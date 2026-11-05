@@ -136,3 +136,7 @@ fallback boundary retain their existing representations. Faithful production
 AST binding, source-byte lexing, and the finite implementation-interface coverage
 contract remain separate obligations. This slice does not close G2 or G4 or
 promote an umbrella target.
+
+## Subsequent consumer
+
+The [generic-requirement recursive-grouping lift](surface-parser-generic-requirement-recursive-grouping-v1.md) carries the effect-set value through the thirteen-way requirement choice, changing only its Effects branch.
