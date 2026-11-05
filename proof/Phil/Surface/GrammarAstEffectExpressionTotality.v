@@ -1,8 +1,13 @@
 From Stdlib Require Import Lists.List Strings.String.
 
 From Phil.Surface Require Import
+  Grammar
+  GrammarDerivation
+  GrammarDeterminacySimpleResolverSoundness
+  GrammarAstSourceHeader
   GrammarAstEffectExpressionSpine
   GrammarAstGenericRequirementsTotality
+  GrammarAstStaticReferenceSpine
   GrammarAstStaticReferenceTotality.
 
 Import ListNotations.
@@ -96,7 +101,9 @@ Proof.
       ]
       input rest subtree Hbody)
     as [trees [Hsubtree Hitems]].
-  inversion Hsubtree; subst trees.
+  rewrite Hsubtree in Htree.
+  clear Hderive Hbody Hsubtree subtree.
+  revert tree Htree.
   repeat match goal with
   | Hseq : DerivesSequence phase1_surface_rules _ _ (_ :: _) _ _ _ |- _ =>
       inversion Hseq; subst; clear Hseq
@@ -105,7 +112,8 @@ Proof.
   | Hnil : DerivesSequence phase1_surface_rules _ _ [] _ _ _ |- _ =>
       inversion Hnil; subst; clear Hnil
   end.
-  match goal with
+  intros original_tree Htree.
+  lazymatch goal with
   | Hreference : Derives phase1_surface_rules _
       (ENonterminal "static_reference") _ _ ?reference_tree,
     Harguments : Derives phase1_surface_rules _
@@ -122,14 +130,14 @@ Proof.
         {| phase1_effect_expression_spine_reference := reference;
            phase1_effect_expression_spine_arguments := arguments |}) in
       assert (Hnormalize :
-        phase1_surface_normalize_effect_expression_spine tree = Some effect);
+        phase1_surface_normalize_effect_expression_spine original_tree = Some effect);
       [ rewrite Htree;
         unfold phase1_surface_normalize_effect_expression_spine,
           phase1_surface_expect_nonterminal,
           phase1_surface_expect_sequence,
           phase1_surface_exact2;
-        cbn;
         rewrite String.eqb_refl;
+        cbn;
         rewrite Hreference_normalize, Harguments_normalize;
         reflexivity
       | exists effect;

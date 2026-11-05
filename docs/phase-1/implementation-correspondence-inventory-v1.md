@@ -123,12 +123,20 @@ the [term-argument continuation](surface-parser-term-arguments-recursive-groupin
 replaces every expression in the selected outer argument list. Its exact
 map-of-erasure equality preserves the complete list, including arity and order;
 the shell/raw/legacy entry points have derivation-only totality. An empty list
-denotes present `()` syntax, not an absent optional payload. The next consumers
-are optional effect arguments, effect-set literal elements, the
+denotes present `()` syntax, not an absent optional payload.
+
+Based on the term-argument slice's merge, `bacf910a61786feed785de8f08fe3882ecbcdc2a`,
+the [effect-expression continuation](surface-parser-effect-expression-recursive-grouping-v1.md)
+replaces its optional term-argument payload with the complete-list carrier.
+It preserves absent arguments versus present empty `()`, reconstructs the exact
+old shallow carrier and tree, and directly preserves the complete static-reference
+carrier in the legacy adapter. All public totalities require only the relevant
+grammar derivation. The next consumers are effect-set literal elements, the
 `effects ... within ...` generic-requirement alternative, and the established
-record/data route. Named-postfix argument payloads, command bodies,
-failure-target arguments, the generic grouping carrier's nested fallback
-boundary, and production AST binding retain their separate obligations.
+record/data route. Static-reference argument interiors, named-postfix argument
+payloads, command bodies, failure-target arguments, the generic grouping
+carrier's nested fallback boundary, and production AST binding retain their
+separate obligations.
 These local carrier results do not close G2 or G4 or promote an umbrella target.
 
 ## Work needed to finish the umbrella inventory

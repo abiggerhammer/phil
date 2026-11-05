@@ -1,6 +1,9 @@
 From Stdlib Require Import Lists.List Strings.String.
 
 From Phil.Surface Require Import
+  GrammarDerivation
+  GrammarAstStaticReferenceSpine
+  GrammarAstTermArgumentsSpine
   GrammarAstEffectExpressionTermArgumentsSpine
   GrammarAstTermArgumentsExpressionOuterSpine.
 
@@ -107,12 +110,20 @@ Theorem
       phase1_surface_effect_expression_term_arguments_spine_tree effect.
 Proof.
   intros [reference arguments] refined Hnormalize.
-  cbn in Hnormalize.
+  unfold phase1_surface_normalize_effect_expression_expression_outer_spine
+    in Hnormalize.
+  cbn [phase1_effect_expression_term_arguments_spine_reference
+    phase1_effect_expression_term_arguments_spine_arguments] in Hnormalize.
   destruct
     (phase1_surface_normalize_optional_term_arguments_expression_outer arguments)
     as [actual |] eqn:Harguments; try discriminate Hnormalize.
   inversion Hnormalize; subst refined.
-  cbn.
+  unfold phase1_surface_effect_expression_expression_outer_spine_tree,
+    phase1_surface_effect_expression_term_arguments_spine_tree.
+  cbn [phase1_effect_expression_expression_outer_spine_reference
+    phase1_effect_expression_expression_outer_spine_arguments
+    phase1_effect_expression_term_arguments_spine_reference
+    phase1_effect_expression_term_arguments_spine_arguments].
   rewrite
     (phase1_surface_normalize_optional_term_arguments_expression_outer_round_trip
       arguments actual Harguments).
