@@ -1,6 +1,9 @@
 From Stdlib Require Import Lists.List Strings.String.
 
 From Phil.Surface Require Import
+  GrammarDerivation
+  GrammarAstSourceHeader
+  GrammarAstTopLevelSpine
   GrammarAstGenericRequirementsSpine
   GrammarAstStaticReferenceSpine.
 
@@ -125,7 +128,7 @@ Proof.
     + eapply phase1_surface_normalize_effect_set_suffix_round_trip.
       exact Heffect.
     + eapply IH.
-      exact Hrest.
+      reflexivity.
 Qed.
 
 Definition phase1_surface_effect_set_entries_tree
