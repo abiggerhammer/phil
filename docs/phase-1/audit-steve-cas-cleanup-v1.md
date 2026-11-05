@@ -40,3 +40,16 @@ after that pre-close exception; the repaired module must pass and retry in
 the same process. The real RLIMIT failure remains a separate positive
 control, not evidence about which write/flush operation threw. This is a
 bounded Linux/GHC regression rather than proof of all exception cases.
+
+## Strong handle reference and retry harness correction
+
+The first injected test was inconclusive: the unmodified baseline passed the
+open-descriptor scan, and the later retry failed because every test-module
+`hPut` was deliberately faulted. The revised test holds the acquired Handle
+in a test-only `IORef` and queries `hIsClosed` through a CPP-enabled worker,
+so an opportunistic finalizer cannot conceal the missing explicit close.
+
+The injected variant tests only the one forced failure. The independent
+uninstrumented `RLIMIT_FSIZE` case continues to verify successful same-process
+retry and no-replace behavior. The baseline must specifically fail because its
+anchored handle is still open, while the repaired source must pass.

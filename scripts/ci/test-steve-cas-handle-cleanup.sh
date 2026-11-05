@@ -32,16 +32,43 @@ fault = '(ioError (userError "E-STEVE-CLEANUP-01-injected-preclose-failure"))'
 for label, original in [("baseline", "original-source.hs"),
                         ("repaired", "repaired-source.hs")]:
     source = (work / original).read_text()
-    if source.count(needle) != 1:
-        raise SystemExit(f"{label}: expected exactly one hPut to instrument")
+    def exactly_once(text, old, replacement):
+        if text.count(old) != 1:
+            raise SystemExit(f"{label}: expected one instrumentation anchor: {old!r}")
+        return text.replace(old, replacement)
+    source = exactly_once(source, "  , readBlob\n  ) where",
+                          "  , readBlob\n  , testStagedHandleClosed\n  ) where")
+    source = exactly_once(source,
+        "import qualified Crypto.Hash.SHA256 as SHA256",
+        "import Data.IORef (IORef, newIORef, readIORef, writeIORef)\n"
+        "import System.IO.Unsafe (unsafePerformIO)\n"
+        "import qualified Crypto.Hash.SHA256 as SHA256")
+    source = exactly_once(source,
+        "import System.IO (hClose, openBinaryTempFile)",
+        "import System.IO (Handle, hClose, hIsClosed, openBinaryTempFile)")
+    source = exactly_once(source, "Right (tempPath, handle) -> do",
+        "Right (tempPath, handle) -> do\n"
+        "          writeIORef testStagedHandle (Just handle)")
+    source = exactly_once(source, needle, fault)
+    source += (
+        "\n{-# NOINLINE testStagedHandle #-}\n"
+        "testStagedHandle :: IORef (Maybe Handle)\n"
+        "testStagedHandle = unsafePerformIO (newIORef Nothing)\n\n"
+        "testStagedHandleClosed :: IO Bool\n"
+        "testStagedHandleClosed = do\n"
+        "  current <- readIORef testStagedHandle\n"
+        "  case current of\n"
+        "    Just handle -> hIsClosed handle\n"
+        "    Nothing -> ioError (userError \"test handle anchor not populated\")\n"
+    )
     destination = work / label / "Phil" / "Compiler" / "SteveCAS.hs"
-    destination.write_text(source.replace(needle, fault))
+    destination.write_text(source)
 PY
 
 build_worker() {
   local variant="$1"
   mkdir -p "$work/build-$variant"
-  cabal exec -- ghc -fforce-recomp -i"$work/$variant" -isrc \
+  cabal exec -- ghc -fforce-recomp -DTEST_CAS_PRE_CLOSE -i"$work/$variant" -isrc \
     -outputdir "$work/build-$variant" -Wall -Werror -rtsopts \
     -package bytestring -package text -package directory \
     -package unix -package cryptohash-sha256 \
