@@ -1,0 +1,43 @@
+name: Phase 1 Audit Source Manifest Producer Binding
+
+on:
+  pull_request:
+    paths:
+      - 'src/Phil/Verification/SourceManifestBinding.hs'
+      - 'src/Phil/Verification/FinalAuthorityAdapter.hs'
+      - 'test/Phase1INT005CertifiedReleaseEnvelopeMain.hs'
+      - 'phil-core.cabal'
+      - 'docs/phase-1/audit-source-manifest-producer-binding-v1.md'
+      - '.github/workflows/phase1-audit-source-manifest-producer-binding.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'src/Phil/Verification/SourceManifestBinding.hs'
+      - 'src/Phil/Verification/FinalAuthorityAdapter.hs'
+      - 'test/Phase1INT005CertifiedReleaseEnvelopeMain.hs'
+      - 'phil-core.cabal'
+      - 'docs/phase-1/audit-source-manifest-producer-binding-v1.md'
+      - '.github/workflows/phase1-audit-source-manifest-producer-binding.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  source-manifest-producer:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: haskell-actions/setup@v2
+        with:
+          ghc-version: '9.6.7'
+          cabal-version: 'latest'
+      - name: Complete strict Haskell build
+        run: cabal build all --enable-tests --ghc-options=-Werror
+      - name: Typecheck exact producer and consumer with warnings as errors
+        run: |
+          cabal exec -- ghc -isrc -itest -Wall -Werror -fno-code src/Phil/Verification/SourceManifestBinding.hs
+          cabal exec -- ghc -isrc -itest -Wall -Werror -fno-code test/Phase1INT005CertifiedReleaseEnvelopeMain.hs
+      - name: Run accepted source/closed manifest production and attack controls
+        run: cabal exec -- runghc -isrc -Wall -Werror test/Phase1INT005CertifiedReleaseEnvelopeMain.hs
+      - name: Retain separate source-artifact closure test
+        run: cabal exec -- runghc -isrc -Wall -Werror test/Phase1VerificationSourceArtifactClosureMain.hs
