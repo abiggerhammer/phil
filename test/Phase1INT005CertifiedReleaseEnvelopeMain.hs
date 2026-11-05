@@ -566,3 +566,6 @@ conventionalTrust =
       , releaseTrustRevision = revision
       , releaseTrustBasis = basis
       }
+
+mapLeft :: (a -> b) -> Either a c -> Either b c
+mapLeft convert = either (Left . convert) Right
