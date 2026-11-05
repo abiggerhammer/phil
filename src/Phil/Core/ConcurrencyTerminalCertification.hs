@@ -76,9 +76,13 @@ newtype CertifiedTerminalEnabledStep = CertifiedTerminalEnabledStep
   deriving (Eq, Show)
 
 newtype CertifiedTerminalDisposition = CertifiedTerminalDisposition
-  { certifiedTerminalDispositionNative :: ProcessNetworkDisposition
+  { privateTerminalDispositionNativeField :: ProcessNetworkDisposition
   }
   deriving (Eq, Show)
+
+-- Preserve the read API without exporting an updateable record field.
+certifiedTerminalDispositionNative :: CertifiedTerminalDisposition -> ProcessNetworkDisposition
+certifiedTerminalDispositionNative = privateTerminalDispositionNativeField
 
 data ProcessTerminalKernelFacts = ProcessTerminalKernelFacts
   { terminalResourcesClosed :: Bool
