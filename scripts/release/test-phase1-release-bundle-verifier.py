@@ -120,6 +120,43 @@ def tar_traversal_rejects(tmp: Path) -> None:
     )
 
 
+def archive_member_character_guard_rejects() -> None:
+    for label, name in [
+        ("embedded NUL", "pkg/sub\x00item"),
+        ("single backslash", r"pkg/sub\README.md"),
+    ]:
+        expect_error(
+            f"{label} archive member path rejects",
+            lambda name=name: bundle.canonical_archive_name(name, is_dir=False),
+            "unsafe archive member path",
+        )
+
+    assert bundle.canonical_archive_name("pkg/sub/README.md", is_dir=False) == "pkg/sub/README.md"
+    print("PASS: ordinary slash-delimited archive member path accepts")
+
+
+def tar_backslash_member_rejects(tmp: Path) -> None:
+    archive = tmp / "single-backslash.tar.gz"
+    with tarfile.open(archive, "w:gz") as tf:
+        add_tar_file(tf, r"pkg/sub\README.md", b"not canonical")
+    expect_error(
+        "tar single-backslash member path rejects",
+        lambda: bundle.read_archive_tree(archive),
+        "unsafe archive member path",
+    )
+
+
+def zip_backslash_member_rejects(tmp: Path) -> None:
+    archive = tmp / "single-backslash.zip"
+    with zipfile.ZipFile(archive, "w") as zf:
+        zf.writestr(r"pkg/sub\README.md", b"not canonical")
+    expect_error(
+        "zip single-backslash member path rejects",
+        lambda: bundle.read_archive_tree(archive),
+        "unsafe archive member path",
+    )
+
+
 def zip_symlink_rejects(tmp: Path) -> None:
     archive = tmp / "symlink.zip"
     with zipfile.ZipFile(archive, "w") as zf:
@@ -165,6 +202,9 @@ def main() -> int:
         hardlink_replacement_rejects(tmp)
         tar_duplicate_regular_rejects(tmp)
         tar_traversal_rejects(tmp)
+        archive_member_character_guard_rejects()
+        tar_backslash_member_rejects(tmp)
+        zip_backslash_member_rejects(tmp)
         zip_symlink_rejects(tmp)
         zip_duplicate_rejects(tmp)
         zip_traversal_rejects(tmp)

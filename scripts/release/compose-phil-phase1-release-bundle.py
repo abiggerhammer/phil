@@ -272,7 +272,7 @@ def verify_checksum_sidecar(sidecar: Path, payload: Path) -> None:
 
 
 def canonical_archive_name(name: str, *, is_dir: bool) -> str:
-    if not name or "\\x00" in name or "\\\\" in name:
+    if not name or "\x00" in name or "\\" in name:
         raise BundleError(f"unsafe archive member path: {name!r}")
     if name.startswith("/"):
         raise BundleError(f"absolute archive member path: {name!r}")
