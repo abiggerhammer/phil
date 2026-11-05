@@ -74,7 +74,9 @@ main = do
   r20SubjectReusable <- prepareForInput "R20 subject alias" r20SubjectSingle r20SubjectSingleInput certificate
   r20ContextReusable <- prepareForInput "R20 context alias" r20ContextSingle r20ContextSingleInput certificate
   let checks =
-        [ ("cache record captures exact dependencies and declared validity dimensions",
+        [ ("unmodified prepared cache is accepted by the actual reuse evaluator",
+            evaluateReusableProofEvidence baseline baseValidity reusable == EvidenceReusable)
+        , ("cache record preserves exact dependencies and declared validity dimensions",
             testPrepared baseline reusable)
         , ("unrelated graph and undeclared context edits preserve evidence",
             testUnrelatedReuse baseline unrelatedChanged reusable)
