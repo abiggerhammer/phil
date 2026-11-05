@@ -1,6 +1,9 @@
 From Stdlib Require Import Lists.List Strings.String.
 
 From Phil.Surface Require Import
+  GrammarDerivation
+  GrammarAstExpressionOuterSpine
+  GrammarAstBaseExpressionChoiceSpine
   GrammarAstExpressionBaseChoiceSpine
   GrammarAstFallbackBaseChoiceSpine.
 
@@ -57,7 +60,10 @@ Proof.
       (phase1_surface_normalize_fallback_base_choice_spine tree)
       as [actual |] eqn:Hfallback; try discriminate Hnormalize.
     inversion Hnormalize; subst refined.
-    cbn.
+    cbn [phase1_surface_optional_expression_fallback_base_choice_tree
+      phase1_surface_optional_expression_fallback_tree].
+    unfold phase1_surface_expression_fallback_base_choice_tail_tree,
+      phase1_surface_expression_fallback_tail_tree.
     rewrite
       (phase1_surface_normalize_fallback_base_choice_spine_round_trip
         tree actual Hfallback).
@@ -106,12 +112,20 @@ Theorem phase1_surface_normalize_expression_fallback_base_choice_spine_round_tri
       phase1_surface_expression_base_choice_spine_tree expression.
 Proof.
   intros [base fallback] refined Hnormalize.
-  cbn in Hnormalize.
+  unfold phase1_surface_normalize_expression_fallback_base_choice_spine
+    in Hnormalize.
+  cbn [phase1_expression_base_choice_spine_base
+    phase1_expression_base_choice_spine_fallback] in Hnormalize.
   destruct
     (phase1_surface_normalize_optional_expression_fallback_base_choice fallback)
     as [actual |] eqn:Hfallback; try discriminate Hnormalize.
   inversion Hnormalize; subst refined.
-  cbn.
+  unfold phase1_surface_expression_fallback_base_choice_spine_tree,
+    phase1_surface_expression_base_choice_spine_tree.
+  cbn [phase1_expression_fallback_base_choice_spine_base
+    phase1_expression_fallback_base_choice_spine_fallback
+    phase1_expression_base_choice_spine_base
+    phase1_expression_base_choice_spine_fallback].
   rewrite
     (phase1_surface_normalize_optional_expression_fallback_base_choice_round_trip
       fallback actual Hfallback).

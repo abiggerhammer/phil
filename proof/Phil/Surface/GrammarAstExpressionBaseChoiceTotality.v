@@ -1,6 +1,10 @@
 From Stdlib Require Import Lists.List Strings.String.
 
 From Phil.Surface Require Import
+  GrammarDerivation
+  GrammarDeterminacySimpleResolverSoundness
+  GrammarAstExpressionOuterSpine
+  GrammarAstBaseExpressionChoiceSpine
   GrammarAstExpressionBaseChoiceSpine
   GrammarAstExpressionOuterTotality
   GrammarAstBaseExpressionChoiceTotality.
@@ -74,7 +78,9 @@ Proof.
       exists
         {| phase1_expression_base_choice_spine_base := refined_base;
            phase1_expression_base_choice_spine_fallback := fallback |};
-      cbn;
+      unfold phase1_surface_normalize_expression_base_choice_spine;
+      cbn [phase1_expression_outer_spine_base
+        phase1_expression_outer_spine_fallback];
       rewrite Hrefined_base;
       reflexivity
   end.

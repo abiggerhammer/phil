@@ -1,6 +1,7 @@
 From Stdlib Require Import Lists.List Strings.String.
 
 From Phil.Surface Require Import
+  GrammarDerivation
   GrammarAstExpressionOuterSpine
   GrammarAstBaseExpressionChoiceSpine.
 
@@ -53,12 +54,19 @@ Theorem phase1_surface_normalize_expression_base_choice_spine_round_trip :
       phase1_surface_expression_outer_spine_tree expression.
 Proof.
   intros [base fallback] refined Hnormalize.
-  cbn in Hnormalize.
+  unfold phase1_surface_normalize_expression_base_choice_spine in Hnormalize.
+  cbn [phase1_expression_outer_spine_base
+    phase1_expression_outer_spine_fallback] in Hnormalize.
   destruct
     (phase1_surface_normalize_base_expression_choice_spine base)
     as [actual |] eqn:Hbase; try discriminate Hnormalize.
   inversion Hnormalize; subst refined.
-  cbn.
+  unfold phase1_surface_expression_base_choice_spine_tree,
+    phase1_surface_expression_outer_spine_tree.
+  cbn [phase1_expression_base_choice_spine_base
+    phase1_expression_base_choice_spine_fallback
+    phase1_expression_outer_spine_base
+    phase1_expression_outer_spine_fallback].
   rewrite
     (phase1_surface_normalize_base_expression_choice_spine_round_trip
       base actual Hbase).
