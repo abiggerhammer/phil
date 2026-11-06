@@ -71,7 +71,7 @@ data GrammarV1BorrowResourceError
 -- resource state:
 --
 --     fn f(owner : Bytes[N]) -> Bytes[N] satisfies C {
---       borrow owner as view { [view;]* [();]? };
+--       borrow owner as view { [view;]* [unit;]? };
 --       return owner;
 --     }
 --
