@@ -13,6 +13,14 @@ The important exceptions are documents that explicitly declare themselves curren
 - [`surface-grammar-v1.md`](surface-grammar-v1.md), together with [`../../grammar/phase1-surface.ebnf`](../../grammar/phase1-surface.ebnf), for the Phase 1 concrete-syntax epoch; and
 - any document whose own text explicitly states that it is a current normative specification rather than an implementation-slice record.
 
+## Entry points for formal-methods review
+
+- [Phase 1 typing and semantics reader's guide](typing-and-semantics-reader-guide-v1.md) — non-normative map of existing semantic authorities, models and proof-scope caveats.
+- [Three worked typing-rule families](typing-rules-worked-examples-draft-v1.md) — illustrative positive/expected-negative examples; not all negatives are executable conformance witnesses yet.
+- [Formal-semantics judgment inventory (FSEM-00)](formal-semantics-judgment-inventory-v0.md) — proposed rule interfaces, translation boundaries and explicit outstanding evidence, tracked in [FSEM issue #1613](https://github.com/abiggerhammer/phil/issues/1613).
+
+These review documents do not replace accepted semantic contracts, the normative grammar, the Logic Ledger, or exact-commit proof and conformance results.
+
 ## Reading historical slices
 
 A historical slice document should therefore be read as:
