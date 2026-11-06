@@ -478,14 +478,14 @@ Section NativeFinalInstanceTypedCorrespondence.
     Definition CheckedDescriptorPreservedToFinalWitness
       (w : NativeFinalInstanceCoordinates)
       (produced token exported : ArchitectureInstanceDescriptor) : Prop :=
-      ExactCheckedDescriptorRetained descriptorIdentity w produced token /\\
+      ExactCheckedDescriptorRetained descriptorIdentity w produced token /\
       token = exported.
 
     Theorem checked_source_descriptor_reaches_final_witness_exactly :
       forall w produced token exported,
         CheckedDescriptorPreservedToFinalWitness w produced token exported ->
-        produced = exported /\\
-        descriptorIdentity exported = checkedArchitectureInstance w /\\
+        produced = exported /\
+        descriptorIdentity exported = checkedArchitectureInstance w /\
         NativeCheckedInstanceProducerBound w.
     Proof.
       intros w produced token exported [[Hnative [Heq Hid]] Hexport].
