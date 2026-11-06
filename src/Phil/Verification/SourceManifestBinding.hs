@@ -4,6 +4,7 @@ module Phil.Verification.SourceManifestBinding
   ( CertifiedSourceManifestBinding
   , sourceManifestBindingManifest
   , sourceManifestBindingArchitectureInstance
+  , sourceManifestBindingArchitectureDescriptor
   , SourceManifestBindingError (..)
   , closeSourceManifestBinding
   , closeSourceManifestBindingForInstance
@@ -63,23 +64,33 @@ import Phil.Verification.ManifestClosure
 -- that exact verification bundle. The private constructor also retains the
 -- COMPLETE accepted source assurance for the independently accepted consumer.
 -- Declaration-only closure has no checked architecture-instance binding;
--- only the checked actuals/descriptor/bundle producer can attach it.
--- Even a checked instance does NOT establish stage-production lineage.
+-- only the checked actuals/descriptor/bundle producer can attach the COMPLETE
+-- descriptor, including semantic bindings and declaration lineage. An identity
+-- projection would discard those inputs before faithful representation.
+-- Even the retained descriptor does NOT establish stage-production lineage.
 data CertifiedSourceManifestBinding = CertifiedSourceManifestBinding
   GenericApplicationAssurance
   AssuranceManifest
-  (Maybe ArchitectureInstanceIdentity)
+  (Maybe ArchitectureInstanceDescriptor)
   deriving (Eq, Show)
 
 sourceManifestBindingManifest :: CertifiedSourceManifestBinding -> AssuranceManifest
 sourceManifestBindingManifest (CertifiedSourceManifestBinding _ manifest _) = manifest
 
--- | Checked canonical occurrence, if produced by the stronger instance path.
--- Its constructor remains private; absence cannot be recast as acceptance.
+-- | Derived identity of the retained, checked canonical descriptor. The
+-- token cannot carry an arbitrary independently supplied identity.
 sourceManifestBindingArchitectureInstance
   :: CertifiedSourceManifestBinding -> Maybe ArchitectureInstanceIdentity
-sourceManifestBindingArchitectureInstance
-  (CertifiedSourceManifestBinding _ _ instanceIdentity) = instanceIdentity
+sourceManifestBindingArchitectureInstance =
+  fmap deriveArchitectureInstanceIdentity . sourceManifestBindingArchitectureDescriptor
+
+-- | Complete checked descriptor, preserving declaration and semantic actuals
+-- for later competent representation. Its presence is producer-gated, not
+-- proof that this occurrence produced the downstream StageClosure.
+sourceManifestBindingArchitectureDescriptor
+  :: CertifiedSourceManifestBinding -> Maybe ArchitectureInstanceDescriptor
+sourceManifestBindingArchitectureDescriptor
+  (CertifiedSourceManifestBinding _ _ descriptor) = descriptor
 
 data SourceManifestBindingError
   = SourceManifestDeclarationNotInVerificationBundle DeclarationIdentity
@@ -158,7 +169,7 @@ closeSourceManifestBindingForInstance source descriptor bundle policy context le
     else Left SourceManifestInstanceNotInVerificationBundle
   baseBinding <- closeSourceManifestBinding source bundle policy context ledger selection
   pure (CertifiedSourceManifestBinding
-    source (sourceManifestBindingManifest baseBinding) (Just instanceIdentity))
+    source (sourceManifestBindingManifest baseBinding) (Just descriptor))
 
 -- | The final adapter consumes only a *checked-instance* source manifest,
 -- not the weaker declaration-only closure. This is a necessary producer gate,
