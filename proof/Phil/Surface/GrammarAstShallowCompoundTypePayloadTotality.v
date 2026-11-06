@@ -150,7 +150,7 @@ Proof.
             phase1_surface_rules _ 2
             (ELiteral "]") []
             _ _ last_tail Hlast)
-          as [final [close_tree [end_trees
+          as [index_final [close_tree [end_trees
             [Hlast_trees [Hclose Hend_index]]]]];
         inversion Hend_index; subst end_trees;
         rewrite Hindex_trees, Hindex_tail_trees, Hlast_trees
