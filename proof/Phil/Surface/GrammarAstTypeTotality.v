@@ -235,6 +235,5 @@ Proof.
       * exact Hnormalize.
       * eapply phase1_surface_normalize_type_spine_round_trip.
         exact Hnormalize.
-    + cbn in Hnth.
-      discriminate Hnth.
+    + destruct index; cbn in Hnth; discriminate Hnth.
 Qed.
