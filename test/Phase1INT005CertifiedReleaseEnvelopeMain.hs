@@ -141,6 +141,10 @@ main = do
           , producedBindingAccepted source upload)
         , ( "Source-manifest producer closes Steve from checked declaration and bundle"
           , producedBindingAccepted source steve)
+        , ( "Declaration-only Upload producer cannot bind a certified release"
+          , declarationOnlyBindingRejected source upload)
+        , ( "Declaration-only Steve producer cannot bind a certified release"
+          , declarationOnlyBindingRejected source steve)
         , ( "Low-level manifest binder rejects same-identity distinct source proof for Upload"
           , producedBindingDifferentAcceptedSourceRejects source upload)
         , ( "Low-level manifest binder rejects same-identity distinct source proof for Steve"
@@ -580,12 +584,37 @@ producedBindingAccepted source fixture = case produceFixture source fixture of
         case bindProducedFinalAuthority binding sourceArtifact release of
           Left _ -> False
           Right native ->
-            nativeFinalSourceIdentity native == nativeAdapterSourceId source
+            sourceManifestBindingArchitectureInstance binding
+                == Just (deriveArchitectureInstanceIdentity (sourceInstanceDescriptor source))
+              && nativeFinalSourceIdentity native == nativeAdapterSourceId source
               && nativeFinalManifestId native
                 == manifestId (fixtureManifest producedFixture)
               && nativeFinalRawSystemsDigest native
                 == stageSystemsDigest (fixtureStage fixture)
 
+
+-- | The declaration-only producer can close the exact same manifest, but
+-- cannot issue final authority even with matching independently accepted
+-- source artifact and release. Only the checked-instance path may do so.
+declarationOnlyBindingRejected
+  :: GenericApplicationAssurance -> ReleaseFixture -> Bool
+declarationOnlyBindingRejected source fixture =
+  case (producerInputs source, produceFixture source fixture) of
+    (Right (bundle, policy), Right (checked, produced)) ->
+      case closeSourceManifestBinding source bundle policy
+          (fixtureContext produced) (fixtureLedger produced)
+          emptyProducerSelection of
+        Left _ -> False
+        Right weak ->
+          sourceManifestBindingManifest weak == sourceManifestBindingManifest checked
+            && sourceManifestBindingArchitectureInstance weak == Nothing
+            && case nativeAdapterPair source produced of
+              Nothing -> False
+              Just (sourceArtifact, release) ->
+                case bindProducedFinalAuthority weak sourceArtifact release of
+                  Left SourceManifestInstanceNotBound -> True
+                  _ -> False
+    _ -> False
 
 -- This new consumer is deliberately *stronger* than the old caller-supplied
 -- association: it runs the exact generic-actuals / architecture instance

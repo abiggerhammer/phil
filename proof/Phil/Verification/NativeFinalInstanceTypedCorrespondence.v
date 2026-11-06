@@ -43,6 +43,30 @@ Section NativeFinalInstanceTypedCorrespondence.
     manifestRawSystemsDigest w = stageRawSystemsDigest w /\
     manifestLoweringLedgerRoot w = stageLoweringLedgerRoot w.
 
+  (* Model-level representation of the distinct native producer gate:
+     existing source/manifest/stage equalities do not imply checked-instance
+     producer acceptance. This predicate is an explicit external premise, not
+     an invented Haskell-to-Rocq authority or stage-production certificate. *)
+  Context (checkedInstanceProducer : ArchitectureInstanceIdentity -> Prop).
+
+  Definition NativeCheckedInstanceProducerBound (w : NativeFinalInstanceCoordinates) : Prop :=
+    NativeProducerConsumerBound w /\
+    checkedInstanceProducer (checkedArchitectureInstance w).
+
+  Theorem declaration_only_source_cannot_bind_final_authority :
+    forall w,
+      ~ checkedInstanceProducer (checkedArchitectureInstance w) ->
+      ~ NativeCheckedInstanceProducerBound w.
+  Proof.
+    intros w Hnot [_ Hchecked]. exact (Hnot Hchecked).
+  Qed.
+
+  Theorem checked_instance_token_preserves_existing_consumer_equalities :
+    forall w, NativeCheckedInstanceProducerBound w -> NativeProducerConsumerBound w.
+  Proof.
+    intros w [Hbound _]. exact Hbound.
+  Qed.
+
   Theorem bound_preserves_exact_native_coordinates :
     forall w, NativeProducerConsumerBound w ->
       acceptedApplication w = producedApplication w /\
