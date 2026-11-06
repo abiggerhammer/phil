@@ -331,6 +331,47 @@ Section NativeFinalInstanceTypedCorrespondence.
     Qed.
   End ConditionalStageCoordinateTransport.
 
+  (*
+    A new necessary native gate on the exact, opaque accepted SOURCE assurance
+    object, stronger than equality of GenericApplicationIdentity. The model
+    only receives this as an explicit predicate; the proof cannot construct
+    the native object's acceptance or the source-to-stage origin.
+  *)
+  Section ExactSourceAssuranceGate.
+    Context {SourceAssurance : Type}.
+    Context (sourceIdentity : SourceAssurance -> ApplicationIdentity).
+
+    Definition NativeBoundWithExactSource
+      (w : NativeFinalInstanceCoordinates)
+      (producedSource acceptedSource : SourceAssurance) : Prop :=
+      NativeProducerConsumerBound w /\
+      producedSource = acceptedSource /\
+      sourceIdentity producedSource = acceptedApplication w.
+
+    Theorem exact_source_assurance_gate_preserves_consumer_identity :
+      forall w producedSource acceptedSource,
+        NativeBoundWithExactSource w producedSource acceptedSource ->
+        NativeProducerConsumerBound w /\
+        producedSource = acceptedSource /\
+        sourceIdentity acceptedSource = producedApplication w.
+    Proof.
+      intros w producedSource acceptedSource [Hbound [Heq Hidentity]].
+      split; [exact Hbound |].
+      split; [exact Heq |].
+      rewrite <- Heq. rewrite Hidentity.
+      exact (proj1 Hbound).
+    Qed.
+
+    Theorem different_certified_source_assurance_cannot_bind :
+      forall w producedSource acceptedSource,
+        producedSource <> acceptedSource ->
+        ~ NativeBoundWithExactSource w producedSource acceptedSource.
+    Proof.
+      intros w producedSource acceptedSource Hneq [_ [Heq _]].
+      exact (Hneq Heq).
+    Qed.
+  End ExactSourceAssuranceGate.
+
 End NativeFinalInstanceTypedCorrespondence.
 
 (* A concrete logical counterexample, NOT an encoding of Haskell identity
@@ -389,4 +430,16 @@ Theorem separate_noninjective_stage_models_hide_common_and_closed_drift :
 Proof.
   exists (fun _ => ModelCommonOnly), (fun _ => ModelClosedOnly).
   repeat split; try discriminate; reflexivity.
+Qed.
+
+(* Logical collision only: distinct assurance objects can have identical
+   application identities. No bool/unit is a Haskell/Rocq encoding. *)
+Theorem equal_application_identity_does_not_authenticate_source_assurance :
+  exists (sourceIdentity : bool -> unit)
+         (producedSource acceptedSource : bool),
+    producedSource <> acceptedSource /\
+    sourceIdentity producedSource = sourceIdentity acceptedSource.
+Proof.
+  exists (fun _ : bool => tt), true, false.
+  split; [discriminate | reflexivity].
 Qed.

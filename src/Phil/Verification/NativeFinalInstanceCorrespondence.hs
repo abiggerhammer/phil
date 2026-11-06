@@ -23,7 +23,10 @@ import Phil.Core.Static
   , deriveArchitectureInstanceIdentity
   )
 import Phil.Verification (ApplicationAssurancePolicy)
-import Phil.Verification.ArtifactClosure (CertifiedApplicationArtifact)
+import Phil.Verification.ArtifactClosure
+  ( CertifiedApplicationArtifact
+  , certifiedApplicationSourceAssurance
+  )
 import Phil.Verification.Bundle (VerificationBundle)
 import Phil.Verification.CertifiedRelease (CertifiedReleaseArtifact)
 import Phil.Verification.FinalAuthorityAdapter
@@ -95,7 +98,8 @@ checkNativeStageRevisionEquality witness =
       else Left (NativeStageRevisionDifferent expected actual)
 
 data NativeFinalInstanceCorrespondenceError
-  = NativeFinalInstanceSourceRejected SourceManifestBindingError
+  = NativeFinalInstanceSourceAssuranceMismatch
+  | NativeFinalInstanceSourceRejected SourceManifestBindingError
   | NativeFinalInstanceReleaseRejected SourceManifestBindingError
   deriving (Eq, Show)
 
@@ -123,6 +127,12 @@ closeNativeFinalInstanceCorrespondence
   -> Either NativeFinalInstanceCorrespondenceError NativeFinalInstanceCorrespondence
 closeNativeFinalInstanceCorrespondence
   source descriptor bundle policy context ledger selection sourceArtifact release = do
+    -- The producer must use the EXACT accepted source-assurance object,
+    -- not merely a second assurance with the same application identity.
+    -- This check is necessary, not stage-origin or model-proof authority.
+    if source == certifiedApplicationSourceAssurance sourceArtifact
+      then Right ()
+      else Left NativeFinalInstanceSourceAssuranceMismatch
     produced <- either (Left . NativeFinalInstanceSourceRejected) Right
       (closeSourceManifestBindingForInstance
         source descriptor bundle policy context ledger selection)

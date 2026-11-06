@@ -118,3 +118,33 @@ verification separately. No supplied model Prop creates native producer
 authority; no full FixedFinalAuthorityAdapter or FinalArtifactCertified is
 derived. LLVM/provider/runtime TCB and original 244 normative conformance
 cases remain unchanged. Independent audit-freeze verdict: **NOT YET**.
+
+## 2026-11-06 — exact accepted source-assurance object gate
+
+The sealed native `closeNativeFinalInstanceCorrespondence` now fails closed
+unless its generic source/manifest producer receives the **same complete**
+`GenericApplicationAssurance` value as the independent
+`CertifiedApplicationArtifact` source assurance. Merely comparing
+`GenericApplicationIdentity` was insufficient: the same declaration and
+semantic actuals may be paired with a *different* checked reusable-body
+evidence artifact. The new error `NativeFinalInstanceSourceAssuranceMismatch`
+does not disclose or fabricate proof contents. Both Upload and Steve positive
+consumers continue to use exactly matching accepted assurance; both now have
+a separate negative test built using the checked generic-assurance constructors
+with **equal application identity but different source proof evidence**.
+
+The matching Rocq boundary treats the full source assurance as a separate,
+abstract type with an explicit identity projection. Its conditional theorem
+preserves consumer identities only given an independently provided exact-source
+gate; its mismatch theorem forbids substitution, and a logical noninjective
+identity projection demonstrates why equality of identities alone cannot
+authenticate the source object. No mapping from native evidence to Rocq is
+invented. Exact-head Rocq `Print Assumptions` and strict native replay are
+required before this addition earns any audit credit.
+
+**Open:** a verified source-to-stage occurrence-key/production-lineage
+provenance, actual faithful typed representation implementations and
+injectivity, source/assumption/erasure and final predecessor proofs, release
+public **bytes**, and independent pinned final-delta signoff. The complete
+`FinalArtifactCertified` remains unproved, the 244 normative cases are
+unchanged, and independent Phase 1 audit freeze remains **NOT YET**.
