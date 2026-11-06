@@ -1,0 +1,98 @@
+name: MHB ATC Stage Candidate
+
+# This runs trusted workflow code from main only, not from staged hamster
+# branches. Existing Phase 1 auto-PR workflows remain unchanged.
+on:
+  repository_dispatch:
+    types: [mhb-atc-stage]
+
+permissions:
+  contents: read
+  issues: write
+
+concurrency:
+  group: mhb-atc-stage-global
+  queue: max
+  cancel-in-progress: false
+
+jobs:
+  register:
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Checkout trusted main
+        uses: actions/checkout@v4
+        with:
+          ref: main
+          persist-credentials: false
+
+      - name: Validate and register staged candidate
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          BRANCH: ${{ github.event.client_payload.branch }}
+          HEAD_SHA: ${{ github.event.client_payload.head_sha }}
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          # Reject an unsafe branch name before interpolating it into an API path.
+          python3 scripts/mhb_atc_stage.py \
+            --branch "$BRANCH" --head-sha "$HEAD_SHA" \
+            --live-sha "$HEAD_SHA" >/dev/null
+
+          live="$(gh api "repos/$GH_REPO/git/ref/heads/$BRANCH" --jq '.object.sha')"
+          python3 scripts/mhb_atc_stage.py \
+            --branch "$BRANCH" --head-sha "$HEAD_SHA" \
+            --live-sha "$live" > /tmp/atc-candidate.json
+
+          lane="$(jq -r '.lane' /tmp/atc-candidate.json)"
+          title="$(jq -r '.title' /tmp/atc-candidate.json)"
+          jq -r '.body' /tmp/atc-candidate.json > /tmp/atc-candidate.md
+
+          # Labels keep the queue machine-readable and preserve lane ownership.
+          for label in "atc: staged" "lane: $lane"; do
+            if ! gh label list --repo "$GH_REPO" --limit 1000 --json name \
+                 | jq -e --arg name "$label" 'any(.[]; .name == $name)' >/dev/null; then
+              gh label create "$label" --repo "$GH_REPO" \
+                --color 6a737d --description 'MHB ATC staged candidate'
+            fi
+          done
+
+          # The global queue serializes duplicate events; a branch has one issue.
+          existing="$(
+            gh issue list --repo "$GH_REPO" --state all --limit 1000 \
+              --search 'in:title "ATC candidate:"' \
+              --json number,title,state \
+            | jq -c --arg title "$title" '[.[] | select(.title == $title)]'
+          )"
+          count="$(jq 'length' <<<"$existing")"
+          if [ "$count" -gt 1 ]; then
+            echo "Ambiguous duplicate staged-candidate issues" >&2
+            exit 1
+          fi
+
+          if [ "$count" -eq 1 ]; then
+            number="$(jq -r '.[0].number' <<<"$existing")"
+            state="$(jq -r '.[0].state' <<<"$existing")"
+            if [ "$state" != "OPEN" ]; then
+              echo "Candidate was previously closed; use a new staged branch" >&2
+              exit 1
+            fi
+            gh issue edit "$number" --repo "$GH_REPO" \
+              --body-file /tmp/atc-candidate.md \
+              --add-label "atc: staged" --add-label "lane: $lane"
+            echo "Updated staged candidate issue #$number"
+          else
+            gh issue create --repo "$GH_REPO" \
+              --title "$title" --body-file /tmp/atc-candidate.md \
+              --label "atc: staged" --label "lane: $lane"
+          fi
+
+          # A later admission must revalidate live SHA; registering creates NO PR.
+          {
+            echo "### MHB-ATC staging"
+            echo "- lane: $lane"
+            echo "- branch: $BRANCH"
+            echo "- exact requested head: $HEAD_SHA"
+            echo "- status: staged only; no PR created"
+          } >> "$GITHUB_STEP_SUMMARY"
