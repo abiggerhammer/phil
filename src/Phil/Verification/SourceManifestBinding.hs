@@ -3,6 +3,7 @@
 module Phil.Verification.SourceManifestBinding
   ( CertifiedSourceManifestBinding
   , sourceManifestBindingManifest
+  , sourceManifestBindingSourceAssurance
   , sourceManifestBindingArchitectureInstance
   , sourceManifestBindingArchitectureDescriptor
   , SourceManifestBindingError (..)
@@ -76,6 +77,13 @@ data CertifiedSourceManifestBinding = CertifiedSourceManifestBinding
 
 sourceManifestBindingManifest :: CertifiedSourceManifestBinding -> AssuranceManifest
 sourceManifestBindingManifest (CertifiedSourceManifestBinding _ manifest _) = manifest
+
+-- | The complete accepted source-assurance object attached to the checked
+-- manifest producer; identity alone would lose checked body evidence.
+-- This projection does not certify any concrete stage-production origin.
+sourceManifestBindingSourceAssurance
+  :: CertifiedSourceManifestBinding -> GenericApplicationAssurance
+sourceManifestBindingSourceAssurance (CertifiedSourceManifestBinding source _ _) = source
 
 -- | Derived identity of the retained, checked canonical descriptor. The
 -- token cannot carry an arbitrary independently supplied identity.

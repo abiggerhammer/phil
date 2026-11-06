@@ -202,3 +202,36 @@ The checked source-manifest producer was hardened in #1600 to retain a complete 
 The strict Haskell Upload and Steve tests require the exact complete descriptor on both the independently produced checked source-manifest token and the final witness, plus derived canonical identity. Adversarial substitutions alter semantic static arguments and must be rejected by the checked producer; the existing witness continues to expose the original descriptor. Typed Rocq models the **two separate equality gates** (produced-to-token and token-to-exported) and proves exact transport only under those explicit externally supplied premises, with fail-closed substitution and noninjective-identity negative pressure. The three new theorems are in mandatory `Print Assumptions` replay. A model `Prop` does not count as native acceptance; no Haskell-to-Rocq encoding/injectivity is invented.
 
 Still open: authenticated occurrence-to-actual-StageClosure production, concrete native-to-Rocq representation/injectivity and predecessor authority, complete `FinalArtifactCertified`, independently validated public release **bytes**, and independent pinned final-delta signoff. Raw Systems digest/lowering root are not normalized SystemsArtifactRevision; common Phase1StageContractRevision is not final ClosedStageContractRevision. Subject, instance, realization, and verifier profile remain independently typed. No TCB expansion, generated-output edit, normative-case change (the original 244 remain), historical audit overwrite, or independent freeze credit. **NOT YET**.
+
+## 2026-11-06 — complete accepted source assurance retained at exported final witness
+
+The checked source-manifest producer already retained the **complete accepted**
+`GenericApplicationAssurance`, and both high-level and independently exported
+low-level consumers required equality with the separately certified source
+artifact. However, `NativeFinalInstanceCorrespondence` had exported only the
+projected `GenericApplicationIdentity` inside its final authority. This
+successor retains the **complete checked source-assurance object** in the opaque
+final witness, sourcing it from the real produced source-manifest token. The
+read-only `nativeCorrespondenceSourceAssurance` accessor prevents later
+representation work from confusing equal application identities with equal
+accepted reusable-body evidence. The manifest, raw Systems digest, lowering
+root, normalized Systems revision, common/closed stage contracts and distinct
+subject/instance/realization/profile coordinates remain unchanged and separate.
+
+Strict Upload and Steve controls check exact equality of the source token,
+accepted source, and exported final witness. Two independent checked-body
+substitutions keep the same `GenericApplicationIdentity` but must fail the
+existing exact source gate without modifying the accepted witness. The Rocq
+model adds conditional three-boundary source-assurance transport and explicit
+substitution rejection, including equal-identity negative pressure, with
+`Print Assumptions` queries. The source identity projection and native
+producer acceptances are still external typed premises: no Haskell-to-Rocq
+totality, injectivity, or `nat` encoding is claimed.
+
+This does **not** authenticate architecture occurrence-to-concrete StageClosure
+production or discharge source/assumption/erasure/final predecessor authority.
+No `FixedFinalAuthorityAdapter` or `FinalArtifactCertified` conclusion,
+public release-byte verification, or independent pinned final-delta signoff
+follows. Strict GHC, Rocq, LLVM and runtime/provider TCB remain unchanged.
+The 244 normative cases and historical audit record are untouched;
+independent Phase 1 audit-freeze verdict remains **NOT YET**.

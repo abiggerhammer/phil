@@ -6,6 +6,7 @@ module Phil.Verification.NativeFinalInstanceCorrespondence
   ( NativeFinalInstanceCorrespondence
   , nativeCorrespondenceArchitectureInstance
   , nativeCorrespondenceArchitectureDescriptor
+  , nativeCorrespondenceSourceAssurance
   , nativeCorrespondenceAuthority
   , NativeStageRevisionEquality
   , nativeStageRevisionEqualityOccurrence
@@ -40,6 +41,7 @@ import Phil.Verification.SourceManifestBinding
   ( SourceManifestBindingError
   , bindProducedFinalAuthority
   , closeSourceManifestBindingForInstance
+  , sourceManifestBindingSourceAssurance
   )
 
 -- | Preserve the *whole* canonical architecture descriptor validated by
@@ -49,16 +51,26 @@ import Phil.Verification.SourceManifestBinding
 -- authenticate occurrence-to-stage production or its source origin.
 -- Constructor private: callers cannot replace verified descriptor inputs.
 data NativeFinalInstanceCorrespondence = NativeFinalInstanceCorrespondence
+  GenericApplicationAssurance
   ArchitectureInstanceDescriptor
   NativeFinalAuthority
   deriving (Eq, Show)
+
+-- | The exact complete source assurance retained by the checked source-manifest
+-- producer and independently matched to the certified source artifact.
+-- Returning its generic application identity alone would discard accepted
+-- reusable-body evidence; this accessor does not derive any Rocq authority.
+nativeCorrespondenceSourceAssurance
+  :: NativeFinalInstanceCorrespondence -> GenericApplicationAssurance
+nativeCorrespondenceSourceAssurance
+  (NativeFinalInstanceCorrespondence source _ _) = source
 
 -- | Complete checked producer descriptor at the final witness boundary.
 -- No new downstream StageClosure/provenance authority is inferred.
 nativeCorrespondenceArchitectureDescriptor
   :: NativeFinalInstanceCorrespondence -> ArchitectureInstanceDescriptor
 nativeCorrespondenceArchitectureDescriptor
-  (NativeFinalInstanceCorrespondence descriptor _) = descriptor
+  (NativeFinalInstanceCorrespondence _ descriptor _) = descriptor
 
 nativeCorrespondenceArchitectureInstance
   :: NativeFinalInstanceCorrespondence -> ArchitectureInstanceIdentity
@@ -68,7 +80,7 @@ nativeCorrespondenceArchitectureInstance =
 nativeCorrespondenceAuthority
   :: NativeFinalInstanceCorrespondence -> NativeFinalAuthority
 nativeCorrespondenceAuthority
-  (NativeFinalInstanceCorrespondence _ authority) = authority
+  (NativeFinalInstanceCorrespondence _ _ authority) = authority
 
 -- | Equality of the architecture occurrence's canonical revision with the
 -- retained concrete stage's InstanceRevision. The constructor is private.
@@ -150,4 +162,5 @@ closeNativeFinalInstanceCorrespondence
     -- Do not lose the checked static/declaration inputs across the *final*
     -- producer-to-consumer witness boundary. The earlier source-manifest
     -- token separately retains this same exact descriptor.
-    pure (NativeFinalInstanceCorrespondence descriptor authority)
+    pure (NativeFinalInstanceCorrespondence
+      (sourceManifestBindingSourceAssurance produced) descriptor authority)

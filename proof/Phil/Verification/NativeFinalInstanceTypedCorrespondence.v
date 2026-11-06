@@ -517,6 +517,65 @@ Section NativeFinalInstanceTypedCorrespondence.
     Qed.
   End SourceTokenToFinalWitnessDescriptor.
 
+  (*
+    A distinct exact accepted-source preservation boundary: the checked
+    source-manifest token carries the complete GenericApplicationAssurance,
+    and the exported final witness must retain that same value. No equality of
+    application identities can substitute another checked-body assurance.
+    The model's producer predicates and object equalities below remain
+    explicitly supplied; no concrete Haskell-to-Rocq encoding is postulated.
+  *)
+  Section SourceTokenToFinalWitnessAssurance.
+    Context {SourceAssurance : Type}.
+    Context (sourceIdentity : SourceAssurance -> ApplicationIdentity).
+
+    Definition CheckedSourceAssurancePreservedToFinalWitness
+      (w : NativeFinalInstanceCoordinates)
+      (produced accepted token exported : SourceAssurance) : Prop :=
+      NativeBoundWithExactSource sourceIdentity w produced accepted /\
+      produced = token /\
+      token = exported.
+
+    Theorem checked_source_assurance_reaches_final_witness_exactly :
+      forall w produced accepted token exported,
+        CheckedSourceAssurancePreservedToFinalWitness
+          w produced accepted token exported ->
+        exported = accepted /\
+        sourceIdentity exported = producedApplication w /\
+        NativeProducerConsumerBound w.
+    Proof.
+      intros w produced accepted token exported
+        [[Hbound [Haccepted Hidentity]] [Htoken Hexport]].
+      split.
+      - rewrite <- Hexport. rewrite <- Htoken. exact Haccepted.
+      - split.
+        + rewrite <- Hexport. rewrite <- Htoken.
+          rewrite Hidentity. exact (proj1 Hbound).
+        + exact Hbound.
+    Qed.
+
+    Theorem substituted_source_witness_cannot_bind :
+      forall w produced accepted token exported,
+        token <> exported ->
+        ~ CheckedSourceAssurancePreservedToFinalWitness
+            w produced accepted token exported.
+    Proof.
+      intros w produced accepted token exported Hdiff [_ [_ Hexport]].
+      exact (Hdiff Hexport).
+    Qed.
+
+    Theorem same_source_identity_does_not_override_witness_equality :
+      forall w produced accepted token exported,
+        sourceIdentity token = sourceIdentity exported ->
+        token <> exported ->
+        ~ CheckedSourceAssurancePreservedToFinalWitness
+            w produced accepted token exported.
+    Proof.
+      intros w produced accepted token exported _ Hdiff [_ [_ Hexport]].
+      exact (Hdiff Hexport).
+    Qed.
+  End SourceTokenToFinalWitnessAssurance.
+
 End NativeFinalInstanceTypedCorrespondence.
 
 (* A concrete logical counterexample, NOT an encoding of Haskell identity
