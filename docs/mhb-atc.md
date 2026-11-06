@@ -89,6 +89,53 @@ oldest candidate by UTC enqueue time with deterministic tie-breaking.
 Unknown states, invalid SHAs, duplicate branch identities and naive timestamps
 fail closed. It neither grants clearance nor contacts GitHub.
 
+## Opt-in durable staging (new, inactive for Phase 1)
+
+A worker can prepare a branch under:
+
+    hamster/staged/<lane>/<candidate-slug>
+
+No existing Phase 1 auto-PR branch pattern matches this namespace. A staged
+branch by itself does **not** open a PR or trigger the full PR verification
+fanout. The worker submits a trusted repository_dispatch event to the default
+branch with event_type 'mhb-atc-stage' and a client_payload consisting of:
+- branch: the full staged branch name;
+- head_sha: the exact forty-character commit SHA to register.
+
+The workflow in .github/workflows/mhb-atc-stage.yml runs trusted main-branch
+code, compares the supplied SHA with the live GitHub branch head, and creates
+or updates one open issue titled "ATC candidate: <branch>" with labels
+"atc: staged" and "lane: <lane>". The issue's original creation timestamp
+is the durable FIFO enqueue time. An update to the same branch preserves
+that timestamp, but replaces the recorded exact head SHA. A closed issue
+cannot be reopened by reusing its branch name: create a new candidate slug.
+
+A GitHub CLI example, after a staged branch is already pushed:
+
+    branch=hamster/staged/mhb-atc/my-first-candidate
+    sha=$(git rev-parse HEAD)
+    gh api --method POST repos/abiggerhammer/phil/dispatches \
+      -f event_type=mhb-atc-stage \
+      -f "client_payload[branch]=$branch" \
+      -f "client_payload[head_sha]=$sha"
+
+The dispatcher is serialized with a global GitHub Actions concurrency group
+using queue:max and cancel-in-progress:false, to avoid overwriting an earlier
+pending stage request. It uses the workflow's scoped GitHub token to write
+issues; no untrusted staged branch code is checked out or executed.
+
+**Not admission clearance:** staging does not create a PR, reserve a runner,
+or imply that the recorded SHA is current later. A future controller must
+re-check branch identity and exact SHA immediately before admitting a
+candidate. The issue registry is opt-in and does not automatically scan
+hamster branches or change any of the three existing Phase 1 lanes.
+
+Operational limitations to address before live adoption: test repeated
+dispatch idempotence against the actual GitHub issue search response,
+bound the issue-search result set, add retry/backoff for rate-limit or
+transient API failures, define cancellation/supersession behavior, and
+ensure a global atomic admission decision across multiple queued issues.
+
 ## Rollout
 
 1. Observe representative queue delays, run costs, cancellations and verified
