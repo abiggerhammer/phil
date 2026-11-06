@@ -725,20 +725,20 @@ Section NativeFinalInstanceTypedCorrespondence.
     Definition ExactCertifiedReleasePreservedToFinalWitness
       (w : NativeFinalInstanceCoordinates)
       (accepted exported : CertifiedReleaseObject) : Prop :=
-      NativeProducerConsumerBound w /\\
-      certifiedByNativeProducer accepted /\\
-      releaseStage accepted = releaseStageClosure w /\\
-      releaseManifestId accepted = acceptedReleaseManifest w /\\
+      NativeProducerConsumerBound w /\
+      certifiedByNativeProducer accepted /\
+      releaseStage accepted = releaseStageClosure w /\
+      releaseManifestId accepted = acceptedReleaseManifest w /\
       accepted = exported.
 
     Theorem accepted_certified_release_reaches_final_witness_exactly :
       forall w accepted exported,
         ExactCertifiedReleasePreservedToFinalWitness
           w accepted exported ->
-        accepted = exported /\\
-        releaseStage exported = releaseStageClosure w /\\
-        releaseManifestId exported = acceptedReleaseManifest w /\\
-        certifiedByNativeProducer accepted /\\
+        accepted = exported /\
+        releaseStage exported = releaseStageClosure w /\
+        releaseManifestId exported = acceptedReleaseManifest w /\
+        certifiedByNativeProducer accepted /\
         NativeProducerConsumerBound w.
     Proof.
       intros w accepted exported [Hbound [Hcert [Hstage [Hmanifest Heq]]]].
