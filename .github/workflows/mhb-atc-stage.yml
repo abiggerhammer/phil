@@ -81,7 +81,7 @@ jobs:
             fi
             # A retry must not reset an in-flight or admitted candidate.
             # Staged issues are owned by the trusted default-branch bot.
-            author="$(gh issue view "$number" --repo "$GH_REPO" --json author --jq '.author.login')"
+            author="$(gh api "repos/$GH_REPO/issues/$number" --jq '.user.login')"
             test "$author" = "github-actions[bot]" || {
               echo "Untrusted existing candidate owner" >&2
               exit 1
