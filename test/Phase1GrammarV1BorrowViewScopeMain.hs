@@ -25,6 +25,7 @@ import Phil.Surface.GrammarV1.LetPatternScope
   )
 import Phil.Surface.GrammarV1.ParameterBodyScope
   ( GrammarV1CheckedLocalValueOccurrence (..)
+  , grammarV1CheckedLocalValueOccurrenceInScope
   )
 import Phil.Surface.GrammarV1.Parser
 import Phil.Surface.Syntax (Located (..))
@@ -37,6 +38,8 @@ main = do
         borrowOwnerPrecedesViewBinding
     , test "SURF-009 borrow view and body lets disappear together at scope exit"
         borrowScopeExitDropsViewAndBodyLets
+    , test "FSEM-01 Phase 1 borrow view is invisible to a same-result-type return after scope exit"
+        borrowViewNotReturnedAfterScope
     , test "SURF-009 sibling borrows may reuse spelling with fresh semantic identities"
         siblingBorrowsReuseSpellingDistinctly
     , test "SURF-009 borrow views cannot shadow active enclosing binders"
@@ -134,6 +137,70 @@ borrowScopeExitDropsViewAndBodyLets = do
   assert
     (grammarV1BinderOrdinal (grammarV1ResolvedBinderKey laterBinder) == 3)
     "borrow child-scope exit rewound the declaration-wide binder ordinal"
+
+-- FSEM-01 isolates lexical loan-scope failure from a public result-type
+-- mismatch: both functions declare -> U8 and each return expression is a
+-- single source identifier. The proof here is about *local-name resolution*,
+-- not yet a complete Phase 1 source type-checker BorrowEscape diagnostic.
+borrowViewNotReturnedAfterScope :: Either String ()
+borrowViewNotReturnedAfterScope = do
+  accepted <- onlyFunction "fsem01-borrow-return-owner" $ Text.unlines
+    [ "fn borrow_return(owner : U8) -> U8 satisfies C {"
+    , "  borrow owner as view { view; };"
+    , "  return owner;"
+    , "}"
+    ]
+  rejected <- onlyFunction "fsem01-borrow-return-view" $ Text.unlines
+    [ "fn borrow_return(owner : U8) -> U8 satisfies C {"
+    , "  borrow owner as view { view; };"
+    , "  return view;"
+    , "}"
+    ]
+  let declaration = DeclarationKey "decl.FSEM01BorrowReturn"
+  (acceptedParams, acceptedScope) <- mapLeft show
+    (grammarV1FunctionParameterScope declaration accepted)
+  (rejectedParams, rejectedScope) <- mapLeft show
+    (grammarV1FunctionParameterScope declaration rejected)
+  acceptedParam <- exactlyOne "accepted return owner" acceptedParams
+  rejectedParam <- exactlyOne "rejected return owner" rejectedParams
+  assert (grammarV1ResolvedBinderKey acceptedParam
+       == grammarV1ResolvedBinderKey rejectedParam)
+    "matched declarations did not retain the same owner identity"
+  acceptedBorrow <- firstExpressionStatement accepted
+  rejectedBorrow <- firstExpressionStatement rejected
+  (_, afterAccepted) <- checkedBorrow acceptedScope acceptedBorrow
+  (checkedRejected, afterRejected) <- checkedBorrow rejectedScope rejectedBorrow
+  acceptedReturn <- finalReturnExpression accepted
+  rejectedReturn <- finalReturnExpression rejected
+  case grammarV1CheckedLocalValueOccurrenceInScope afterAccepted acceptedReturn of
+    Just ownerOccurrence ->
+      assert (grammarV1ResolvedBinderKey (grammarV1CheckedLocalValueBinder ownerOccurrence)
+           == grammarV1ResolvedBinderKey acceptedParam)
+        "return owner did not resolve to the original U8 parameter"
+    Nothing -> Left "return owner should remain an active local occurrence"
+  -- Confirm the source negative is the expected return spelling, then test
+  -- the precise lexical rejection rather than relying on any failed type check.
+  case locatedValue rejectedReturn of
+    GrammarV1NameExpression reference []
+      | null (grammarV1StaticReferenceArguments reference)
+      , grammarV1QualifiedNameParts (grammarV1StaticReferenceName reference) == ["view"] ->
+          Right ()
+    other -> Left ("expected bare return view occurrence, got " <> show other)
+  assert (grammarV1CheckedLocalValueOccurrenceInScope afterRejected rejectedReturn == Nothing)
+    "return view was incorrectly accepted as a local after borrow scope exit"
+  let viewBinder = grammarV1CheckedBorrowViewBinder checkedRejected
+  case grammarV1ResolveLocal (Located (locatedSpan rejectedReturn) "view") afterRejected of
+    Left (GrammarV1BinderNotInScope _) ->
+      assertNotInScope "view" viewBinder afterRejected
+    other -> Left ("expected exact out-of-scope view rejection, got " <> show other)
+
+finalReturnExpression
+  :: GrammarV1FunctionDecl
+  -> Either String (Located GrammarV1Expression)
+finalReturnExpression functionDecl =
+  case reverse (grammarV1BlockStatements (locatedValue (grammarV1FunctionBody functionDecl))) of
+    Located _ (GrammarV1ReturnStatement expression) : _ -> Right expression
+    other -> Left ("expected final return statement, got " <> show other)
 
 siblingBorrowsReuseSpellingDistinctly :: Either String ()
 siblingBorrowsReuseSpellingDistinctly = do
