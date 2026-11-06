@@ -235,3 +235,43 @@ public release-byte verification, or independent pinned final-delta signoff
 follows. Strict GHC, Rocq, LLVM and runtime/provider TCB remain unchanged.
 The 244 normative cases and historical audit record are untouched;
 independent Phase 1 audit-freeze verdict remains **NOT YET**.
+
+
+## 2026-11-06 — preserve the independently accepted full manifest at final witness
+
+The prior opaque `NativeFinalInstanceCorrespondence` retained the complete checked
+source assurance and architecture descriptor, but projected the independently
+checked `AssuranceManifest` down to `manifestId` within `NativeFinalAuthority`.
+This bounded successor retains the entire manifest from the actual checked
+INT-002 `CertifiedSourceManifestBinding` token. The read-only
+`nativeCorrespondenceManifest` projection is not a way to fabricate a new
+accepted manifest or a stage-production certificate. The lower-level binder
+still requires full equality to `certifiedReleaseManifest` and the exact
+independently accepted source/release StageClosure, raw Systems digest and
+lowering root. Haskell Upload/Steve tests check all three full-manifest
+equalities and distinct raw Systems/root projections.
+
+Negative tests independently change the compilation-profile field while
+keeping the supplied `manifestId`, and require conventional release
+certification to reject the inconsistent manifest before any new
+`CertifiedReleaseArtifact` can exist. This does **not** assert a cryptographic
+digest collision: it is deliberate same-ID/different-object logical pressure
+against reducing whole manifest authority to a caller-chosen identity.
+Rocq's conditional four-object equality transport retains the independently
+accepted manifest as a separately typed object and distinguishes raw Systems
+and lowering-root projection codomains. Three `Print Assumptions` replays
+check the positive and full-manifest/same-ID rejection theorems. Their native
+acceptance and equality premises remain explicit, not derived by the model.
+
+**Remaining-premise ledger:** Even an exactly preserved full accepted manifest
+does not authenticate canonical architecture occurrence-to-concrete
+`StageClosure` production. Raw Systems digest/lowering root are not normalized
+`SystemsArtifactRevision`; common `Phase1StageContractRevision` is distinct
+from final `ClosedStageContractRevision`. Subject, instance, realization and
+verifier-profile identities remain separate. Faithful total/injective native
+to Rocq encodings and reflection, predecessor source/assumption/erasure/final
+authority, full `FixedFinalAuthorityAdapter` and `FinalArtifactCertified`,
+public release-byte validation, and independent pinned final-delta signoff
+remain outstanding. No TCB relaxation, generated artifact edit, Phase 2,
+historical audit overwrite, or normative case change. Original 244 cases
+remain intact; independent audit-freeze verdict **NOT YET**.
