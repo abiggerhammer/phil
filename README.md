@@ -4,6 +4,13 @@
 
 Phil is part of the broader Logics to Order research program. It starts from system boundaries, protocols, authority, and proof obligations, then lowers those meanings toward executable implementations without making one implementation the definition of the system.
 
+<p align="center">
+  <img src="docs/assets/mascots/phil-and-blocks-josie-backett.jpg" width="360" alt="Phil, a black-and-white border collie, with colorful smiling code blocks in a grassy field.">
+</p>
+<p align="center">
+  <sub>Illustration: Josie Backett · <a href="docs/brand/mascots.md">More Phil mascot art and artist credits</a></sub>
+</p>
+
 ## Start here
 
 New to Phil? Start with **[A Tour of Phil](docs/tutorials/tour-phase1.md)**. It begins with a tiny component and builds outward through ownership, callable contracts, effects and authority, protocols, architectures, processes, providers, generics, verification, and lowering. Each concept is introduced only after the preceding examples give it a reason to exist.
@@ -58,6 +65,7 @@ Portable Phase 1 handoff artifacts, remaining verification/realization integrati
 - `app/` — checker, certification, and bootstrap executables
 - `test/` — conformance and correspondence tests
 - `docs/tutorials/tour-phase1.md` — beginner-facing source-first tour of the current Phil language
+- `docs/brand/mascots.md` — mascot artwork gallery, artist credits, and usage notes
 - `docs/tutorials/tour-phase0.md` — frozen Phase 0 framed-upload worked example
 - `docs/tutorials/from-phase0-to-phase1.md` — conceptual migration guide for readers who already know Phase 0
 - `docs/reference/keywords-phase1.md` — grouped explanatory lexicon for every canonical Grammar-v1 reserved word
@@ -95,6 +103,8 @@ A successful `parse` command still means only syntactic acceptance and source-lo
 Phil's source code, proofs, examples, and repository documentation are licensed under the **Apache License 2.0**. See [`LICENSE`](LICENSE).
 
 Project names, logos, mascots, and other visual identity assets are not granted additional trademark or branding rights by the software license.
+
+Mascot illustrations are separately credited and are **not presumed to be covered by Apache-2.0**. See the [mascot artwork credits and reuse notes](docs/brand/mascots.md).
 
 ## Naming
 
