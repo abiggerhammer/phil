@@ -742,12 +742,10 @@ Section NativeFinalInstanceTypedCorrespondence.
         NativeProducerConsumerBound w.
     Proof.
       intros w accepted exported [Hbound [Hcert [Hstage [Hmanifest Heq]]]].
-      repeat split.
-      - exact Heq.
-      - rewrite <- Heq. exact Hstage.
-      - rewrite <- Heq. exact Hmanifest.
-      - exact Hcert.
-      - exact Hbound.
+      split; [exact Heq |].
+      split; [rewrite <- Heq; exact Hstage |].
+      split; [rewrite <- Heq; exact Hmanifest |].
+      split; [exact Hcert | exact Hbound].
     Qed.
 
     Theorem substituted_certified_release_cannot_bind :
