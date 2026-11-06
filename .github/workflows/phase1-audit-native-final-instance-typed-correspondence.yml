@@ -80,6 +80,9 @@ jobs:
           Print Assumptions native_bound_transports_to_typed_model_equalities.
           Print Assumptions typed_model_equalities_reflect_only_with_injections.
           Print Assumptions noninjective_representation_hides_digest_drift.
+          Print Assumptions native_stage_coordinate_equalities_transport.
+          Print Assumptions represented_stage_coordinates_reflect_only_with_injections.
+          Print Assumptions separate_noninjective_stage_models_hide_common_and_closed_drift.
           Print Assumptions fixed_adapter_full_certification_preserves_predecessors.
           EOF
           rocq c -Q proof/Phil Phil /tmp/NativeFinalInstanceAssumptions.v 2>&1 | tee typed-native-instance-assumptions.log
