@@ -108,6 +108,9 @@ jobs:
           Print Assumptions accepted_full_stage_closure_reaches_final_witness.
           Print Assumptions substituted_full_stage_closure_cannot_bind.
           Print Assumptions same_closed_revision_cannot_override_full_stage.
+          Print Assumptions accepted_certified_release_reaches_final_witness_exactly.
+          Print Assumptions substituted_certified_release_cannot_bind.
+          Print Assumptions same_stage_and_manifest_id_cannot_override_exact_release.
           Print Assumptions fixed_adapter_full_certification_preserves_predecessors.
           EOF
           rocq c -Q proof/Phil Phil /tmp/NativeFinalInstanceAssumptions.v 2>&1 | tee typed-native-instance-assumptions.log

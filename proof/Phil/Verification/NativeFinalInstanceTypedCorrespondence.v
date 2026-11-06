@@ -709,6 +709,68 @@ Section NativeFinalInstanceTypedCorrespondence.
     Qed.
   End FullStageClosureToFinalWitness.
 
+  (*
+    Full independently certified INT-005 release retention at the exported
+    native witness boundary. The native release contains LLVM and declared
+    residual trust in addition to its manifest and stage. All projections,
+    independent certification, and exact accepted-release equality are
+    EXTERNAL typed premises; a supplied Prop proves no Haskell acceptance.
+  *)
+  Section FullCertifiedReleaseToFinalWitness.
+    Context {CertifiedReleaseObject : Type}.
+    Context (releaseStage : CertifiedReleaseObject -> StageClosureObject).
+    Context (releaseManifestId : CertifiedReleaseObject -> ManifestIdentity).
+    Context (certifiedByNativeProducer : CertifiedReleaseObject -> Prop).
+
+    Definition ExactCertifiedReleasePreservedToFinalWitness
+      (w : NativeFinalInstanceCoordinates)
+      (accepted exported : CertifiedReleaseObject) : Prop :=
+      NativeProducerConsumerBound w /\
+      certifiedByNativeProducer accepted /\
+      releaseStage accepted = releaseStageClosure w /\
+      releaseManifestId accepted = acceptedReleaseManifest w /\
+      accepted = exported.
+
+    Theorem accepted_certified_release_reaches_final_witness_exactly :
+      forall w accepted exported,
+        ExactCertifiedReleasePreservedToFinalWitness
+          w accepted exported ->
+        accepted = exported /\
+        releaseStage exported = releaseStageClosure w /\
+        releaseManifestId exported = acceptedReleaseManifest w /\
+        certifiedByNativeProducer accepted /\
+        NativeProducerConsumerBound w.
+    Proof.
+      intros w accepted exported [Hbound [Hcert [Hstage [Hmanifest Heq]]]].
+      split; [exact Heq |].
+      split; [rewrite <- Heq; exact Hstage |].
+      split; [rewrite <- Heq; exact Hmanifest |].
+      split; [exact Hcert | exact Hbound].
+    Qed.
+
+    Theorem substituted_certified_release_cannot_bind :
+      forall w accepted exported,
+        accepted <> exported ->
+        ~ ExactCertifiedReleasePreservedToFinalWitness
+            w accepted exported.
+    Proof.
+      intros w accepted exported Hdiff [_ [_ [_ [_ Heq]]]].
+      exact (Hdiff Heq).
+    Qed.
+
+    Theorem same_stage_and_manifest_id_cannot_override_exact_release :
+      forall w accepted exported,
+        releaseStage accepted = releaseStage exported ->
+        releaseManifestId accepted = releaseManifestId exported ->
+        accepted <> exported ->
+        ~ ExactCertifiedReleasePreservedToFinalWitness
+            w accepted exported.
+    Proof.
+      intros w accepted exported _ _ Hdiff [_ [_ [_ [_ Heq]]]].
+      exact (Hdiff Heq).
+    Qed.
+  End FullCertifiedReleaseToFinalWitness.
+
 End NativeFinalInstanceTypedCorrespondence.
 
 (* A concrete logical counterexample, NOT an encoding of Haskell identity
