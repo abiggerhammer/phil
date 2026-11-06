@@ -85,3 +85,36 @@ competent producer that ties the representations to accepted native
 objects. None is supplied by this parametric transport. Release public bytes
 and independent pinned final-delta signoff remain separate; audit freeze
 **NOT YET**. This does not modify the 244 normative conformance cases.
+
+
+## 2026-11-06 — seven-field typed StageClosure coordinate transport
+
+Following merged #1590, the new bounded Rocq slice covers the *other seven*
+concrete native StageClosure coordinates independently: subject, instance,
+realization, **normalized** SystemsArtifactRevision, **common**
+Phase1StageContractRevision, **final closed** ClosedStageContractRevision,
+and verifier profile. Each source field and model codomain remains its own
+type, deliberately separate from #1590's accepted source, manifest, whole
+StageClosure, raw Systems digest, and lowering ledger root. These are
+parameterized functions rather than unproved Haskell-to-Rocq nat encodings.
+
+The positive theorem transports already-given equalities between two
+independently typed native stage-coordinate records. The reverse theorem
+requires **seven separately supplied injectivity premises** and recovers
+only the seven equalities, not native authority. An explicit counterexample
+uses distinct native/common and closed-stage logical types and distinct
+model target types with noninjective maps to show why both model equalities
+can hide two independent native drifts. This is not a model of actual
+Haskell revisions or a claim that unrelated StageClosure objects can be
+accepted. The exact-head workflow compiles the theorems and prints their
+assumptions while reexecuting unchanged strict GHC/Haskell Upload/Steve
+accepted-object and adversarial native/release tests.
+
+**Still open:** implement and prove these seven real encodings and the five
+earlier ones, authenticate the occurrence-key/stage-production origin,
+reconcile full source/assumption/erasure and final predecessor authority,
+and execute release public-byte and independent pinned final-delta
+verification separately. No supplied model Prop creates native producer
+authority; no full FixedFinalAuthorityAdapter or FinalArtifactCertified is
+derived. LLVM/provider/runtime TCB and original 244 normative conformance
+cases remain unchanged. Independent audit-freeze verdict: **NOT YET**.

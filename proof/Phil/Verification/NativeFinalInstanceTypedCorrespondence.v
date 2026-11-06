@@ -231,6 +231,106 @@ Section NativeFinalInstanceTypedCorrespondence.
       - apply Hroot. exact Hr.
     Qed.
   End ConditionalModelTransport.
+
+  (*
+    Conditional transport of the SEVEN additional, independently typed
+    concrete StageClosure coordinates.  These maps are parameters, not
+    implemented Haskell encoders or established native authority.
+    Source/raw-Systems/lowering-root maps remain separate above.
+  *)
+  Section ConditionalStageCoordinateTransport.
+    Context
+      {ModelSubject ModelInstance ModelRealization ModelNormalizedSystems
+       ModelCommonContract ModelClosedContract ModelProfile : Type}.
+    Context
+      (representSubject : SubjectRevision -> ModelSubject)
+      (representInstance : StageInstanceRevision -> ModelInstance)
+      (representRealization : RealizationRevision -> ModelRealization)
+      (representNormalizedSystems : SystemsArtifactRevision -> ModelNormalizedSystems)
+      (representCommonContract : Phase1StageContractRevision -> ModelCommonContract)
+      (representClosedContract : ClosedStageContractRevision -> ModelClosedContract)
+      (representProfile : VerifierProfileRevision -> ModelProfile).
+
+    Definition NativeStageCoordinatesAgree
+      (left right : NativeFinalInstanceCoordinates) : Prop :=
+      stageSubjectRevision left = stageSubjectRevision right /\
+      stageInstanceRevision left = stageInstanceRevision right /\
+      stageRealizationRevision left = stageRealizationRevision right /\
+      stageNormalizedSystemsRevision left = stageNormalizedSystemsRevision right /\
+      stageCommonContractRevision left = stageCommonContractRevision right /\
+      stageClosedContractRevision left = stageClosedContractRevision right /\
+      stageVerifierProfile left = stageVerifierProfile right.
+
+    Definition RepresentedStageCoordinatesAgree
+      (left right : NativeFinalInstanceCoordinates) : Prop :=
+      representSubject (stageSubjectRevision left) =
+        representSubject (stageSubjectRevision right) /\
+      representInstance (stageInstanceRevision left) =
+        representInstance (stageInstanceRevision right) /\
+      representRealization (stageRealizationRevision left) =
+        representRealization (stageRealizationRevision right) /\
+      representNormalizedSystems (stageNormalizedSystemsRevision left) =
+        representNormalizedSystems (stageNormalizedSystemsRevision right) /\
+      representCommonContract (stageCommonContractRevision left) =
+        representCommonContract (stageCommonContractRevision right) /\
+      representClosedContract (stageClosedContractRevision left) =
+        representClosedContract (stageClosedContractRevision right) /\
+      representProfile (stageVerifierProfile left) =
+        representProfile (stageVerifierProfile right).
+
+    Theorem native_stage_coordinate_equalities_transport :
+      forall left right,
+        NativeStageCoordinatesAgree left right ->
+        RepresentedStageCoordinatesAgree left right.
+    Proof.
+      intros left right [Hs [Hi [Hr [Hsys [Hcommon [Hclosed Hp]]]]]].
+      unfold RepresentedStageCoordinatesAgree.
+      repeat split;
+        [ now rewrite Hs | now rewrite Hi | now rewrite Hr
+        | now rewrite Hsys | now rewrite Hcommon
+        | now rewrite Hclosed | now rewrite Hp ].
+    Qed.
+
+    (*
+      The converse requires a separate injection for every source DOMAIN;
+      even all seven injections recover only equalities.  They do not create
+      accepted source, stage, or release evidence or authenticate the stage
+      occurrence key / stage-production lineage.
+    *)
+    Theorem represented_stage_coordinates_reflect_only_with_injections :
+      (forall x y : SubjectRevision,
+        representSubject x = representSubject y -> x = y) ->
+      (forall x y : StageInstanceRevision,
+        representInstance x = representInstance y -> x = y) ->
+      (forall x y : RealizationRevision,
+        representRealization x = representRealization y -> x = y) ->
+      (forall x y : SystemsArtifactRevision,
+        representNormalizedSystems x = representNormalizedSystems y -> x = y) ->
+      (forall x y : Phase1StageContractRevision,
+        representCommonContract x = representCommonContract y -> x = y) ->
+      (forall x y : ClosedStageContractRevision,
+        representClosedContract x = representClosedContract y -> x = y) ->
+      (forall x y : VerifierProfileRevision,
+        representProfile x = representProfile y -> x = y) ->
+      forall left right,
+        RepresentedStageCoordinatesAgree left right ->
+        NativeStageCoordinatesAgree left right.
+    Proof.
+      intros Hsubject Hinstance Hrealization Hsystems Hcommon Hclosed
+        Hprofile left right
+        [Hs [Hi [Hr [Hsys [Hc [Hf Hp]]]]]].
+      unfold NativeStageCoordinatesAgree.
+      repeat split.
+      - apply Hsubject. exact Hs.
+      - apply Hinstance. exact Hi.
+      - apply Hrealization. exact Hr.
+      - apply Hsystems. exact Hsys.
+      - apply Hcommon. exact Hc.
+      - apply Hclosed. exact Hf.
+      - apply Hprofile. exact Hp.
+    Qed.
+  End ConditionalStageCoordinateTransport.
+
 End NativeFinalInstanceTypedCorrespondence.
 
 (* A concrete logical counterexample, NOT an encoding of Haskell identity
@@ -263,4 +363,30 @@ Theorem noninjective_representation_hides_digest_drift :
 Proof.
   exists (fun _ : bool => tt), true, false.
   split; [discriminate | reflexivity].
+Qed.
+
+
+(*
+  Typed logical example, NOT Haskell revision encodings.  Even distinct
+  native/common and closed-stage model domains can each be noninjective:
+  their two image equalities do not force either native revision equality.
+*)
+Inductive ExampleNativeCommonStage : Type :=
+  | NativeCommonA | NativeCommonB.
+Inductive ExampleNativeClosedStage : Type :=
+  | NativeClosedA | NativeClosedB.
+Inductive ExampleModelCommonStage : Type := ModelCommonOnly.
+Inductive ExampleModelClosedStage : Type := ModelClosedOnly.
+
+Theorem separate_noninjective_stage_models_hide_common_and_closed_drift :
+  exists
+    (commonModel : ExampleNativeCommonStage -> ExampleModelCommonStage)
+    (closedModel : ExampleNativeClosedStage -> ExampleModelClosedStage),
+    NativeCommonA <> NativeCommonB /\
+    NativeClosedA <> NativeClosedB /\
+    commonModel NativeCommonA = commonModel NativeCommonB /\
+    closedModel NativeClosedA = closedModel NativeClosedB.
+Proof.
+  exists (fun _ => ModelCommonOnly), (fun _ => ModelClosedOnly).
+  repeat split; try discriminate; reflexivity.
 Qed.
