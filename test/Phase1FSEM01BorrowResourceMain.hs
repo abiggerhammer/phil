@@ -125,7 +125,7 @@ checkBounded label source = do
 safe :: Text.Text
 safe = Text.unlines
   [ "fn loan(owner : Bytes[8]) -> Bytes[8] satisfies C {"
-  , "  borrow owner as view { (); };"
+  , "  borrow owner as view { unit; };"
   , "  return owner;"
   , "}"
   ]
@@ -141,7 +141,7 @@ escaped = Text.unlines
 viewThenUnit :: Text.Text
 viewThenUnit = Text.unlines
   [ "fn loan(owner : Bytes[8]) -> Bytes[8] satisfies C {"
-  , "  borrow owner as view { view; (); };"
+  , "  borrow owner as view { view; unit; };"
   , "  return owner;"
   , "}"
   ]
