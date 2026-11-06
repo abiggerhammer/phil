@@ -5,6 +5,7 @@
 module Phil.Verification.NativeFinalInstanceCorrespondence
   ( NativeFinalInstanceCorrespondence
   , nativeCorrespondenceArchitectureInstance
+  , nativeCorrespondenceArchitectureDescriptor
   , nativeCorrespondenceAuthority
   , NativeStageRevisionEquality
   , nativeStageRevisionEqualityOccurrence
@@ -41,20 +42,28 @@ import Phil.Verification.SourceManifestBinding
   , closeSourceManifestBindingForInstance
   )
 
--- | Retains the canonical architecture-instance identity from the checked
--- actuals/instance/bundle producer *separately* from StageClosure's
--- InstanceRevision (available through 'nativeCorrespondenceAuthority').
--- They are different native domains; relating them remains a named premise.
--- The constructor is deliberately private.
+-- | Preserve the *whole* canonical architecture descriptor validated by
+-- the checked actuals/instance/bundle producer, not just its identity. The
+-- identity projection is derived from this retained descriptor. The concrete
+-- StageClosure InstanceRevision remains a separate domain and does NOT
+-- authenticate occurrence-to-stage production or its source origin.
+-- Constructor private: callers cannot replace verified descriptor inputs.
 data NativeFinalInstanceCorrespondence = NativeFinalInstanceCorrespondence
-  ArchitectureInstanceIdentity
+  ArchitectureInstanceDescriptor
   NativeFinalAuthority
   deriving (Eq, Show)
 
+-- | Complete checked producer descriptor at the final witness boundary.
+-- No new downstream StageClosure/provenance authority is inferred.
+nativeCorrespondenceArchitectureDescriptor
+  :: NativeFinalInstanceCorrespondence -> ArchitectureInstanceDescriptor
+nativeCorrespondenceArchitectureDescriptor
+  (NativeFinalInstanceCorrespondence descriptor _) = descriptor
+
 nativeCorrespondenceArchitectureInstance
   :: NativeFinalInstanceCorrespondence -> ArchitectureInstanceIdentity
-nativeCorrespondenceArchitectureInstance
-  (NativeFinalInstanceCorrespondence instanceIdentity _) = instanceIdentity
+nativeCorrespondenceArchitectureInstance =
+  deriveArchitectureInstanceIdentity . nativeCorrespondenceArchitectureDescriptor
 
 nativeCorrespondenceAuthority
   :: NativeFinalInstanceCorrespondence -> NativeFinalAuthority
@@ -138,5 +147,7 @@ closeNativeFinalInstanceCorrespondence
         source descriptor bundle policy context ledger selection)
     authority <- either (Left . NativeFinalInstanceReleaseRejected) Right
       (bindProducedFinalAuthority produced sourceArtifact release)
-    pure (NativeFinalInstanceCorrespondence
-      (deriveArchitectureInstanceIdentity descriptor) authority)
+    -- Do not lose the checked static/declaration inputs across the *final*
+    -- producer-to-consumer witness boundary. The earlier source-manifest
+    -- token separately retains this same exact descriptor.
+    pure (NativeFinalInstanceCorrespondence descriptor authority)
