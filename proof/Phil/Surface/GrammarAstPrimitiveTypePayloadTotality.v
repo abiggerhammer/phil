@@ -176,7 +176,7 @@ Proof.
     assert (Houter : phase1_surface_normalize_nonreference_type_spine tree = Some type_value).
     { rewrite Htree, Hsubtree. unfold phase1_surface_normalize_nonreference_type_spine,
         phase1_surface_expect_nonterminal, phase1_surface_expect_alternative.
-      cbn. rewrite String.eqb_refl. reflexivity. }
+      cbn. reflexivity. }
     assert (Hrefine : phase1_surface_normalize_primitive_nonreference_type_spine type_value =
       Some Phase1PrimitiveUnitType).
     { cbn. rewrite Hselected_tree. reflexivity. }
@@ -194,7 +194,7 @@ Proof.
       assert (Houter : phase1_surface_normalize_nonreference_type_spine tree = Some type_value).
       { rewrite Htree, Hsubtree. unfold phase1_surface_normalize_nonreference_type_spine,
           phase1_surface_expect_nonterminal, phase1_surface_expect_alternative.
-        cbn. rewrite String.eqb_refl. reflexivity. }
+        cbn. reflexivity. }
       assert (Hrefine : phase1_surface_normalize_primitive_nonreference_type_spine type_value =
         Some Phase1PrimitiveBoolType).
       { cbn. rewrite Hselected_tree. reflexivity. }
@@ -212,7 +212,7 @@ Proof.
         assert (Houter : phase1_surface_normalize_nonreference_type_spine tree = Some type_value).
         { rewrite Htree, Hsubtree. unfold phase1_surface_normalize_nonreference_type_spine,
             phase1_surface_expect_nonterminal, phase1_surface_expect_alternative.
-          cbn. rewrite String.eqb_refl. reflexivity. }
+          cbn. reflexivity. }
         assert (Hrefine : phase1_surface_normalize_primitive_nonreference_type_spine type_value =
           Some Phase1PrimitiveCharType).
         { cbn. rewrite Hselected_tree. reflexivity. }
@@ -230,7 +230,7 @@ Proof.
            assert (Houter : phase1_surface_normalize_nonreference_type_spine tree = Some type_value).
            { rewrite Htree, Hsubtree. unfold phase1_surface_normalize_nonreference_type_spine,
                phase1_surface_expect_nonterminal, phase1_surface_expect_alternative.
-             cbn. rewrite String.eqb_refl. reflexivity. }
+             cbn. reflexivity. }
            assert (Hrefine : phase1_surface_normalize_primitive_nonreference_type_spine type_value =
              Some Phase1PrimitiveStringType).
            { cbn. rewrite Hselected_tree. reflexivity. }
@@ -250,7 +250,7 @@ Proof.
               assert (Houter : phase1_surface_normalize_nonreference_type_spine tree = Some type_value).
               { rewrite Htree, Hsubtree. unfold phase1_surface_normalize_nonreference_type_spine,
                   phase1_surface_expect_nonterminal, phase1_surface_expect_alternative.
-                cbn. rewrite String.eqb_refl. reflexivity. }
+                cbn. reflexivity. }
               assert (Hrefine : phase1_surface_normalize_primitive_nonreference_type_spine type_value =
                 Some (Phase1PrimitiveUintType spelling)).
               { cbn. rewrite Hselected_norm. reflexivity. }
@@ -270,7 +270,7 @@ Proof.
                  assert (Houter : phase1_surface_normalize_nonreference_type_spine tree = Some type_value).
                  { rewrite Htree, Hsubtree. unfold phase1_surface_normalize_nonreference_type_spine,
                      phase1_surface_expect_nonterminal, phase1_surface_expect_alternative.
-                   cbn. rewrite String.eqb_refl. reflexivity. }
+                   cbn. reflexivity. }
                  assert (Hrefine : phase1_surface_normalize_primitive_nonreference_type_spine type_value =
                    Some (Phase1PrimitiveSintType spelling)).
                  { cbn. rewrite Hselected_norm. reflexivity. }
@@ -289,7 +289,7 @@ Proof.
                      assert (Houter : phase1_surface_normalize_nonreference_type_spine tree = Some type_value).
                      { rewrite Htree, Hsubtree. unfold phase1_surface_normalize_nonreference_type_spine,
                          phase1_surface_expect_nonterminal, phase1_surface_expect_alternative.
-                       cbn. rewrite String.eqb_refl. reflexivity. }
+                       cbn. reflexivity. }
                      assert (Hrefine : phase1_surface_normalize_primitive_nonreference_type_spine type_value =
                        Some (Phase1PrimitiveFloatType value)).
                      { cbn. rewrite Hselected_norm. reflexivity. }
@@ -379,7 +379,7 @@ Proof.
       unfold phase1_surface_normalize_type_spine,
         phase1_surface_expect_nonterminal,
         phase1_surface_expect_alternative.
-      cbn. rewrite String.eqb_refl. rewrite Houter. reflexivity.
+      cbn. rewrite Houter. reflexivity.
     }
     assert (Hresult : phase1_surface_normalize_primitive_type_tree tree = Some result).
     {
@@ -399,7 +399,7 @@ Proof.
         unfold phase1_surface_normalize_type_spine,
           phase1_surface_expect_nonterminal,
           phase1_surface_expect_alternative.
-        cbn. rewrite String.eqb_refl. reflexivity.
+        cbn. reflexivity.
       }
       assert (Hresult : phase1_surface_normalize_primitive_type_tree tree = Some result).
       {
