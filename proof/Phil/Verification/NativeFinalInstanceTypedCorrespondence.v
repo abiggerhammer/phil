@@ -488,9 +488,13 @@ Section NativeFinalInstanceTypedCorrespondence.
         descriptorIdentity exported = checkedArchitectureInstance w /\
         NativeCheckedInstanceProducerBound w.
     Proof.
-      intros w produced token exported [[Hnative [Heq Hid]] Hexport].
-      subst token.
-      repeat split; assumption.
+      intros w produced token exported
+        [[Hnative [Hproduced Hidentity]] Hexport].
+      split.
+      - exact (eq_trans Hproduced Hexport).
+      - split.
+        + rewrite <- Hexport. exact Hidentity.
+        + exact Hnative.
     Qed.
 
     Theorem final_witness_substituted_descriptor_cannot_bind :
