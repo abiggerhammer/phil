@@ -1,0 +1,163 @@
+name: MHB ATC Admit One (Manual)
+
+# Deliberately manual while ATC is being commissioned.
+# This does NOT modify legacy hamster auto-PR workflows.
+on:
+  workflow_dispatch:
+    inputs:
+      mode:
+        description: "dry-run reads queue only; admit-one opens exactly one PR"
+        type: choice
+        required: true
+        default: dry-run
+        options:
+          - dry-run
+          - admit-one
+
+permissions:
+  contents: read
+  issues: write
+  pull-requests: write
+
+concurrency:
+  # Durable serialization across *all* ATC admission attempts.
+  group: mhb-atc-admission-global
+  queue: max
+  cancel-in-progress: false
+
+jobs:
+  admit:
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Checkout trusted main
+        uses: actions/checkout@v4
+        with:
+          ref: main
+          persist-credentials: false
+
+      - name: Reconcile queue and optionally admit one exact revision
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          MODE: ${{ inputs.mode }}
+          # A user token rather than GITHUB_TOKEN is needed for PR creation
+          # to trigger the usual pull_request CI workflows.
+          HAMSTER_PR_TOKEN: ${{ secrets.HAMSTER_PR_TOKEN }}
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          read_snapshot() {
+            # Two independent complete, paginated GitHub API listings.
+            gh api --paginate "repos/$GH_REPO/issues?state=open&per_page=100" \
+              | jq -s 'add // []' > /tmp/atc-open-issues.json
+            gh api --paginate "repos/$GH_REPO/pulls?state=open&per_page=100" \
+              | jq -s 'add // []' > /tmp/atc-open-prs.json
+            python3 scripts/mhb_atc_admit.py \
+              --issues /tmp/atc-open-issues.json \
+              --prs /tmp/atc-open-prs.json > /tmp/atc-plan.json
+          }
+
+          read_snapshot
+          cat /tmp/atc-plan.json
+          decision="$(jq -r '.decision' /tmp/atc-plan.json)"
+
+          if [ "$MODE" = "dry-run" ]; then
+            {
+              echo "### MHB-ATC admission (read-only)"
+              echo
+              echo "- mode: dry-run"
+              echo "- decision: $decision"
+              echo "- no PR created; no queue state changed"
+            } >> "$GITHUB_STEP_SUMMARY"
+            exit 0
+          fi
+          if [ "$MODE" != "admit-one" ]; then
+            echo "Unknown mode $MODE" >&2
+            exit 1
+          fi
+          if [ "$decision" = "hold" ]; then
+            echo "No admission clearance; capacity occupied or no candidate."
+            exit 0
+          fi
+          test "$decision" = "would-admit"
+          if [ -z "$HAMSTER_PR_TOKEN" ]; then
+            echo "Missing HAMSTER_PR_TOKEN; GitHub token would not trigger PR CI" >&2
+            exit 1
+          fi
+
+          # Refresh entire snapshot before side effects; reject a changed plan.
+          prior="$(cat /tmp/atc-plan.json)"
+          read_snapshot
+          test "$(cat /tmp/atc-plan.json)" = "$prior"
+
+          issue="$(jq -r '.candidate_issue' /tmp/atc-plan.json)"
+          lane="$(jq -r '.lane' /tmp/atc-plan.json)"
+          branch="$(jq -r '.branch' /tmp/atc-plan.json)"
+          expected="$(jq -r '.head_sha' /tmp/atc-plan.json)"
+
+          # Exact-head freshness is checked against the authoritative ref,
+          # not a mutable issue description or a checkout of staged code.
+          live="$(gh api "repos/$GH_REPO/git/ref/heads/$branch" --jq '.object.sha')"
+          test "$live" = "$expected" || {
+            echo "Staged candidate $issue is stale; refusing PR creation" >&2
+            exit 1
+          }
+
+          # Reject any already-open PR for this staged branch. A previous
+          # partially completed admission must be reconciled, never duplicated.
+          duplicate="$(gh pr list --repo "$GH_REPO" --head "$branch" \
+            --state open --json number --jq 'length')"
+          test "$duplicate" = "0"
+
+          if ! gh label list --repo "$GH_REPO" --limit 1000 --json name \
+               | jq -e 'any(.[]; .name == "atc: admitted")' >/dev/null; then
+            gh label create "atc: admitted" --repo "$GH_REPO" \
+              --color 6a737d --description "MHB-ATC admitted verification"
+          fi
+
+          cat > /tmp/atc-pr-body.md <<EOF
+          MHB-ATC admitted staged candidate; this PR is **not** merge clearance.
+
+          - Candidate issue: #$issue
+          - Lane: $lane
+          - Staged branch: $branch
+          - Exact registered head: $expected
+
+          Required checks and integration safety must still be verified before any merge.
+          EOF
+
+          # Use the existing credential that provably triggers PR CI, not the
+          # workflow's GITHUB_TOKEN (whose events would not launch PR CI).
+          url="$(GH_TOKEN="$HAMSTER_PR_TOKEN" gh pr create \
+            --repo "$GH_REPO" --base main --head "$branch" \
+            --title "MHB-ATC admission: $lane / $issue" \
+            --body-file /tmp/atc-pr-body.md)"
+
+          # Detect the create-PR race: if the live revision changed between
+          # preflight and creation, immediately close the PR fail-closed.
+          actual="$(gh pr view "$url" --repo "$GH_REPO" \
+            --json headRefOid --jq '.headRefOid')"
+          if [ "$actual" != "$expected" ]; then
+            gh pr close "$url" --repo "$GH_REPO" \
+              --comment "ATC admission invalidated: head SHA moved during PR creation."
+            echo "Head moved during PR creation; PR closed fail-closed" >&2
+            exit 1
+          fi
+
+          # A crash before issue mutation leaves an open staged-branch PR;
+          # subsequent admissions detect it and hold rather than duplicate it.
+          gh pr edit "$url" --repo "$GH_REPO" \
+            --add-label "atc: admitted" --add-label "lane: $lane"
+          gh issue edit "$issue" --repo "$GH_REPO" \
+            --remove-label "atc: staged" --add-label "atc: admitted"
+
+          {
+            echo "### MHB-ATC admission"
+            echo
+            echo "- admitted issue: #$issue"
+            echo "- opened PR: $url"
+            echo "- lane: $lane"
+            echo "- authorized head: $expected"
+            echo "- next admission requires PR and issue closeout"
+          } >> "$GITHUB_STEP_SUMMARY"
