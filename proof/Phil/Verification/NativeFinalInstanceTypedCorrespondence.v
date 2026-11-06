@@ -409,6 +409,60 @@ Section NativeFinalInstanceTypedCorrespondence.
     Qed.
   End ExactSourceAssuranceGate.
 
+  (*
+    One necessary producer-level preservation: retain the entire checked
+    ArchitectureInstanceDescriptor, not only its derived occurrence identity.
+    Descriptor is an independent type and its identity projection may be
+    noninjective in an abstract model. The checked producer, equality and
+    descriptor-to-identity relation remain externally supplied premises;
+    these lemmas do not construct native acceptance or stage origin.
+  *)
+  Section ExactCheckedDescriptorRetention.
+    Context {ArchitectureInstanceDescriptor : Type}.
+    Context (descriptorIdentity :
+      ArchitectureInstanceDescriptor -> ArchitectureInstanceIdentity).
+
+    Definition ExactCheckedDescriptorRetained
+      (w : NativeFinalInstanceCoordinates)
+      (producedDescriptor retainedDescriptor : ArchitectureInstanceDescriptor)
+      : Prop :=
+      NativeCheckedInstanceProducerBound w /\
+      producedDescriptor = retainedDescriptor /\
+      descriptorIdentity retainedDescriptor = checkedArchitectureInstance w.
+
+    Theorem exact_checked_descriptor_retention_preserves_bound :
+      forall w produced retained,
+        ExactCheckedDescriptorRetained w produced retained ->
+        NativeCheckedInstanceProducerBound w /\
+        produced = retained /\
+        descriptorIdentity produced = checkedArchitectureInstance w.
+    Proof.
+      intros w produced retained [Hnative [Heq Hid]].
+      split; [exact Hnative |].
+      split; [exact Heq |].
+      rewrite Heq. exact Hid.
+    Qed.
+
+    Theorem different_checked_descriptor_cannot_bind :
+      forall w produced retained,
+        produced <> retained ->
+        ~ ExactCheckedDescriptorRetained w produced retained.
+    Proof.
+      intros w produced retained Hdiff [_ [Heq _]].
+      exact (Hdiff Heq).
+    Qed.
+
+    Theorem equal_descriptor_identity_cannot_override_exact_retention :
+      forall w produced retained,
+        descriptorIdentity produced = descriptorIdentity retained ->
+        produced <> retained ->
+        ~ ExactCheckedDescriptorRetained w produced retained.
+    Proof.
+      intros w produced retained _ Hdiff [_ [Heq _]].
+      exact (Hdiff Heq).
+    Qed.
+  End ExactCheckedDescriptorRetention.
+
 End NativeFinalInstanceTypedCorrespondence.
 
 (* A concrete logical counterexample, NOT an encoding of Haskell identity
@@ -476,6 +530,19 @@ Theorem equal_application_identity_does_not_authenticate_source_assurance :
          (producedSource acceptedSource : bool),
     producedSource <> acceptedSource /\
     sourceIdentity producedSource = sourceIdentity acceptedSource.
+Proof.
+  exists (fun _ : bool => tt), true, false.
+  split; [discriminate | reflexivity].
+Qed.
+
+(* Logical collision only: identity equality does not establish descriptor
+   equality without a proved injectivity premise. No Haskell encoder here. *)
+Theorem equal_architecture_identity_does_not_authenticate_descriptor :
+  exists (descriptorIdentity : bool -> unit)
+         (producedDescriptor retainedDescriptor : bool),
+    producedDescriptor <> retainedDescriptor /\
+    descriptorIdentity producedDescriptor =
+      descriptorIdentity retainedDescriptor.
 Proof.
   exists (fun _ : bool => tt), true, false.
   split; [discriminate | reflexivity].

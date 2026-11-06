@@ -141,6 +141,10 @@ main = do
           , producedBindingAccepted source upload)
         , ( "Source-manifest producer closes Steve from checked declaration and bundle"
           , producedBindingAccepted source steve)
+        , ( "Checked Upload source-manifest token retains exact semantic descriptor"
+          , checkedDescriptorRetained source upload)
+        , ( "Checked Steve source-manifest token retains exact semantic descriptor"
+          , checkedDescriptorRetained source steve)
         , ( "Declaration-only Upload producer cannot bind a certified release"
           , declarationOnlyBindingRejected source upload)
         , ( "Declaration-only Steve producer cannot bind a certified release"
@@ -573,6 +577,19 @@ produceFixture source fixture = do
         , fixtureManifest = sourceManifestBindingManifest binding }
   Right (binding, updated)
 
+-- This checks the *complete* producer-verified semantic descriptor, rather
+-- than treating its derived architecture identity as a substitute.
+checkedDescriptorRetained
+  :: GenericApplicationAssurance -> ReleaseFixture -> Bool
+checkedDescriptorRetained source fixture =
+  case produceFixture source fixture of
+    Left _ -> False
+    Right (binding, _) ->
+      let descriptor = sourceInstanceDescriptor source
+      in sourceManifestBindingArchitectureDescriptor binding == Just descriptor
+          && sourceManifestBindingArchitectureInstance binding
+               == Just (deriveArchitectureInstanceIdentity descriptor)
+
 producedBindingAccepted
   :: GenericApplicationAssurance -> ReleaseFixture -> Bool
 producedBindingAccepted source fixture = case produceFixture source fixture of
@@ -608,6 +625,7 @@ declarationOnlyBindingRejected source fixture =
         Right weak ->
           sourceManifestBindingManifest weak == sourceManifestBindingManifest checked
             && sourceManifestBindingArchitectureInstance weak == Nothing
+            && sourceManifestBindingArchitectureDescriptor weak == Nothing
             && case nativeAdapterPair source produced of
               Nothing -> False
               Just (sourceArtifact, release) ->
