@@ -143,9 +143,9 @@ Proof.
   destruct
     (phase1_surface_nonreference_type_item_matches_tag index item Hnth)
     as [tag Htag].
-  let type_value := constr:(
+  pose (type_value :=
     {| phase1_nonreference_type_spine_tag := tag;
-       phase1_nonreference_type_spine_selected_tree := selected |}) in
+       phase1_nonreference_type_spine_selected_tree := selected |}).
   assert (Hnormalize :
     phase1_surface_normalize_nonreference_type_spine tree = Some type_value).
   {
@@ -198,7 +198,7 @@ Proof.
           (AtAlternative 0))
         input rest selected Hselected)
       as [nonreference [Hnonreference Hround_trip]].
-    let type_value := constr:(Phase1NonreferenceTypeSpine nonreference) in
+    pose (type_value := Phase1NonreferenceTypeSpine nonreference).
     assert (Hnormalize :
       phase1_surface_normalize_type_spine tree = Some type_value).
     {
@@ -219,7 +219,7 @@ Proof.
   - destruct index as [|index].
     + cbn in Hnth.
       inversion Hnth; subst item.
-      let type_value := constr:(Phase1NamedTypeSpine selected) in
+      pose (type_value := Phase1NamedTypeSpine selected).
       assert (Hnormalize :
         phase1_surface_normalize_type_spine tree = Some type_value).
       {
