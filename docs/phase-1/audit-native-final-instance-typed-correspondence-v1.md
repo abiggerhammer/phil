@@ -53,3 +53,35 @@ the fixed-adapter representation, source/assumption/erasure predecessors,
 `FinalArtifactCertified`, public-release byte verification, or independent
 final-delta approval. These remain separate obligations; Phase 1 audit freeze
 is **NOT YET**, and 244 normative cases are unchanged.
+
+## 2026-11-06 — conditional, domain-separated model transport (issue #1584)
+
+The next bounded proof slice formalizes what an eventual representation layer
+would *have to* establish before it could support native-to-Rocq final
+authority. The actual checked native producer/consumer equalities transport
+forward through five separately typed **parameter** functions: application
+identity, manifest identity, whole StageClosure, raw Systems digest, and
+lowering ledger root. In particular, although native Haskell uses the same
+Digest type for raw Systems and ledger roots, their **model target types and
+representation functions are distinct**. This is not a map from those values
+to the model's existing nat fields.
+
+The reverse theorem requires **five separate injectivity premises**; its
+conclusion is limited to those five native equality propositions, never the
+independent acceptance or origin of their inputs. A concrete proof-level
+counterexample uses an explicitly noninjective bool-to-unit mapping to
+demonstrate how distinct native-side values could collapse to one modeled
+value. That example is **not** a purported native Digest encoding. Rocq
+Print Assumptions replays both directions and the counterexample, and the
+unchanged but reexecuted strict Haskell Upload/Steve and adversarial
+producer/consumer suite remains the executable native control.
+
+**Still missing:** actual total and injective representations (and their
+faithfulness proofs) for every required source, manifest and stage coordinate;
+the occurrence-key/stage-production origin, all normalized Systems, common
+and closed contract, subject/instance/realization/verifier-profile model
+translations, predecessor source/assumption/erasure authority, and a
+competent producer that ties the representations to accepted native
+objects. None is supplied by this parametric transport. Release public bytes
+and independent pinned final-delta signoff remain separate; audit freeze
+**NOT YET**. This does not modify the 244 normative conformance cases.
