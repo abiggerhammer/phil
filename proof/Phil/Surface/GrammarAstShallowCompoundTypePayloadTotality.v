@@ -314,97 +314,134 @@ Proof.
       ]
       input rest tree Hderive)
     as [trees [Htree Hitems]].
-  repeat match goal with
-  | Hseq : DerivesSequence phase1_surface_rules _ _ (_ :: _) _ _ _ |- _ =>
-      inversion Hseq; subst; clear Hseq
-  end.
-  match goal with
-  | Hnil : DerivesSequence phase1_surface_rules _ _ [] _ _ _ |- _ =>
-      inversion Hnil; subst; clear Hnil
-  end.
-  match goal with
-  | Hkeyword : Derives phase1_surface_rules _
-      (ELiteral "Validated") _ _ ?keyword_tree,
-    Hopen : Derives phase1_surface_rules _
-      (ELiteral "[") _ _ ?open_tree,
-    Hreference : Derives phase1_surface_rules _
-      (ENonterminal "static_reference") _ _ ?reference_tree,
-    Hfirst_comma : Derives phase1_surface_rules _
-      (ELiteral ",") _ _ ?first_comma_tree,
-    Hfirst_expression : Derives phase1_surface_rules _
-      (ENonterminal "expression") _ _ ?first_expression_tree,
-    Hsecond_comma : Derives phase1_surface_rules _
-      (ELiteral ",") _ _ ?second_comma_tree,
-    Hsecond_expression : Derives phase1_surface_rules _
-      (ENonterminal "expression") _ _ ?second_expression_tree,
-    Hclose : Derives phase1_surface_rules _
-      (ELiteral "]") _ _ ?close_tree |- _ =>
-      destruct
-        (literal_derivation_is_exact
-          phase1_surface_rules _ "Validated" _ _ keyword_tree Hkeyword)
-        as [keyword_tail [_ [_ Hkeyword_tree]]];
-      destruct
-        (literal_derivation_is_exact
-          phase1_surface_rules _ "[" _ _ open_tree Hopen)
-        as [open_tail [_ [_ Hopen_tree]]];
-      destruct
-        (literal_derivation_is_exact
-          phase1_surface_rules _ "," _ _ first_comma_tree Hfirst_comma)
-        as [first_comma_tail [_ [_ Hfirst_comma_tree]]];
-      destruct
-        (literal_derivation_is_exact
-          phase1_surface_rules _ "," _ _ second_comma_tree Hsecond_comma)
-        as [second_comma_tail [_ [_ Hsecond_comma_tree]]];
-      destruct
-        (literal_derivation_is_exact
-          phase1_surface_rules _ "]" _ _ close_tree Hclose)
-        as [close_tail [_ [_ Hclose_tree]]];
-      destruct
-        (derives_nonterminal_exposes_body
-          phase1_surface_rules _ "static_reference"
-          _ _ reference_tree Hreference)
-        as [reference_body
-            [reference_subtree
-             [Hreference_lookup [Hreference_tree Hreference_body]]]];
-      destruct
-        (derives_nonterminal_exposes_body
-          phase1_surface_rules _ "expression"
-          _ _ first_expression_tree Hfirst_expression)
-        as [first_expression_body
-            [first_expression_subtree
-             [Hfirst_expression_lookup
-              [Hfirst_expression_tree Hfirst_expression_body]]]];
-      destruct
-        (derives_nonterminal_exposes_body
-          phase1_surface_rules _ "expression"
-          _ _ second_expression_tree Hsecond_expression)
-        as [second_expression_body
-            [second_expression_subtree
-             [Hsecond_expression_lookup
-              [Hsecond_expression_tree Hsecond_expression_body]]]];
-      let payload := constr:(
-        {| phase1_validated_payload_reference := reference_tree;
-           phase1_validated_payload_first_expression := first_expression_tree;
-           phase1_validated_payload_second_expression := second_expression_tree |}) in
-      assert (Hnormalize :
-        phase1_surface_normalize_validated_payload tree = Some payload);
-      [ rewrite Htree, Hkeyword_tree, Hopen_tree, Hreference_tree,
-          Hfirst_comma_tree, Hfirst_expression_tree,
-          Hsecond_comma_tree, Hsecond_expression_tree, Hclose_tree;
-        unfold phase1_surface_normalize_validated_payload,
-          phase1_surface_expect_sequence,
-          phase1_surface_shallow_exact8,
-          phase1_surface_expect_literal,
-          phase1_surface_expect_nonterminal;
-        cbn;
-        repeat rewrite String.eqb_refl;
-        reflexivity
-      | exists payload;
-        split;
-        [ exact Hnormalize
-        | eapply phase1_surface_normalize_validated_payload_round_trip;
-          exact Hnormalize ] ]
-  end.
+  destruct
+    (derives_sequence_cons_exposes_head_exact
+      phase1_surface_rules path 0
+      (ELiteral "Validated") [ ELiteral "["; ENonterminal "static_reference"; ELiteral ","; ENonterminal "expression"; ELiteral ","; ENonterminal "expression"; ELiteral "]" ]
+      input rest trees Hitems)
+    as [keyword_middle [keyword_tree [keyword_tail_trees
+      [Htrees [Hkeyword Hkeyword_tail]]]]].
+  destruct
+    (derives_sequence_cons_exposes_head_exact
+      phase1_surface_rules path 1
+      (ELiteral "[") [ ENonterminal "static_reference"; ELiteral ","; ENonterminal "expression"; ELiteral ","; ENonterminal "expression"; ELiteral "]" ]
+      keyword_middle rest keyword_tail_trees Hkeyword_tail)
+    as [open_middle [open_tree [open_tail_trees
+      [Hkeyword_tail_trees [Hopen Hopen_tail]]]]].
+  destruct
+    (derives_sequence_cons_exposes_head_exact
+      phase1_surface_rules path 2
+      (ENonterminal "static_reference") [ ELiteral ","; ENonterminal "expression"; ELiteral ","; ENonterminal "expression"; ELiteral "]" ]
+      open_middle rest open_tail_trees Hopen_tail)
+    as [reference_middle [reference_tree [reference_tail_trees
+      [Hopen_tail_trees [Hreference Hreference_tail]]]]].
+  destruct
+    (derives_sequence_cons_exposes_head_exact
+      phase1_surface_rules path 3
+      (ELiteral ",") [ ENonterminal "expression"; ELiteral ","; ENonterminal "expression"; ELiteral "]" ]
+      reference_middle rest reference_tail_trees Hreference_tail)
+    as [first_comma_middle [first_comma_tree [first_comma_tail_trees
+      [Hreference_tail_trees [Hfirst_comma Hfirst_comma_tail]]]]].
+  destruct
+    (derives_sequence_cons_exposes_head_exact
+      phase1_surface_rules path 4
+      (ENonterminal "expression") [ ELiteral ","; ENonterminal "expression"; ELiteral "]" ]
+      first_comma_middle rest first_comma_tail_trees Hfirst_comma_tail)
+    as [first_expression_middle [first_expression_tree [first_expression_tail_trees
+      [Hfirst_comma_tail_trees [Hfirst_expression Hfirst_expression_tail]]]]].
+  destruct
+    (derives_sequence_cons_exposes_head_exact
+      phase1_surface_rules path 5
+      (ELiteral ",") [ ENonterminal "expression"; ELiteral "]" ]
+      first_expression_middle rest first_expression_tail_trees Hfirst_expression_tail)
+    as [second_comma_middle [second_comma_tree [second_comma_tail_trees
+      [Hfirst_expression_tail_trees [Hsecond_comma Hsecond_comma_tail]]]]].
+  destruct
+    (derives_sequence_cons_exposes_head_exact
+      phase1_surface_rules path 6
+      (ENonterminal "expression") [ ELiteral "]" ]
+      second_comma_middle rest second_comma_tail_trees Hsecond_comma_tail)
+    as [second_expression_middle [second_expression_tree [second_expression_tail_trees
+      [Hsecond_comma_tail_trees [Hsecond_expression Hsecond_expression_tail]]]]].
+  destruct
+    (derives_sequence_cons_exposes_head_exact
+      phase1_surface_rules path 7
+      (ELiteral "]") []
+      second_expression_middle rest second_expression_tail_trees Hsecond_expression_tail)
+    as [close_middle [close_tree [end_trees
+      [Hsecond_expression_tail_trees [Hclose Hend]]]]].
+  inversion Hend; subst end_trees.
+  rewrite Htrees, Hkeyword_tail_trees, Hopen_tail_trees,
+    Hreference_tail_trees, Hfirst_comma_tail_trees,
+    Hfirst_expression_tail_trees, Hsecond_comma_tail_trees,
+    Hsecond_expression_tail_trees in Htree.
+  destruct
+    (literal_derivation_is_exact
+      phase1_surface_rules _ "Validated" _ _ keyword_tree Hkeyword)
+    as [keyword_tail [_ [_ Hkeyword_tree]]].
+  destruct
+    (literal_derivation_is_exact
+      phase1_surface_rules _ "[" _ _ open_tree Hopen)
+    as [open_tail [_ [_ Hopen_tree]]].
+  destruct
+    (literal_derivation_is_exact
+      phase1_surface_rules _ "," _ _ first_comma_tree Hfirst_comma)
+    as [first_comma_tail [_ [_ Hfirst_comma_tree]]].
+  destruct
+    (literal_derivation_is_exact
+      phase1_surface_rules _ "," _ _ second_comma_tree Hsecond_comma)
+    as [second_comma_tail [_ [_ Hsecond_comma_tree]]].
+  destruct
+    (literal_derivation_is_exact
+      phase1_surface_rules _ "]" _ _ close_tree Hclose)
+    as [close_tail [_ [_ Hclose_tree]]].
+  destruct
+    (derives_nonterminal_exposes_body
+      phase1_surface_rules _ "static_reference"
+      _ _ reference_tree Hreference)
+    as [reference_body
+        [reference_subtree
+         [Hreference_lookup [Hreference_tree Hreference_body]]]].
+  destruct
+    (derives_nonterminal_exposes_body
+      phase1_surface_rules _ "expression"
+      _ _ first_expression_tree Hfirst_expression)
+    as [first_expression_body
+        [first_expression_subtree
+         [Hfirst_expression_lookup
+          [Hfirst_expression_tree Hfirst_expression_body]]]].
+  destruct
+    (derives_nonterminal_exposes_body
+      phase1_surface_rules _ "expression"
+      _ _ second_expression_tree Hsecond_expression)
+    as [second_expression_body
+        [second_expression_subtree
+         [Hsecond_expression_lookup
+          [Hsecond_expression_tree Hsecond_expression_body]]]].
+  pose (payload :=
+    {| phase1_validated_payload_reference := reference_tree;
+       phase1_validated_payload_first_expression := first_expression_tree;
+       phase1_validated_payload_second_expression := second_expression_tree |}).
+  assert (Hnormalize :
+    phase1_surface_normalize_validated_payload tree = Some payload).
+  {
+    rewrite Htree, Hkeyword_tree, Hopen_tree, Hreference_tree,
+      Hfirst_comma_tree, Hfirst_expression_tree,
+      Hsecond_comma_tree, Hsecond_expression_tree, Hclose_tree.
+    unfold phase1_surface_normalize_validated_payload,
+      phase1_surface_expect_sequence,
+      phase1_surface_shallow_exact8,
+      phase1_surface_expect_literal,
+      phase1_surface_expect_nonterminal.
+    cbn.
+    repeat rewrite String.eqb_refl.
+    reflexivity.
+  }
+  exists payload.
+  split.
+  - exact Hnormalize.
+  - eapply phase1_surface_normalize_validated_payload_round_trip.
+    exact Hnormalize.
 Qed.
 
 Lemma phase1_surface_normalize_shallow_compound_nonreference_total_from_derivation :
