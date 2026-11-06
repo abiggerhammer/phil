@@ -18,6 +18,7 @@ MARKER_FENCE = re.compile(r"~~~json\n(\{.*?\})\n~~~", re.DOTALL)
 SHA = re.compile(r"[a-f0-9]{40}\Z")
 ACTIVE_LABEL = "atc: admitted"
 STAGED_LABEL = "atc: staged"
+ADMITTING_LABEL = "atc: admitting"
 TRUSTED_CREATOR = "github-actions[bot]"
 
 
@@ -79,20 +80,20 @@ def plan(issues: list, prs: list) -> dict:
         if not isinstance(issue, dict) or issue.get("state") != "open":
             raise ValueError("unexpected issue in open-issue snapshot")
         labels = names(issue)
-        if STAGED_LABEL not in labels and ACTIVE_LABEL not in labels:
+        if not ({STAGED_LABEL, ADMITTING_LABEL, ACTIVE_LABEL} & labels):
             continue
         if "pull_request" in issue:
             # PRs also appear in the GitHub Issues API. Admitted PRs are
             # deliberately labelled and already counted from the PR listing.
-            if STAGED_LABEL in labels:
-                raise ValueError("a PR cannot be a staged candidate issue")
+            if STAGED_LABEL in labels or ADMITTING_LABEL in labels:
+                raise ValueError("a PR cannot be a staged or admitting candidate issue")
             continue
         if issue.get("user", {}).get("login") != TRUSTED_CREATOR:
             raise ValueError("ATC candidate not created by trusted stage bot")
         number = issue.get("number")
         if type(number) is not int or number < 1:
             raise ValueError("invalid candidate issue number")
-        if STAGED_LABEL in labels and ACTIVE_LABEL in labels:
+        if len({STAGED_LABEL, ADMITTING_LABEL, ACTIVE_LABEL} & labels) != 1:
             raise ValueError("ambiguous candidate state labels")
         record = machine_record(issue)
         branch = record["branch"]
@@ -104,7 +105,7 @@ def plan(issues: list, prs: list) -> dict:
         lane_labels = {label for label in labels if label.startswith("lane: ")}
         if lane_labels != {"lane: " + record["lane"]}:
             raise ValueError("candidate lane labels inconsistent")
-        if ACTIVE_LABEL in labels:
+        if ACTIVE_LABEL in labels or ADMITTING_LABEL in labels:
             admitted_issues.append(number)
             continue
         created = issue.get("created_at")
@@ -115,7 +116,7 @@ def plan(issues: list, prs: list) -> dict:
             raise ValueError("candidate has naive enqueue timestamp")
         candidates.append((at.astimezone(dt.timezone.utc), number, record))
 
-    # An admitted issue may be waiting for a manual closeout. Fail closed
+    # An admitting/admitted issue may be awaiting recovery. Fail closed
     # rather than declaring the slot free simply because the PR disappeared.
     if active_prs or admitted_issues:
         return {"decision": "hold", "reason": "active or unreconciled admissions",
