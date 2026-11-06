@@ -82,9 +82,11 @@ def plan(issues: list, prs: list) -> dict:
         if STAGED_LABEL not in labels and ACTIVE_LABEL not in labels:
             continue
         if "pull_request" in issue:
-            # PRs appear in the GitHub Issues API. We already scanned all open
-            # PRs separately; reject a PR masquerading as a queue issue.
-            raise ValueError("PR is incorrectly labelled as an ATC candidate issue")
+            # PRs also appear in the GitHub Issues API. Admitted PRs are
+            # deliberately labelled and already counted from the PR listing.
+            if STAGED_LABEL in labels:
+                raise ValueError("a PR cannot be a staged candidate issue")
+            continue
         if issue.get("user", {}).get("login") != TRUSTED_CREATOR:
             raise ValueError("ATC candidate not created by trusted stage bot")
         number = issue.get("number")
