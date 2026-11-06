@@ -147,6 +147,10 @@ main = do
           , nativeFinalInstanceAccepts source upload)
         , ( "Typed native final instance witness closes Steve accepted consumer"
           , nativeFinalInstanceAccepts source steve)
+        , ( "Same application identity with different accepted source assurance rejects Upload"
+          , nativeFinalInstanceDifferentAcceptedSourceRejects source upload)
+        , ( "Same application identity with different accepted source assurance rejects Steve"
+          , nativeFinalInstanceDifferentAcceptedSourceRejects source steve)
         , ( "Stage revision gate rejects unrelated Upload source occurrence"
           , nativeStageRevisionGateRejectsUnrelated source upload)
         , ( "Stage revision gate rejects unrelated Steve source occurrence"
@@ -393,16 +397,20 @@ independentlyRehashedSystemsManifestRejected fixture =
 -- constructors, rather than inventing GenericApplicationAssurance internals.
 nativeAdapterSourceAssurance
   :: Either String GenericApplicationAssurance
-nativeAdapterSourceAssurance = do
+nativeAdapterSourceAssurance = nativeAdapterSourceAssuranceWithEvidence
+  (ArtifactIdentity
+    (ArtifactRef "nr-d06.accepted-source-proof")
+    (digestText "nr-d06.content-checked-source-evidence"))
+
+nativeAdapterSourceAssuranceWithEvidence
+  :: ArtifactIdentity -> Either String GenericApplicationAssurance
+nativeAdapterSourceAssuranceWithEvidence sourceEvidence = do
   let declaration = DeclarationKey "nr-d06.generic.map"
       interface = InterfaceRevision "nr-d06.interface.v1"
       definition = DefinitionRevision "nr-d06.definition.v1"
       requirements = Set.empty
-      sourceArtifact = ArtifactIdentity
-        (ArtifactRef "nr-d06.accepted-source-proof")
-        (digestText "nr-d06.content-checked-source-evidence")
   body <- mapLeft show (prepareReusableGenericBodyAssurance
-    declaration interface definition requirements sourceArtifact)
+    declaration interface definition requirements sourceEvidence)
   application <- mapLeft show (deriveGenericApplicationIdentity declaration interface
     [(GenericStaticParameterKey "T", SemanticAtom "Blob")])
   disposition <- mapLeft show (checkGenericInstantiation
@@ -609,6 +617,34 @@ nativeFinalInstanceAccepts source fixture =
                 && nativeFinalCommonContractRevision authority == phase1StageContractRevision common
                 && nativeFinalClosedContractRevision authority == stageClosureContractRevision stage
                 && nativeFinalVerifierProfile authority == phase1StageVerifierProfileRevision common
+    _ -> False
+
+-- A second *independently constructed* source assurance has the same exact
+-- application identity but different checked body evidence. The final
+-- source/manifest producer must use the same accepted assurance object as the
+-- independently certified application artifact, not merely the same ID.
+nativeFinalInstanceDifferentAcceptedSourceRejects
+  :: GenericApplicationAssurance -> ReleaseFixture -> Bool
+nativeFinalInstanceDifferentAcceptedSourceRejects source fixture =
+  let alternativeEvidence = ArtifactIdentity
+        (ArtifactRef "nr-d06.independent-second-source-proof")
+        (digestText "nr-d06.distinct-content-checked-source-evidence")
+  in case ( nativeAdapterSourceAssuranceWithEvidence alternativeEvidence
+          , producerInputs source
+          , produceFixture source fixture ) of
+    (Right alternative, Right (bundle, policy), Right (_, produced))
+      | alternative /= source
+          && nativeAdapterSourceId alternative == nativeAdapterSourceId source ->
+          case ( certifyApplicationArtifact alternative (fixtureStage produced)
+               , runRelease produced ) of
+            (Right independentArtifact, Right release) ->
+              case closeNativeFinalInstanceCorrespondence source
+                  (sourceInstanceDescriptor source) bundle policy
+                  (fixtureContext produced) (fixtureLedger produced)
+                  emptyProducerSelection independentArtifact release of
+                Left NativeFinalInstanceSourceAssuranceMismatch -> True
+                _ -> False
+            _ -> False
     _ -> False
 
 nativeFinalInstanceWrongActualRejects
