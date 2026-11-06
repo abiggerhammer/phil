@@ -7,6 +7,7 @@ module Phil.Verification.NativeFinalInstanceCorrespondence
   , nativeCorrespondenceArchitectureInstance
   , nativeCorrespondenceArchitectureDescriptor
   , nativeCorrespondenceSourceAssurance
+  , nativeCorrespondenceManifest
   , nativeCorrespondenceAuthority
   , NativeStageRevisionEquality
   , nativeStageRevisionEqualityOccurrence
@@ -17,7 +18,7 @@ module Phil.Verification.NativeFinalInstanceCorrespondence
   , closeNativeFinalInstanceCorrespondence
   ) where
 
-import Phil.Assurance.Types (AssuranceLedger, VerificationContext)
+import Phil.Assurance.Types (AssuranceLedger, AssuranceManifest, VerificationContext)
 import Phil.Core.Static
   ( ArchitectureInstanceDescriptor
   , ArchitectureInstanceIdentity (..)
@@ -42,6 +43,7 @@ import Phil.Verification.SourceManifestBinding
   , bindProducedFinalAuthority
   , closeSourceManifestBindingForInstance
   , sourceManifestBindingSourceAssurance
+  , sourceManifestBindingManifest
   )
 
 -- | Preserve the *whole* canonical architecture descriptor validated by
@@ -52,6 +54,7 @@ import Phil.Verification.SourceManifestBinding
 -- Constructor private: callers cannot replace verified descriptor inputs.
 data NativeFinalInstanceCorrespondence = NativeFinalInstanceCorrespondence
   GenericApplicationAssurance
+  AssuranceManifest
   ArchitectureInstanceDescriptor
   NativeFinalAuthority
   deriving (Eq, Show)
@@ -63,14 +66,24 @@ data NativeFinalInstanceCorrespondence = NativeFinalInstanceCorrespondence
 nativeCorrespondenceSourceAssurance
   :: NativeFinalInstanceCorrespondence -> GenericApplicationAssurance
 nativeCorrespondenceSourceAssurance
-  (NativeFinalInstanceCorrespondence source _ _) = source
+  (NativeFinalInstanceCorrespondence source _ _ _) = source
+
+-- | Preserve the entire independently checked INT-002 manifest through the
+-- exported final boundary. The checked producer token supplies it, and the
+-- lower-level binder requires equality with the independently certified
+-- release manifest. A manifestId alone is not the accepted manifest object.
+-- Read-only: no downstream producer or stage-origin authority is introduced.
+nativeCorrespondenceManifest
+  :: NativeFinalInstanceCorrespondence -> AssuranceManifest
+nativeCorrespondenceManifest
+  (NativeFinalInstanceCorrespondence _ manifest _ _) = manifest
 
 -- | Complete checked producer descriptor at the final witness boundary.
 -- No new downstream StageClosure/provenance authority is inferred.
 nativeCorrespondenceArchitectureDescriptor
   :: NativeFinalInstanceCorrespondence -> ArchitectureInstanceDescriptor
 nativeCorrespondenceArchitectureDescriptor
-  (NativeFinalInstanceCorrespondence _ descriptor _) = descriptor
+  (NativeFinalInstanceCorrespondence _ _ descriptor _) = descriptor
 
 nativeCorrespondenceArchitectureInstance
   :: NativeFinalInstanceCorrespondence -> ArchitectureInstanceIdentity
@@ -80,7 +93,7 @@ nativeCorrespondenceArchitectureInstance =
 nativeCorrespondenceAuthority
   :: NativeFinalInstanceCorrespondence -> NativeFinalAuthority
 nativeCorrespondenceAuthority
-  (NativeFinalInstanceCorrespondence _ _ authority) = authority
+  (NativeFinalInstanceCorrespondence _ _ _ authority) = authority
 
 -- | Equality of the architecture occurrence's canonical revision with the
 -- retained concrete stage's InstanceRevision. The constructor is private.
@@ -163,4 +176,6 @@ closeNativeFinalInstanceCorrespondence
     -- producer-to-consumer witness boundary. The earlier source-manifest
     -- token separately retains this same exact descriptor.
     pure (NativeFinalInstanceCorrespondence
-      (sourceManifestBindingSourceAssurance produced) descriptor authority)
+      (sourceManifestBindingSourceAssurance produced)
+      (sourceManifestBindingManifest produced)
+      descriptor authority)

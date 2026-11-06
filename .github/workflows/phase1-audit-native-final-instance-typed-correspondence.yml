@@ -102,6 +102,9 @@ jobs:
           Print Assumptions checked_source_assurance_reaches_final_witness_exactly.
           Print Assumptions substituted_source_witness_cannot_bind.
           Print Assumptions same_source_identity_does_not_override_witness_equality.
+          Print Assumptions checked_manifest_reaches_final_witness_exactly.
+          Print Assumptions substituted_full_manifest_cannot_bind.
+          Print Assumptions equal_manifest_id_cannot_override_full_manifest.
           Print Assumptions fixed_adapter_full_certification_preserves_predecessors.
           EOF
           rocq c -Q proof/Phil Phil /tmp/NativeFinalInstanceAssumptions.v 2>&1 | tee typed-native-instance-assumptions.log

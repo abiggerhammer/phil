@@ -576,6 +576,77 @@ Section NativeFinalInstanceTypedCorrespondence.
     Qed.
   End SourceTokenToFinalWitnessAssurance.
 
+  (*
+    Independently accepted INT-002 manifest preservation is a distinct
+    concrete native boundary from retaining only manifestId. The actual
+    Haskell manifest has one Digest type for raw Systems and lowering root;
+    the logical projections below intentionally have DIFFERENT codomains.
+    Equalities and NativeProducerConsumerBound are EXTERNAL typed premises,
+    not derived native acceptance or a Haskell-to-Rocq encoding.
+  *)
+  Section ManifestTokenToFinalWitness.
+    Context {NativeManifest RawSystemsDigest LoweringLedgerRoot : Type}.
+    Context (manifestIdentity : NativeManifest -> ManifestIdentity).
+    Context (rawSystems : NativeManifest -> RawSystemsDigest).
+    Context (loweringRoot : NativeManifest -> LoweringLedgerRoot).
+
+    Definition ExactManifestPreservedToFinalWitness
+      (w : NativeFinalInstanceCoordinates)
+      (produced token accepted exported : NativeManifest) : Prop :=
+      NativeProducerConsumerBound w /\
+      produced = token /\
+      token = accepted /\
+      accepted = exported /\
+      manifestIdentity produced = producedManifest w.
+
+    Theorem checked_manifest_reaches_final_witness_exactly :
+      forall w produced token accepted exported,
+        ExactManifestPreservedToFinalWitness
+          w produced token accepted exported ->
+        exported = produced /\
+        manifestIdentity exported = acceptedReleaseManifest w /\
+        rawSystems exported = rawSystems produced /\
+        loweringRoot exported = loweringRoot produced /\
+        NativeProducerConsumerBound w.
+    Proof.
+      intros w produced token accepted exported
+        [Hbound [Hpt [Hta [Hae Hid]]]].
+      assert (Heq : exported = produced).
+      { rewrite <- Hae, <- Hta, <- Hpt. reflexivity. }
+      split; [exact Heq |].
+      split.
+      - rewrite Heq. rewrite Hid. exact (proj1 (proj2 Hbound)).
+      - split.
+        + rewrite Heq. reflexivity.
+        + split.
+          * rewrite Heq. reflexivity.
+          * exact Hbound.
+    Qed.
+
+    Theorem substituted_full_manifest_cannot_bind :
+      forall w produced token accepted exported,
+        accepted <> exported ->
+        ~ ExactManifestPreservedToFinalWitness
+            w produced token accepted exported.
+    Proof.
+      intros w produced token accepted exported Hdiff
+        [_ [_ [_ [Heq _]]]].
+      exact (Hdiff Heq).
+    Qed.
+
+    Theorem equal_manifest_id_cannot_override_full_manifest :
+      forall w produced token accepted exported,
+        manifestIdentity accepted = manifestIdentity exported ->
+        accepted <> exported ->
+        ~ ExactManifestPreservedToFinalWitness
+            w produced token accepted exported.
+    Proof.
+      intros w produced token accepted exported _ Hdiff
+        [_ [_ [_ [Heq _]]]].
+      exact (Hdiff Heq).
+    Qed.
+  End ManifestTokenToFinalWitness.
+
 End NativeFinalInstanceTypedCorrespondence.
 
 (* A concrete logical counterexample, NOT an encoding of Haskell identity

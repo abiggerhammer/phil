@@ -167,6 +167,14 @@ main = do
           , finalWitnessRetainsProducedSource source upload)
         , ( "Steve final witness retains full source producer assurance"
           , finalWitnessRetainsProducedSource source steve)
+        , ( "Upload final witness retains exact checked and accepted full manifest"
+          , finalWitnessRetainsProducedManifest source upload)
+        , ( "Steve final witness retains exact checked and accepted full manifest"
+          , finalWitnessRetainsProducedManifest source steve)
+        , ( "Upload altered full manifest with same ID cannot replace final witness"
+          , finalWitnessManifestIdCollisionRejects source upload)
+        , ( "Steve altered full manifest with same ID cannot replace final witness"
+          , finalWitnessManifestIdCollisionRejects source steve)
         , ( "Upload substituted same-identity source proof cannot replace final witness"
           , finalWitnessSourceProofSubstitutionRejects source upload)
         , ( "Steve substituted same-identity source proof cannot replace final witness"
@@ -676,6 +684,7 @@ nativeFinalInstanceAccepts source fixture =
                 && nativeCorrespondenceArchitectureInstance witnessed
                     == deriveArchitectureInstanceIdentity (sourceInstanceDescriptor source)
                 && nativeCorrespondenceSourceAssurance witnessed == source
+                && nativeCorrespondenceManifest witnessed == fixtureManifest produced
                 && nativeFinalSourceIdentity authority == nativeAdapterSourceId source
                 && nativeFinalManifestId authority == manifestId (fixtureManifest produced)
                 && nativeFinalRawSystemsDigest authority == stageSystemsDigest stage
@@ -766,6 +775,67 @@ finalWitnessRetainsProducedSource source fixture =
               nativeCorrespondenceSourceAssurance witness == source
                 && nativeCorrespondenceSourceAssurance witness
                    == sourceManifestBindingSourceAssurance producedToken
+    _ -> False
+
+-- | The accepted final witness must retain the complete checked INT-002
+-- manifest, not only its digest identity. The accepted CertifiedRelease
+-- carries the identical whole manifest, and raw Systems digest and lowering
+-- root retain their distinct meanings.
+finalWitnessRetainsProducedManifest
+  :: GenericApplicationAssurance -> ReleaseFixture -> Bool
+finalWitnessRetainsProducedManifest source fixture =
+  case (producerInputs source, produceFixture source fixture) of
+    (Right (bundle, policy), Right (sourceToken, produced)) ->
+      case nativeAdapterPair source produced of
+        Nothing -> False
+        Just (sourceArtifact, release) ->
+          case closeNativeFinalInstanceCorrespondence
+              source (sourceInstanceDescriptor source) bundle policy
+              (fixtureContext produced) (fixtureLedger produced)
+              emptyProducerSelection sourceArtifact release of
+            Left _ -> False
+            Right witness ->
+              let manifest = nativeCorrespondenceManifest witness
+                  authority = nativeCorrespondenceAuthority witness
+              in manifest == sourceManifestBindingManifest sourceToken
+                && manifest == certifiedReleaseManifest release
+                && manifest == fixtureManifest produced
+                && manifestId manifest == nativeFinalManifestId authority
+                && manifestImplementationDigest manifest
+                    == nativeFinalRawSystemsDigest authority
+                && manifestLoweringLedgerRoot manifest
+                    == nativeFinalLoweringRoot authority
+    _ -> False
+
+-- | A forged same-ID but different full manifest is not an accepted release:
+-- independently verifying its bytes/fields fails before the opaque release
+-- exists. A projected manifest ID cannot stand in for that accepted object.
+-- This is negative pressure, not a proof of digest collision resistance.
+finalWitnessManifestIdCollisionRejects
+  :: GenericApplicationAssurance -> ReleaseFixture -> Bool
+finalWitnessManifestIdCollisionRejects source fixture =
+  case (producerInputs source, produceFixture source fixture) of
+    (Right (bundle, policy), Right (sourceToken, produced)) ->
+      case nativeAdapterPair source produced of
+        Nothing -> False
+        Just (sourceArtifact, release) ->
+          let manifest = sourceManifestBindingManifest sourceToken
+              substituted = manifest
+                { manifestCompilationProfile =
+                    manifestCompilationProfile manifest <> ".substituted" }
+          in manifestId manifest == manifestId substituted
+            && manifest /= substituted
+            && case runReleaseWith produced
+                  (fixtureContext produced) substituted
+                  (fixtureLLVM produced) (fixtureTrust produced) of
+                Left (CertifiedReleaseManifestRejected _) ->
+                  case closeNativeFinalInstanceCorrespondence
+                      source (sourceInstanceDescriptor source) bundle policy
+                      (fixtureContext produced) (fixtureLedger produced)
+                      emptyProducerSelection sourceArtifact release of
+                    Right witness -> nativeCorrespondenceManifest witness == manifest
+                    Left _ -> False
+                _ -> False
     _ -> False
 
 -- | Identity-colliding but independently checked source evidence must not
