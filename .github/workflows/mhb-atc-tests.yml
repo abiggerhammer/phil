@@ -7,6 +7,9 @@ on:
       - 'scripts/test_mhb_atc.py'
       - 'scripts/mhb_atc_stage.py'
       - 'scripts/test_mhb_atc_stage.py'
+      - 'scripts/mhb_atc_admit.py'
+      - 'scripts/test_mhb_atc_admit.py'
+      - '.github/workflows/mhb-atc-admit.yml'
       - '.github/workflows/mhb-atc-stage.yml'
       - 'docs/mhb-atc.md'
       - '.github/workflows/mhb-atc-tests.yml'
@@ -17,6 +20,9 @@ on:
       - 'scripts/test_mhb_atc.py'
       - 'scripts/mhb_atc_stage.py'
       - 'scripts/test_mhb_atc_stage.py'
+      - 'scripts/mhb_atc_admit.py'
+      - 'scripts/test_mhb_atc_admit.py'
+      - '.github/workflows/mhb-atc-admit.yml'
       - '.github/workflows/mhb-atc-stage.yml'
       - 'docs/mhb-atc.md'
       - '.github/workflows/mhb-atc-tests.yml'
@@ -34,8 +40,10 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - name: Syntax
-        run: python3 -m py_compile scripts/mhb_atc.py scripts/test_mhb_atc.py scripts/mhb_atc_stage.py scripts/test_mhb_atc_stage.py
+        run: python3 -m py_compile scripts/mhb_atc.py scripts/test_mhb_atc.py scripts/mhb_atc_stage.py scripts/test_mhb_atc_stage.py scripts/mhb_atc_admit.py scripts/test_mhb_atc_admit.py
       - name: Offline radar and admission-policy tests
         run: python3 scripts/test_mhb_atc.py
       - name: Offline durable staging-intent tests
         run: python3 scripts/test_mhb_atc_stage.py
+      - name: Offline single-slot admission tests
+        run: python3 scripts/test_mhb_atc_admit.py
