@@ -27,6 +27,7 @@ import Phil.Core.Static
   )
 import Phil.Verification.ArtifactClosure
   ( CertifiedApplicationArtifact
+  , certifiedApplicationStageClosure
   , certifyApplicationArtifact
   )
 import Phil.Verification.FinalAuthorityAdapter
@@ -171,6 +172,14 @@ main = do
           , finalWitnessRetainsProducedManifest source upload)
         , ( "Steve final witness retains exact checked and accepted full manifest"
           , finalWitnessRetainsProducedManifest source steve)
+        , ( "Upload final witness retains exact accepted full StageClosure"
+          , finalWitnessRetainsAcceptedStage source upload)
+        , ( "Steve final witness retains exact accepted full StageClosure"
+          , finalWitnessRetainsAcceptedStage source steve)
+        , ( "Upload same closed revision cannot replace exact final StageClosure"
+          , finalWitnessStageRevisionOnlyRejects source upload)
+        , ( "Steve same closed revision cannot replace exact final StageClosure"
+          , finalWitnessStageRevisionOnlyRejects source steve)
         , ( "Upload altered full manifest with same ID cannot replace final witness"
           , finalWitnessManifestIdCollisionRejects source upload)
         , ( "Steve altered full manifest with same ID cannot replace final witness"
@@ -805,6 +814,76 @@ finalWitnessRetainsProducedManifest source fixture =
                     == nativeFinalRawSystemsDigest authority
                 && manifestLoweringLedgerRoot manifest
                     == nativeFinalLoweringRoot authority
+    _ -> False
+
+-- | Retain the actual *complete* independently checked StageClosure object,
+-- not just its Systems or closed-contract revision. The accepted source and
+-- release artifacts are independently constructed and compared by the binder.
+finalWitnessRetainsAcceptedStage
+  :: GenericApplicationAssurance -> ReleaseFixture -> Bool
+finalWitnessRetainsAcceptedStage source fixture =
+  case (producerInputs source, produceFixture source fixture) of
+    (Right (bundle, policy), Right (_, produced)) ->
+      case nativeAdapterPair source produced of
+        Nothing -> False
+        Just (sourceArtifact, release) ->
+          case closeNativeFinalInstanceCorrespondence
+              source (sourceInstanceDescriptor source) bundle policy
+              (fixtureContext produced) (fixtureLedger produced)
+              emptyProducerSelection sourceArtifact release of
+            Left _ -> False
+            Right witness ->
+              let stage = nativeCorrespondenceStageClosure witness
+                  authority = nativeCorrespondenceAuthority witness
+              in stage == certifiedApplicationStageClosure sourceArtifact
+                && stage == certifiedReleaseStageClosure release
+                && stage == fixtureStage produced
+                && stageClosureSystemsArtifactRevision stage
+                    == nativeFinalSystemsRevision authority
+                && stageClosureContractRevision stage
+                    == nativeFinalClosedContractRevision authority
+    _ -> False
+
+-- | Same *advertised closed revision* is insufficient to substitute an
+-- altered concrete StageClosure. Independently supplied stale Systems identity
+-- is rejected by both the real stage verifier and release-certification gate.
+-- The original accepted witness continues to expose the unmodified stage.
+finalWitnessStageRevisionOnlyRejects
+  :: GenericApplicationAssurance -> ReleaseFixture -> Bool
+finalWitnessStageRevisionOnlyRejects source fixture =
+  case (producerInputs source, produceFixture source fixture) of
+    (Right (bundle, policy), Right (_, produced)) ->
+      case nativeAdapterPair source produced of
+        Nothing -> False
+        Just (sourceArtifact, release) ->
+          case closeNativeFinalInstanceCorrespondence
+              source (sourceInstanceDescriptor source) bundle policy
+              (fixtureContext produced) (fixtureLedger produced)
+              emptyProducerSelection sourceArtifact release of
+            Left _ -> False
+            Right witness ->
+              let original = nativeCorrespondenceStageClosure witness
+                  stale = SystemsArtifactRevision "nr-d06.final-witness-stale-systems"
+                  substituted = original
+                    { stageClosureSystemsArtifactRevision = stale }
+              in substituted /= original
+                && stageClosureContractRevision substituted
+                    == stageClosureContractRevision original
+                && original == certifiedReleaseStageClosure release
+                && case (verifyStageClosureBundle substituted,
+                    certifyReleaseArtifact
+                      (fixtureProfile produced)
+                      (fixtureContext produced)
+                      (fixtureLedger produced)
+                      (fixtureManifest produced)
+                      substituted
+                      (fixtureLLVM produced)
+                      (fixtureTrust produced)) of
+                  ( Left (StageClosureStoredSystemsRevisionMismatch _ observed1)
+                    , Left (CertifiedReleaseStageClosureRejected
+                        (StageClosureStoredSystemsRevisionMismatch _ observed2))) ->
+                      observed1 == stale && observed2 == stale
+                  _ -> False
     _ -> False
 
 -- | A forged same-ID but different full manifest is not an accepted release:

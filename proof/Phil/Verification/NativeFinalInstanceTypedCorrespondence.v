@@ -647,6 +647,68 @@ Section NativeFinalInstanceTypedCorrespondence.
     Qed.
   End ManifestTokenToFinalWitness.
 
+  (*
+    Exact full StageClosure retention across the independently accepted
+    VER-010 source / INT-005 release consumers and exported native witness.
+    The model's NativeProducerConsumerBound and representation of these
+    native objects are EXTERNAL premises. A same closed-contract revision is
+    neither full-object equality nor authenticated architecture-stage origin.
+  *)
+  Section FullStageClosureToFinalWitness.
+    Context (closedRevision : StageClosureObject -> ClosedStageContractRevision).
+
+    Definition ExactStageClosurePreservedToFinalWitness
+      (w : NativeFinalInstanceCoordinates)
+      (source acceptedRelease exported : StageClosureObject) : Prop :=
+      NativeProducerConsumerBound w /\
+      source = sourceStageClosure w /\
+      acceptedRelease = releaseStageClosure w /\
+      acceptedRelease = exported.
+
+    Theorem accepted_full_stage_closure_reaches_final_witness :
+      forall w source acceptedRelease exported,
+        ExactStageClosurePreservedToFinalWitness
+          w source acceptedRelease exported ->
+        source = exported /\
+        exported = releaseStageClosure w /\
+        NativeProducerConsumerBound w.
+    Proof.
+      intros w source acceptedRelease exported
+        [Hbound [Hsource [Hrelease Hexport]]].
+      assert (Hstage : sourceStageClosure w = releaseStageClosure w).
+      { exact (proj1 (proj2 (proj2 Hbound))). }
+      split.
+      - rewrite Hsource. rewrite Hstage.
+        rewrite <- Hrelease. exact Hexport.
+      - split.
+        + rewrite <- Hexport. exact Hrelease.
+        + exact Hbound.
+    Qed.
+
+    Theorem substituted_full_stage_closure_cannot_bind :
+      forall w source acceptedRelease exported,
+        acceptedRelease <> exported ->
+        ~ ExactStageClosurePreservedToFinalWitness
+            w source acceptedRelease exported.
+    Proof.
+      intros w source acceptedRelease exported Hdiff
+        [_ [_ [_ Heq]]].
+      exact (Hdiff Heq).
+    Qed.
+
+    Theorem same_closed_revision_cannot_override_full_stage :
+      forall w source acceptedRelease exported,
+        closedRevision acceptedRelease = closedRevision exported ->
+        acceptedRelease <> exported ->
+        ~ ExactStageClosurePreservedToFinalWitness
+            w source acceptedRelease exported.
+    Proof.
+      intros w source acceptedRelease exported _ Hdiff
+        [_ [_ [_ Heq]]].
+      exact (Hdiff Heq).
+    Qed.
+  End FullStageClosureToFinalWitness.
+
 End NativeFinalInstanceTypedCorrespondence.
 
 (* A concrete logical counterexample, NOT an encoding of Haskell identity

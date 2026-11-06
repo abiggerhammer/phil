@@ -275,3 +275,38 @@ public release-byte validation, and independent pinned final-delta signoff
 remain outstanding. No TCB relaxation, generated artifact edit, Phase 2,
 historical audit overwrite, or normative case change. Original 244 cases
 remain intact; independent audit-freeze verdict **NOT YET**.
+
+## 2026-11-06 — retain complete independently accepted StageClosure at final witness
+
+The final witness already retained an exact manifest, checked architecture descriptor,
+complete accepted source assurance and a *projection* of stage coordinates. This
+separately scoped successor retains the **complete `StageClosureBundle`** from
+`certifiedReleaseStageClosure` only after the existing lower-level binder checks
+full equality with `certifiedApplicationStageClosure`, the produced manifest,
+raw Systems digest and lowering root. The new read-only projection is not a
+constructor, a derived stage producer, or a native-to-Rocq encoder.
+
+Strict Upload and Steve replay requires whole-object equality among the exported
+witness, independently accepted VER-010 source artifact, INT-005 release and the
+fixture's stage. The negative replay deliberately preserves the final
+`ClosedStageContractRevision` while substituting a stale stored
+`SystemsArtifactRevision`; independent `verifyStageClosureBundle` and
+`certifyReleaseArtifact` must reject before an alternative accepted stage can
+exist. Matching a revision is not full-object identity.
+
+Typed Rocq adds a conditional four-boundary full-stage transport and exact
+substitution rejection, with separately typed `StageClosureObject` and
+`ClosedStageContractRevision`. Three mandatory `Print Assumptions` replays cover
+these lemmas. This logic assumes the native consumer equalities; it neither
+implements injective Haskell-to-Rocq mappings nor proves native acceptance or
+occurrence-to-stage provenance. Source generic actuals, independently accepted
+manifest, raw Systems digest/root, normalized Systems revision, common and
+closed contracts, and subject/instance/realization/profile remain distinct.
+
+**Remaining-premise ledger:** authenticated architecture-occurrence-to-StageClosure
+production, concrete total/injective native-to-Rocq representation, source /
+assumption / erasure / final predecessor authority, `FixedFinalAuthorityAdapter`
+and `FinalArtifactCertified`, release public-byte validation, and independent
+pinned final-delta signoff. No changes to TCB, generated Phase-1 outputs,
+independent-audit history or the 244 normative conformance cases. Audit freeze
+verdict **NOT YET**.
