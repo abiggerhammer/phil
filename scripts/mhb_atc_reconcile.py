@@ -133,21 +133,21 @@ def plan(issues: list, prs: list, repo: str, now: dt.datetime) -> dict:
             # reservation must have happened before we can release the issue.
             if state == STAGED_LABEL:
                 raise ValueError("closed PR associated with unreserved staged issue")
-            actions.append({"action": "release", "issue": item["issue"],
+            actions.append({"action": "release", "issue": item["issue"], "lane": item["lane"],
                             "pr": pr["pr"], "branch": item["branch"],
                             "head_sha": item["head_sha"], "prior_state": state})
         elif pr is not None and pr["state"] == "open":
             if state == STAGED_LABEL:
                 raise ValueError("staged issue has unreserved open PR")
             if pr["needs_label"] or state == ADMITTING_LABEL:
-                actions.append({"action": "repair", "issue": item["issue"],
+                actions.append({"action": "repair", "issue": item["issue"], "lane": item["lane"],
                                 "pr": pr["pr"], "branch": item["branch"],
                                 "head_sha": item["head_sha"],
                                 "prior_state": state,
                                 "needs_label": pr["needs_label"]})
         elif state == ADMITTING_LABEL:
             if now - item["updated_at"] >= MIN_RETRY_AGE:
-                actions.append({"action": "retry", "issue": item["issue"],
+                actions.append({"action": "retry", "issue": item["issue"], "lane": item["lane"],
                                 "branch": item["branch"], "head_sha": item["head_sha"],
                                 "prior_state": state})
         elif state == ACTIVE_LABEL:
