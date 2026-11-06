@@ -63,24 +63,34 @@ Proof.
       ]
       input rest tree Hderive)
     as [trees [Htree Hitems]].
-  repeat match goal with
-  | Hseq : DerivesSequence phase1_surface_rules _ _ (_ :: _) _ _ _ |- _ =>
-      inversion Hseq; subst; clear Hseq
-  end.
-  match goal with
-  | Hnil : DerivesSequence phase1_surface_rules _ _ [] _ _ _ |- _ =>
-      inversion Hnil; subst; clear Hnil
-  end.
-  match goal with
-  | Hkeyword : Derives phase1_surface_rules _
-      (ELiteral "Bytes") _ _ ?keyword_tree,
-    Hoptional : Derives phase1_surface_rules _
+  destruct
+    (derives_sequence_cons_exposes_head_exact
+      phase1_surface_rules path 0
+      (ELiteral "Bytes")
+      [ EOptional
+          (ESequence
+            [ ELiteral "[";
+              ENonterminal "expression";
+              ELiteral "]"
+            ])
+      ]
+      input rest trees Hitems)
+    as [middle [keyword_tree [tail_trees
+      [Htrees [Hkeyword Htail]]]]].
+  destruct
+    (derives_sequence_cons_exposes_head_exact
+      phase1_surface_rules path 1
       (EOptional
         (ESequence
           [ ELiteral "[";
             ENonterminal "expression";
             ELiteral "]"
-          ])) _ _ ?optional_tree |- _ =>
+          ]))
+      [] middle rest tail_trees Htail)
+    as [final [optional_tree [end_trees
+      [Htail_trees [Hoptional Hend]]]]].
+  inversion Hend; subst end_trees.
+  rewrite Htrees, Htail_trees in Htree.
       destruct
         (literal_derivation_is_exact
           phase1_surface_rules _ "Bytes" _ _ keyword_tree Hkeyword)
@@ -171,8 +181,7 @@ Proof.
               [ exact Hnormalize
               | eapply phase1_surface_normalize_bytes_payload_round_trip;
                 exact Hnormalize ] ]
-        end ]
-  end.
+        end ].
 Qed.
 
 Lemma phase1_surface_normalize_bracketed_child_payload_total_from_derivation :
