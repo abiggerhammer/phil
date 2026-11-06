@@ -129,58 +129,68 @@ Proof.
             ]
             _ _ index_tree Hindex)
           as [index_trees [Hindex_tree Hindex_items]];
-        repeat match goal with
-        | Hseq : DerivesSequence phase1_surface_rules _ _ (_ :: _) _ _ _ |- _ =>
-            inversion Hseq; subst; clear Hseq
-        end;
-        match goal with
-        | Hnil : DerivesSequence phase1_surface_rules _ _ [] _ _ _ |- _ =>
-            inversion Hnil; subst; clear Hnil
-        end;
-        match goal with
-        | Hopen : Derives phase1_surface_rules _
-            (ELiteral "[") _ _ ?open_tree,
-          Hexpression : Derives phase1_surface_rules _
-            (ENonterminal "expression") _ _ ?expression_tree,
-          Hclose : Derives phase1_surface_rules _
-            (ELiteral "]") _ _ ?close_tree |- _ =>
-            destruct
-              (literal_derivation_is_exact
-                phase1_surface_rules _ "[" _ _ open_tree Hopen)
-              as [open_tail [_ [_ Hopen_tree]]];
-            destruct
-              (literal_derivation_is_exact
-                phase1_surface_rules _ "]" _ _ close_tree Hclose)
-              as [close_tail [_ [_ Hclose_tree]]];
-            destruct
-              (derives_nonterminal_exposes_body
-                phase1_surface_rules _ "expression"
-                _ _ expression_tree Hexpression)
-              as [expression_body
-                  [expression_subtree
-                   [Hexpression_lookup
-                    [Hexpression_tree Hexpression_body]]]];
-            assert (Hnormalize :
-              phase1_surface_normalize_bytes_payload tree =
-                Some (Some expression_tree));
-            [ rewrite Htree, Hkeyword_tree, Hsome, Hindex_tree,
-                Hopen_tree, Hexpression_tree, Hclose_tree;
-              unfold phase1_surface_normalize_bytes_payload,
-                phase1_surface_expect_sequence,
-                phase1_surface_exact2,
-                phase1_surface_expect_literal,
-                phase1_surface_expect_optional,
-                phase1_surface_exact3,
-                phase1_surface_expect_nonterminal;
-              cbn;
-              repeat rewrite String.eqb_refl;
-              reflexivity
-            | exists (Some expression_tree);
-              split;
-              [ exact Hnormalize
-              | eapply phase1_surface_normalize_bytes_payload_round_trip;
-                exact Hnormalize ] ]
-        end ].
+        destruct
+          (derives_sequence_cons_exposes_head_exact
+            phase1_surface_rules _ 0
+            (ELiteral "[")
+            [ ENonterminal "expression"; ELiteral "]" ]
+            _ _ index_trees Hindex_items)
+          as [open_middle [open_tree [index_tail
+            [Hindex_trees [Hopen Hindex_tail]]]]];
+        destruct
+          (derives_sequence_cons_exposes_head_exact
+            phase1_surface_rules _ 1
+            (ENonterminal "expression")
+            [ ELiteral "]" ]
+            _ _ index_tail Hindex_tail)
+          as [close_middle [expression_tree [last_tail
+            [Hindex_tail_trees [Hexpression Hlast]]]]];
+        destruct
+          (derives_sequence_cons_exposes_head_exact
+            phase1_surface_rules _ 2
+            (ELiteral "]") []
+            _ _ last_tail Hlast)
+          as [final [close_tree [end_trees
+            [Hlast_trees [Hclose Hend_index]]]]];
+        inversion Hend_index; subst end_trees;
+        rewrite Hindex_trees, Hindex_tail_trees, Hlast_trees
+          in Hindex_tree;
+        destruct
+          (literal_derivation_is_exact
+            phase1_surface_rules _ "[" _ _ open_tree Hopen)
+          as [open_tail [_ [_ Hopen_tree]]];
+        destruct
+          (literal_derivation_is_exact
+            phase1_surface_rules _ "]" _ _ close_tree Hclose)
+          as [close_tail [_ [_ Hclose_tree]]];
+        destruct
+          (derives_nonterminal_exposes_body
+            phase1_surface_rules _ "expression"
+            _ _ expression_tree Hexpression)
+          as [expression_body
+              [expression_subtree
+               [Hexpression_lookup
+                [Hexpression_tree Hexpression_body]]]];
+        assert (Hnormalize :
+          phase1_surface_normalize_bytes_payload tree =
+            Some (Some expression_tree));
+        [ rewrite Htree, Hkeyword_tree, Hsome, Hindex_tree,
+            Hopen_tree, Hexpression_tree, Hclose_tree;
+          unfold phase1_surface_normalize_bytes_payload,
+            phase1_surface_expect_sequence,
+            phase1_surface_exact2,
+            phase1_surface_expect_literal,
+            phase1_surface_expect_optional,
+            phase1_surface_exact3,
+            phase1_surface_expect_nonterminal;
+          cbn;
+          repeat rewrite String.eqb_refl;
+          reflexivity
+        | exists (Some expression_tree);
+          split;
+          [ exact Hnormalize
+          | eapply phase1_surface_normalize_bytes_payload_round_trip;
+            exact Hnormalize ] ]
 Qed.
 
 Lemma phase1_surface_normalize_bracketed_child_payload_total_from_derivation :
