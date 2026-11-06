@@ -21,8 +21,7 @@ import Phil.Surface.Check.Types
   , emptySurfaceEnvironment
   )
 import Phil.Surface.GrammarV1.BinderScope
-  ( GrammarV1BinderKey
-  , GrammarV1BinderScopeError
+  ( GrammarV1BinderScopeError
   , GrammarV1ResolvedBinder (..)
   , grammarV1FunctionParameterScope
   )
@@ -47,7 +46,6 @@ import Phil.Surface.GrammarV1.Parser
   , GrammarV1FunctionDecl (..)
   , GrammarV1Statement (..)
   , GrammarV1TermParam (..)
-  , GrammarV1Type
   )
 import Phil.Surface.Syntax
   ( Block (..)
@@ -107,9 +105,7 @@ grammarV1CheckedBorrowResourceFunction staticContext declarationKey source
         (_, Left errorValue) ->
           Just (Left (GrammarV1BorrowResourceFocusingError errorValue))
         (Right (param, _), Right (result, _))
-          | checkedBindingMode param /= Linear
-          , checkedBindingMode result /= Linear -> Nothing
-          | otherwise -> do
+          -> do
               paramTy@(TyBytes _) <- Just (checkedBindingType param)
               (TyBytes _) <- Just (checkedBindingType result)
               if checkedBindingMode param /= Linear
