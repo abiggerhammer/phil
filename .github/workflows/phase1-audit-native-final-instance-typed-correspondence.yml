@@ -96,6 +96,9 @@ jobs:
           Print Assumptions different_checked_descriptor_cannot_bind.
           Print Assumptions equal_descriptor_identity_cannot_override_exact_retention.
           Print Assumptions equal_architecture_identity_does_not_authenticate_descriptor.
+          Print Assumptions checked_source_descriptor_reaches_final_witness_exactly.
+          Print Assumptions final_witness_substituted_descriptor_cannot_bind.
+          Print Assumptions final_witness_identity_projection_cannot_override_exact_descriptor.
           Print Assumptions fixed_adapter_full_certification_preserves_predecessors.
           EOF
           rocq c -Q proof/Phil Phil /tmp/NativeFinalInstanceAssumptions.v 2>&1 | tee typed-native-instance-assumptions.log

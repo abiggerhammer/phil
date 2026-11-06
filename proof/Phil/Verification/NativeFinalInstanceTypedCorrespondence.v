@@ -463,6 +463,60 @@ Section NativeFinalInstanceTypedCorrespondence.
     Qed.
   End ExactCheckedDescriptorRetention.
 
+
+  (*
+    A DISTINCT later native boundary: the source-manifest binding retains a
+    full checked descriptor, but the final public witness must not project it
+    down to an occurrence identity. These are still model premises, not an
+    extraction of Haskell data or authority for concrete StageClosure origin.
+  *)
+  Section SourceTokenToFinalWitnessDescriptor.
+    Context {ArchitectureInstanceDescriptor : Type}.
+    Context (descriptorIdentity :
+      ArchitectureInstanceDescriptor -> ArchitectureInstanceIdentity).
+
+    Definition CheckedDescriptorPreservedToFinalWitness
+      (w : NativeFinalInstanceCoordinates)
+      (produced token exported : ArchitectureInstanceDescriptor) : Prop :=
+      ExactCheckedDescriptorRetained descriptorIdentity w produced token /\
+      token = exported.
+
+    Theorem checked_source_descriptor_reaches_final_witness_exactly :
+      forall w produced token exported,
+        CheckedDescriptorPreservedToFinalWitness w produced token exported ->
+        produced = exported /\
+        descriptorIdentity exported = checkedArchitectureInstance w /\
+        NativeCheckedInstanceProducerBound w.
+    Proof.
+      intros w produced token exported
+        [[Hnative [Hproduced Hidentity]] Hexport].
+      split.
+      - exact (eq_trans Hproduced Hexport).
+      - split.
+        + rewrite <- Hexport. exact Hidentity.
+        + exact Hnative.
+    Qed.
+
+    Theorem final_witness_substituted_descriptor_cannot_bind :
+      forall w produced token exported,
+        token <> exported ->
+        ~ CheckedDescriptorPreservedToFinalWitness w produced token exported.
+    Proof.
+      intros w produced token exported Hdiff [_ Heq].
+      exact (Hdiff Heq).
+    Qed.
+
+    Theorem final_witness_identity_projection_cannot_override_exact_descriptor :
+      forall w produced token exported,
+        descriptorIdentity token = descriptorIdentity exported ->
+        token <> exported ->
+        ~ CheckedDescriptorPreservedToFinalWitness w produced token exported.
+    Proof.
+      intros w produced token exported _ Hdiff [_ Heq].
+      exact (Hdiff Heq).
+    Qed.
+  End SourceTokenToFinalWitnessDescriptor.
+
 End NativeFinalInstanceTypedCorrespondence.
 
 (* A concrete logical counterexample, NOT an encoding of Haskell identity

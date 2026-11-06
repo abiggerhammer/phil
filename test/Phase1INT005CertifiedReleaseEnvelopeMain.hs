@@ -159,6 +159,14 @@ main = do
           , nativeFinalInstanceAccepts source upload)
         , ( "Typed native final instance witness closes Steve accepted consumer"
           , nativeFinalInstanceAccepts source steve)
+        , ( "Upload final witness exports complete checked producer descriptor"
+          , finalWitnessRetainsProducerDescriptor source upload)
+        , ( "Steve final witness exports complete checked producer descriptor"
+          , finalWitnessRetainsProducerDescriptor source steve)
+        , ( "Upload substituted descriptor cannot replace exported checked descriptor"
+          , finalWitnessDescriptorSubstitutionRejects source upload)
+        , ( "Steve substituted descriptor cannot replace exported checked descriptor"
+          , finalWitnessDescriptorSubstitutionRejects source steve)
         , ( "Same application identity with different accepted source assurance rejects Upload"
           , nativeFinalInstanceDifferentAcceptedSourceRejects source upload)
         , ( "Same application identity with different accepted source assurance rejects Steve"
@@ -655,7 +663,9 @@ nativeFinalInstanceAccepts source fixture =
                   stage = fixtureStage produced
                   subject = concreteSubjectStage (stageClosureConcrete stage)
                   common = subjectStageBase subject
-              in nativeCorrespondenceArchitectureInstance witnessed
+              in nativeCorrespondenceArchitectureDescriptor witnessed
+                    == sourceInstanceDescriptor source
+                && nativeCorrespondenceArchitectureInstance witnessed
                     == deriveArchitectureInstanceIdentity (sourceInstanceDescriptor source)
                 && nativeFinalSourceIdentity authority == nativeAdapterSourceId source
                 && nativeFinalManifestId authority == manifestId (fixtureManifest produced)
@@ -668,6 +678,63 @@ nativeFinalInstanceAccepts source fixture =
                 && nativeFinalCommonContractRevision authority == phase1StageContractRevision common
                 && nativeFinalClosedContractRevision authority == stageClosureContractRevision stage
                 && nativeFinalVerifierProfile authority == phase1StageVerifierProfileRevision common
+    _ -> False
+
+
+-- | Check the *cross-boundary* retention that the source-manifest token and
+-- the final opaque witness share the same entire independently checked
+-- descriptor. Neither equality states that the occurrence produced StageClosure.
+finalWitnessRetainsProducerDescriptor
+  :: GenericApplicationAssurance -> ReleaseFixture -> Bool
+finalWitnessRetainsProducerDescriptor source fixture =
+  case (producerInputs source, produceFixture source fixture) of
+    (Right (bundle, policy), Right (sourceBinding, produced)) ->
+      case nativeAdapterPair source produced of
+        Nothing -> False
+        Just (sourceArtifact, release) ->
+          case closeNativeFinalInstanceCorrespondence
+              source (sourceInstanceDescriptor source) bundle policy
+              (fixtureContext produced) (fixtureLedger produced)
+              emptyProducerSelection sourceArtifact release of
+            Left _ -> False
+            Right witness ->
+              let exact = sourceInstanceDescriptor source
+                  exported = nativeCorrespondenceArchitectureDescriptor witness
+              in sourceManifestBindingArchitectureDescriptor sourceBinding == Just exact
+                && exported == exact
+                && nativeCorrespondenceArchitectureInstance witness
+                   == deriveArchitectureInstanceIdentity exported
+    _ -> False
+
+-- | A second, different descriptor is not substituted after source acceptance.
+-- It fails the producer on semantic-actual mismatch; the existing witness
+-- still exports the unchanged original descriptor. No collision or stage
+-- origin inference is made from the derived architecture identity.
+finalWitnessDescriptorSubstitutionRejects
+  :: GenericApplicationAssurance -> ReleaseFixture -> Bool
+finalWitnessDescriptorSubstitutionRejects source fixture =
+  case (producerInputs source, produceFixture source fixture) of
+    (Right (bundle, policy), Right (_, produced)) ->
+      case nativeAdapterPair source produced of
+        Nothing -> False
+        Just (sourceArtifact, release) ->
+          let exact = sourceInstanceDescriptor source
+              wrong = exact
+                { architectureStaticBindings =
+                    Map.singleton "T" (SemanticAtom "substituted-at-final-export") }
+              close descriptor = closeNativeFinalInstanceCorrespondence
+                source descriptor bundle policy (fixtureContext produced)
+                (fixtureLedger produced) emptyProducerSelection
+                sourceArtifact release
+          in case close exact of
+            Left _ -> False
+            Right witness ->
+              nativeCorrespondenceArchitectureDescriptor witness == exact
+                && wrong /= exact
+                && case close wrong of
+                    Left (NativeFinalInstanceSourceRejected
+                      SourceManifestStaticArgumentsMismatch) -> True
+                    _ -> False
     _ -> False
 
 -- The exported low-level manifest/release binder cannot be used to substitute
