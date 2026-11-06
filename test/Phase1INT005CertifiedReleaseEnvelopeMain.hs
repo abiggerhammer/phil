@@ -163,6 +163,14 @@ main = do
           , finalWitnessRetainsProducerDescriptor source upload)
         , ( "Steve final witness exports complete checked producer descriptor"
           , finalWitnessRetainsProducerDescriptor source steve)
+        , ( "Upload final witness retains full source producer assurance"
+          , finalWitnessRetainsProducedSource source upload)
+        , ( "Steve final witness retains full source producer assurance"
+          , finalWitnessRetainsProducedSource source steve)
+        , ( "Upload substituted same-identity source proof cannot replace final witness"
+          , finalWitnessSourceProofSubstitutionRejects source upload)
+        , ( "Steve substituted same-identity source proof cannot replace final witness"
+          , finalWitnessSourceProofSubstitutionRejects source steve)
         , ( "Upload substituted descriptor cannot replace exported checked descriptor"
           , finalWitnessDescriptorSubstitutionRejects source upload)
         , ( "Steve substituted descriptor cannot replace exported checked descriptor"
@@ -667,6 +675,7 @@ nativeFinalInstanceAccepts source fixture =
                     == sourceInstanceDescriptor source
                 && nativeCorrespondenceArchitectureInstance witnessed
                     == deriveArchitectureInstanceIdentity (sourceInstanceDescriptor source)
+                && nativeCorrespondenceSourceAssurance witnessed == source
                 && nativeFinalSourceIdentity authority == nativeAdapterSourceId source
                 && nativeFinalManifestId authority == manifestId (fixtureManifest produced)
                 && nativeFinalRawSystemsDigest authority == stageSystemsDigest stage
@@ -735,6 +744,61 @@ finalWitnessDescriptorSubstitutionRejects source fixture =
                     Left (NativeFinalInstanceSourceRejected
                       SourceManifestStaticArgumentsMismatch) -> True
                     _ -> False
+    _ -> False
+
+-- | Final consumers must retain the *whole* independently checked source
+-- assurance from the opaque manifest producer, not just an equal application
+-- identity or a stand-in source proof with unrelated checked-body evidence.
+finalWitnessRetainsProducedSource
+  :: GenericApplicationAssurance -> ReleaseFixture -> Bool
+finalWitnessRetainsProducedSource source fixture =
+  case (producerInputs source, produceFixture source fixture) of
+    (Right (bundle, policy), Right (producedToken, produced)) ->
+      case nativeAdapterPair source produced of
+        Nothing -> False
+        Just (sourceArtifact, release) ->
+          case closeNativeFinalInstanceCorrespondence
+              source (sourceInstanceDescriptor source) bundle policy
+              (fixtureContext produced) (fixtureLedger produced)
+              emptyProducerSelection sourceArtifact release of
+            Left _ -> False
+            Right witness ->
+              nativeCorrespondenceSourceAssurance witness == source
+                && nativeCorrespondenceSourceAssurance witness
+                   == sourceManifestBindingSourceAssurance producedToken
+    _ -> False
+
+-- | Identity-colliding but independently checked source evidence must not
+-- replace the original accepted final witness's exported assurance. The
+-- substituted source is rejected by the exact certified-source gate.
+finalWitnessSourceProofSubstitutionRejects
+  :: GenericApplicationAssurance -> ReleaseFixture -> Bool
+finalWitnessSourceProofSubstitutionRejects source fixture =
+  let alternativeEvidence = ArtifactIdentity
+        (ArtifactRef "nr-d06.final-witness-substituted-source-proof")
+        (digestText "nr-d06.final-witness-distinct-checked-body-evidence")
+  in case ( nativeAdapterSourceAssuranceWithEvidence alternativeEvidence
+          , producerInputs source
+          , produceFixture source fixture ) of
+    (Right alternative, Right (bundle, policy), Right (producedToken, produced))
+      | alternative /= source
+        && nativeAdapterSourceId alternative == nativeAdapterSourceId source ->
+          case nativeAdapterPair source produced of
+            Nothing -> False
+            Just (sourceArtifact, release) ->
+              let close withSource = closeNativeFinalInstanceCorrespondence
+                    withSource (sourceInstanceDescriptor source) bundle policy
+                    (fixtureContext produced) (fixtureLedger produced)
+                    emptyProducerSelection sourceArtifact release
+              in case close source of
+                Left _ -> False
+                Right witness ->
+                  nativeCorrespondenceSourceAssurance witness == source
+                    && nativeCorrespondenceSourceAssurance witness
+                       == sourceManifestBindingSourceAssurance producedToken
+                    && case close alternative of
+                        Left NativeFinalInstanceSourceAssuranceMismatch -> True
+                        _ -> False
     _ -> False
 
 -- The exported low-level manifest/release binder cannot be used to substitute
