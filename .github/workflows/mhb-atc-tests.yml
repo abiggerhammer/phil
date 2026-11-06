@@ -1,0 +1,33 @@
+name: MHB ATC Radar Replay
+
+on:
+  pull_request:
+    paths:
+      - 'scripts/mhb_atc.py'
+      - 'scripts/test_mhb_atc.py'
+      - 'docs/mhb-atc.md'
+      - '.github/workflows/mhb-atc-tests.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'scripts/mhb_atc.py'
+      - 'scripts/test_mhb_atc.py'
+      - 'docs/mhb-atc.md'
+      - '.github/workflows/mhb-atc-tests.yml'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: mhb-atc-tests-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  replay:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - name: Syntax
+        run: python3 -m py_compile scripts/mhb_atc.py scripts/test_mhb_atc.py
+      - name: Offline radar and admission-policy tests
+        run: python3 scripts/test_mhb_atc.py
