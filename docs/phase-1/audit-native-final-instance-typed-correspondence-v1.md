@@ -148,3 +148,33 @@ injectivity, source/assumption/erasure and final predecessor proofs, release
 public **bytes**, and independent pinned final-delta signoff. The complete
 `FinalArtifactCertified` remains unproved, the 244 normative cases are
 unchanged, and independent Phase 1 audit freeze remains **NOT YET**.
+
+## 2026-11-06 — exact accepted source at the lower-level manifest/release binder
+
+The exported `bindProducedFinalAuthority` was a separate entry point below
+`closeNativeFinalInstanceCorrespondence`: its opaque
+`CertifiedSourceManifestBinding` stored only `GenericApplicationIdentity`
+alongside the checked closed manifest. Therefore, before this change, an
+independently certified source artifact built from a *different* checked
+`GenericApplicationAssurance` with the *same* semantic application identity
+could pass the lower-level association, despite #1594's stronger high-level
+source-assurance gate.
+
+The opaque source-manifest producer token now retains the complete accepted
+`GenericApplicationAssurance`. The lower-level binder compares it with the
+independently accepted `CertifiedApplicationArtifact` source assurance and
+returns `SourceManifestSourceAssuranceMismatch` before evaluating the released
+manifest if they differ. Only after that check does it project the application
+identity for the existing typed manifest/stage/digest/root consumer gate.
+Upload and Steve replay the positive producer path and the distinct accepted
+source-proof negative at this *lower-level* entry point. A Rocq theorem proves
+that even equal application-identity projections cannot override the explicitly
+supplied exact-source gate; its assumption query is part of the strict replay.
+
+This is a necessary fail-closed producer/consumer equality, **not** proof
+that the architecture occurrence produced the StageClosure, nor any faithful
+Haskell-to-Rocq encoding, admitted native acceptance proposition, source /
+assumption / erasure predecessor, `FinalArtifactCertified`, or release public
+byte verification. Independent pinned final-delta review is outstanding.
+No normative conformance case or historic audit finding is changed.
+Independent Phase 1 audit-freeze verdict: **NOT YET**.

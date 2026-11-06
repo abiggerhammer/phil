@@ -4,6 +4,7 @@ on:
   pull_request:
     paths:
       - 'src/Phil/Verification/NativeFinalInstanceCorrespondence.hs'
+      - 'src/Phil/Verification/SourceManifestBinding.hs'
       - 'test/Phase1INT005CertifiedReleaseEnvelopeMain.hs'
       - 'proof/Phil/Verification/NativeFinalInstanceTypedCorrespondence.v'
       - 'docs/phase-1/audit-native-final-instance-typed-correspondence-v1.md'
@@ -13,6 +14,7 @@ on:
     branches: [main]
     paths:
       - 'src/Phil/Verification/NativeFinalInstanceCorrespondence.hs'
+      - 'src/Phil/Verification/SourceManifestBinding.hs'
       - 'test/Phase1INT005CertifiedReleaseEnvelopeMain.hs'
       - 'proof/Phil/Verification/NativeFinalInstanceTypedCorrespondence.v'
       - 'docs/phase-1/audit-native-final-instance-typed-correspondence-v1.md'
@@ -35,6 +37,7 @@ jobs:
         run: cabal build all --enable-tests --ghc-options=-Werror
       - name: Typecheck the exact native witness and accepted consumers
         run: |
+          cabal exec -- ghc -isrc -itest -Wall -Werror -fno-code src/Phil/Verification/SourceManifestBinding.hs
           cabal exec -- ghc -isrc -itest -Wall -Werror -fno-code src/Phil/Verification/NativeFinalInstanceCorrespondence.hs
           cabal exec -- ghc -isrc -itest -Wall -Werror -fno-code test/Phase1INT005CertifiedReleaseEnvelopeMain.hs
       - name: Replay accepted Upload and Steve and adversarial native inputs
@@ -85,6 +88,7 @@ jobs:
           Print Assumptions separate_noninjective_stage_models_hide_common_and_closed_drift.
           Print Assumptions exact_source_assurance_gate_preserves_consumer_identity.
           Print Assumptions different_certified_source_assurance_cannot_bind.
+          Print Assumptions equal_source_identity_cannot_override_exact_binding.
           Print Assumptions equal_application_identity_does_not_authenticate_source_assurance.
           Print Assumptions fixed_adapter_full_certification_preserves_predecessors.
           EOF

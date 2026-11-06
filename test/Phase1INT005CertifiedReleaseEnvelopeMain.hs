@@ -141,6 +141,10 @@ main = do
           , producedBindingAccepted source upload)
         , ( "Source-manifest producer closes Steve from checked declaration and bundle"
           , producedBindingAccepted source steve)
+        , ( "Low-level manifest binder rejects same-identity distinct source proof for Upload"
+          , producedBindingDifferentAcceptedSourceRejects source upload)
+        , ( "Low-level manifest binder rejects same-identity distinct source proof for Steve"
+          , producedBindingDifferentAcceptedSourceRejects source steve)
         , ( "Generic actuals match canonical Upload architecture-instance binding"
           , producedBindingAccepted source upload)
         , ( "Typed native final instance witness closes Upload accepted consumer"
@@ -617,6 +621,28 @@ nativeFinalInstanceAccepts source fixture =
                 && nativeFinalCommonContractRevision authority == phase1StageContractRevision common
                 && nativeFinalClosedContractRevision authority == stageClosureContractRevision stage
                 && nativeFinalVerifierProfile authority == phase1StageVerifierProfileRevision common
+    _ -> False
+
+-- The exported low-level manifest/release binder cannot be used to substitute
+-- a different checked source proof while retaining the same application ID.
+producedBindingDifferentAcceptedSourceRejects
+  :: GenericApplicationAssurance -> ReleaseFixture -> Bool
+producedBindingDifferentAcceptedSourceRejects source fixture =
+  let alternativeEvidence = ArtifactIdentity
+        (ArtifactRef "nr-d06.binding-second-source-proof")
+        (digestText "nr-d06.binding-distinct-checked-body-evidence")
+  in case ( nativeAdapterSourceAssuranceWithEvidence alternativeEvidence
+          , produceFixture source fixture ) of
+    (Right alternative, Right (binding, produced))
+      | alternative /= source
+          && nativeAdapterSourceId alternative == nativeAdapterSourceId source ->
+          case ( certifyApplicationArtifact alternative (fixtureStage produced)
+               , runRelease produced ) of
+            (Right independentArtifact, Right release) ->
+              case bindProducedFinalAuthority binding independentArtifact release of
+                Left SourceManifestSourceAssuranceMismatch -> True
+                _ -> False
+            _ -> False
     _ -> False
 
 -- A second *independently constructed* source assurance has the same exact

@@ -370,6 +370,19 @@ Section NativeFinalInstanceTypedCorrespondence.
       intros w producedSource acceptedSource Hneq [_ [Heq _]].
       exact (Hneq Heq).
     Qed.
+    (* The public lower-level binder needs the exact opaque source assurance;
+       equality of its application identity projection cannot replace it.
+       This is conditional model logic, not native authority construction. *)
+    Theorem equal_source_identity_cannot_override_exact_binding :
+      forall w producedSource acceptedSource,
+        sourceIdentity producedSource = sourceIdentity acceptedSource ->
+        producedSource <> acceptedSource ->
+        ~ NativeBoundWithExactSource w producedSource acceptedSource.
+    Proof.
+      intros w producedSource acceptedSource _ Hneq Hbound.
+      destruct Hbound as [_ [Heq _]].
+      apply Hneq. exact Heq.
+    Qed.
   End ExactSourceAssuranceGate.
 
 End NativeFinalInstanceTypedCorrespondence.

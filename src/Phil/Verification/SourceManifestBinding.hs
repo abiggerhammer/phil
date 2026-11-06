@@ -31,6 +31,7 @@ import Phil.Verification
   )
 import Phil.Verification.ArtifactClosure
   ( CertifiedApplicationArtifact
+  , certifiedApplicationSourceAssurance
   )
 import Phil.Verification.Bundle
   ( VerificationBundle (..)
@@ -57,10 +58,11 @@ import Phil.Verification.ManifestClosure
 
 -- | A manifest obtained by the ordinary checked VER-012 -> INT-002 closure,
 -- with the accepted generic application's declaration identity checked against
--- that exact verification bundle. The constructor and association are private.
+-- that exact verification bundle. The private constructor also retains the
+-- COMPLETE accepted source assurance for the independently accepted consumer.
 -- This does not prove generic actuals map to architecture instance bindings.
 data CertifiedSourceManifestBinding = CertifiedSourceManifestBinding
-  GenericApplicationIdentity
+  GenericApplicationAssurance
   AssuranceManifest
   deriving (Eq, Show)
 
@@ -73,6 +75,7 @@ data SourceManifestBindingError
   | SourceManifestStaticArgumentsMismatch
   | SourceManifestInstanceNotInVerificationBundle
   | SourceManifestClosureRejected ManifestClosureError
+  | SourceManifestSourceAssuranceMismatch
   | SourceManifestReleaseManifestMismatch
   | SourceManifestNativeBindingRejected NativeFinalAuthorityError
   deriving (Eq, Show)
@@ -101,7 +104,7 @@ closeSourceManifestBinding source bundle policy context ledger selection = do
     else Left (SourceManifestDeclarationNotInVerificationBundle declaration)
   manifest <- either (Left . SourceManifestClosureRejected) Right
     (closeVerificationBundle bundle policy context ledger selection)
-  pure (CertifiedSourceManifestBinding application manifest)
+  pure (CertifiedSourceManifestBinding source manifest)
 
 -- | Stronger closeout of one exact generic application against an actual
 -- architecture instance descriptor. The descriptor is checked against the
@@ -149,10 +152,18 @@ bindProducedFinalAuthority
   -> CertifiedApplicationArtifact
   -> CertifiedReleaseArtifact
   -> Either SourceManifestBindingError NativeFinalAuthority
-bindProducedFinalAuthority (CertifiedSourceManifestBinding sourceId manifest) sourceArtifact release = do
+bindProducedFinalAuthority (CertifiedSourceManifestBinding producedSource manifest) sourceArtifact release = do
+  -- Retain the complete checked source proof, not only the same
+  -- application identity. The exported low-level binder must fail closed
+  -- independently of the high-level final-instance wrapper.
+  if producedSource == certifiedApplicationSourceAssurance sourceArtifact
+    then Right ()
+    else Left SourceManifestSourceAssuranceMismatch
   if certifiedReleaseManifest release == manifest
     then Right ()
     else Left SourceManifestReleaseManifestMismatch
+  let sourceId = genericDischargeApplicationIdentity
+        (genericApplicationAssuranceLineage producedSource)
   either (Left . SourceManifestNativeBindingRejected) Right $
     bindNativeFinalAuthority
       (ExpectedSourceManifestAssociation sourceId (manifestId manifest))
