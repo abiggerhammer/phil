@@ -110,7 +110,7 @@ Proof.
                                        ***** exists Phase1RefinementType. reflexivity.
                                        ***** destruct index as [|index]; cbn in Hnth.
                                              ------ exists Phase1TupleType. reflexivity.
-                                             ------ discriminate Hnth.
+                                             ------ destruct index; cbn in Hnth; discriminate Hnth.
 Qed.
 
 Theorem phase1_surface_normalize_nonreference_type_spine_total_from_derivation :
