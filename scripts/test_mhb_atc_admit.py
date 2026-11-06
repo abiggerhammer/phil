@@ -99,6 +99,19 @@ class AdmissionTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "duplicate staged branch"):
             plan([issue(101), issue(103)], [])
 
+    def test_second_candidate_waits_until_first_is_closed_and_released(self):
+        first = issue(101, "hamster/staged/mhb-atc/one", A)
+        first["labels"] = [label("atc: admitted"), label("lane: mhb-atc")]
+        second = issue(102, "hamster/staged/stdlib/two", B,
+                       "2026-11-05T00:01:00Z")
+        live = pr(n=555, branch="hamster/staged/mhb-atc/one")
+        self.assertEqual(plan([first, second], [live])["decision"], "hold")
+        # Once a reconciler closes the first candidate after its PR closes,
+        # only the second eligible issue remains in the open queue.
+        decision = plan([second], [])
+        self.assertEqual(decision["decision"], "would-admit")
+        self.assertEqual(decision["candidate_issue"], 102)
+
     def test_incomplete_api_snapshots_fail_closed(self):
         for issues, prs in ((None, []), ([], None), ({}, []), ([], {})):
             with self.subTest(issues=issues, prs=prs):
