@@ -344,15 +344,15 @@ Section NativeFinalInstanceTypedCorrespondence.
     Definition NativeBoundWithExactSource
       (w : NativeFinalInstanceCoordinates)
       (producedSource acceptedSource : SourceAssurance) : Prop :=
-      NativeProducerConsumerBound w /\\
-      producedSource = acceptedSource /\\
+      NativeProducerConsumerBound w /\
+      producedSource = acceptedSource /\
       sourceIdentity producedSource = acceptedApplication w.
 
     Theorem exact_source_assurance_gate_preserves_consumer_identity :
       forall w producedSource acceptedSource,
         NativeBoundWithExactSource w producedSource acceptedSource ->
-        NativeProducerConsumerBound w /\\
-        producedSource = acceptedSource /\\
+        NativeProducerConsumerBound w /\
+        producedSource = acceptedSource /\
         sourceIdentity acceptedSource = producedApplication w.
     Proof.
       intros w producedSource acceptedSource [Hbound [Heq Hidentity]].
@@ -437,7 +437,7 @@ Qed.
 Theorem equal_application_identity_does_not_authenticate_source_assurance :
   exists (sourceIdentity : bool -> unit)
          (producedSource acceptedSource : bool),
-    producedSource <> acceptedSource /\\
+    producedSource <> acceptedSource /\
     sourceIdentity producedSource = sourceIdentity acceptedSource.
 Proof.
   exists (fun _ : bool => tt), true, false.
