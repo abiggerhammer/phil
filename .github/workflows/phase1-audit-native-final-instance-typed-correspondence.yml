@@ -71,6 +71,8 @@ jobs:
           cat >/tmp/NativeFinalInstanceAssumptions.v <<'EOF'
           From Phil.Verification Require Import NativeFinalInstanceTypedCorrespondence FinalManifestFixedAdapterCertification.
           Print Assumptions bound_preserves_exact_native_coordinates.
+          Print Assumptions declaration_only_source_cannot_bind_final_authority.
+          Print Assumptions checked_instance_token_preserves_existing_consumer_equalities.
           Print Assumptions substituted_source_application_cannot_bind.
           Print Assumptions substituted_manifest_cannot_bind.
           Print Assumptions substituted_stage_closure_cannot_bind.

@@ -3,6 +3,7 @@
 module Phil.Verification.SourceManifestBinding
   ( CertifiedSourceManifestBinding
   , sourceManifestBindingManifest
+  , sourceManifestBindingArchitectureInstance
   , SourceManifestBindingError (..)
   , closeSourceManifestBinding
   , closeSourceManifestBindingForInstance
@@ -24,6 +25,7 @@ import Phil.Core.Generic
 import Phil.Core.Static
   ( DeclarationIdentity (..)
   , ArchitectureInstanceDescriptor (..)
+  , ArchitectureInstanceIdentity
   , deriveArchitectureInstanceIdentity
   )
 import Phil.Verification
@@ -60,14 +62,24 @@ import Phil.Verification.ManifestClosure
 -- with the accepted generic application's declaration identity checked against
 -- that exact verification bundle. The private constructor also retains the
 -- COMPLETE accepted source assurance for the independently accepted consumer.
--- This does not prove generic actuals map to architecture instance bindings.
+-- Declaration-only closure has no checked architecture-instance binding;
+-- only the checked actuals/descriptor/bundle producer can attach it.
+-- Even a checked instance does NOT establish stage-production lineage.
 data CertifiedSourceManifestBinding = CertifiedSourceManifestBinding
   GenericApplicationAssurance
   AssuranceManifest
+  (Maybe ArchitectureInstanceIdentity)
   deriving (Eq, Show)
 
 sourceManifestBindingManifest :: CertifiedSourceManifestBinding -> AssuranceManifest
-sourceManifestBindingManifest (CertifiedSourceManifestBinding _ manifest) = manifest
+sourceManifestBindingManifest (CertifiedSourceManifestBinding _ manifest _) = manifest
+
+-- | Checked canonical occurrence, if produced by the stronger instance path.
+-- Its constructor remains private; absence cannot be recast as acceptance.
+sourceManifestBindingArchitectureInstance
+  :: CertifiedSourceManifestBinding -> Maybe ArchitectureInstanceIdentity
+sourceManifestBindingArchitectureInstance
+  (CertifiedSourceManifestBinding _ _ instanceIdentity) = instanceIdentity
 
 data SourceManifestBindingError
   = SourceManifestDeclarationNotInVerificationBundle DeclarationIdentity
@@ -76,6 +88,7 @@ data SourceManifestBindingError
   | SourceManifestInstanceNotInVerificationBundle
   | SourceManifestClosureRejected ManifestClosureError
   | SourceManifestSourceAssuranceMismatch
+  | SourceManifestInstanceNotBound
   | SourceManifestReleaseManifestMismatch
   | SourceManifestNativeBindingRejected NativeFinalAuthorityError
   deriving (Eq, Show)
@@ -104,7 +117,7 @@ closeSourceManifestBinding source bundle policy context ledger selection = do
     else Left (SourceManifestDeclarationNotInVerificationBundle declaration)
   manifest <- either (Left . SourceManifestClosureRejected) Right
     (closeVerificationBundle bundle policy context ledger selection)
-  pure (CertifiedSourceManifestBinding source manifest)
+  pure (CertifiedSourceManifestBinding source manifest Nothing)
 
 -- | Stronger closeout of one exact generic application against an actual
 -- architecture instance descriptor. The descriptor is checked against the
@@ -143,16 +156,23 @@ closeSourceManifestBindingForInstance source descriptor bundle policy context le
   if Set.member instanceIdentity (verificationBundleArchitectureInstances bundle)
     then Right ()
     else Left SourceManifestInstanceNotInVerificationBundle
-  closeSourceManifestBinding source bundle policy context ledger selection
+  baseBinding <- closeSourceManifestBinding source bundle policy context ledger selection
+  pure (CertifiedSourceManifestBinding
+    source (sourceManifestBindingManifest baseBinding) (Just instanceIdentity))
 
--- | The final adapter must consume the same produced manifest, not a second
--- independently supplied manifest with a caller-selected identity pair.
+-- | The final adapter consumes only a *checked-instance* source manifest,
+-- not the weaker declaration-only closure. This is a necessary producer gate,
+-- not independent occurrence-to-concrete-stage provenance.
+-- The manifest must be the exact produced manifest, never a caller-chosen pair.
 bindProducedFinalAuthority
   :: CertifiedSourceManifestBinding
   -> CertifiedApplicationArtifact
   -> CertifiedReleaseArtifact
   -> Either SourceManifestBindingError NativeFinalAuthority
-bindProducedFinalAuthority (CertifiedSourceManifestBinding producedSource manifest) sourceArtifact release = do
+bindProducedFinalAuthority (CertifiedSourceManifestBinding producedSource manifest maybeInstance) sourceArtifact release = do
+  case maybeInstance of
+    Nothing -> Left SourceManifestInstanceNotBound
+    Just _ -> Right ()
   -- Retain the complete checked source proof, not only the same
   -- application identity. The exported low-level binder must fail closed
   -- independently of the high-level final-instance wrapper.
