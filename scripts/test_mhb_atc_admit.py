@@ -62,6 +62,18 @@ class AdmissionTests(unittest.TestCase):
         self.assertEqual(result["decision"], "hold")
         self.assertEqual(result["open_staged_prs"], [555])
 
+    def test_interrupted_admission_reserves_capacity_without_pr(self):
+        result = plan([issue(state="atc: admitting")], [])
+        self.assertEqual(result["decision"], "hold")
+        self.assertEqual(result["unreconciled_issue_ids"], [101])
+
+    def test_admitting_pr_in_issues_api_is_rejected(self):
+        as_issue = {"state": "open", "number": 555,
+                    "pull_request": {"url": "https://api.github.com/pr/555"},
+                    "labels": [label("atc: admitting")]}
+        with self.assertRaises(ValueError):
+            plan([as_issue], [])
+
     def test_admitted_issue_without_pr_fails_closed(self):
         result = plan([issue(state=ACTIVE_LABEL)], [])
         self.assertEqual(result["decision"], "hold")
