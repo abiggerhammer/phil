@@ -156,6 +156,81 @@ Section NativeFinalInstanceTypedCorrespondence.
   Proof.
     intros w Hmissing [_ Hrelated]. exact (Hmissing Hrelated).
   Qed.
+
+  (*
+    Conditional transport into separately typed model domains. A function
+    per field is only a PARAMETER: this neither constructs a native producer
+    nor supplies an implementation, injectivity proof, or nat representation.
+    In particular the raw Systems digest and lowering root share native
+    Digest but have different model codomains and unrelated representation
+    functions.
+  *)
+  Section ConditionalModelTransport.
+    Context {ModelSource ModelManifest ModelStage ModelRawSystemsDigest
+             ModelLoweringRoot : Type}.
+    Context
+      (representSource : ApplicationIdentity -> ModelSource)
+      (representManifest : ManifestIdentity -> ModelManifest)
+      (representStage : StageClosureObject -> ModelStage)
+      (representRawSystemsDigest : Digest -> ModelRawSystemsDigest)
+      (representLoweringRoot : Digest -> ModelLoweringRoot).
+
+    Definition RepresentedConsumerEqualities
+      (w : NativeFinalInstanceCoordinates) : Prop :=
+      representSource (acceptedApplication w) =
+        representSource (producedApplication w) /\
+      representManifest (producedManifest w) =
+        representManifest (acceptedReleaseManifest w) /\
+      representStage (sourceStageClosure w) =
+        representStage (releaseStageClosure w) /\
+      representRawSystemsDigest (manifestRawSystemsDigest w) =
+        representRawSystemsDigest (stageRawSystemsDigest w) /\
+      representLoweringRoot (manifestLoweringLedgerRoot w) =
+        representLoweringRoot (stageLoweringLedgerRoot w).
+
+    Theorem native_bound_transports_to_typed_model_equalities :
+      forall w,
+        NativeProducerConsumerBound w ->
+        RepresentedConsumerEqualities w.
+    Proof.
+      intros w [Ha [Hm [Hs [Hd Hr]]]].
+      unfold RepresentedConsumerEqualities.
+      repeat split;
+        [ now rewrite Ha | now rewrite Hm | now rewrite Hs
+        | now rewrite Hd | now rewrite Hr ].
+    Qed.
+
+    (*
+      The reverse logical implication needs *each* representation to be
+      injective. Even with these hypotheses it reconstructs only the five
+      equalities, NOT the authority of independently accepted native objects.
+    *)
+    Theorem typed_model_equalities_reflect_only_with_injections :
+      (forall x y : ApplicationIdentity,
+          representSource x = representSource y -> x = y) ->
+      (forall x y : ManifestIdentity,
+          representManifest x = representManifest y -> x = y) ->
+      (forall x y : StageClosureObject,
+          representStage x = representStage y -> x = y) ->
+      (forall x y : Digest,
+          representRawSystemsDigest x = representRawSystemsDigest y -> x = y) ->
+      (forall x y : Digest,
+          representLoweringRoot x = representLoweringRoot y -> x = y) ->
+      forall w,
+        RepresentedConsumerEqualities w ->
+        NativeProducerConsumerBound w.
+    Proof.
+      intros Hsource Hmanifest Hstage Hraw Hroot w
+        [Ha [Hm [Hs [Hd Hr]]]].
+      unfold NativeProducerConsumerBound.
+      repeat split.
+      - apply Hsource. exact Ha.
+      - apply Hmanifest. exact Hm.
+      - apply Hstage. exact Hs.
+      - apply Hraw. exact Hd.
+      - apply Hroot. exact Hr.
+    Qed.
+  End ConditionalModelTransport.
 End NativeFinalInstanceTypedCorrespondence.
 
 (* A concrete logical counterexample, NOT an encoding of Haskell identity
@@ -174,4 +249,18 @@ Proof.
   exists {| collisionKey := 1; collisionRevision := 3 |}.
   exists {| collisionKey := 2; collisionRevision := 3 |}.
   simpl. split; [reflexivity | discriminate].
+Qed.
+
+(*
+  Logical counterexample, not an encoding of native Haskell Digests.
+  A non-injective model representation can make distinct native values look
+  equal. Model equality alone therefore cannot authenticate native equality.
+*)
+Theorem noninjective_representation_hides_digest_drift :
+  exists (representation : bool -> unit) (sourceDigest stageDigest : bool),
+    sourceDigest <> stageDigest /\
+    representation sourceDigest = representation stageDigest.
+Proof.
+  exists (fun _ : bool => tt), true, false.
+  split; [discriminate | reflexivity].
 Qed.

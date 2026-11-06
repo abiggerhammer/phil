@@ -77,6 +77,9 @@ jobs:
           Print Assumptions stage_revision_drift_blocks_equality_gate.
           Print Assumptions revision_equality_does_not_discharge_origin_premise.
           Print Assumptions same_revision_does_not_identify_occurrence.
+          Print Assumptions native_bound_transports_to_typed_model_equalities.
+          Print Assumptions typed_model_equalities_reflect_only_with_injections.
+          Print Assumptions noninjective_representation_hides_digest_drift.
           Print Assumptions fixed_adapter_full_certification_preserves_predecessors.
           EOF
           rocq c -Q proof/Phil Phil /tmp/NativeFinalInstanceAssumptions.v 2>&1 | tee typed-native-instance-assumptions.log
