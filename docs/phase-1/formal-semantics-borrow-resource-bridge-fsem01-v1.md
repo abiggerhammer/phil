@@ -28,7 +28,7 @@ The admitted test family consists of source functions shaped like:
 
 ~~~phil
 fn loan(owner : Bytes[8]) -> Bytes[8] satisfies C {
-  borrow owner as view { (); };
+  borrow owner as view { unit; };
   return owner;
 }
 ~~~
@@ -51,7 +51,7 @@ Both declarations have identical parameter and return types and identical
 outer \`return owner\`. The negative's final loan-body expression returns
 the view itself; the checker must report **\`BorrowEscape\`**, specifically
 "shared view escapes its lexical scope", from the production loan-checking
-path. A second positive uses \`{ view; (); }\` to demonstrate that a
+path. A second positive uses \`{ view; unit; }\` to demonstrate that a
 temporary view observation may be discarded *inside* the borrow scope
 before a Unit result closes the loan.
 
