@@ -176,6 +176,14 @@ main = do
           , finalWitnessRetainsAcceptedStage source upload)
         , ( "Steve final witness retains exact accepted full StageClosure"
           , finalWitnessRetainsAcceptedStage source steve)
+        , ( "Upload final witness preserves exact independently accepted release envelope"
+          , finalWitnessRetainsAcceptedRelease source upload)
+        , ( "Steve final witness preserves exact independently accepted release envelope"
+          , finalWitnessRetainsAcceptedRelease source steve)
+        , ( "Upload same manifest/stage/LLVM do not identify complete trusted release"
+          , equalReleaseCoordinatesCanHideDifferentTrust source upload)
+        , ( "Steve same manifest/stage/LLVM do not identify complete trusted release"
+          , equalReleaseCoordinatesCanHideDifferentTrust source steve)
         , ( "Upload same closed revision cannot replace exact final StageClosure"
           , finalWitnessStageRevisionOnlyRejects source upload)
         , ( "Steve same closed revision cannot replace exact final StageClosure"
@@ -842,6 +850,85 @@ finalWitnessRetainsAcceptedStage source fixture =
                     == nativeFinalSystemsRevision authority
                 && stageClosureContractRevision stage
                     == nativeFinalClosedContractRevision authority
+    _ -> False
+
+
+-- | The final exported opaque witness retains the *entire* accepted INT-005
+-- release, not just its manifest, stage coordinates, or closed-stage digest.
+-- The release may contain additional LLVM and residual-trust evidence.
+finalWitnessRetainsAcceptedRelease
+  :: GenericApplicationAssurance -> ReleaseFixture -> Bool
+finalWitnessRetainsAcceptedRelease source fixture =
+  case (producerInputs source, produceFixture source fixture) of
+    (Right (bundle, policy), Right (_, produced)) ->
+      case nativeAdapterPair source produced of
+        Nothing -> False
+        Just (sourceArtifact, release) ->
+          case closeNativeFinalInstanceCorrespondence
+              source (sourceInstanceDescriptor source) bundle policy
+              (fixtureContext produced) (fixtureLedger produced)
+              emptyProducerSelection sourceArtifact release of
+            Left _ -> False
+            Right witness ->
+              let exported = nativeCorrespondenceCertifiedRelease witness
+              in exported == release
+                && certifiedReleaseManifest exported
+                    == nativeCorrespondenceManifest witness
+                && certifiedReleaseStageClosure exported
+                    == nativeCorrespondenceStageClosure witness
+                && certifiedReleaseLLVMArtifact exported == fixtureLLVM produced
+                && certifiedReleaseTrustBoundaries exported
+                    == certifiedReleaseTrustBoundaries release
+    _ -> False
+
+-- | Two independently *accepted* INT-005 envelopes can have the exact same
+-- manifest, stage, emitted LLVM and native authority coordinates, yet declare
+-- different nonblank residual-trust bases. Both are valid under the existing
+-- release verifier. The final witness must preserve WHICH accepted release was
+-- passed to it. This is negative pressure against projection-only identity,
+-- NOT an assertion that the original binder prohibits an alternate accepted
+-- release or that the alternate declaration is true.
+equalReleaseCoordinatesCanHideDifferentTrust
+  :: GenericApplicationAssurance -> ReleaseFixture -> Bool
+equalReleaseCoordinatesCanHideDifferentTrust source fixture =
+  case (fixtureTrust fixture, producerInputs source, produceFixture source fixture) of
+    (first : rest, Right (bundle, policy), Right (_, produced)) ->
+      case nativeAdapterPair source produced of
+        Nothing -> False
+        Just (sourceArtifact, original) ->
+          let replacement = first
+                { releaseTrustBasis =
+                    releaseTrustBasis first <> " [independent alternative basis]" }
+              close release = closeNativeFinalInstanceCorrespondence
+                source (sourceInstanceDescriptor source) bundle policy
+                (fixtureContext produced) (fixtureLedger produced)
+                emptyProducerSelection sourceArtifact release
+          in case ( runReleaseWith produced
+                      (fixtureContext produced) (fixtureManifest produced)
+                      (fixtureLLVM produced) (replacement : rest)
+                  , close original ) of
+            (Right alternative, Right originalWitness) ->
+              case close alternative of
+                Left _ -> False
+                Right alternativeWitness ->
+                  alternative /= original
+                    && certifiedReleaseManifest alternative
+                        == certifiedReleaseManifest original
+                    && certifiedReleaseStageClosure alternative
+                        == certifiedReleaseStageClosure original
+                    && certifiedReleaseLLVMArtifact alternative
+                        == certifiedReleaseLLVMArtifact original
+                    && certifiedReleaseTrustBoundaries alternative
+                        /= certifiedReleaseTrustBoundaries original
+                    && nativeCorrespondenceAuthority originalWitness
+                        == nativeCorrespondenceAuthority alternativeWitness
+                    && nativeCorrespondenceCertifiedRelease originalWitness
+                        == original
+                    && nativeCorrespondenceCertifiedRelease alternativeWitness
+                        == alternative
+                    && nativeCorrespondenceCertifiedRelease originalWitness
+                        /= nativeCorrespondenceCertifiedRelease alternativeWitness
+            _ -> False
     _ -> False
 
 -- | Same *advertised closed revision* is insufficient to substitute an

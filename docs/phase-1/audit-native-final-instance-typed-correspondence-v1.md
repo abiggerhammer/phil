@@ -310,3 +310,41 @@ and `FinalArtifactCertified`, release public-byte validation, and independent
 pinned final-delta signoff. No changes to TCB, generated Phase-1 outputs,
 independent-audit history or the 244 normative conformance cases. Audit freeze
 verdict **NOT YET**.
+
+## 2026-11-06 — exact independently accepted INT-005 release envelope retention
+
+The final native correspondence now retains the complete supplied, independently
+certified `CertifiedReleaseArtifact` alongside the previously retained checked
+source assurance, architecture descriptor, manifest and StageClosure. The opaque
+read-only `nativeCorrespondenceCertifiedRelease` projection retains the actual
+accepted envelope including emitted LLVM and declared residual trust boundaries.
+This does not manufacture a release or authenticate stage origin.
+
+Strict Haskell replay on Upload and Steve checks complete accepted-release
+object equality and the expected manifest, full stage, LLVM and trust projections.
+A **second independently accepted** envelope is constructed by changing a
+nonblank declared residual-trust basis, with the exact same manifest, StageClosure
+and emitted LLVM. The native binder accepts both because its existing authority
+projection intentionally does not select among alternative trusted declarations.
+The two resulting opaque witnesses retain *different* exact accepted releases
+although their `NativeFinalAuthority` coordinates agree. This is a concrete
+same-stage/same-manifest counterexample to projection-only release identity, not
+an endorsement of either trust claim or a promise that alternatives are rejected.
+
+Typed Rocq adds an abstract `CertifiedReleaseObject` with distinct manifest-ID
+and StageClosure projections, a separately supplied native certification predicate,
+conditional exact transport and full-object substitution rejection. Three
+`Print Assumptions` queries execute in the strict Rocq workflow. The predicate
+is supplied by competent native validation, **not** established by the model.
+No Haskell-to-Rocq encoding or injectivity proof is claimed.
+
+**Remaining-premise ledger:** independently authenticated architecture-occurrence
+to concrete StageClosure/selected-release provenance; a competent total and
+injective representation of native source, accepted manifests, releases, raw
+Systems digests and lowering roots, normalized Systems revisions, common and
+final closed contracts, subject/instance/realization/profile and LLVM/trust
+domains; predecessor source/assumption/erasure/final authority; complete
+`FixedFinalAuthorityAdapter`/`FinalArtifactCertified`; public release-byte
+verification and separate independent pinned final-delta approval. No changes
+to TCB, generated Phase 1 artifacts, historical audit evidence, or the original
+244 normative conformance cases. Independent audit freeze **NOT YET**.
