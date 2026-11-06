@@ -1,0 +1,37 @@
+name: MHB ATC Radar (Manual)
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  actions: read
+
+jobs:
+  radar:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - name: Sample traffic for today and yesterday (UTC)
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          today="$(date -u +%F)"
+          yesterday="$(date -u -d yesterday +%F)"
+          python3 scripts/mhb_atc.py \
+            --date "$yesterday" --date "$today" \
+            --max-pages 3 --jobs-per-day 6 \
+            --format json > atc-radar.json
+          python3 - <<'PY' >> "$GITHUB_STEP_SUMMARY"
+          import json
+          from scripts.mhb_atc import markdown
+          with open("atc-radar.json", encoding="utf-8") as f:
+              print(markdown(json.load(f)["reports"]))
+          PY
+      - name: Retain read-only radar snapshot
+        uses: actions/upload-artifact@v4
+        with:
+          name: mhb-atc-radar
+          path: atc-radar.json
+          retention-days: 30
