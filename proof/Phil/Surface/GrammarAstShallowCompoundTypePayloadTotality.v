@@ -190,7 +190,7 @@ Proof.
           split;
           [ exact Hnormalize
           | eapply phase1_surface_normalize_bytes_payload_round_trip;
-            exact Hnormalize ] ] ]
+            exact Hnormalize ] ] ].
 Qed.
 
 Lemma phase1_surface_normalize_bracketed_child_payload_total_from_derivation :
