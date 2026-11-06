@@ -11,7 +11,8 @@ permissions:
   issues: write
 
 concurrency:
-  group: mhb-atc-stage-global
+  # Stage, admission and release all mutate the same candidate state.
+  group: mhb-atc-admission-global
   queue: max
   cancel-in-progress: false
 
@@ -76,6 +77,18 @@ jobs:
             state="$(jq -r '.[0].state' <<<"$existing")"
             if [ "$state" != "OPEN" ]; then
               echo "Candidate was previously closed; use a new staged branch" >&2
+              exit 1
+            fi
+            # Refuse to restage an admitted or currently reserved candidate.
+            author="$(gh api "repos/$GH_REPO/issues/$number" --jq '.user.login')"
+            test "$author" = "github-actions[bot]" || {
+              echo "Untrusted existing candidate owner" >&2
+              exit 1
+            }
+            stage_labels="$(gh issue view "$number" --repo "$GH_REPO" --json labels --jq '.labels[].name')"
+            if ! grep -Fxq "atc: staged" <<<"$stage_labels" ||
+               grep -Eq '^atc: (admitting|admitted)$' <<<"$stage_labels"; then
+              echo "Cannot restage reserved/admitted or ambiguously labelled candidate" >&2
               exit 1
             fi
             gh issue edit "$number" --repo "$GH_REPO" \

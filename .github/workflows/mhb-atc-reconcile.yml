@@ -1,0 +1,158 @@
+name: MHB ATC Reconcile Slots
+
+# Closed staged-branch PRs release their slots promptly; periodic sweeps
+# recover missed close events and interrupted admissions.
+# No merge operation, permission, or untrusted branch checkout is involved.
+on:
+  pull_request:
+    types: [closed]
+  schedule:
+    - cron: '*/30 * * * *'
+  workflow_dispatch:
+    inputs:
+      mode:
+        type: choice
+        description: "dry-run reports one decision; reconcile applies at most one"
+        required: true
+        default: dry-run
+        options:
+          - dry-run
+          - reconcile
+
+permissions:
+  contents: read
+  issues: write
+  pull-requests: write
+
+concurrency:
+  # Shared by staging, admitting and releasing: one serialized decision domain.
+  group: mhb-atc-admission-global
+  queue: max
+  cancel-in-progress: false
+
+jobs:
+  reconcile:
+    if: >-
+      github.event_name != 'pull_request' ||
+      (startsWith(github.event.pull_request.head.ref, 'hamster/staged/') &&
+       github.event.pull_request.head.repo.full_name == github.repository)
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Checkout trusted main
+        uses: actions/checkout@v4
+        with:
+          ref: main
+          persist-credentials: false
+
+      - name: Snapshot and reconcile one slot
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          MODE: ${{ inputs.mode || 'reconcile' }}
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          read_snapshot() {
+            for state in staged admitting admitted; do
+              gh api --paginate "repos/$GH_REPO/issues?state=open&labels=atc%3A%20$state&per_page=100" \
+                | jq -s 'add // []' > "/tmp/atc-$state.json"
+            done
+            jq -s 'add | map(select(has("pull_request") | not)) | unique_by(.number)' \
+              /tmp/atc-staged.json /tmp/atc-admitting.json /tmp/atc-admitted.json \
+              > /tmp/atc-issues.json
+            printf '%s\n' '[]' > /tmp/atc-prs.json
+            if [ "$(jq 'length' /tmp/atc-issues.json)" -gt 0 ]; then
+              python3 scripts/mhb_atc_reconcile.py \
+                --issues /tmp/atc-issues.json --prs /tmp/atc-prs.json \
+                --repo "$GH_REPO" --branches-only > /tmp/atc-branches.json
+              : > /tmp/atc-pr-pages.ndjson
+              owner="${GH_REPO%%/*}"
+              while IFS= read -r branch; do
+                encoded="$(FILTER="$owner:$branch" python3 -c \
+                  'import os, urllib.parse; print(urllib.parse.quote(os.environ["FILTER"], safe=""))')"
+                gh api --paginate "repos/$GH_REPO/pulls?state=all&head=$encoded&per_page=100" \
+                  | jq -s 'add // []' >> /tmp/atc-pr-pages.ndjson
+              done < <(jq -r '.[]' /tmp/atc-branches.json)
+              jq -s 'add // []' /tmp/atc-pr-pages.ndjson > /tmp/atc-prs.json
+            fi
+            python3 scripts/mhb_atc_reconcile.py \
+              --issues /tmp/atc-issues.json --prs /tmp/atc-prs.json \
+              --repo "$GH_REPO" > /tmp/atc-plan.json
+          }
+
+          read_snapshot
+          cat /tmp/atc-plan.json
+          decision="$(jq -r '.decision' /tmp/atc-plan.json)"
+          if [ "$MODE" = "dry-run" ]; then
+            {
+              echo "### MHB-ATC slot reconciliation"
+              echo "- mode: dry-run"
+              echo "- decision: $decision"
+              echo "- no labels, PRs or issues modified"
+            } >> "$GITHUB_STEP_SUMMARY"
+            exit 0
+          fi
+          test "$MODE" = "reconcile"
+          if [ "$decision" = "hold" ]; then
+            echo "No candidate needs reconciliation."
+            exit 0
+          fi
+          test "$decision" = "reconcile"
+
+          # Refresh complete authoritative snapshots before any mutation.
+          before="$(cat /tmp/atc-plan.json)"
+          read_snapshot
+          test "$(cat /tmp/atc-plan.json)" = "$before" || {
+            echo "State moved during reconciliation; refusing stale action" >&2
+            exit 1
+          }
+
+          issue="$(jq -r '.issue' /tmp/atc-plan.json)"
+          action="$(jq -r '.action' /tmp/atc-plan.json)"
+          lane="$(jq -r '.lane' /tmp/atc-plan.json)"
+          sha="$(jq -r '.head_sha' /tmp/atc-plan.json)"
+          prior="$(jq -r '.prior_state' /tmp/atc-plan.json)"
+          number="$(jq -r '.pr // empty' /tmp/atc-plan.json)"
+
+          if [ "$action" = "retry" ]; then
+            test "$prior" = "atc: admitting"
+            gh issue comment "$issue" --repo "$GH_REPO" \
+              --body "ATC recovery: reservation expired without any matching PR. Returned exact head $sha to staged queue; this does not authorize a merge."
+            gh issue edit "$issue" --repo "$GH_REPO" \
+              --remove-label "atc: admitting" --add-label "atc: staged"
+          elif [ "$action" = "repair" ]; then
+            test "$prior" = "atc: admitting" || test "$prior" = "atc: admitted"
+            test -n "$number"
+            if [ "$(jq -r '.needs_label' /tmp/atc-plan.json)" = true ]; then
+              gh pr edit "$number" --repo "$GH_REPO" \
+                --add-label "atc: admitted" --add-label "lane: $lane"
+            fi
+            if [ "$prior" = "atc: admitting" ]; then
+              gh issue edit "$issue" --repo "$GH_REPO" \
+                --remove-label "atc: admitting" --add-label "atc: admitted"
+            fi
+          elif [ "$action" = "release" ]; then
+            test "$prior" = "atc: admitting" || test "$prior" = "atc: admitted"
+            test -n "$number"
+            # Recheck closed state and exact head immediately before release.
+            live="$(gh api "repos/$GH_REPO/pulls/$number")"
+            test "$(jq -r '.state' <<<"$live")" = "closed"
+            test "$(jq -r '.head.sha' <<<"$live")" = "$sha"
+            gh issue comment "$issue" --repo "$GH_REPO" \
+              --body "ATC slot released: linked PR #$number is closed at exact head $sha. This records capacity release only, not proof or merge approval."
+            gh issue close "$issue" --repo "$GH_REPO" --reason completed
+          else
+            echo "Unexpected ATC action: $action" >&2
+            exit 1
+          fi
+
+          {
+            echo "### MHB-ATC slot reconciliation"
+            echo "- action: $action"
+            echo "- candidate issue: #$issue"
+            echo "- lane: $lane"
+            echo "- head: $sha"
+            echo "- linked PR: ${number:-none}"
+            echo "- merge authority: none"
+          } >> "$GITHUB_STEP_SUMMARY"

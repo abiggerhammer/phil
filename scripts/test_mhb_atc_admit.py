@@ -62,6 +62,18 @@ class AdmissionTests(unittest.TestCase):
         self.assertEqual(result["decision"], "hold")
         self.assertEqual(result["open_staged_prs"], [555])
 
+    def test_interrupted_admission_reserves_capacity_without_pr(self):
+        result = plan([issue(state="atc: admitting")], [])
+        self.assertEqual(result["decision"], "hold")
+        self.assertEqual(result["unreconciled_issue_ids"], [101])
+
+    def test_admitting_pr_in_issues_api_is_rejected(self):
+        as_issue = {"state": "open", "number": 555,
+                    "pull_request": {"url": "https://api.github.com/pr/555"},
+                    "labels": [label("atc: admitting")]}
+        with self.assertRaises(ValueError):
+            plan([as_issue], [])
+
     def test_admitted_issue_without_pr_fails_closed(self):
         result = plan([issue(state=ACTIVE_LABEL)], [])
         self.assertEqual(result["decision"], "hold")
@@ -86,6 +98,19 @@ class AdmissionTests(unittest.TestCase):
     def test_duplicate_branch_records_fail_closed(self):
         with self.assertRaisesRegex(ValueError, "duplicate staged branch"):
             plan([issue(101), issue(103)], [])
+
+    def test_second_candidate_waits_until_first_is_closed_and_released(self):
+        first = issue(101, "hamster/staged/mhb-atc/one", A)
+        first["labels"] = [label("atc: admitted"), label("lane: mhb-atc")]
+        second = issue(102, "hamster/staged/stdlib/two", B,
+                       "2026-11-05T00:01:00Z")
+        live = pr(n=555, branch="hamster/staged/mhb-atc/one")
+        self.assertEqual(plan([first, second], [live])["decision"], "hold")
+        # Once a reconciler closes the first candidate after its PR closes,
+        # only the second eligible issue remains in the open queue.
+        decision = plan([second], [])
+        self.assertEqual(decision["decision"], "would-admit")
+        self.assertEqual(decision["candidate_issue"], 102)
 
     def test_incomplete_api_snapshots_fail_closed(self):
         for issues, prs in ((None, []), ([], None), ({}, []), ([], {})):

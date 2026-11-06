@@ -1,8 +1,9 @@
 # Mecha Hamster Ball — Air Traffic Control (MHB-ATC)
 
-Status: **shadow / read-only**. This phase measures traffic and exercises a
-deterministic admission policy. It does **not** gate real PRs, allocate live
-leases, or merge code.
+Status: opt-in staging and manual one-slot admission have passed a controlled
+live commissioning test. Automatic release and recovery reconcile reservation
+state; **none of these components merges PRs or alters the existing Phase 1
+hamster auto-PR lanes**.
 
 ## Historical baseline (measured 2026-11-06)
 
@@ -119,9 +120,9 @@ A GitHub CLI example, after a staged branch is already pushed:
       -f "client_payload[branch]=$branch" \
       -f "client_payload[head_sha]=$sha"
 
-The dispatcher is serialized with a global GitHub Actions concurrency group
-using queue:max and cancel-in-progress:false, to avoid overwriting an earlier
-pending stage request. It uses the workflow's scoped GitHub token to write
+The dispatcher shares the global MHB-ATC admission concurrency group with
+admission and reconciliation, using queue:max and cancel-in-progress:false,
+so candidate mutations cannot race each other or discard pending requests. It uses the workflow's scoped GitHub token to write
 issues; no untrusted staged branch code is checked out or executed.
 
 **Not admission clearance:** staging does not create a PR, reserve a runner,
@@ -151,9 +152,10 @@ single pull request with the existing HAMSTER_PR_TOKEN credential (not
 GITHUB_TOKEN), so ordinary PR-triggered checks actually run.
 
 A successful admission labels the PR and corresponding issue "atc: admitted".
-It does not merge anything. An unfinished or already admitted issue blocks
-all later admissions; manual closeout is required until a separate completion
-controller is implemented. Failed or interrupted partial admissions cannot
+It does not merge anything. An in-progress (atc: admitting) or already admitted issue blocks
+all later admissions. The admission workflow reserves capacity with
+atc: admitting **before** creating its PR; the reconciliation controller
+closes the candidate after its exact-head PR closes. Failed or interrupted partial admissions cannot
 silently open another PR: a staged-branch PR counts as occupying capacity
 even without its final labels.
 
@@ -164,6 +166,70 @@ and issue number. A manual out-of-band creation of staged PRs is not prevented
 by GitHub permissions; it is detected and blocks the next ATC admission.
 Commissioning requires a controlled end-to-end staging test and checks that
 creating a PR with HAMSTER_PR_TOKEN correctly triggers mandatory CI.
+
+## Automatic slot release and partial admission recovery
+
+The trusted workflow at .github/workflows/mhb-atc-reconcile.yml reconciles
+candidate issues with the lifecycle of their exact authorized PRs. It runs
+after a same-repository staged-branch PR is closed and every 30 minutes as
+a fallback for missed/delayed close events or interrupted admissions. It can
+also be invoked manually in **dry-run** mode (no writes), or explicitly in
+reconcile mode.
+
+All stage, admission and reconciliation workflows share the concurrency
+group "mhb-atc-admission-global" with queue:max, preventing two controller
+operations from modifying the issue state concurrently. Other repository
+actors are not prevented from modifying PRs manually; before writing, the
+controller re-reads its authoritative snapshot and rejects changed plans.
+
+ATC candidate lifecycle:
+
+    atc: staged -> atc: admitting -> atc: admitted -> issue closed
+                      |                  |
+                      | no matching PR   | exact-head PR closed
+                      | after >=15 min   v
+                      +--> atc: staged   slot released
+
+- Closed linked PR (merged or simply closed): close the candidate issue to
+  release the verification slot. This does **not** certify its work or grant
+  merge authority.
+- Open linked PR with incomplete labels or an admitting issue: repair the PR
+  labels and promote the issue to admitted.
+- Admitting issue with no PR after 15 minutes: return it to staged for a
+  future explicit admission attempt, but only after complete PR lookup and
+  revalidation while holding the shared controller concurrency group.
+- Admitting issue with no PR for less than 15 minutes: leave the capacity
+  reserved; do not create another PR.
+- Admitted issue with no matching exact-head PR, multiple matching PRs,
+  incorrect branch/base/commit, inconsistent labels, malformed machine
+  records, or untrusted issue provenance: **fail closed** and require
+  investigation. Never infer release or merge success from missing data.
+
+The reconciliation planner is pure and unit-tested using failure/replay
+snapshots. Live reconciliation is a separate workflow using only trusted
+main-branch code; it has issue and PR metadata write permissions but never
+merges anything or checks out the candidate's code.
+
+### Commissioning baseline
+
+The first live test (November 6, 2026) staged one documentation-only
+candidate at head 0d643f2fd1ea8923f76bb37b112b448e1075a02c. The
+stage job created candidate issue #1608, a dry-run selected it, and explicit
+admission opened PR #1609. Fourteen ordinary PR-triggered workflows started;
+the test PR was closed **without merging**, and the issue was closed. This
+validated staging, selection, CI triggering, and manual closeout, but was
+completed before automatic recovery and release were installed. Do not
+treat it as an automated recovery commissioning test.
+
+### Limitations before unattended scheduling of admissions
+
+This controller releases slots automatically, but does not automatically
+admit the next candidate, and it cannot guarantee when GitHub's scheduled
+workflows run. An unexpected or unknown state fails closed. Further
+commissioning should exercise a two-candidate scenario (second candidate
+held while the first PR remains open, then released by the close event),
+a mid-admission crash simulation, and duplicate stage event idempotency.
+Keep the admission workflow manually triggered until those are tested.
 
 ## Rollout
 
