@@ -169,6 +169,10 @@ Before marking any FSEM rule as adopted, its subsequent PR must provide:
 5. Review before elevating provisional text to normativity. Updates to the
    Logic Ledger and Conformance Matrix must reflect actual checked evidence.
 
+## FSEM-01 worked source controls
+
+The next bounded review slice is documented in the [FSEM-01 borrow-scope judgment and executable controls](formal-semantics-borrow-scope-fsem01-v0.md). It compares two parsed Grammar-v1 U8-returning functions, isolates post-borrow lexical name resolution, and records why a full Phase 1 BorrowEscape diagnostic remains separate from the existing Phase 0 checker evidence.
+
 ## Next slices
 
 - **FSEM-01:** start with ownership/borrowing, using the existing tests to
