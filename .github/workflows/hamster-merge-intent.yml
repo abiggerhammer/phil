@@ -11,7 +11,11 @@ permissions:
   actions: read
 
 concurrency:
-  group: hamster-merge-intent-${{ github.ref }}
+  # The merge operation mutates shared main, so every lane must use one queue.
+  # GitHub's default single pending slot replaces earlier requests: preserve
+  # distinct merge intents instead of silently cancelling pending work.
+  group: hamster-merge-intent-global
+  queue: max
   cancel-in-progress: false
 
 jobs:
