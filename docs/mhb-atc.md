@@ -136,6 +136,35 @@ bound the issue-search result set, add retry/backoff for rate-limit or
 transient API failures, define cancellation/supersession behavior, and
 ensure a global atomic admission decision across multiple queued issues.
 
+## Manual single-slot admission (opt-in commissioning)
+
+The workflow "MHB ATC Admit One (Manual)" implements the *first*
+repository-backed admission decision. Its default **dry-run** mode is
+read-only: it fetches the complete GitHub API lists of open issues and open
+PRs and reports the oldest eligible staged candidate. At most one candidate
+would be admitted while any staged-branch or ATC-admitted PR is open.
+
+Explicitly selecting **admit-one** re-reads the authoritative snapshot,
+checks that the choice is unchanged, validates the recorded SHA against the
+live GitHub branch, verifies no open PR for that branch exists, and opens a
+single pull request with the existing HAMSTER_PR_TOKEN credential (not
+GITHUB_TOKEN), so ordinary PR-triggered checks actually run.
+
+A successful admission labels the PR and corresponding issue "atc: admitted".
+It does not merge anything. An unfinished or already admitted issue blocks
+all later admissions; manual closeout is required until a separate completion
+controller is implemented. Failed or interrupted partial admissions cannot
+silently open another PR: a staged-branch PR counts as occupying capacity
+even without its final labels.
+
+**Not yet automatic**: no schedule, no automatic hamster integration, and no
+merge/release controller. The existing three Phase 1 lane auto-PR workflows
+continue unchanged. Admission fairness is FIFO by trusted issue creation time
+and issue number. A manual out-of-band creation of staged PRs is not prevented
+by GitHub permissions; it is detected and blocks the next ATC admission.
+Commissioning requires a controlled end-to-end staging test and checks that
+creating a PR with HAMSTER_PR_TOKEN correctly triggers mandatory CI.
+
 ## Rollout
 
 1. Observe representative queue delays, run costs, cancellations and verified
