@@ -11,7 +11,7 @@ permissions:
   issues: write
 
 concurrency:
-  # Stage updates, reservations and slot releases mutate the same issue state.
+  # Stage, admission and release all mutate the same candidate state.
   group: mhb-atc-admission-global
   queue: max
   cancel-in-progress: false
@@ -79,8 +79,7 @@ jobs:
               echo "Candidate was previously closed; use a new staged branch" >&2
               exit 1
             fi
-            # A retry must not reset an in-flight or admitted candidate.
-            # Staged issues are owned by the trusted default-branch bot.
+            # Refuse to restage an admitted or currently reserved candidate.
             author="$(gh api "repos/$GH_REPO/issues/$number" --jq '.user.login')"
             test "$author" = "github-actions[bot]" || {
               echo "Untrusted existing candidate owner" >&2
@@ -88,25 +87,7 @@ jobs:
             }
             stage_labels="$(gh issue view "$number" --repo "$GH_REPO" --json labels --jq '.labels[].name')"
             if ! grep -Fxq "atc: staged" <<<"$stage_labels" ||
-               grep -Eq '^atc: (admitting|admitted)
-              --body-file /tmp/atc-candidate.md \
-              --add-label "atc: staged" --add-label "lane: $lane"
-            echo "Updated staged candidate issue #$number"
-          else
-            gh issue create --repo "$GH_REPO" \
-              --title "$title" --body-file /tmp/atc-candidate.md \
-              --label "atc: staged" --label "lane: $lane"
-          fi
-
-          # A later admission must revalidate live SHA; registering creates NO PR.
-          {
-            echo "### MHB-ATC staging"
-            echo "- lane: $lane"
-            echo "- branch: $BRANCH"
-            echo "- exact requested head: $HEAD_SHA"
-            echo "- status: staged only; no PR created"
-          } >> "$GITHUB_STEP_SUMMARY"
- <<<"$stage_labels"; then
+               grep -Eq '^atc: (admitting|admitted)$' <<<"$stage_labels"; then
               echo "Cannot restage reserved/admitted or ambiguously labelled candidate" >&2
               exit 1
             fi
