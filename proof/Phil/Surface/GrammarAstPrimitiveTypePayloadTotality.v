@@ -1,8 +1,12 @@
 From Stdlib Require Import Lists.List Strings.String.
 
 From Phil.Surface Require Import
+  GrammarDerivation
+  GrammarAstSourceHeader
+  GrammarAstTopLevelSpine
   GrammarAstPrimitiveTypePayloadSpine
-  GrammarAstTypeTotality.
+  GrammarAstTypeTotality
+  GrammarDeterminacySimpleResolverSoundness.
 
 Import ListNotations.
 Open Scope string_scope.
@@ -133,8 +137,7 @@ Proof.
       split; first exact Hnormalize.
       eapply phase1_surface_normalize_float_primitive_round_trip.
       exact Hnormalize.
-    + cbn in Hnth.
-      discriminate Hnth.
+    + destruct index; cbn in Hnth; discriminate Hnth.
 Qed.
 
 Lemma phase1_surface_normalize_primitive_nonreference_total_from_derivation :
@@ -166,9 +169,9 @@ Proof.
   - cbn in Hnth. inversion Hnth; subst item.
     destruct (literal_derivation_is_exact phase1_surface_rules _ "Unit" _ _ selected Hselected)
       as [tail [_ [_ Hselected_tree]]].
-    let type_value := constr:(
+    pose (type_value :=
       {| phase1_nonreference_type_spine_tag := Phase1UnitType;
-         phase1_nonreference_type_spine_selected_tree := selected |}) in
+         phase1_nonreference_type_spine_selected_tree := selected |}).
     assert (Houter : phase1_surface_normalize_nonreference_type_spine tree = Some type_value).
     { rewrite Htree, Hsubtree. unfold phase1_surface_normalize_nonreference_type_spine,
         phase1_surface_expect_nonterminal, phase1_surface_expect_alternative.
@@ -184,9 +187,9 @@ Proof.
     + cbn in Hnth. inversion Hnth; subst item.
       destruct (literal_derivation_is_exact phase1_surface_rules _ "Bool" _ _ selected Hselected)
         as [tail [_ [_ Hselected_tree]]].
-      let type_value := constr:(
+      pose (type_value :=
         {| phase1_nonreference_type_spine_tag := Phase1BoolType;
-           phase1_nonreference_type_spine_selected_tree := selected |}) in
+           phase1_nonreference_type_spine_selected_tree := selected |}).
       assert (Houter : phase1_surface_normalize_nonreference_type_spine tree = Some type_value).
       { rewrite Htree, Hsubtree. unfold phase1_surface_normalize_nonreference_type_spine,
           phase1_surface_expect_nonterminal, phase1_surface_expect_alternative.
@@ -202,9 +205,9 @@ Proof.
       * cbn in Hnth. inversion Hnth; subst item.
         destruct (literal_derivation_is_exact phase1_surface_rules _ "Char" _ _ selected Hselected)
           as [tail [_ [_ Hselected_tree]]].
-        let type_value := constr:(
+        pose (type_value :=
           {| phase1_nonreference_type_spine_tag := Phase1CharType;
-             phase1_nonreference_type_spine_selected_tree := selected |}) in
+             phase1_nonreference_type_spine_selected_tree := selected |}).
         assert (Houter : phase1_surface_normalize_nonreference_type_spine tree = Some type_value).
         { rewrite Htree, Hsubtree. unfold phase1_surface_normalize_nonreference_type_spine,
             phase1_surface_expect_nonterminal, phase1_surface_expect_alternative.
@@ -220,9 +223,9 @@ Proof.
         -- cbn in Hnth. inversion Hnth; subst item.
            destruct (literal_derivation_is_exact phase1_surface_rules _ "String" _ _ selected Hselected)
              as [tail [_ [_ Hselected_tree]]].
-           let type_value := constr:(
+           pose (type_value :=
              {| phase1_nonreference_type_spine_tag := Phase1StringType;
-                phase1_nonreference_type_spine_selected_tree := selected |}) in
+                phase1_nonreference_type_spine_selected_tree := selected |}).
            assert (Houter : phase1_surface_normalize_nonreference_type_spine tree = Some type_value).
            { rewrite Htree, Hsubtree. unfold phase1_surface_normalize_nonreference_type_spine,
                phase1_surface_expect_nonterminal, phase1_surface_expect_alternative.
@@ -240,9 +243,9 @@ Proof.
                 "uint_type" "UINT_TYPE" _ _ _ selected
                 phase1_surface_uint_type_lookup_for_primitive_totality Hselected)
                 as [spelling [Hselected_norm Hselected_round]].
-              let type_value := constr:(
+              pose (type_value :=
                 {| phase1_nonreference_type_spine_tag := Phase1UintType;
-                   phase1_nonreference_type_spine_selected_tree := selected |}) in
+                   phase1_nonreference_type_spine_selected_tree := selected |}).
               assert (Houter : phase1_surface_normalize_nonreference_type_spine tree = Some type_value).
               { rewrite Htree, Hsubtree. unfold phase1_surface_normalize_nonreference_type_spine,
                   phase1_surface_expect_nonterminal, phase1_surface_expect_alternative.
@@ -260,9 +263,9 @@ Proof.
                    "sint_type" "SINT_TYPE" _ _ _ selected
                    phase1_surface_sint_type_lookup_for_primitive_totality Hselected)
                    as [spelling [Hselected_norm Hselected_round]].
-                 let type_value := constr:(
+                 pose (type_value :=
                    {| phase1_nonreference_type_spine_tag := Phase1SintType;
-                      phase1_nonreference_type_spine_selected_tree := selected |}) in
+                      phase1_nonreference_type_spine_selected_tree := selected |}).
                  assert (Houter : phase1_surface_normalize_nonreference_type_spine tree = Some type_value).
                  { rewrite Htree, Hsubtree. unfold phase1_surface_normalize_nonreference_type_spine,
                      phase1_surface_expect_nonterminal, phase1_surface_expect_alternative.
@@ -279,9 +282,9 @@ Proof.
                      destruct (phase1_surface_normalize_float_primitive_total_from_derivation
                        _ _ _ selected Hselected)
                        as [value [Hselected_norm Hselected_round]].
-                     let type_value := constr:(
+                     pose (type_value :=
                        {| phase1_nonreference_type_spine_tag := Phase1FloatType;
-                          phase1_nonreference_type_spine_selected_tree := selected |}) in
+                          phase1_nonreference_type_spine_selected_tree := selected |}).
                      assert (Houter : phase1_surface_normalize_nonreference_type_spine tree = Some type_value).
                      { rewrite Htree, Hsubtree. unfold phase1_surface_normalize_nonreference_type_spine,
                          phase1_surface_expect_nonterminal, phase1_surface_expect_alternative.
@@ -295,47 +298,47 @@ Proof.
                      +++ eapply phase1_surface_normalize_nonreference_type_spine_round_trip; exact Houter.
                  --- destruct index as [|index].
                      +++ cbn in Hnth. inversion Hnth; subst item.
-                         let type_value := constr:(
+                         pose (type_value :=
                            {| phase1_nonreference_type_spine_tag := Phase1BytesType;
-                              phase1_nonreference_type_spine_selected_tree := selected |}) in
+                              phase1_nonreference_type_spine_selected_tree := selected |}).
                          exists type_value, (Phase1OpaqueNonreferenceType Phase1BytesType selected).
                          rewrite Htree, Hsubtree. repeat split; reflexivity.
                      +++ destruct index as [|index].
                          *** cbn in Hnth. inversion Hnth; subst item.
-                             let type_value := constr:(
+                             pose (type_value :=
                                {| phase1_nonreference_type_spine_tag := Phase1FrameType;
-                                  phase1_nonreference_type_spine_selected_tree := selected |}) in
+                                  phase1_nonreference_type_spine_selected_tree := selected |}).
                              exists type_value, (Phase1OpaqueNonreferenceType Phase1FrameType selected).
                              rewrite Htree, Hsubtree. repeat split; reflexivity.
                          *** destruct index as [|index].
                              ---- cbn in Hnth. inversion Hnth; subst item.
-                                  let type_value := constr:(
+                                  pose (type_value :=
                                     {| phase1_nonreference_type_spine_tag := Phase1ProofType;
-                                       phase1_nonreference_type_spine_selected_tree := selected |}) in
+                                       phase1_nonreference_type_spine_selected_tree := selected |}).
                                   exists type_value, (Phase1OpaqueNonreferenceType Phase1ProofType selected).
                                   rewrite Htree, Hsubtree. repeat split; reflexivity.
                              ---- destruct index as [|index].
                                   ++++ cbn in Hnth. inversion Hnth; subst item.
-                                       let type_value := constr:(
+                                       pose (type_value :=
                                          {| phase1_nonreference_type_spine_tag := Phase1ValidatedType;
-                                            phase1_nonreference_type_spine_selected_tree := selected |}) in
+                                            phase1_nonreference_type_spine_selected_tree := selected |}).
                                        exists type_value, (Phase1OpaqueNonreferenceType Phase1ValidatedType selected).
                                        rewrite Htree, Hsubtree. repeat split; reflexivity.
                                   ++++ destruct index as [|index].
                                        ***** cbn in Hnth. inversion Hnth; subst item.
-                                             let type_value := constr:(
+                                             pose (type_value :=
                                                {| phase1_nonreference_type_spine_tag := Phase1RefinementType;
-                                                  phase1_nonreference_type_spine_selected_tree := selected |}) in
+                                                  phase1_nonreference_type_spine_selected_tree := selected |}).
                                              exists type_value, (Phase1OpaqueNonreferenceType Phase1RefinementType selected).
                                              rewrite Htree, Hsubtree. repeat split; reflexivity.
                                        ***** destruct index as [|index].
                                              ------ cbn in Hnth. inversion Hnth; subst item.
-                                                    let type_value := constr:(
+                                                    pose (type_value :=
                                                       {| phase1_nonreference_type_spine_tag := Phase1TupleType;
-                                                         phase1_nonreference_type_spine_selected_tree := selected |}) in
+                                                         phase1_nonreference_type_spine_selected_tree := selected |}).
                                                     exists type_value, (Phase1OpaqueNonreferenceType Phase1TupleType selected).
                                                     rewrite Htree, Hsubtree. repeat split; reflexivity.
-                                             ------ cbn in Hnth. discriminate Hnth.
+                                             ------ destruct index; cbn in Hnth; discriminate Hnth.
 Qed.
 
 Theorem phase1_surface_normalize_primitive_type_tree_total_from_derivation :
@@ -367,8 +370,8 @@ Proof.
         (descend (descend path (AtNonterminal "type_expression")) (AtAlternative 0))
         input rest selected Hselected)
       as [type_value [refined [Houter [Hrefine Hround]]]].
-    let outer_type := constr:(Phase1NonreferenceTypeSpine type_value) in
-    let result := constr:(Phase1PrimitiveNonreferenceTypeSpine refined) in
+    pose (outer_type := Phase1NonreferenceTypeSpine type_value).
+    pose (result := Phase1PrimitiveNonreferenceTypeSpine refined).
     assert (Htype : phase1_surface_normalize_type_spine tree = Some outer_type).
     {
       rewrite Htree, Hsubtree.
@@ -387,8 +390,8 @@ Proof.
     exact Hresult.
   - destruct index as [|index].
     + cbn in Hnth. inversion Hnth; subst item.
-      let outer_type := constr:(Phase1NamedTypeSpine selected) in
-      let result := constr:(Phase1PrimitiveNamedTypeSpine selected) in
+      pose (outer_type := Phase1NamedTypeSpine selected).
+      pose (result := Phase1PrimitiveNamedTypeSpine selected).
       assert (Htype : phase1_surface_normalize_type_spine tree = Some outer_type).
       {
         rewrite Htree, Hsubtree.
@@ -405,5 +408,5 @@ Proof.
       exists result. split; first exact Hresult.
       eapply phase1_surface_normalize_primitive_type_tree_round_trip.
       exact Hresult.
-    + cbn in Hnth. discriminate Hnth.
+    + destruct index; cbn in Hnth; discriminate Hnth.
 Qed.
