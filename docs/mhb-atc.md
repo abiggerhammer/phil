@@ -1,0 +1,107 @@
+# Mecha Hamster Ball — Air Traffic Control (MHB-ATC)
+
+Status: **shadow / read-only**. This phase measures traffic and exercises a
+deterministic admission policy. It does **not** gate real PRs, allocate live
+leases, or merge code.
+
+## Historical baseline (measured 2026-11-06)
+
+Source: GitHub Actions REST run listing for abiggerhammer/phil, filtered by
+UTC creation day (created=YYYY-MM-DD..YYYY-MM-DD).
+
+| UTC date | Workflow runs reported | Note |
+| --- | ---: | --- |
+| 2026-09-21 | at least 2,500 | date query reached its result ceiling; lower bound |
+| 2026-09-30 | 588 | historical comparison |
+| 2026-10-05 | 375 | historical comparison |
+| 2026-11-05 | 2,327 | heavy recent activity |
+| 2026-11-06 | 567 | partial day, around 09:32 UTC |
+
+These counts include push, pull_request and helper workflow events; they are
+NOT PR counts, job counts, billed runner minutes, or unique commits. Historical
+query counts sometimes exceed the set of runs available through pagination.
+Do not extrapolate from the missing pages without an explicit sampling method.
+
+A revision caused approximately 28–35 near-simultaneous workflows in
+September/October samples. A sampled main push on November 5 had 56 distinct
+workflow names. The main resource concern is fanout per revision.
+
+Samples of individual jobs (created to started; started to completed):
+
+| UTC date / run | Queue wait | Runtime |
+| --- | ---: | ---: |
+| Sep 21 PR CI, run 35669893424 | 151 s | 670 s |
+| Sep 21 PR Proofs / Rocq, run 35669893458 | 401 s | 85 s |
+| Sep 30 PR CI, run 36783581835 | 2 s | 590 s |
+| Oct 5 PR CI, run 37353089065 | 3 s | 699 s |
+| Nov 5 PR Proofs / field projections, run 42133129498 | 323 s | 399 s |
+| Nov 5 push CI, run 42081041967 | 499 s | 713 s |
+| Nov 6 ATC PR CI, run 42192947291 | 240 s | 547 s |
+
+These are selected examples, not a representative distribution. The results
+support contention as a concern but do not isolate GitHub runner limits from
+fanout, repo configuration, workflow mix and other upstream factors.
+
+## Read-only radar
+
+The manual-only workflow "MHB ATC Radar (Manual)" samples UTC today and
+yesterday, retains a JSON artifact and publishes a workflow summary. It
+never runs automatically on push or pull_request.
+
+Historical replay with an authenticated GitHub CLI:
+
+    python3 scripts/mhb_atc.py --repo abiggerhammer/phil \
+      --date 2026-09-30 --date 2026-11-05 \
+      --max-pages 3 --jobs-per-day 6 --format markdown
+
+Run offline policy and sampler tests:
+
+    python3 scripts/test_mhb_atc.py
+
+Reported daily run totals are distinguished from newest-first sampled runs and
+sampled jobs. Sample medians are not population percentiles. For comparisons,
+keep the same date window and sampling budget. The sampler fails closed on
+malformed responses and partial job pages.
+
+## Shadow admission
+
+The deterministic selector takes an offline JSON snapshot:
+
+    {
+      "capacity": 1,
+      "admitted": [
+        {"state": "verifying",
+         "head_sha": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"}
+      ],
+      "candidates": [
+        {"branch": "hamster/rocq-refinement/proof-one",
+         "head_sha": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+         "enqueued_at": "2026-11-06T09:00:00Z"}
+      ]
+    }
+
+Invoke:
+
+    python3 scripts/mhb_atc.py --admission-snapshot snapshot.json
+
+It holds when verification capacity is occupied, otherwise recommends the
+oldest candidate by UTC enqueue time with deterministic tie-breaking.
+Unknown states, invalid SHAs, duplicate branch identities and naive timestamps
+fail closed. It neither grants clearance nor contacts GitHub.
+
+## Rollout
+
+1. Observe representative queue delays, run costs, cancellations and verified
+   merges/hour. Never infer entire-population statistics from newest samples.
+2. Stage hamster branch candidates durably before opening a PR. Integrate all
+   hamster wakes with a serialized admission controller, not ad hoc gate checks.
+3. Admit one CI revision, binding the decision to branch, lane, exact head SHA,
+   WIP limits and a durable queue; forbid push or reopened-PR bypasses.
+4. Recover from stale heads, retries, timeouts and cancellation without treating
+   absent verification as successful verification.
+5. Expand to two admitted revisions only if verified merges/hour improve.
+6. Deduplicate builds and proof checks only with an explicit required-check
+   manifest; retain the existing exact-head verification invariant.
+
+Merge serialization foundation: PR #1601 (merged).
+Tracking issue: #1602.
