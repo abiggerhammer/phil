@@ -219,57 +219,74 @@ Proof.
       ]
       input rest tree Hderive)
     as [trees [Htree Hitems]].
-  repeat match goal with
-  | Hseq : DerivesSequence phase1_surface_rules _ _ (_ :: _) _ _ _ |- _ =>
-      inversion Hseq; subst; clear Hseq
-  end.
-  match goal with
-  | Hnil : DerivesSequence phase1_surface_rules _ _ [] _ _ _ |- _ =>
-      inversion Hnil; subst; clear Hnil
-  end.
-  match goal with
-  | Hkeyword : Derives phase1_surface_rules _
-      (ELiteral keyword) _ _ ?keyword_tree,
-    Hopen : Derives phase1_surface_rules _
-      (ELiteral "[") _ _ ?open_tree,
-    Hchild : Derives phase1_surface_rules _
-      (ENonterminal child_name) _ _ ?child_tree,
-    Hclose : Derives phase1_surface_rules _
-      (ELiteral "]") _ _ ?close_tree |- _ =>
-      destruct
-        (literal_derivation_is_exact
-          phase1_surface_rules _ keyword _ _ keyword_tree Hkeyword)
-        as [keyword_tail [_ [_ Hkeyword_tree]]];
-      destruct
-        (literal_derivation_is_exact
-          phase1_surface_rules _ "[" _ _ open_tree Hopen)
-        as [open_tail [_ [_ Hopen_tree]]];
-      destruct
-        (literal_derivation_is_exact
-          phase1_surface_rules _ "]" _ _ close_tree Hclose)
-        as [close_tail [_ [_ Hclose_tree]]];
-      destruct
-        (derives_nonterminal_exposes_body
-          phase1_surface_rules _ child_name _ _ child_tree Hchild)
-        as [child_body [child_subtree [Hchild_lookup [Hchild_tree Hchild_body]]]];
-      assert (Hnormalize :
-        phase1_surface_normalize_bracketed_child_payload
-          keyword child_name tree = Some child_tree);
-      [ rewrite Htree, Hkeyword_tree, Hopen_tree, Hchild_tree, Hclose_tree;
-        unfold phase1_surface_normalize_bracketed_child_payload,
-          phase1_surface_expect_sequence,
-          phase1_surface_exact4,
-          phase1_surface_expect_literal,
-          phase1_surface_expect_nonterminal;
-        cbn;
-        repeat rewrite String.eqb_refl;
-        reflexivity
-      | exists child_tree;
-        split;
-        [ exact Hnormalize
-        | eapply phase1_surface_normalize_bracketed_child_payload_round_trip;
-          exact Hnormalize ] ]
-  end.
+  destruct
+    (derives_sequence_cons_exposes_head_exact
+      phase1_surface_rules path 0
+      (ELiteral keyword)
+      [ ELiteral "["; ENonterminal child_name; ELiteral "]" ]
+      input rest trees Hitems)
+    as [keyword_middle [keyword_tree [keyword_tail_trees
+      [Htrees [Hkeyword Hkeyword_tail]]]]].
+  destruct
+    (derives_sequence_cons_exposes_head_exact
+      phase1_surface_rules path 1
+      (ELiteral "[")
+      [ ENonterminal child_name; ELiteral "]" ]
+      keyword_middle rest keyword_tail_trees Hkeyword_tail)
+    as [open_middle [open_tree [open_tail_trees
+      [Hkeyword_tail_trees [Hopen Hopen_tail]]]]].
+  destruct
+    (derives_sequence_cons_exposes_head_exact
+      phase1_surface_rules path 2
+      (ENonterminal child_name) [ ELiteral "]" ]
+      open_middle rest open_tail_trees Hopen_tail)
+    as [child_middle [child_tree [child_tail_trees
+      [Hopen_tail_trees [Hchild Hchild_tail]]]]].
+  destruct
+    (derives_sequence_cons_exposes_head_exact
+      phase1_surface_rules path 3
+      (ELiteral "]") []
+      child_middle rest child_tail_trees Hchild_tail)
+    as [close_middle [close_tree [end_trees
+      [Hchild_tail_trees [Hclose Hend]]]]].
+  inversion Hend; subst end_trees.
+  rewrite Htrees, Hkeyword_tail_trees, Hopen_tail_trees,
+    Hchild_tail_trees in Htree.
+  destruct
+    (literal_derivation_is_exact
+      phase1_surface_rules _ keyword _ _ keyword_tree Hkeyword)
+    as [keyword_tail [_ [_ Hkeyword_tree]]].
+  destruct
+    (literal_derivation_is_exact
+      phase1_surface_rules _ "[" _ _ open_tree Hopen)
+    as [open_tail [_ [_ Hopen_tree]]].
+  destruct
+    (literal_derivation_is_exact
+      phase1_surface_rules _ "]" _ _ close_tree Hclose)
+    as [close_tail [_ [_ Hclose_tree]]].
+  destruct
+    (derives_nonterminal_exposes_body
+      phase1_surface_rules _ child_name _ _ child_tree Hchild)
+    as [child_body [child_subtree [Hchild_lookup [Hchild_tree Hchild_body]]]].
+  assert (Hnormalize :
+    phase1_surface_normalize_bracketed_child_payload
+      keyword child_name tree = Some child_tree).
+  {
+    rewrite Htree, Hkeyword_tree, Hopen_tree, Hchild_tree, Hclose_tree.
+    unfold phase1_surface_normalize_bracketed_child_payload,
+      phase1_surface_expect_sequence,
+      phase1_surface_exact4,
+      phase1_surface_expect_literal,
+      phase1_surface_expect_nonterminal.
+    cbn.
+    repeat rewrite String.eqb_refl.
+    reflexivity.
+  }
+  exists child_tree.
+  split.
+  - exact Hnormalize.
+  - eapply phase1_surface_normalize_bracketed_child_payload_round_trip.
+    exact Hnormalize.
 Qed.
 
 Lemma phase1_surface_normalize_validated_payload_total_from_derivation :
