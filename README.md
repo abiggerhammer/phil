@@ -23,6 +23,8 @@ Looking up a spelling? The **[Phase 1 keyword lexicon](docs/reference/keywords-p
 
 For a focused checked Phase 1 example, **[Steve provider put/get walkthrough](docs/tutorials/steve-provider-put-get.md)** follows the current content-addressed-store witness in both directions and explains where provider replacement, ownership, and digest checking meet the canonical source.
 
+**Formal-methods readers:** start with the [Phase 1 typing and semantics reader's guide](docs/phase-1/typing-and-semantics-reader-guide-v1.md) and its [worked rule examples](docs/phase-1/typing-rules-worked-examples-draft-v1.md). The separate [formal-semantics judgment inventory](docs/phase-1/formal-semantics-judgment-inventory-v0.md) tracks what remains to be specified, tested, and proved; these materials are not a newly accepted normative specification.
+
 ## Core formulations
 
 **What Phil is**
