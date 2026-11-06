@@ -58,7 +58,7 @@ jobs:
               gh api --paginate "repos/$GH_REPO/issues?state=open&labels=atc%3A%20$state&per_page=100" \
                 | jq -s 'add // []' > "/tmp/atc-$state.json"
             done
-            jq -s 'add | unique_by(.number)' \
+            jq -s 'add | map(select(has("pull_request") | not)) | unique_by(.number)' \
               /tmp/atc-staged.json /tmp/atc-admitting.json /tmp/atc-admitted.json \
               > /tmp/atc-issues.json
             printf '%s\n' '[]' > /tmp/atc-prs.json
