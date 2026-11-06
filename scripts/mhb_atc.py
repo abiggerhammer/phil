@@ -99,7 +99,7 @@ def scan_day(repo: str, day: str, pages: int, job_limit: int) -> dict:
     # Most recent per (revision, workflow) to avoid sampling repeated retries.
     chosen: list[dict] = []
     seen: set[tuple[str, str]] = set()
-    for run in runs:
+    for run in runs if job_limit > 0 else []:
         key = (str(run.get("head_sha")), str(run.get("name")))
         if run.get("name") not in JOB_NAMES or key in seen:
             continue
