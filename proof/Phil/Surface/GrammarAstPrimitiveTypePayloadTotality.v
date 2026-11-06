@@ -111,7 +111,7 @@ Proof.
       reflexivity.
     }
     exists Phase1Float32.
-    split; first exact Hnormalize.
+    split; [exact Hnormalize | ].
     eapply phase1_surface_normalize_float_primitive_round_trip.
     exact Hnormalize.
   - destruct index as [|index].
@@ -134,7 +134,7 @@ Proof.
         reflexivity.
       }
       exists Phase1Float64.
-      split; first exact Hnormalize.
+      split; [exact Hnormalize | ].
       eapply phase1_surface_normalize_float_primitive_round_trip.
       exact Hnormalize.
     + destruct index; cbn in Hnth; discriminate Hnth.
@@ -385,7 +385,7 @@ Proof.
       unfold phase1_surface_normalize_primitive_type_tree.
       rewrite Htype. cbn. rewrite Hrefine. reflexivity.
     }
-    exists result. split; first exact Hresult.
+    exists result. split; [exact Hresult | ].
     eapply phase1_surface_normalize_primitive_type_tree_round_trip.
     exact Hresult.
   - destruct index as [|index].
@@ -405,7 +405,7 @@ Proof.
         unfold phase1_surface_normalize_primitive_type_tree.
         rewrite Htype. reflexivity.
       }
-      exists result. split; first exact Hresult.
+      exists result. split; [exact Hresult | ].
       eapply phase1_surface_normalize_primitive_type_tree_round_trip.
       exact Hresult.
     + destruct index; cbn in Hnth; discriminate Hnth.
