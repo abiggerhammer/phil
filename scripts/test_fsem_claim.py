@@ -17,7 +17,7 @@ BRANCH = "formal-semantics/fsem01-next-proof"
 
 
 def pr(number=99, branch=BRANCH, slice_key="fsem-01", state="open",
-       created="2026-11-07T03:00:00Z", title="FSEM-01: next proof"):
+       created="2099-01-01T00:00:00Z", title="FSEM-01: next proof"):
     return {"number": number, "state": state, "head": {
         "ref": branch, "repo": {"full_name": f.REPO}},
         "created_at": created, "title": title,
