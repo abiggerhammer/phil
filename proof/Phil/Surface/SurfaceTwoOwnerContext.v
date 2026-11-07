@@ -286,19 +286,31 @@ Qed.
 Theorem two_owner_loan_start_preserves_spectator :
   forall owner spectator ownerTy spectatorTy,
     String.eqb spectator owner = false ->
-    let ctx := twoOwnerContext owner spectator ownerTy spectatorTy in
-    let started := SurfaceBorrowLoanStateCorrespondence.setCoreLoan owner true ctx in
-    Context.linearBindings started spectator = Some spectatorTy /\
-    Context.sharedLoans started spectator = false /\
-    Context.sharedLoans started owner = true.
+    Context.linearBindings
+      (SurfaceBorrowLoanStateCorrespondence.setCoreLoan owner true
+        (twoOwnerContext owner spectator ownerTy spectatorTy))
+      spectator = Some spectatorTy /\
+    Context.sharedLoans
+      (SurfaceBorrowLoanStateCorrespondence.setCoreLoan owner true
+        (twoOwnerContext owner spectator ownerTy spectatorTy))
+      spectator = false /\
+    Context.sharedLoans
+      (SurfaceBorrowLoanStateCorrespondence.setCoreLoan owner true
+        (twoOwnerContext owner spectator ownerTy spectatorTy))
+      owner = true.
 Proof.
-  intros owner spectator ownerTy spectatorTy Hdiff ctx started.
+  intros owner spectator ownerTy spectatorTy Hdiff.
   split.
-  - simpl. apply spectator_present_in_two_owner_context; exact Hdiff.
+  - change (Context.linearBindings
+      (twoOwnerContext owner spectator ownerTy spectatorTy)
+      spectator = Some spectatorTy).
+    apply spectator_present_in_two_owner_context.
+    exact Hdiff.
   - split.
-    + apply SurfaceBorrowLoanStateCorrespondence.set_core_loan_preserves_other_names
-        with (owner := owner).
-      exact Hdiff.
+    + rewrite (SurfaceBorrowLoanStateCorrespondence.set_core_loan_preserves_other_names
+        owner spectator true
+        (twoOwnerContext owner spectator ownerTy spectatorTy) Hdiff).
+      reflexivity.
     + apply SurfaceBorrowLoanStateCorrespondence.set_core_loan_has_exact_target.
 Qed.
 
