@@ -70,11 +70,10 @@ class FakeGitHub:
                 raise f.ClaimFailure("GitHub 404: claim missing")
             return {"object": {"sha": self.refs[key]}}
         if method == "GET" and endpoint.startswith("/contents/" + f.CLAIM_FILE):
-            name = urllib.parse.unquote(endpoint.partition("?ref=")[2])
-            ref = "refs/heads/" + name
-            if ref not in self.refs:
+            sha = urllib.parse.unquote(endpoint.partition("?ref=")[2])
+            if sha not in self.commits:
                 raise f.ClaimFailure("claim missing record")
-            record = self.commits[self.refs[ref]]
+            record = self.commits[sha]
             return {"encoding": "base64", "content":
                     base64.b64encode(json.dumps(record).encode()).decode()}
         if method == "POST" and endpoint == f"/issues/{ISSUE}/comments":
