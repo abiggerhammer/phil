@@ -29,14 +29,16 @@ length-framed ASCII fields, in order:
    `phase/unrestricted/affine/linear/loans`;
 6. exact terminal outcome.
 
-Map entries are listed in ascending `Name` order using exact bounded tags:
-`<owner-hex>=Bytes8` for the linear owner and
-`<view-hex>=SharedBytes` for the temporary unrestricted view, with set members listed in ascending order as
-`<hex-encoded-name>`. Empty collections are `-`. The fragment refuses
-other resource types, and the independent decoder permits only the
-one-owner linear domain, a temporary unrestricted `SharedBytes` view within
-the scoped body, empty affine bindings, and no foreign loan member. Unknown keys are encoded, **not silently dropped**;
-their frames then fail validation.
+Map entries are listed in ascending `Name` order as
+`<owner-hex>=Bytes8`; set members are lowercase hex-encoded names. Empty
+collections are `-`. The independent decoder accepts only the linear
+`Bytes[8]` owner with empty unrestricted/affine maps and no foreign loan
+member. **The source checker inserts a temporary unrestricted `SharedBytes`
+view during the lexical body, but `checkScopedValueBlock` removes that view
+before the recorded body-result checkpoint.** Consequently the four captured
+collections reflect the *post-prune* state; the separate Haskell transition
+test exercises the temporary insertion/removal roundtrip. Unknown map entries
+are encoded, **not silently dropped**, and then rejected by validation.
 
 This is intentionally a *new* artifact. The established
 [OBS-V1](formal-semantics-observation-wire-fsem01-v1.md) format and its four
@@ -52,8 +54,9 @@ and `Set.toAscList`, **not** canonical phase-to-bit templates.
 It independently reconstructs the captured `Core.Context.ResourceContext`
 for each checkpoint, then runs the **real Haskell Core.Context operations**:
 
-- admitted success: `startSharedLoan`, unchanged safe body, `endSharedLoan`,
-  and `consumeLinear`, comparing every successor context for exact equality;
+- admitted success: `startSharedLoan`, temporary view insertion and scope
+  cleanup, `endSharedLoan`, and `consumeLinear`, checking the recorded
+  post-prune successor contexts for exact equality;
 - `BorrowEscape` prefix: start the actual loan, retain live owner and loan
   at both error checkpoints, and verify `consumeLinear` returns
   `OwnerBorrowed`; no invented post-rejection successor;
