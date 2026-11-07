@@ -483,3 +483,39 @@ release-byte verification or pinned independent final-delta signoff is claimed.
 No change to Phase 1 TCB, strict GHC/LLVM/Rocq policy, generated Phase-1
 artifacts, historical independent-audit evidence or the original 244 normative
 cases. Independent audit freeze: **NOT YET**.
+
+
+## 2026-11-07 — full accepted-object replay is stronger than coordinate replay
+
+After #1643 and its #1645 readiness reconciliation, one separately scoped
+read-only replay now requires the **exact full checked source-manifest producer
+token**, **exact independently accepted VER-010 source envelope**, and **exact
+independently accepted INT-005 release envelope**, before replaying the accepted
+manifest's raw Systems digest, lowering root, and distinct concrete stage
+revision domains. Private native receipt construction retains those objects and
+the previously checked stage-coordinate receipt. This replay is not a new
+acceptance producer and never equates GenericApplicationIdentity, architecture
+instance identity, manifestId, normalized Systems revision, common contract
+revision, final closed contract revision or the complete accepted objects.
+
+Executable Upload/Steve pressure includes the positive exact-object path and
+three independent substitution classes: declaration-only producer with **same
+complete source and manifest**; independently accepted different VER-010 source
+envelope with the **same source assurance**; and a second independently
+accepted INT-005 release with **identical full manifest, concrete StageClosure
+and LLVM**, but different residual trust. A release's manifest, stage and LLVM
+projections are not its complete consumer identity. Conditional Rocq proofs
+expose four named assumption queries for object equality and these rejected
+substitutions. Model equalities are explicit premises, not independently derived
+native acceptance or a Haskell-to-Rocq encoding.
+
+**Remaining-premise ledger:** The source's checked architecture occurrence
+still has no authenticated production link to the concrete accepted
+StageClosure or selected CertifiedRelease. The StageClosure has no InstanceKey.
+A supplied model Prop or matching instance revision cannot create that link.
+Concrete total/injective native-to-Rocq representations, all predecessor
+authority and complete FixedFinalAuthorityAdapter / FinalArtifactCertified are
+still unproved. Public-release byte verification and pinned independent
+final-delta signoff remain separate gates. Strict GHC, Rocq, LLVM and TCB
+policies are untouched; no generated Phase-1 artifacts or original 244
+normative cases are changed. Independent audit freeze: **NOT YET**.

@@ -1144,3 +1144,81 @@ Proof.
   exists (fun _ : bool => tt), true, false.
   split; [discriminate | reflexivity].
 Qed.
+
+(* #1584: exact *whole native object* replay is stronger than coordinate
+   replay. Every equality below is a typed external premise; the model never
+   constructs a checked producer, certified source or selected release. *)
+Section NativeExactAcceptedConsumerObjectReplay.
+  Context {CheckedSourceManifestToken CertifiedSourceObject
+           CertifiedReleaseObject NativeManifest NativeStage
+           NativeReleaseTrust : Type}.
+  Context (producerManifest : CheckedSourceManifestToken -> NativeManifest).
+  Context (sourceStage : CertifiedSourceObject -> NativeStage).
+  Context (releaseManifest : CertifiedReleaseObject -> NativeManifest).
+  Context (releaseStage : CertifiedReleaseObject -> NativeStage).
+  Context (releaseTrust : CertifiedReleaseObject -> NativeReleaseTrust).
+
+  Definition NativeExactAcceptedConsumerObjectsBound
+    (retainedProducer suppliedProducer : CheckedSourceManifestToken)
+    (retainedSource suppliedSource : CertifiedSourceObject)
+    (retainedRelease suppliedRelease : CertifiedReleaseObject) : Prop :=
+      retainedProducer = suppliedProducer /\
+      retainedSource = suppliedSource /\
+      retainedRelease = suppliedRelease /\
+      producerManifest retainedProducer = releaseManifest retainedRelease /\
+      sourceStage retainedSource = releaseStage retainedRelease.
+
+  Theorem exact_accepted_consumer_replay_retains_all_full_objects :
+    forall retainedProducer suppliedProducer retainedSource suppliedSource
+           retainedRelease suppliedRelease,
+      NativeExactAcceptedConsumerObjectsBound
+        retainedProducer suppliedProducer retainedSource suppliedSource
+        retainedRelease suppliedRelease ->
+      retainedProducer = suppliedProducer /\
+      retainedSource = suppliedSource /\
+      retainedRelease = suppliedRelease.
+  Proof.
+    intros rp cp rs cs rr cr [Hp [Hs [Hr _]]].
+    repeat split; assumption.
+  Qed.
+
+  Theorem same_full_manifest_cannot_replace_checked_producer :
+    forall retainedProducer suppliedProducer retainedSource suppliedSource
+           retainedRelease suppliedRelease,
+      retainedProducer <> suppliedProducer ->
+      producerManifest retainedProducer = producerManifest suppliedProducer ->
+      ~ NativeExactAcceptedConsumerObjectsBound
+          retainedProducer suppliedProducer retainedSource suppliedSource
+          retainedRelease suppliedRelease.
+  Proof.
+    intros rp cp rs cs rr cr Hdiff _ [Heq _].
+    exact (Hdiff Heq).
+  Qed.
+
+  Theorem same_source_stage_cannot_replace_certified_source_object :
+    forall retainedProducer suppliedProducer retainedSource suppliedSource
+           retainedRelease suppliedRelease,
+      retainedSource <> suppliedSource ->
+      sourceStage retainedSource = sourceStage suppliedSource ->
+      ~ NativeExactAcceptedConsumerObjectsBound
+          retainedProducer suppliedProducer retainedSource suppliedSource
+          retainedRelease suppliedRelease.
+  Proof.
+    intros rp cp rs cs rr cr Hdiff _ [_ [Heq _]].
+    exact (Hdiff Heq).
+  Qed.
+
+  Theorem same_release_manifest_stage_cannot_replace_trust_different_release :
+    forall retainedProducer suppliedProducer retainedSource suppliedSource
+           retainedRelease suppliedRelease,
+      releaseManifest retainedRelease = releaseManifest suppliedRelease ->
+      releaseStage retainedRelease = releaseStage suppliedRelease ->
+      releaseTrust retainedRelease <> releaseTrust suppliedRelease ->
+      ~ NativeExactAcceptedConsumerObjectsBound
+          retainedProducer suppliedProducer retainedSource suppliedSource
+          retainedRelease suppliedRelease.
+  Proof.
+    intros rp cp rs cs rr cr _ _ Hdiff [_ [_ [Heq _]]].
+    apply Hdiff. now rewrite Heq.
+  Qed.
+End NativeExactAcceptedConsumerObjectReplay.

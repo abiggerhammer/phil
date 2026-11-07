@@ -124,6 +124,10 @@ jobs:
           Print Assumptions native_replay_lowering_root_drift_rejected.
           Print Assumptions equal_raw_and_root_cannot_replace_full_manifest.
           Print Assumptions exact_release_stage_preserves_separately_typed_stage_coordinates.
+          Print Assumptions exact_accepted_consumer_replay_retains_all_full_objects.
+          Print Assumptions same_full_manifest_cannot_replace_checked_producer.
+          Print Assumptions same_source_stage_cannot_replace_certified_source_object.
+          Print Assumptions same_release_manifest_stage_cannot_replace_trust_different_release.
           Print Assumptions fixed_adapter_full_certification_preserves_predecessors.
           EOF
           rocq c -Q proof/Phil Phil /tmp/NativeFinalInstanceAssumptions.v 2>&1 | tee typed-native-instance-assumptions.log
