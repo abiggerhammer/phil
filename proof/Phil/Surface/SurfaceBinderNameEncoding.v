@@ -97,10 +97,11 @@ Lemma split_render_uint :
 Proof.
   induction d; intro suffix.
   - reflexivity.
-  all: cbn [DecimalString.NilEmpty.string_of_uint];
-       apply split_first_colon_preserves_digit_prefix;
-       [reflexivity | apply IHd].
-  Show.
+  all: solve [
+    cbn [DecimalString.NilEmpty.string_of_uint];
+    apply split_first_colon_preserves_digit_prefix;
+    [reflexivity | apply IHd]
+  ].
 Qed.
 
 Lemma split_render_nat :
