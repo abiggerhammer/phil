@@ -208,3 +208,7 @@ borrow evaluator as the ordinary checker. Its concrete `Core.Name`,
 `linearBindings` and `sharedLoans` checkpoints and negative error prefix
 are runnable evidence for constructing an eventual model correspondence.
 The source-to-Rocq owner encoding and simulation theorem remain **open**.
+
+## Subsequent first proof slice
+
+[The exact linear loan transition model](formal-semantics-exact-loan-transition-model-fsem01-v1.md) adds Rocq theorems about owner-name loan membership, preserving unrelated bindings, blocked linear consumption, and a **conditional** relation to abstract ResourceOwner loan sets. Its name/owner encoders are injective *hypotheses*, not verified Haskell source-to-model functions; it does not prove escaping-value rejection or a source-to-Rocq simulation. Review the exact-head CI evidence separately.
