@@ -151,9 +151,9 @@ Proof.
   intros catalog normalized concrete cut event next
     [Hnod [Hrepresented [Howner Hwf]]] Hstep.
   unfold representedObservation.
-  repeat split.
-  - exact Hnod.
-  - exact Hrepresented.
+  split; [exact Hnod |].
+  split; [exact Hrepresented |].
+  split.
   - rewrite (checked_advance_preserves_owner cut event next Hstep).
     exact Howner.
   - exact (checked_advance_is_well_formed cut event next Hstep).
