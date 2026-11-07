@@ -189,6 +189,62 @@ observeProductionCut catalog owner view cut = do
     , modelLoan = loaned
     }
 
+-- | An independently checked relation on every pair of ACTUAL production
+-- checkpoints. A rejection or terminal return has no outgoing rule.
+observedStep :: ModelCut -> ModelCut -> Either String ()
+observedStep prior next = do
+  assert (modelKey next == modelKey prior)
+    "step silently changed the represented owner identity"
+  event <- case (modelPhase prior, modelPhase next) of
+    (Before, Started) -> Right BeginLoan
+    (Started, BodyResult False) -> Right (CheckBody False)
+    (Started, BodyResult True) -> Right (CheckBody True)
+    (BodyResult False, Closed) -> Right EndLoan
+    (Closed, Returned) -> Right ReturnOwner
+    (BodyResult True, Rejected) -> Right RejectEscape
+    _ -> Left ("illegal loan step: " <> show prior <> " -> " <> show next)
+  let priorState = ModelState
+        (modelPhase prior) (modelLinear prior) (modelLoan prior)
+      expectedState = ModelState
+        (modelPhase next) (modelLinear next) (modelLoan next)
+  actualState <- applyStep priorState event
+  assert (actualState == expectedState)
+    ("step changed linear/loan membership unexpectedly: " <> show prior
+      <> " -> " <> show next)
+
+validateObservedSteps :: [ModelCut] -> Either String ()
+validateObservedSteps [] = Left "empty production trace cannot certify a path"
+validateObservedSteps (first : rest) = do
+  assert (first == ModelCut (modelKey first) Before True False)
+    "production trace does not start with an unloaned linear owner"
+  _ <- foldM (\previous current -> do
+      observedStep previous current
+      Right current) first rest
+  Right ()
+
+-- | Outcome classification is checked against the ACTUAL production result.
+-- A prefix, a wrong error class or a post-error continuation fails closed.
+validateTraceCertificate
+  :: [ModelCut]
+  -> Either GrammarV1BorrowResourceError SurfaceCheckResult
+  -> Either String ()
+validateTraceCertificate cuts outcome = do
+  validateObservedSteps cuts
+  case (last cuts, outcome) of
+    (ModelCut _ Returned False False, Right checked) ->
+      assert (checkedTerminalControls checked == [Return expectedTy])
+        "terminal model path disagrees with production Bytes[8] return"
+    (ModelCut _ Rejected True True,
+      Left (GrammarV1BorrowResourceProductionError err)) ->
+        assert (surfaceErrorClass err == BorrowEscape
+          && surfaceErrorDetail err == "shared view escapes its lexical scope")
+          "rejection certificate lacked the exact production BorrowEscape result"
+    _ -> Left "trace end state and actual production outcome disagree"
+
+isRejected :: Either String a -> Bool
+isRejected (Left _) = True
+isRejected (Right _) = False
+
 checkTrace :: Catalog -> DeclarationKey -> Bool -> Text -> Either String ()
 checkTrace catalog root escapes label = do
   parsed <- parseFun label (if escapes then escapingBody else safeBody)
@@ -218,6 +274,7 @@ checkTrace catalog root escapes label = do
     ("production loan-state trace does not commute with represented model"
       <> "\nactual = " <> show observed
       <> "\nmodel = " <> show expected)
+  validateTraceCertificate observed (grammarV1TraceOutcome trace)
   if escapes
     then case grammarV1TraceOutcome trace of
       Left (GrammarV1BorrowResourceProductionError err) -> do
