@@ -301,15 +301,15 @@ makeEvidence primary spectatorSource expected = do
   -- Tampering must fail closed, not be silently projected away.
   let before = head cuts
       initial = head contexts
-      foreign = Name "unadmitted-third-owner"
+      thirdOwner = Name "unadmitted-third-owner"
       badContexts =
         [ initial { Core.linearBindings =
-            Map.insert foreign expectedTy (Core.linearBindings initial) }
+            Map.insert thirdOwner expectedTy (Core.linearBindings initial) }
         , initial { Core.affineBindings =
-            Map.insert foreign expectedTy Map.empty }
+            Map.insert thirdOwner expectedTy Map.empty }
         , initial { Core.unrestrictedBindings =
-            Map.insert foreign expectedTy Map.empty }
-        , initial { Core.sharedLoans = Set.singleton foreign }
+            Map.insert thirdOwner expectedTy Map.empty }
+        , initial { Core.sharedLoans = Set.singleton thirdOwner }
         , initial { Core.linearBindings =
             Map.delete spectator (Core.linearBindings initial) }
         , initial { Core.linearBindings =
