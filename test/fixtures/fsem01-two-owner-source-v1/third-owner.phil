@@ -1,0 +1,4 @@
+fn loan(owner : Bytes[8], spectator : Bytes[8], third : Bytes[8]) -> (Bytes[8], Bytes[8]) satisfies C {
+  borrow owner as view { view; unit; };
+  return (owner, spectator);
+}
