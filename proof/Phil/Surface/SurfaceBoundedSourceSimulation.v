@@ -2,7 +2,7 @@ From Stdlib Require Import Strings.String Bool.Bool Lists.List.
 From Phil.Core Require Import BindingSemantics.
 From Phil.Surface Require Import
   SurfaceObservationWire SurfaceBorrowStepErrorBridge
-  SurfaceRepresentedBorrowTrace.
+  SurfaceRepresentedBorrowTrace SurfaceDeclarationIdentityBridge.
 
 Import ListNotations.
 Open Scope string_scope.
@@ -56,6 +56,38 @@ Definition SourceBindsArtifact
   runTraceCodes run = SurfaceObservationWire.traceCodes artifact /\
   sourceTerminalCode (runTerminal run) =
     SurfaceObservationWire.terminalCode artifact.
+
+(* Catalog entries are canonical UTF-8-hex declaration-root tokens from
+   versioned observations; they are not persistent Phil declaration numbers.
+   This deliberately avoids assuming that raw Unicode Text is Rocq String. *)
+Definition SourceOwnerCatalog
+  (catalog : list string)
+  (owner : BindingSemantics.BinderKey)
+  (run : SourceRun) : Prop :=
+  NoDup catalog /\
+  nth_error catalog (fst owner) = Some (runDeclarationRootHex run) /\
+  SurfaceObservationWire.canonicalNatural (runOwnerOrdinal run) =
+    Some (snd owner).
+
+Theorem catalog_bound_run_has_unique_model_owner :
+  forall catalog first second run,
+    NoDup catalog ->
+    SourceOwnerCatalog catalog first run ->
+    SourceOwnerCatalog catalog second run ->
+    first = second.
+Proof.
+  intros catalog [firstDecl firstOrd] [secondDecl secondOrd] run
+    Hcatalog [_ [Hroot1 Hordinal1]] [_ [Hroot2 Hordinal2]].
+  simpl in *.
+  pose proof
+    (SurfaceDeclarationIdentityBridge.distinct_catalog_positions_have_distinct_roots
+      catalog firstDecl secondDecl (runDeclarationRootHex run)
+      Hcatalog Hroot1 Hroot2) as Hdecl.
+  rewrite Hordinal1 in Hordinal2.
+  injection Hordinal2 as Hordinal.
+  subst.
+  reflexivity.
+Qed.
 
 Definition sourceEventSequence (outcome : SourceTerminal)
   : list SurfaceBorrowStepErrorBridge.LoanEvent :=
@@ -167,6 +199,20 @@ Proof.
       intro event.
       apply SurfaceBorrowStepErrorBridge.no_continuation_after_borrow_escape.
       reflexivity.
+Qed.
+
+Theorem decoded_catalog_bound_source_simulates :
+  forall wire artifact run catalog owner,
+    SurfaceObservationWire.decodeArtifact wire = Some artifact ->
+    SourceBindsArtifact run artifact ->
+    SourceOwnerCatalog catalog owner run ->
+    BoundedSourceSimulation run owner /\
+    SourceOwnerCatalog catalog owner run.
+Proof.
+  intros wire artifact run catalog owner Hdecoded Hbinding Hcatalog.
+  split.
+  - eapply decoded_source_run_simulates_bounded_model; eassumption.
+  - exact Hcatalog.
 Qed.
 
 Theorem decoded_source_run_has_no_post_error_continuation :
