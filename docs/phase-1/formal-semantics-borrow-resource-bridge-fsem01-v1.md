@@ -119,3 +119,7 @@ The central result of this PR, if CI passes, is deliberately concrete:
 **one source-derived linear borrow can be checked using the existing
 production loan machinery, and a genuine escaping result is rejected
 with the production error class.**
+
+## Subsequent correspondence inventory
+
+The [proposed source-to-production-to-Rocq loan-state relation](formal-semantics-loan-state-correspondence-fsem01-v0.md) records the exact implemented identity/state checkpoints, how they differ from the normalized continuing-boundary model, and the **open** extraction/simulation and rejection correspondence obligations. That follow-up is not itself a discharged theorem or a normative rule.
