@@ -25,6 +25,12 @@ module Phil.Verification.NativeFinalInstanceCorrespondence
   , decodeNativeCommonContractRevisionWire
   , encodeNativeClosedContractRevisionWire
   , decodeNativeClosedContractRevisionWire
+  , encodeNativeSubjectRevisionWire
+  , decodeNativeSubjectRevisionWire
+  , encodeNativeInstanceRevisionWire
+  , decodeNativeInstanceRevisionWire
+  , encodeNativeRealizationRevisionWire
+  , decodeNativeRealizationRevisionWire
   , NativeManifestStageReplay
   , nativeReplayRawDigest
   , nativeReplayLoweringRoot
@@ -60,8 +66,8 @@ import Phil.Assurance.Types
 import Phil.Core.Static
   ( ArchitectureInstanceDescriptor
   , ArchitectureInstanceIdentity (..)
-  , InstanceRevision
-  , RealizationRevision
+  , InstanceRevision (..)
+  , RealizationRevision (..)
   , deriveArchitectureInstanceIdentity
   )
 import Phil.Verification (ApplicationAssurancePolicy)
@@ -83,7 +89,7 @@ import Phil.Systems.Phase1Stage
 import Phil.Systems.StageClosure
   ( StageClosureBundle (..), ClosedStageContractRevision (..), concreteSubjectStage )
 import Phil.Systems.SubjectCorrespondence
-  ( SubjectStageBundle (..), SubjectStageRevision )
+  ( SubjectStageBundle (..), SubjectStageRevision (..) )
 import Phil.Verification.FinalAuthorityAdapter
   ( NativeFinalAuthority
   , nativeFinalInstanceRevision
@@ -270,6 +276,39 @@ decodeNativeClosedContractRevisionWire :: Text -> Maybe ClosedStageContractRevis
 decodeNativeClosedContractRevisionWire wire =
   case Text.uncons wire of
     Just ('F', payload) -> Just (ClosedStageContractRevision payload)
+    _ -> Nothing
+
+-- | A separate data-only wire fragment for the concrete subject, instance and
+-- realization revisions. These are three native Text newtypes, distinct from
+-- R/L manifest digests and S/C/F stage contract revisions. The B/I/A tags
+-- retain every character without deriving revision validity or provenance.
+-- InstanceRevision is NOT the architecture occurrence's InstanceKey.
+encodeNativeSubjectRevisionWire :: SubjectStageRevision -> Text
+encodeNativeSubjectRevisionWire (SubjectStageRevision value) = Text.cons 'B' value
+
+decodeNativeSubjectRevisionWire :: Text -> Maybe SubjectStageRevision
+decodeNativeSubjectRevisionWire wire =
+  case Text.uncons wire of
+    Just ('B', payload) -> Just (SubjectStageRevision payload)
+    _ -> Nothing
+
+encodeNativeInstanceRevisionWire :: InstanceRevision -> Text
+encodeNativeInstanceRevisionWire (InstanceRevision value) = Text.cons 'I' value
+
+decodeNativeInstanceRevisionWire :: Text -> Maybe InstanceRevision
+decodeNativeInstanceRevisionWire wire =
+  case Text.uncons wire of
+    Just ('I', payload) -> Just (InstanceRevision payload)
+    _ -> Nothing
+
+encodeNativeRealizationRevisionWire :: RealizationRevision -> Text
+encodeNativeRealizationRevisionWire (RealizationRevision value) =
+  Text.cons 'A' value
+
+decodeNativeRealizationRevisionWire :: Text -> Maybe RealizationRevision
+decodeNativeRealizationRevisionWire wire =
+  case Text.uncons wire of
+    Just ('A', payload) -> Just (RealizationRevision payload)
     _ -> Nothing
 
 -- | Read-only replay of the exact accepted manifest/StageClosure consumer

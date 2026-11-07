@@ -600,3 +600,43 @@ invented. Public release-byte verification and independent pinned final-delta
 signoff are separate, uncredited gates. No Phase 1 TCB, strict GHC/LLVM/Rocq
 policy, generated Phase-1 outputs, independent-audit history or original 244
 normative cases are changed. Audit freeze verdict: **NOT YET**.
+
+
+## 2026-11-07 — distinct subject, instance and realization revision data wires
+
+The existing checked native producer and exact accepted VER-010 and INT-005
+consumers already retain a concrete StageClosure. This successor adds reversible
+ASCII-prefixed role wires for its three separate Haskell Text newtypes:
+`SubjectStageRevision` (B), `InstanceRevision` (I) and
+`RealizationRevision` (A). They remain disjoint from raw Systems digest (R),
+lowering root (L), normalized Systems revision (S), common Phase1StageContract
+revision (C), and final ClosedStageContractRevision (F). In particular,
+`InstanceRevision` is not the checked architecture occurrence's `InstanceKey`.
+
+Strict Upload/Steve executable Haskell tests read all three roles through
+the existing independently accepted whole-object manifest/StageClosure replay,
+check exact native authority projections, typed roundtrips, distinct wire
+images and wrong-role decoding. Separate adversarial tests deliberately
+reuse the real accepted instance revision's Text as UNACCEPTED subject and
+realization role payloads and prove that decoding across roles fails. No
+new stage acceptance producer, trust predicate or canonical derivation is
+introduced. Nine bounded Rocq theorems establish algebraic injectivity,
+roundtrips, three-way disjointness, wrong-role rejection and disjointness
+from all five prior wire domains. Nine named Print Assumptions queries
+are executed by the strict correspondence workflow.
+
+**Remaining-premise ledger:** Exact Haskell Data.Text Unicode serialization
+agreement with Rocq string is NOT proved, nor full native-to-Rocq
+total/injective representation for accepted GenericApplicationIdentity,
+actuals, architecture occurrence, manifest, verifier-profile revision,
+exact source/release objects or their trust status. Even perfect
+revision-wire equality cannot authenticate the checked occurrence
+as producer of independently accepted StageClosure (which has no
+architecture InstanceKey). Canonical predecessor authority, complete
+FixedFinalAuthorityAdapter and FinalArtifactCertified remain unproved;
+no nat mapping or native authority from a model Prop is assumed.
+Public release-byte verification and independent pinned final-delta
+signoff are separate uncredited gates. No generated outputs, TCB changes,
+GHC/LLVM/Rocq relaxations, historical audit evidence or original
+244 normative conformance cases change. Independent Phase 1 audit
+freeze verdict: **NOT YET**.

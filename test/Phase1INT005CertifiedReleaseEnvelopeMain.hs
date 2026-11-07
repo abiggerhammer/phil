@@ -19,6 +19,8 @@ import Phil.Core.Static
   , ArchitectureInstanceIdentity (..)
   , DeclarationIdentity (..)
   , InstanceKey (..)
+  , InstanceRevision (..)
+  , RealizationRevision (..)
   , SemanticForm (..)
   , deriveArchitectureInstanceIdentity
   , DeclarationKey (..)
@@ -98,6 +100,7 @@ import Phil.Systems.StageClosure
   )
 import Phil.Systems.SubjectCorrespondence
   ( SubjectStageBundle (..)
+  , SubjectStageRevision (..)
   )
 import Phil.Verification.CertifiedRelease
 import System.Exit (exitFailure)
@@ -168,6 +171,14 @@ main = do
           , nativeRevisionRoleEqualPayloadSubstitutionsReject source upload)
         , ( "Steve equal-payload revision and digest role substitutions fail closed"
           , nativeRevisionRoleEqualPayloadSubstitutionsReject source steve)
+        , ( "Upload accepted subject/instance/realization revision roles roundtrip through disjoint wires"
+          , nativeStageIdentityRoleReplayAccepts source upload)
+        , ( "Steve accepted subject/instance/realization revision roles roundtrip through disjoint wires"
+          , nativeStageIdentityRoleReplayAccepts source steve)
+        , ( "Upload equal-payload subject/instance/realization substitutions reject by role"
+          , nativeStageIdentityEqualPayloadRejects source upload)
+        , ( "Steve equal-payload subject/instance/realization substitutions reject by role"
+          , nativeStageIdentityEqualPayloadRejects source steve)
         , ( "Upload changed raw Systems digest cannot pass exact manifest-stage replay"
           , nativeManifestStageReplayRejectsChangedDigests source upload)
         , ( "Steve changed raw Systems digest cannot pass exact manifest-stage replay"
@@ -980,6 +991,95 @@ nativeRevisionRoleEqualPayloadSubstitutionsReject source fixture =
                     && decodeNativeClosedContractRevisionWire commonWire == Nothing
                     && decodeNativeRawSystemsDigestWire closedWire == Nothing
                     && decodeNativeLoweringRootWire systemsWire == Nothing
+    _ -> False
+
+-- | Read the three revision roles only from the checked producer and exact
+-- accepted VER-010 / INT-005 consumer replay. Tagged data is never authority.
+nativeStageIdentityRoleReplayAccepts
+  :: GenericApplicationAssurance -> ReleaseFixture -> Bool
+nativeStageIdentityRoleReplayAccepts source fixture =
+  case (producerInputs source, produceFixture source fixture) of
+    (Right (bundle, policy), Right (_, produced)) ->
+      case nativeAdapterPair source produced of
+        Nothing -> False
+        Just (sourceArtifact, release) ->
+          case closeNativeFinalInstanceCorrespondence
+              source (sourceInstanceDescriptor source) bundle policy
+              (fixtureContext produced) (fixtureLedger produced)
+              emptyProducerSelection sourceArtifact release of
+            Left _ -> False
+            Right witness ->
+              case replayNativeManifestStageCoordinates witness
+                (nativeCorrespondenceManifest witness)
+                (nativeCorrespondenceStageClosure witness) of
+                Left _ -> False
+                Right view ->
+                  let subject = nativeReplaySubjectRevision view
+                      instanceRev = nativeReplayInstanceRevision view
+                      realization = nativeReplayRealizationRevision view
+                      bWire = encodeNativeSubjectRevisionWire subject
+                      iWire = encodeNativeInstanceRevisionWire instanceRev
+                      aWire = encodeNativeRealizationRevisionWire realization
+                      existingWires =
+                        [ encodeNativeRawSystemsDigestWire (nativeReplayRawDigest view)
+                        , encodeNativeLoweringRootWire (nativeReplayLoweringRoot view)
+                        , encodeNativeSystemsRevisionWire (nativeReplaySystemsRevision view)
+                        , encodeNativeCommonContractRevisionWire (nativeReplayCommonRevision view)
+                        , encodeNativeClosedContractRevisionWire (nativeReplayClosedRevision view)
+                        ]
+                      wires = bWire : iWire : aWire : existingWires
+                      authority = nativeCorrespondenceAuthority witness
+                  in subject == nativeFinalSubjectRevision authority
+                    && instanceRev == nativeFinalInstanceRevision authority
+                    && realization == nativeFinalRealizationRevision authority
+                    && decodeNativeSubjectRevisionWire bWire == Just subject
+                    && decodeNativeInstanceRevisionWire iWire == Just instanceRev
+                    && decodeNativeRealizationRevisionWire aWire == Just realization
+                    && Set.size (Set.fromList wires) == length wires
+                    && decodeNativeSubjectRevisionWire iWire == Nothing
+                    && decodeNativeSubjectRevisionWire aWire == Nothing
+                    && decodeNativeInstanceRevisionWire bWire == Nothing
+                    && decodeNativeInstanceRevisionWire aWire == Nothing
+                    && decodeNativeRealizationRevisionWire bWire == Nothing
+                    && decodeNativeRealizationRevisionWire iWire == Nothing
+                    && all (== Nothing) (map decodeNativeSubjectRevisionWire existingWires)
+                    && all (== Nothing) (map decodeNativeInstanceRevisionWire existingWires)
+                    && all (== Nothing) (map decodeNativeRealizationRevisionWire existingWires)
+    _ -> False
+
+-- | This deliberately constructs UNACCEPTED role wrappers containing the
+-- same payload taken from a real accepted instance revision. Equal Text does
+-- not allow a subject, instance or realization to impersonate another domain.
+nativeStageIdentityEqualPayloadRejects
+  :: GenericApplicationAssurance -> ReleaseFixture -> Bool
+nativeStageIdentityEqualPayloadRejects source fixture =
+  case (producerInputs source, produceFixture source fixture) of
+    (Right (bundle, policy), Right (_, produced)) ->
+      case nativeAdapterPair source produced of
+        Nothing -> False
+        Just (sourceArtifact, release) ->
+          case closeNativeFinalInstanceCorrespondence
+              source (sourceInstanceDescriptor source) bundle policy
+              (fixtureContext produced) (fixtureLedger produced)
+              emptyProducerSelection sourceArtifact release of
+            Left _ -> False
+            Right witness ->
+              case replayNativeManifestStageCoordinates witness
+                (nativeCorrespondenceManifest witness)
+                (nativeCorrespondenceStageClosure witness) of
+                Left _ -> False
+                Right view ->
+                  let same = unInstanceRevision (nativeReplayInstanceRevision view)
+                      bWire = encodeNativeSubjectRevisionWire (SubjectStageRevision same)
+                      iWire = encodeNativeInstanceRevisionWire (InstanceRevision same)
+                      aWire = encodeNativeRealizationRevisionWire (RealizationRevision same)
+                  in Set.size (Set.fromList [bWire, iWire, aWire]) == 3
+                    && decodeNativeSubjectRevisionWire iWire == Nothing
+                    && decodeNativeSubjectRevisionWire aWire == Nothing
+                    && decodeNativeInstanceRevisionWire bWire == Nothing
+                    && decodeNativeInstanceRevisionWire aWire == Nothing
+                    && decodeNativeRealizationRevisionWire bWire == Nothing
+                    && decodeNativeRealizationRevisionWire iWire == Nothing
     _ -> False
 
 -- | Adversarial same-manifest-ID projections. Neither modified manifest is an
