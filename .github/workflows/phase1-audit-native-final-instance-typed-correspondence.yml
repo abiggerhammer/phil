@@ -115,6 +115,10 @@ jobs:
           Print Assumptions substituted_certified_source_cannot_bind.
           Print Assumptions same_source_proof_cannot_override_certified_source_envelope.
           Print Assumptions source_envelope_stage_drift_blocks_exact_retention.
+          Print Assumptions checked_source_manifest_binding_reaches_final_witness_exactly.
+          Print Assumptions substituted_checked_source_manifest_binding_cannot_bind.
+          Print Assumptions declaration_only_binding_cannot_replace_checked_instance_token.
+          Print Assumptions same_source_and_manifest_cannot_upgrade_declaration_only_binding.
           Print Assumptions fixed_adapter_full_certification_preserves_predecessors.
           EOF
           rocq c -Q proof/Phil Phil /tmp/NativeFinalInstanceAssumptions.v 2>&1 | tee typed-native-instance-assumptions.log

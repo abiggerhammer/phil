@@ -147,6 +147,14 @@ main = do
           , checkedDescriptorRetained source upload)
         , ( "Checked Steve source-manifest token retains exact semantic descriptor"
           , checkedDescriptorRetained source steve)
+        , ( "Upload final witness retains exact checked-instance source-manifest token"
+          , finalWitnessRetainsCheckedSourceManifestBinding source upload)
+        , ( "Steve final witness retains exact checked-instance source-manifest token"
+          , finalWitnessRetainsCheckedSourceManifestBinding source steve)
+        , ( "Upload declaration-only token cannot replace final checked producer token"
+          , declarationOnlyTokenCannotReplaceFinalProducer source upload)
+        , ( "Steve declaration-only token cannot replace final checked producer token"
+          , declarationOnlyTokenCannotReplaceFinalProducer source steve)
         , ( "Declaration-only Upload producer cannot bind a certified release"
           , declarationOnlyBindingRejected source upload)
         , ( "Declaration-only Steve producer cannot bind a certified release"
@@ -682,6 +690,70 @@ declarationOnlyBindingRejected source fixture =
                 case bindProducedFinalAuthority weak sourceArtifact release of
                   Left SourceManifestInstanceNotBound -> True
                   _ -> False
+    _ -> False
+
+
+-- | The final opaque witness retains the exact checked-instance producer token,
+-- not just separately copied source/manifest/descriptor projections.
+finalWitnessRetainsCheckedSourceManifestBinding
+  :: GenericApplicationAssurance -> ReleaseFixture -> Bool
+finalWitnessRetainsCheckedSourceManifestBinding source fixture =
+  case (producerInputs source, produceFixture source fixture) of
+    (Right (bundle, policy), Right (checked, produced)) ->
+      case nativeAdapterPair source produced of
+        Nothing -> False
+        Just (sourceArtifact, release) ->
+          case closeNativeFinalInstanceCorrespondence
+              source (sourceInstanceDescriptor source) bundle policy
+              (fixtureContext produced) (fixtureLedger produced)
+              emptyProducerSelection sourceArtifact release of
+            Left _ -> False
+            Right witness ->
+              let exported = nativeCorrespondenceSourceManifestBinding witness
+              in exported == checked
+                && sourceManifestBindingSourceAssurance exported
+                    == nativeCorrespondenceSourceAssurance witness
+                && sourceManifestBindingManifest exported
+                    == nativeCorrespondenceManifest witness
+                && sourceManifestBindingArchitectureDescriptor exported
+                    == Just (nativeCorrespondenceArchitectureDescriptor witness)
+    _ -> False
+
+-- | Declaration-only closure can carry the exact same source assurance and
+-- manifest as the checked-instance producer while lacking its descriptor.
+-- Those equal projections must not identify the producer token: the real
+-- low-level final binder rejects the weak token, and the final witness retains
+-- the checked token that actually passed.
+declarationOnlyTokenCannotReplaceFinalProducer
+  :: GenericApplicationAssurance -> ReleaseFixture -> Bool
+declarationOnlyTokenCannotReplaceFinalProducer source fixture =
+  case (producerInputs source, produceFixture source fixture) of
+    (Right (bundle, policy), Right (checked, produced)) ->
+      case closeSourceManifestBinding source bundle policy
+          (fixtureContext produced) (fixtureLedger produced)
+          emptyProducerSelection of
+        Left _ -> False
+        Right weak ->
+          case nativeAdapterPair source produced of
+            Nothing -> False
+            Just (sourceArtifact, release) ->
+              case closeNativeFinalInstanceCorrespondence
+                  source (sourceInstanceDescriptor source) bundle policy
+                  (fixtureContext produced) (fixtureLedger produced)
+                  emptyProducerSelection sourceArtifact release of
+                Left _ -> False
+                Right witness ->
+                  sourceManifestBindingSourceAssurance weak
+                      == sourceManifestBindingSourceAssurance checked
+                    && sourceManifestBindingManifest weak
+                      == sourceManifestBindingManifest checked
+                    && sourceManifestBindingArchitectureDescriptor weak == Nothing
+                    && weak /= checked
+                    && nativeCorrespondenceSourceManifestBinding witness == checked
+                    && nativeCorrespondenceSourceManifestBinding witness /= weak
+                    && case bindProducedFinalAuthority weak sourceArtifact release of
+                        Left SourceManifestInstanceNotBound -> True
+                        _ -> False
     _ -> False
 
 -- This new consumer is deliberately *stronger* than the old caller-supplied
