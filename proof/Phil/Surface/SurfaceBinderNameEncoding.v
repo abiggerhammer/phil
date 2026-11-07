@@ -95,13 +95,16 @@ Lemma split_render_uint :
       (DecimalString.NilEmpty.string_of_uint d ++ (":" ++ suffix)) =
     Some (DecimalString.NilEmpty.string_of_uint d, suffix).
 Proof.
-  induction d; intro suffix.
-  - reflexivity.
-  all: solve [
-    cbn [DecimalString.NilEmpty.string_of_uint];
-    apply split_first_colon_preserves_digit_prefix;
-    [reflexivity | apply IHd]
-  ].
+  (* The semicolon distributes the closing tactic to EVERY constructor.
+     A leading bullet followed by [all:] only focused the next constructor
+     in the previous version, leaving nine decimal cases unproved. *)
+  induction d; intro suffix;
+    solve [
+      reflexivity
+    | cbn [DecimalString.NilEmpty.string_of_uint];
+      apply split_first_colon_preserves_digit_prefix;
+      [reflexivity | apply IHd]
+    ].
 Qed.
 
 Lemma split_render_nat :
