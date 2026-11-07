@@ -68,13 +68,30 @@ Fixpoint splitFirstColon (input : string) : option (string * string) :=
         end
   end.
 
+Lemma split_first_colon_preserves_digit_prefix :
+  forall (digit : ascii) (tail suffix : string),
+    Ascii.eqb digit ":"%char = false ->
+    splitFirstColon (tail ++ (":" ++ suffix)) = Some (tail, suffix) ->
+    splitFirstColon (String digit tail ++ (":" ++ suffix)) =
+      Some (String digit tail, suffix).
+Proof.
+  intros digit tail suffix Hdigit Htail.
+  simpl.
+  rewrite Hdigit.
+  now rewrite Htail.
+Qed.
+
 Lemma split_render_uint :
   forall (d : Decimal.uint) (suffix : string),
     splitFirstColon
       (DecimalString.NilEmpty.string_of_uint d ++ (":" ++ suffix)) =
     Some (DecimalString.NilEmpty.string_of_uint d, suffix).
 Proof.
-  induction d; intro suffix; simpl; try (rewrite (IHd suffix)); reflexivity.
+  induction d; intro suffix.
+  - reflexivity.
+  all: cbn [DecimalString.NilEmpty.string_of_uint];
+       apply split_first_colon_preserves_digit_prefix;
+       [reflexivity | apply IHd].
 Qed.
 
 Lemma split_render_nat :
