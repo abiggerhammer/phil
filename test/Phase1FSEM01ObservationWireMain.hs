@@ -6,14 +6,13 @@ import qualified Crypto.Hash.SHA256 as SHA256
 import qualified Data.ByteString as BS
 import qualified Data.Map.Strict as Map
 import qualified Data.Set as Set
-import Data.Char (isAsciiLower, isDigit)
 import Data.Text (Text)
 import qualified Data.Text as Text
 import qualified Data.Text.Encoding as TextEncoding
 import qualified Data.Text.IO as TextIO
 import Numeric (showHex)
 import Phil.Core.Static (DeclarationKey (..), emptyStaticContext)
-import Phil.Core.Syntax (Control (Return), RefTerm (..), Ty (..))
+import Phil.Core.Syntax (Control (Return), Name (..), RefTerm (..), Ty (..))
 import Phil.Surface.Check.Engine (BorrowTraceCheckpoint (..), BorrowTracePhase (..))
 import Phil.Surface.Check.Types
   ( RejectionClass (..), SurfaceCheckError (..), SurfaceCheckResult (..) )
@@ -103,7 +102,7 @@ parseFrames n raw
 
 isLowerHex :: Text -> Bool
 isLowerHex = Text.all (\c -> (c >= '0' && c <= '9') ||
-                             (isAsciiLower c && c <= 'f'))
+                             (c >= 'a' && c <= 'f'))
 
 canonicalHex :: Text -> Bool
 canonicalHex s = even (Text.length s) && isLowerHex s
@@ -323,8 +322,7 @@ checkOne (_, source, actual) = do
           obsSourceSHA256 forgedHash /= digestSource source)
     "source-binding check failed to distinguish forged digest"
   ensure (decodeObservation (encodeObservation forgedRoot) == Just forgedRoot &&
-          obsRootHex forgedRoot /= utf8Hex (unDeclarationKey (specimenRoot
-            (head specimens))))
+          obsRootHex forgedRoot /= obsRootHex actual)
     "root-binding check failed to distinguish forged root"
   Right ()
 
