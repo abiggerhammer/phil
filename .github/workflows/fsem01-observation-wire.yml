@@ -6,6 +6,7 @@ on:
       - 'proof/Phil/Surface/SurfaceObservationWire.v'
       - 'proof/Phil/Surface/SurfaceBoundedSourceSimulation.v'
       - 'proof/Phil/Surface/SurfaceObservationProducerFidelity.v'
+      - 'proof/Phil/Surface/SurfaceCheckerStateObservation.v'
       - 'docs/phase-1/formal-semantics-producer-fidelity-fsem01-v1.md'
       - 'scripts/fsem01_simulation_witness.py'
       - 'docs/phase-1/formal-semantics-source-simulation-fsem01-v1.md'
@@ -20,6 +21,7 @@ on:
       - 'proof/Phil/Surface/SurfaceObservationWire.v'
       - 'proof/Phil/Surface/SurfaceBoundedSourceSimulation.v'
       - 'proof/Phil/Surface/SurfaceObservationProducerFidelity.v'
+      - 'proof/Phil/Surface/SurfaceCheckerStateObservation.v'
       - 'docs/phase-1/formal-semantics-producer-fidelity-fsem01-v1.md'
       - 'scripts/fsem01_simulation_witness.py'
       - 'docs/phase-1/formal-semantics-source-simulation-fsem01-v1.md'
@@ -115,7 +117,8 @@ jobs:
             proof/Phil/Surface/SurfaceBorrowStepErrorBridge.v \
             proof/Phil/Surface/SurfaceObservationWire.v \
             proof/Phil/Surface/SurfaceBoundedSourceSimulation.v \
-            proof/Phil/Surface/SurfaceObservationProducerFidelity.v
+            proof/Phil/Surface/SurfaceObservationProducerFidelity.v \
+            proof/Phil/Surface/SurfaceCheckerStateObservation.v
           do
             rocq c -Q proof/Phil Phil "$file"
           done
@@ -131,6 +134,7 @@ jobs:
               proof/Phil/Surface/SurfaceObservationWire.v \
               proof/Phil/Surface/SurfaceBoundedSourceSimulation.v \
               proof/Phil/Surface/SurfaceObservationProducerFidelity.v \
+              proof/Phil/Surface/SurfaceCheckerStateObservation.v \
               fsem01-wire-generated/GeneratedObservationWitness.v \
               fsem01-wire-generated/GeneratedSimulationWitness.v; then
             echo "Prohibited unproved admission in decoder or witnesses"
@@ -142,6 +146,8 @@ jobs:
             proof/Phil/Surface/SurfaceBoundedSourceSimulation.vo \
             proof/Phil/Surface/SurfaceObservationProducerFidelity.v \
             proof/Phil/Surface/SurfaceObservationProducerFidelity.vo \
+            proof/Phil/Surface/SurfaceCheckerStateObservation.v \
+            proof/Phil/Surface/SurfaceCheckerStateObservation.vo \
             fsem01-wire-artifacts/*.obs \
             fsem01-wire-generated/GeneratedObservationWitness.v \
             fsem01-wire-generated/GeneratedObservationWitness.vo \
