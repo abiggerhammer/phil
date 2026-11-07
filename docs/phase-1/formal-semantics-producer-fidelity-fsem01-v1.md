@@ -39,7 +39,9 @@ The new theorem
 no field, phase, membership bit, or terminal classification changes
 within this pure representation step.
 
-The canonical successful and escaping-borrow snapshot sequences
+The theorem `rendering_one_checkpoint_is_injective` proves distinct
+phase/owner/loan triples cannot share a checkpoint code. The canonical
+successful and escaping-borrow snapshot sequences
 are additionally proved to render to the two precise v1 trace
 strings. In the escaping path, the owner remains present with an
 active loan at rejection; there is no invented closure or return.
