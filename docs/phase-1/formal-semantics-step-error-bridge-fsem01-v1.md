@@ -106,3 +106,7 @@ artifact plus a formally checked decoder/step checker (or an extracted
 checker) so the cross-language evidence itself has a proved, inspectable
 boundary. That—not another snapshot comparison—is needed before claiming
 an implementation simulation result.
+
+## Versioned source observation artifact follow-up
+
+[The v1 observation-wire decoder and source-derived CI artifact](formal-semantics-observation-wire-fsem01-v1.md) now serializes actual production checkpoint records into ASCII length-framed fields (source SHA-256, UTF-8-hex identities, ordinals, state/outcome). The Rocq decoder proves framing roundtrip and soundness and CI runs it on *the emitted artifact bytes*, while independent Python controls source provenance and UTF-8 identities. This is a bounded checked evidence seam, **not** an extracted refinement theorem for the Haskell evaluator.

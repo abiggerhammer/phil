@@ -1,0 +1,123 @@
+name: FSEM-01 Versioned Source Observation Decoder
+
+on:
+  pull_request:
+    paths:
+      - 'proof/Phil/Surface/SurfaceObservationWire.v'
+      - 'test/Phase1FSEM01ObservationWireMain.hs'
+      - 'test/fixtures/fsem01-observation-v1/**'
+      - 'scripts/fsem01_observation_wire.py'
+      - 'docs/phase-1/formal-semantics-observation-wire-fsem01-v1.md'
+      - '.github/workflows/fsem01-observation-wire.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'proof/Phil/Surface/SurfaceObservationWire.v'
+      - 'test/Phase1FSEM01ObservationWireMain.hs'
+      - 'test/fixtures/fsem01-observation-v1/**'
+      - 'scripts/fsem01_observation_wire.py'
+      - 'docs/phase-1/formal-semantics-observation-wire-fsem01-v1.md'
+      - '.github/workflows/fsem01-observation-wire.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  produce-source-derived-v1-artifacts:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: haskell-actions/setup@v2
+        with:
+          ghc-version: '9.6.7'
+          cabal-version: 'latest'
+      - name: Build production Haskell implementation
+        run: cabal build lib:phil-core --ghc-options=-Werror
+      - name: Strict typecheck actual checker observer
+        shell: bash
+        run: |
+          set -euo pipefail
+          cabal exec -- ghc -isrc -Wall -Werror -fno-code \
+            test/Phase1FSEM01ObservationWireMain.hs
+      - name: Source-derived artifact roundtrip and mutation tests
+        run: cabal exec -- runghc -isrc -Wall -Werror test/Phase1FSEM01ObservationWireMain.hs
+      - name: Emit actual production observations
+        shell: bash
+        run: |
+          set -euo pipefail
+          cabal exec -- runghc -isrc -Wall -Werror \
+            test/Phase1FSEM01ObservationWireMain.hs --emit fsem01-wire-artifacts
+          python3 scripts/fsem01_observation_wire.py \
+            --artifact-dir fsem01-wire-artifacts \
+            --golden-dir test/fixtures/fsem01-observation-v1/expected
+          sha256sum test/fixtures/fsem01-observation-v1/*.phil \
+            fsem01-wire-artifacts/*.obs
+      - uses: actions/upload-artifact@v4
+        with:
+          name: fsem01-source-observation-v1
+          path: fsem01-wire-artifacts/*.obs
+          if-no-files-found: error
+          retention-days: 30
+
+  rocq-verify-exact-wire:
+    needs: produce-source-derived-v1-artifacts
+    runs-on: ubuntu-latest
+    container:
+      image: rocq/rocq-prover:9.2.0
+      options: --user root
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          name: fsem01-source-observation-v1
+          path: fsem01-wire-artifacts
+      - name: Validate exact artifact bytes and generate a literal Rocq witness
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 scripts/fsem01_observation_wire.py \
+            --artifact-dir fsem01-wire-artifacts \
+            --golden-dir test/fixtures/fsem01-observation-v1/expected \
+            --rocq-witness fsem01-wire-generated/GeneratedObservationWitness.v
+      - name: Compile the verified decoder and real production wire witnesses
+        shell: bash
+        run: |
+          set -euo pipefail
+          export PATH="/home/rocq/.opam/${COMPILER}/bin:$PATH"
+          for file in \
+            proof/Phil/Core/Syntax.v \
+            proof/Phil/Core/Context.v \
+            proof/Phil/Core/BindingSemantics.v \
+            proof/Phil/Core/ContextJoin.v \
+            proof/Phil/Core/ProcessJoin.v \
+            proof/Phil/Core/ResourceJoin.v \
+            proof/Phil/Core/ResourceScope.v \
+            proof/Phil/Surface/SurfaceBinderScopeCore.v \
+            proof/Phil/Surface/SurfaceLetPatternScope.v \
+            proof/Phil/Surface/SurfaceBorrowViewScope.v \
+            proof/Phil/Surface/SurfaceBorrowLoanStateCorrespondence.v \
+            proof/Phil/Surface/SurfaceBinderNameEncoding.v \
+            proof/Phil/Surface/SurfaceDeclarationIdentityBridge.v \
+            proof/Phil/Surface/SurfaceRepresentedBorrowTrace.v \
+            proof/Phil/Surface/SurfaceBorrowStepErrorBridge.v \
+            proof/Phil/Surface/SurfaceObservationWire.v
+          do
+            rocq c -Q proof/Phil Phil "$file"
+          done
+          rocq c -Q proof/Phil Phil \
+            fsem01-wire-generated/GeneratedObservationWitness.v
+      - name: No admissions and exact decoded-artifact SHA256 evidence
+        shell: bash
+        run: |
+          set -euo pipefail
+          if grep -nE '^[[:space:]]*(Admitted[.]|Axiom[[:space:]]|Parameter[[:space:]])' \
+              proof/Phil/Surface/SurfaceObservationWire.v \
+              fsem01-wire-generated/GeneratedObservationWitness.v; then
+            echo "Prohibited unproved admission in decoder or witnesses"
+            exit 1
+          fi
+          sha256sum proof/Phil/Surface/SurfaceObservationWire.v \
+            proof/Phil/Surface/SurfaceObservationWire.vo \
+            fsem01-wire-artifacts/*.obs \
+            fsem01-wire-generated/GeneratedObservationWitness.v \
+            fsem01-wire-generated/GeneratedObservationWitness.vo
