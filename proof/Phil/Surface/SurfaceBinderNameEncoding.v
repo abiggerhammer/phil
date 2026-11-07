@@ -1,6 +1,6 @@
 From Stdlib Require Import
   Strings.String Strings.Ascii
-  Numbers.Decimal Numbers.DecimalNat Numbers.DecimalString
+  Init.Decimal Numbers.DecimalNat Numbers.DecimalString
   Arith.PeanoNat.
 
 From Phil.Core Require Import BindingSemantics.
