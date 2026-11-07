@@ -1,4 +1,4 @@
-From Stdlib Require Import Strings.String Bool.Bool Lists.List.
+From Stdlib Require Import Strings.String Bool.Bool Lists.List Arith.PeanoNat.
 From Phil.Core Require Import Syntax Context.
 From Phil.Surface Require Import
   SurfaceObservationWire SurfaceBinderNameEncoding
@@ -164,9 +164,8 @@ Proof.
   intros state obs H.
   unfold bindsObservation in H.
   repeat rewrite Bool.andb_true_iff in H.
-  destruct H as [_ H].
-  destruct H as [Hhash _].
-  now apply String.eqb_eq.
+  apply String.eqb_eq.
+  tauto.
 Qed.
 
 (* Reconstruct the Rocq Context lookups from the admitted finite
