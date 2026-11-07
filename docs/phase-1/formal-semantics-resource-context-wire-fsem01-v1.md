@@ -29,12 +29,13 @@ length-framed ASCII fields, in order:
    `phase/unrestricted/affine/linear/loans`;
 6. exact terminal outcome.
 
-Map entries are listed in ascending `Name` order as
-`<hex-encoded-name>=Bytes8`, with set members listed in ascending order as
+Map entries are listed in ascending `Name` order using exact bounded tags:
+`<owner-hex>=Bytes8` for the linear owner and
+`<view-hex>=SharedBytes` for the temporary unrestricted view, with set members listed in ascending order as
 `<hex-encoded-name>`. Empty collections are `-`. The fragment refuses
-non-`Bytes[8]` resource types, and the independent decoder permits only the
-one-owner linear domain with empty unrestricted/affine collections and no
-foreign loan member. Unknown keys are encoded, **not silently dropped**;
+other resource types, and the independent decoder permits only the
+one-owner linear domain, a temporary unrestricted `SharedBytes` view within
+the scoped body, empty affine bindings, and no foreign loan member. Unknown keys are encoded, **not silently dropped**;
 their frames then fail validation.
 
 This is intentionally a *new* artifact. The established
