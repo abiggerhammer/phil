@@ -365,7 +365,7 @@ Proof.
     + eapply phase1_surface_normalize_proposition_and_suffix_round_trip.
       exact Hproposition.
     + eapply IH.
-      exact Hrest.
+      reflexivity.
 Qed.
 
 Record Phase1SurfacePropositionAndSpine : Type := {
@@ -527,7 +527,7 @@ Proof.
     + eapply phase1_surface_normalize_proposition_or_suffix_round_trip.
       exact Hproposition.
     + eapply IH.
-      exact Hrest.
+      reflexivity.
 Qed.
 
 Record Phase1SurfacePropositionOrSpine : Type := {
