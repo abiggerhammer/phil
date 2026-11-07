@@ -139,13 +139,13 @@ Proof.
     [firstRoot firstEncodedOrd] [secondRoot secondEncodedOrd]
     Hnod [HfirstRoot HfirstOrd] [HsecondRoot HsecondOrd] Hname.
   simpl in *.
-  apply encode_text_binder_key_injective in Hname.
-  inversion Hname; subst.
+  unfold encodeTextBinderKey in Hname; simpl in Hname.
+  apply encode_binder_name_injective in Hname.
+  destruct Hname as [HrootEqual HordinalEqual].
+  rewrite HrootEqual in HfirstRoot.
   pose proof (distinct_catalog_positions_have_distinct_roots
     catalog firstDecl secondDecl secondRoot
     Hnod HfirstRoot HsecondRoot) as Hdeclarations.
-  subst.
-  f_equal.
   congruence.
 Qed.
 
