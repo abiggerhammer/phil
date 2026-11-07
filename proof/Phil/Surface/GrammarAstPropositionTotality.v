@@ -134,14 +134,27 @@ Proof.
           [ELiteral "("; ENonterminal "proposition"; ELiteral ")"]
           input rest selected Hselected)
         as [trees [Hselected_tree Hitems]].
-      repeat match goal with
-      | Hseq : DerivesSequence phase1_surface_rules _ _ (_ :: _) _ _ _ |- _ =>
-          inversion Hseq; subst; clear Hseq
-      end.
-      match goal with
-      | Hnil : DerivesSequence phase1_surface_rules _ _ [] _ _ _ |- _ =>
-          inversion Hnil; subst; clear Hnil
-      end.
+      destruct
+        (derives_sequence_cons_exposes_head_exact
+          phase1_surface_rules _ 0 (ELiteral "(")
+          [ENonterminal "proposition"; ELiteral ")"]
+          input rest trees Hitems)
+        as [after_open [open_tree [tail1_trees
+          [Htrees [Hopen Htail1]]]]].
+      destruct
+        (derives_sequence_cons_exposes_head_exact
+          phase1_surface_rules _ 1 (ENonterminal "proposition")
+          [ELiteral ")"] after_open rest tail1_trees Htail1)
+        as [after_proposition [proposition_tree [tail2_trees
+          [Htail1_trees [Hproposition Htail2]]]]].
+      destruct
+        (derives_sequence_cons_exposes_head_exact
+          phase1_surface_rules _ 2 (ELiteral ")") []
+          after_proposition rest tail2_trees Htail2)
+        as [after_close [close_tree [nil_trees
+          [Htail2_trees [Hclose Hnil]]]]].
+      rewrite Htrees, Htail1_trees, Htail2_trees in Hselected_tree.
+      inversion Hnil; subst nil_trees.
       match goal with
       | Hopen : Derives phase1_surface_rules _ (ELiteral "(") _ _ ?open_tree,
         Hproposition : Derives phase1_surface_rules _
@@ -271,14 +284,21 @@ Proof.
         [ELiteral "not"; ENonterminal "proposition_not"]
         input rest selected Hselected)
       as [trees [Hselected_tree Hitems]].
-    repeat match goal with
-    | Hseq : DerivesSequence phase1_surface_rules _ _ (_ :: _) _ _ _ |- _ =>
-        inversion Hseq; subst; clear Hseq
-    end.
-    match goal with
-    | Hnil : DerivesSequence phase1_surface_rules _ _ [] _ _ _ |- _ =>
-        inversion Hnil; subst; clear Hnil
-    end.
+    destruct
+      (derives_sequence_cons_exposes_head_exact
+        phase1_surface_rules _ 0 (ELiteral "not")
+        [ENonterminal "proposition_not"]
+        input rest trees Hitems)
+      as [after_not [not_tree [tail_trees
+        [Htrees [Hnot Htail]]]]].
+    destruct
+      (derives_sequence_cons_exposes_head_exact
+        phase1_surface_rules _ 1 (ENonterminal "proposition_not") []
+        after_not rest tail_trees Htail)
+      as [after_child [child_tree [nil_trees
+        [Htail_trees [Hchild Hnil]]]]].
+    rewrite Htrees, Htail_trees in Hselected_tree.
+    inversion Hnil; subst nil_trees.
     match goal with
     | Hnot : Derives phase1_surface_rules _ (ELiteral "not") _ _ ?not_tree,
       Hchild : Derives phase1_surface_rules _
@@ -348,14 +368,21 @@ Proof.
       [ELiteral "and"; ENonterminal "proposition_not"]
       input rest tree Hderive)
     as [trees [Htree Hitems]].
-  repeat match goal with
-  | Hseq : DerivesSequence phase1_surface_rules _ _ (_ :: _) _ _ _ |- _ =>
-      inversion Hseq; subst; clear Hseq
-  end.
-  match goal with
-  | Hnil : DerivesSequence phase1_surface_rules _ _ [] _ _ _ |- _ =>
-      inversion Hnil; subst; clear Hnil
-  end.
+  destruct
+    (derives_sequence_cons_exposes_head_exact
+      phase1_surface_rules path 0 (ELiteral "and")
+      [ENonterminal "proposition_not"]
+      input rest trees Hitems)
+    as [after_and [and_tree [tail_trees
+      [Htrees [Hand Htail]]]]].
+  destruct
+    (derives_sequence_cons_exposes_head_exact
+      phase1_surface_rules path 1 (ENonterminal "proposition_not") []
+      after_and rest tail_trees Htail)
+    as [after_proposition [proposition_tree [nil_trees
+      [Htail_trees [Hproposition Hnil]]]]].
+  rewrite Htrees, Htail_trees in Htree.
+  inversion Hnil; subst nil_trees.
   match goal with
   | Hand : Derives phase1_surface_rules _ (ELiteral "and") _ _ ?and_tree,
     Hproposition : Derives phase1_surface_rules _
@@ -427,14 +454,22 @@ Proof.
         ERepetition phase1_surface_proposition_and_suffix_expression_for_totality ]
       input rest subtree Hbody)
     as [trees [Hsubtree Hitems]].
-  repeat match goal with
-  | Hseq : DerivesSequence phase1_surface_rules _ _ (_ :: _) _ _ _ |- _ =>
-      inversion Hseq; subst; clear Hseq
-  end.
-  match goal with
-  | Hnil : DerivesSequence phase1_surface_rules _ _ [] _ _ _ |- _ =>
-      inversion Hnil; subst; clear Hnil
-  end.
+  destruct
+    (derives_sequence_cons_exposes_head_exact
+      phase1_surface_rules _ 0 (ENonterminal "proposition_not")
+      [ERepetition phase1_surface_proposition_and_suffix_expression_for_totality]
+      input rest trees Hitems)
+    as [after_first [first_tree [tail_trees
+      [Htrees [Hfirst Htail]]]]].
+  destruct
+    (derives_sequence_cons_exposes_head_exact
+      phase1_surface_rules _ 1
+      (ERepetition phase1_surface_proposition_and_suffix_expression_for_totality)
+      [] after_first rest tail_trees Htail)
+    as [after_rest [rest_tree [nil_trees
+      [Htail_trees [Hrest Hnil]]]]].
+  rewrite Htrees, Htail_trees in Hsubtree.
+  inversion Hnil; subst nil_trees.
   match goal with
   | Hfirst : Derives phase1_surface_rules _
       (ENonterminal "proposition_not") _ _ ?first_tree,
@@ -493,14 +528,21 @@ Proof.
       [ELiteral "or"; ENonterminal "proposition_and"]
       input rest tree Hderive)
     as [trees [Htree Hitems]].
-  repeat match goal with
-  | Hseq : DerivesSequence phase1_surface_rules _ _ (_ :: _) _ _ _ |- _ =>
-      inversion Hseq; subst; clear Hseq
-  end.
-  match goal with
-  | Hnil : DerivesSequence phase1_surface_rules _ _ [] _ _ _ |- _ =>
-      inversion Hnil; subst; clear Hnil
-  end.
+  destruct
+    (derives_sequence_cons_exposes_head_exact
+      phase1_surface_rules path 0 (ELiteral "or")
+      [ENonterminal "proposition_and"]
+      input rest trees Hitems)
+    as [after_or [or_tree [tail_trees
+      [Htrees [Hor Htail]]]]].
+  destruct
+    (derives_sequence_cons_exposes_head_exact
+      phase1_surface_rules path 1 (ENonterminal "proposition_and") []
+      after_or rest tail_trees Htail)
+    as [after_proposition [proposition_tree [nil_trees
+      [Htail_trees [Hproposition Hnil]]]]].
+  rewrite Htrees, Htail_trees in Htree.
+  inversion Hnil; subst nil_trees.
   match goal with
   | Hor : Derives phase1_surface_rules _ (ELiteral "or") _ _ ?or_tree,
     Hproposition : Derives phase1_surface_rules _
@@ -572,14 +614,22 @@ Proof.
         ERepetition phase1_surface_proposition_or_suffix_expression_for_totality ]
       input rest subtree Hbody)
     as [trees [Hsubtree Hitems]].
-  repeat match goal with
-  | Hseq : DerivesSequence phase1_surface_rules _ _ (_ :: _) _ _ _ |- _ =>
-      inversion Hseq; subst; clear Hseq
-  end.
-  match goal with
-  | Hnil : DerivesSequence phase1_surface_rules _ _ [] _ _ _ |- _ =>
-      inversion Hnil; subst; clear Hnil
-  end.
+  destruct
+    (derives_sequence_cons_exposes_head_exact
+      phase1_surface_rules _ 0 (ENonterminal "proposition_and")
+      [ERepetition phase1_surface_proposition_or_suffix_expression_for_totality]
+      input rest trees Hitems)
+    as [after_first [first_tree [tail_trees
+      [Htrees [Hfirst Htail]]]]].
+  destruct
+    (derives_sequence_cons_exposes_head_exact
+      phase1_surface_rules _ 1
+      (ERepetition phase1_surface_proposition_or_suffix_expression_for_totality)
+      [] after_first rest tail_trees Htail)
+    as [after_rest [rest_tree [nil_trees
+      [Htail_trees [Hrest Hnil]]]]].
+  rewrite Htrees, Htail_trees in Hsubtree.
+  inversion Hnil; subst nil_trees.
   match goal with
   | Hfirst : Derives phase1_surface_rules _
       (ENonterminal "proposition_and") _ _ ?first_tree,
