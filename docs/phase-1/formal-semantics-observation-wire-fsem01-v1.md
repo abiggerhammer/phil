@@ -89,8 +89,11 @@ frame lengths and a fixed number of fields. It validates:
 Its key theorems are
 `parse_frame_roundtrip`, `parse_pack_fields`,
 `decode_encode_valid_artifact`, `decoded_artifact_is_valid`,
-`decoded_artifact_has_consistent_outcome`, and
-`decoder_rejects_wrong_version`. These statements concern the
+`decoded_artifact_has_consistent_outcome`,
+`decoded_wire_replays_one_terminal_model`, and
+`decoder_rejects_wrong_version`. The replay theorem connects either
+accepted wire outcome to its existing Rocq checked-event sequence and
+proved terminal state; it does not certify production step execution. These statements concern the
 **Rocq wire codec**, not Haskell UTF-8/SHA implementation correctness.
 The decoder's validation alone does not cryptographically bind a root to
 a source; that is checked against real sources by CI.
