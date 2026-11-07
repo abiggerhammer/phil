@@ -149,6 +149,7 @@ def main() -> int:
         "--fixtures", default="test/fixtures/fsem01-observation-v1", type=Path
     )
     parser.add_argument("--rocq-witness", type=Path)
+    parser.add_argument("--golden-dir", type=Path)
     args = parser.parse_args()
     try:
         observed = {}
@@ -159,6 +160,14 @@ def main() -> int:
                 root,
                 escapes,
             )
+        if args.golden_dir:
+            for filename, wire in observed.items():
+                expected = (args.golden_dir / filename).read_bytes()
+                if wire.encode("ascii") != expected:
+                    fail(f"{filename}: production output diverges from committed golden artifact")
+            expected_files = {path.name for path in args.golden_dir.iterdir()}
+            if expected_files != set(observed):
+                fail(f"unexpected/missing committed golden artifacts: {expected_files ^ set(observed)}")
         actual_files = {path.name for path in args.artifact_dir.iterdir()}
         if actual_files != set(observed):
             fail(f"unexpected/missing artifacts: {actual_files ^ set(observed)}")
