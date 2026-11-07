@@ -627,6 +627,12 @@ emit directory observations = do
   createDirectoryIfMissing True directory
   mapM_ (\(name, _, artifact) -> TextIO.writeFile
       (directory <> "/" <> name) (encodeObservation artifact)) observations
+
+-- Backwards compatibility: --emit remains OBS-V1-only. The new mode
+-- deliberately adds CONTEXT-V1 sidecars for independent state witnesses.
+emitWithContexts :: FilePath -> [(FilePath, Text, Observation)] -> IO ()
+emitWithContexts directory observations = do
+  emit directory observations
   case traverse contextSpecimen observations of
     Left reason -> fail reason
     Right contexts -> mapM_ (\(name, wire) ->
@@ -650,7 +656,10 @@ main = do
           ["--emit", directory] -> do
             emit directory observations
             putStrLn ("PASS: emitted four source-derived v1 artifacts in " <> directory)
-          _ -> putStrLn "Usage: no args, or --emit DIR" >> exitFailure
+          ["--emit-context", directory] -> do
+            emitWithContexts directory observations
+            putStrLn ("PASS: emitted four OBS-V1 and four CONTEXT-V1 artifacts in " <> directory)
+          _ -> putStrLn "Usage: no args, --emit DIR, or --emit-context DIR" >> exitFailure
 
 mapLeft :: (a -> b) -> Either a c -> Either b c
 mapLeft f = either (Left . f) Right
