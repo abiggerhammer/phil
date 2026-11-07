@@ -1,0 +1,68 @@
+name: FSEM-01 Two-Owner Source Conformance
+
+concurrency:
+  # PR-only supersession, never cancel main or other PRs.
+  group: ${{ github.workflow_ref }}-${{ github.event.pull_request.number || github.run_id }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+on:
+  pull_request:
+    paths:
+      - 'src/Phil/Surface/GrammarV1/TwoOwnerBorrowResourceSurface.hs'
+      - 'test/Phase1FSEM01TwoOwnerSourceMain.hs'
+      - 'test/fixtures/fsem01-two-owner-source-v1/**'
+      - 'phil-core.cabal'
+      - 'docs/phase-1/formal-semantics-two-owner-source-fsem01-v1.md'
+      - '.github/workflows/fsem01-two-owner-source.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'src/Phil/Surface/GrammarV1/TwoOwnerBorrowResourceSurface.hs'
+      - 'test/Phase1FSEM01TwoOwnerSourceMain.hs'
+      - 'test/fixtures/fsem01-two-owner-source-v1/**'
+      - 'phil-core.cabal'
+      - 'docs/phase-1/formal-semantics-two-owner-source-fsem01-v1.md'
+      - '.github/workflows/fsem01-two-owner-source.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  check-two-owner-source:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: haskell-actions/setup@v2
+        with:
+          ghc-version: '9.6.7'
+          cabal-version: 'latest'
+      - name: Strictly build production checker and exact source projection
+        shell: bash
+        run: |
+          set -euo pipefail
+          cabal build lib:phil-core --ghc-options=-Werror
+          cabal exec -- ghc -isrc -Wall -Werror -fno-code \
+            test/Phase1FSEM01TwoOwnerSourceMain.hs
+      - name: Run accepted and minimally rejected real source witnesses
+        shell: bash
+        run: |
+          set -euo pipefail
+          cabal exec -- runghc -isrc -Wall -Werror \
+            test/Phase1FSEM01TwoOwnerSourceMain.hs
+      - name: Preserve single-owner and bounded Core two-owner regression contracts
+        shell: bash
+        run: |
+          set -euo pipefail
+          cabal exec -- runghc -isrc -Wall -Werror \
+            test/Phase1FSEM01ObservationWireMain.hs
+          cabal exec -- runghc -isrc -Wall -Werror \
+            test/Phase1FSEM01TwoOwnerContextMain.hs
+      - name: Hash exact source and checked bridge evidence
+        shell: bash
+        run: |
+          set -euo pipefail
+          sha256sum \
+            test/fixtures/fsem01-two-owner-source-v1/*.phil \
+            test/Phase1FSEM01TwoOwnerSourceMain.hs \
+            src/Phil/Surface/GrammarV1/TwoOwnerBorrowResourceSurface.hs \
+            proof/Phil/Surface/SurfaceTwoOwnerContext.v
