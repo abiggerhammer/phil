@@ -130,6 +130,7 @@ Proof.
   split; [exact Hconsume|].
   split; [|exact Hrepresented].
   unfold ownerLoanState, linearOwnerPresent.
+  unfold owner in *.
   rewrite Hty, Hfree.
   rewrite HstartedTy, HstartedLoan.
   rewrite HclosedTy, HclosedFree.
@@ -177,6 +178,7 @@ Proof.
   { rewrite HstartedBindings. exact Hty. }
   split; [|exact Hrepresented].
   unfold ownerLoanState, linearOwnerPresent.
+  unfold owner in *.
   rewrite Hty, Hfree.
   rewrite HstartedTy, HstartedLoan.
   reflexivity.
