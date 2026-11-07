@@ -9,6 +9,10 @@ on:
   pull_request:
     paths:
       - 'src/Phil/Surface/GrammarV1/TwoOwnerBorrowResourceSurface.hs'
+      - 'src/Phil/Surface/Check/Types.hs'
+      - 'src/Phil/Surface/Check/Engine.hs'
+      - 'src/Phil/Surface/GrammarV1/CheckedType.hs'
+      - 'docs/phase-1/formal-semantics-product-return-fsem01-v1.md'
       - 'test/Phase1FSEM01TwoOwnerSourceMain.hs'
       - 'test/fixtures/fsem01-two-owner-source-v1/**'
       - 'phil-core.cabal'
@@ -18,6 +22,10 @@ on:
     branches: [main]
     paths:
       - 'src/Phil/Surface/GrammarV1/TwoOwnerBorrowResourceSurface.hs'
+      - 'src/Phil/Surface/Check/Types.hs'
+      - 'src/Phil/Surface/Check/Engine.hs'
+      - 'src/Phil/Surface/GrammarV1/CheckedType.hs'
+      - 'docs/phase-1/formal-semantics-product-return-fsem01-v1.md'
       - 'test/Phase1FSEM01TwoOwnerSourceMain.hs'
       - 'test/fixtures/fsem01-two-owner-source-v1/**'
       - 'phil-core.cabal'
@@ -65,4 +73,7 @@ jobs:
             test/fixtures/fsem01-two-owner-source-v1/*.phil \
             test/Phase1FSEM01TwoOwnerSourceMain.hs \
             src/Phil/Surface/GrammarV1/TwoOwnerBorrowResourceSurface.hs \
+            src/Phil/Surface/GrammarV1/CheckedType.hs \
+            src/Phil/Surface/Check/Engine.hs \
+            src/Phil/Surface/Check/Types.hs \
             proof/Phil/Surface/SurfaceTwoOwnerContext.v
