@@ -45,9 +45,9 @@ jobs:
           PR_BRANCH: ${{ github.event.pull_request.head.ref }}
         run: |
           set -euo pipefail
-          # One explicit legacy exception: #1627 predates the claim protocol.
-          # Only the one protocol bootstrap branch is permitted without a claim.
-          if [[ "$PR_NUMBER" == "1627" || "$PR_BRANCH" == "coordination/fsem-claim-protocol" ]]; then
+          # Exact-number exceptions only: historical #1627 and bootstrap #1629.
+          # Do not exempt a reusable branch prefix from future checks.
+          if [[ "$PR_NUMBER" == "1627" || "$PR_NUMBER" == "1629" ]]; then
             echo "Grandfathered existing PR / bootstrap; no retrospective claim."
             exit 0
           fi
