@@ -1,4 +1,4 @@
-# First 47 ordinary #1644 wave + guard + 19 audited INT-008/009/FSEM-01 checks + new FSEM-01 two-owner workflow (68 total).
+# 47 original ordinary PR workflows + guard + 19 INT/FSEM + two-owner context and direct-source workflows (69 total).
 begin-policy-choice-proofs.yml
 ci.yml
 digest-validation-proofs.yml
@@ -13,6 +13,7 @@ fsem01-resource-context-wire.yml
 fsem01-source-simulation-proof.yml
 fsem01-transition-error-bridge.yml
 fsem01-two-owner-context.yml
+fsem01-two-owner-source.yml
 hello-policy-validation-proofs.yml
 local-runtime-choice-proofs.yml
 payload-cancel-choice-proofs.yml
