@@ -48,7 +48,8 @@ jobs:
           cabal exec -- runghc -isrc -Wall -Werror \
             test/Phase1FSEM01ObservationWireMain.hs --emit fsem01-wire-artifacts
           python3 scripts/fsem01_observation_wire.py \
-            --artifact-dir fsem01-wire-artifacts
+            --artifact-dir fsem01-wire-artifacts \
+            --golden-dir test/fixtures/fsem01-observation-v1/expected
           sha256sum test/fixtures/fsem01-observation-v1/*.phil \
             fsem01-wire-artifacts/*.obs
       - uses: actions/upload-artifact@v4
@@ -76,6 +77,7 @@ jobs:
           set -euo pipefail
           python3 scripts/fsem01_observation_wire.py \
             --artifact-dir fsem01-wire-artifacts \
+            --golden-dir test/fixtures/fsem01-observation-v1/expected \
             --rocq-witness fsem01-wire-generated/GeneratedObservationWitness.v
       - name: Compile the verified decoder and real production wire witnesses
         shell: bash
