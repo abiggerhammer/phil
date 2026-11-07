@@ -1,0 +1,54 @@
+name: FSEM Slice Claim Guard
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened, edited, labeled, unlabeled, ready_for_review]
+  push:
+    branches: [main]
+    paths:
+      - 'scripts/fsem_claim.py'
+      - 'scripts/test_fsem_claim.py'
+      - '.github/workflows/fsem-claim-guard.yml'
+
+permissions:
+  contents: read
+  pull-requests: read
+  issues: read
+
+jobs:
+  claim-protocol-tests:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Compile claim controller and exercise offline CAS/lifecycle tests
+        run: |
+          set -euo pipefail
+          python3 -m py_compile scripts/fsem_claim.py scripts/test_fsem_claim.py
+          python3 scripts/test_fsem_claim.py
+
+  exact-claim-before-pr:
+    if: >-
+      github.event_name == 'pull_request' &&
+      (startsWith(github.event.pull_request.head.ref, 'formal-semantics/') ||
+       contains(github.event.pull_request.labels.*.name, 'lane: formal-semantics'))
+    runs-on: ubuntu-latest
+    steps:
+      # Read controller from trusted main, not from an untrusted PR head.
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.base.sha }}
+          persist-credentials: false
+      - name: Validate exclusive claim on exact PR
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+          PR_BRANCH: ${{ github.event.pull_request.head.ref }}
+        run: |
+          set -euo pipefail
+          # Exact-number exceptions only: historical #1627 and bootstrap #1629.
+          # Do not exempt a reusable branch prefix from future checks.
+          if [[ "$PR_NUMBER" == "1627" || "$PR_NUMBER" == "1629" ]]; then
+            echo "Grandfathered existing PR / bootstrap; no retrospective claim."
+            exit 0
+          fi
+          python3 scripts/fsem_claim.py verify --pr "$PR_NUMBER"
