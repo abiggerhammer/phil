@@ -47,7 +47,7 @@ jobs:
           set -euo pipefail
           cabal exec -- runghc -isrc -Wall -Werror \
             test/Phase1FSEM01ObservationWireMain.hs \
-            --emit fsem01-context-artifacts
+            --emit-context fsem01-context-artifacts
           python3 -m py_compile scripts/fsem01_resource_context_witness.py
           python3 scripts/fsem01_resource_context_witness.py \
             --artifact-dir fsem01-context-artifacts \
