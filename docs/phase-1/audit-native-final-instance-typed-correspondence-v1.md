@@ -439,3 +439,47 @@ release-byte verification and pinned independent final-delta signoff. TCB,
 generated Phase-1 artifacts, historical independent-audit evidence and all 244
 original normative conformance cases remain unchanged. Independent audit freeze
 verdict **NOT YET**.
+
+## 2026-11-07 — exact accepted manifest/StageClosure coordinate replay
+
+This successor to merged #1636 and #1639 adds a *read-only diagnostic replay* of
+the actual opaque checked `CertifiedSourceManifestBinding`, independently
+accepted `CertifiedApplicationArtifact` and `CertifiedReleaseArtifact`
+retained in `NativeFinalInstanceCorrespondence`. The replay first checks
+whole-object producer/consumer equality and the exact retained StageClosure;
+it compares the manifest's **raw Systems digest** against the raw Systems
+artifact digest and its **lowering-ledger root** against the actual lowering
+ledger root. Distinct Haskell wrappers `NativeRawSystemsDigest` and
+`NativeLoweringRootDigest` avoid treating those two Digest roles as the same
+revision type. The resulting private receipt separately retains
+`SystemsArtifactRevision`, `Phase1StageContractRevision`,
+`ClosedStageContractRevision` and subject, instance, realization and verifier
+profile projections, cross-checked against the already-bound
+`NativeFinalAuthority`.
+
+This is a recheck **after** native acceptance, not a second native acceptance
+producer. Supplied candidate objects cannot replace the exact stored manifest
+or StageClosure. Upload and Steve executable replay checks the complete
+accepted coordinate view; two same-manifest-ID adversarial examples separately
+change the raw digest and lowering root, demanding domain-specific failures.
+Those deliberately altered manifests are *not* certified INT-002 products.
+Typed Rocq uses separately parameterized native manifest, raw digest, lowering
+root, normalized Systems revision, common contract and closed contract
+domains, together with exact source/release stage objects. Five named
+`Print Assumptions` queries check conditional full-consumer transport,
+raw/root drift rejection, full-manifest substitution rejection even when raw
+and root projections agree, and retention of separate stage-coordinate types.
+The model premises remain externally supplied; no native-to-Rocq `nat`
+encoding, injectivity or new native acceptance is fabricated.
+
+**Remaining-premise ledger:** the checked architecture occurrence still has no
+authenticated production path to the independently accepted concrete
+StageClosure / selected CertifiedRelease; `StageClosure` lacks an
+`InstanceKey`, and matching instance revisions would not establish origin.
+Faithful total/injective representations and source/assumption/erasure/final
+predecessor authority remain open. No complete
+`FixedFinalAuthorityAdapter` / `FinalArtifactCertified`, independent public
+release-byte verification or pinned independent final-delta signoff is claimed.
+No change to Phase 1 TCB, strict GHC/LLVM/Rocq policy, generated Phase-1
+artifacts, historical independent-audit evidence or the original 244 normative
+cases. Independent audit freeze: **NOT YET**.
