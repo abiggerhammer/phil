@@ -101,6 +101,13 @@ Definition fieldsOf (artifact : Artifact) : list string :=
    ownerOrdinal artifact; viewOrdinal artifact;
    traceCodes artifact; terminalCode artifact].
 
+Lemma fields_of_length :
+  forall artifact, List.length (fieldsOf artifact) = 8.
+Proof.
+  intros [hash root owner view ownerIndex viewIndex trace outcome].
+  reflexivity.
+Qed.
+
 Definition recordOfFields (fields : list string) : option Artifact :=
   match fields with
   | [hash; root; owner; view; ownerIndex; viewIndex; trace; outcome] =>
@@ -187,6 +194,7 @@ Proof.
   intros artifact Hvalid.
   unfold decodeArtifact, encodeArtifact.
   rewrite SurfaceBinderNameEncoding.strip_prefix_self.
+  rewrite <- (fields_of_length artifact).
   rewrite (parse_pack_fields (fieldsOf artifact) "").
   rewrite record_fields_roundtrip.
   now rewrite Hvalid.
