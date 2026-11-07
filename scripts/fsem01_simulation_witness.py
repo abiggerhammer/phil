@@ -132,7 +132,7 @@ def main() -> int:
             f"  BoundedSourceSimulation {run_var} ({catalog_id}, {ordinal}).",
             "Proof.",
             f"  destruct {lemma} as [Hdecode [Hbinding Hcatalog]].",
-            "  eapply (proj1 (decoded_catalog_bound_source_simulates",
+            "  exact (proj1 (decoded_catalog_bound_source_simulates",
             f"    {wire_var} {artifact_var} {run_var}",
             f"    sourceRootCatalog ({catalog_id}, {ordinal})",
             "    Hdecode Hbinding Hcatalog)).",
