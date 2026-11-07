@@ -21,7 +21,7 @@ import Phil.Core.Static
   , deriveDeclarationIdentity
   , emptyStaticContext
   )
-import Phil.Core.Syntax (Control (Return), Name (..), RefTerm (..), Ty (..))
+import Phil.Core.Syntax (Control (Return), Mode (Unrestricted), Name (..), RefSort (..), RefTerm (..), Ty (..))
 import Phil.Surface.Check.Engine
   ( BorrowTraceCheckpoint (..)
   , BorrowTracePhase (..)
@@ -442,14 +442,19 @@ checkProducerProjection (filename, source, artifact) = do
 contextVersion :: Text
 contextVersion = "PHIL-FSEM01-CONTEXT-V1|"
 
+viewTy :: Ty
+viewTy = TyOpaqueSorted "SharedBytes" (SortFiniteSeq (SortUInt 8))
+
 renderContextMap :: Map.Map Name Ty -> Either String Text
 renderContextMap entries =
   case Map.toAscList entries of
     [] -> Right "-"
     pairs -> do
       encoded <- mapM (\(name, ty) -> do
-        ensure (ty == expectedTy) "unsupported resource binding type in CONTEXT-V1"
-        Right (utf8Hex (unName name) <> "=Bytes8")) pairs
+        tag <- if ty == expectedTy then Right "Bytes8"
+          else if ty == viewTy then Right "SharedBytes"
+          else Left "unsupported resource binding type in CONTEXT-V1"
+        Right (utf8Hex (unName name) <> "=" <> tag)) pairs
       Right (Text.intercalate "," encoded)
 
 renderContextSet :: Set.Set Name -> Text
@@ -472,24 +477,26 @@ renderRawContextState owner view cut = do
 
 -- Canonical model words are used by the *validator*, never to produce
 -- state. The producer above enumerates the real four ResourceContext fields.
-modelContextWord :: Text -> Text -> Text -> Text
-modelContextWord phase ownerPresent loan =
-  Text.intercalate "/" [phase, "-", "-", ownerPresent, loan]
+modelContextWord :: Text -> Text -> Text -> Text -> Text
+modelContextWord phase viewEntry ownerPresent loan =
+  Text.intercalate "/" [phase, viewEntry, "-", ownerPresent, loan]
 
 canonicalContextStates :: Observation -> Text
 canonicalContextStates observation =
   let owner = obsOwnerHex observation
       present = owner <> "=Bytes8"
-      state = \phase lin loan -> modelContextWord phase
+      view = obsViewHex observation <> "=SharedBytes"
+      state = \phase viewLive lin loan -> modelContextWord phase
+        (if viewLive then view else "-")
         (if lin then present else "-") (if loan then owner else "-")
   in if obsOutcome observation == positiveOutcome
        then Text.intercalate "," [
-         state "B" True False, state "S" True True,
-         state "N" True True, state "C" True False,
-         state "R" False False]
+         state "B" False True False, state "S" False True True,
+         state "N" True True True, state "C" False True False,
+         state "R" False False False]
        else Text.intercalate "," [
-         state "B" True False, state "S" True True,
-         state "E" True True, state "X" True True]
+         state "B" False True False, state "S" False True True,
+         state "E" True True True, state "X" True True True]
 
 contextFields :: Observation -> Text -> [Text]
 contextFields observation states =
@@ -526,8 +533,8 @@ contextOfCheckpoint cut = CoreContext.ResourceContext
 -- Independently replay the *real* Core.Context operations against successive
 -- production snapshots. No phase label is used to synthesize a successor.
 checkCoreContextTransitions
-  :: Name -> [BorrowTraceCheckpoint] -> Either String ()
-checkCoreContextTransitions owner cuts =
+  :: Name -> Name -> [BorrowTraceCheckpoint] -> Either String ()
+checkCoreContextTransitions owner view cuts =
   case cuts of
     [before, started, body, closed, returned] -> do
       ensure (map tracePhase cuts ==
@@ -537,11 +544,16 @@ checkCoreContextTransitions owner cuts =
       ensure (CoreContext.startSharedLoan owner (contextOfCheckpoint before) ==
         Right (contextOfCheckpoint started))
         "real Core.Context loan start differs from source snapshot"
-      ensure (contextOfCheckpoint started == contextOfCheckpoint body)
-        "safe body unexpectedly changed checker resource context"
-      ensure (CoreContext.endSharedLoan owner (contextOfCheckpoint body) ==
+      ensure (CoreContext.insertBinding Unrestricted view viewTy
+                (contextOfCheckpoint started) ==
+        Right (contextOfCheckpoint body))
+        "scoped SharedBytes view insertion differs from Core.Context"
+      let withoutView = (contextOfCheckpoint body)
+            { CoreContext.unrestrictedBindings =
+                Map.delete view (traceUnrestrictedOwners body) }
+      ensure (CoreContext.endSharedLoan owner withoutView ==
         Right (contextOfCheckpoint closed))
-        "real Core.Context loan end differs from source snapshot"
+        "real Core.Context loan end differs after removing scoped view"
       ensure (CoreContext.consumeLinear owner (contextOfCheckpoint closed) ==
         Right (expectedTy, contextOfCheckpoint returned))
         "real Core.Context terminal consume differs from source snapshot"
@@ -553,8 +565,11 @@ checkCoreContextTransitions owner cuts =
       ensure (CoreContext.startSharedLoan owner (contextOfCheckpoint before) ==
         Right (contextOfCheckpoint started))
         "real Core.Context escape-path loan start differs from source snapshot"
-      ensure (contextOfCheckpoint started == contextOfCheckpoint escaping &&
-              contextOfCheckpoint escaping == contextOfCheckpoint rejected)
+      ensure (CoreContext.insertBinding Unrestricted view viewTy
+                (contextOfCheckpoint started) ==
+        Right (contextOfCheckpoint escaping))
+        "escape-path scoped SharedBytes view insertion differs from Core.Context"
+      ensure (contextOfCheckpoint escaping == contextOfCheckpoint rejected)
         "BorrowEscape prefix invented a closed or consumed resource context"
       ensure (CoreContext.consumeLinear owner (contextOfCheckpoint rejected) ==
         Left (CoreContext.OwnerBorrowed owner))
@@ -575,7 +590,7 @@ contextSpecimen (filename, source, artifact) = do
   let owner = grammarV1ResolvedBinderCoreName (grammarV1TraceOwnerBinder traced)
       view = grammarV1ResolvedBinderCoreName (grammarV1TraceViewBinder traced)
       cuts = grammarV1TraceCheckpoints traced
-  checkCoreContextTransitions owner cuts
+  checkCoreContextTransitions owner view cuts
   wire <- encodeContextEvidence artifact owner view cuts
   ensure (validContextEvidence artifact wire)
     "actual full Map/Set representation failed strict CONTEXT-V1 validator"
