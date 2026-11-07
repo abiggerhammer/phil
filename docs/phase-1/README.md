@@ -18,6 +18,7 @@ The important exceptions are documents that explicitly declare themselves curren
 - [Phase 1 typing and semantics reader's guide](typing-and-semantics-reader-guide-v1.md) — non-normative map of existing semantic authorities, models and proof-scope caveats.
 - [Three worked typing-rule families](typing-rules-worked-examples-draft-v1.md) — illustrative positive/expected-negative examples; not all negatives are executable conformance witnesses yet.
 - [Formal-semantics judgment inventory (FSEM-00)](formal-semantics-judgment-inventory-v0.md) — proposed rule interfaces, translation boundaries and explicit outstanding evidence, tracked in [FSEM issue #1613](https://github.com/abiggerhammer/phil/issues/1613).
+- [FSEM-01 proposed loan-state correspondence](formal-semantics-loan-state-correspondence-fsem01-v0.md) — exact source binder/production resource identities, an explicit candidate Rocq relation, and undischarged source-to-model proof obligations (non-normative).
 
 These review documents do not replace accepted semantic contracts, the normative grammar, the Logic Ledger, or exact-commit proof and conformance results.
 
