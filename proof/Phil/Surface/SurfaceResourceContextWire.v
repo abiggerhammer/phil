@@ -40,7 +40,7 @@ Definition fieldsOfState (a : StateArtifact) : list string :=
 
 Lemma state_fields_length :
   forall a, List.length (fieldsOfState a) = 6.
-Proof. intros [? ? ? ? ? ?]; reflexivity. Qed.
+Proof. intros [hash root owner view words outcome]; reflexivity. Qed.
 
 Definition stateOfFields (fields : list string) : option StateArtifact :=
   match fields with
@@ -203,6 +203,40 @@ Proof.
   now rewrite String.eqb_refl.
 Qed.
 
+
+(* The checker temporarily installs a SharedBytes view as an unrestricted
+   binding. Its own type is a second abstract Ty in Rocq; the wire's exact
+   SharedBytes tag is checked independently. *)
+Definition withScopedView
+  (view : Syntax.Name) (viewTy : Syntax.Ty) (live : bool)
+  (ctx : Context.ResourceContext) : Context.ResourceContext :=
+  Context.mkResourceContext
+    (fun candidate =>
+       if String.eqb candidate view
+       then if live then Some viewTy else None
+       else None)
+    (Context.affineBindings ctx)
+    (Context.linearBindings ctx)
+    (Context.sharedLoans ctx).
+
+Theorem scoped_view_lookup_is_exact :
+  forall view viewTy live ctx,
+    Context.unrestrictedBindings (withScopedView view viewTy live ctx) view =
+      if live then Some viewTy else None.
+Proof.
+  intros view viewTy live ctx.
+  unfold withScopedView; simpl.
+  now rewrite String.eqb_refl.
+Qed.
+
+Theorem scoped_view_preserves_owner_and_loan_lookups :
+  forall owner view viewTy live ctx,
+    Context.linearBindings (withScopedView view viewTy live ctx) owner =
+      Context.linearBindings ctx owner /\
+    Context.sharedLoans (withScopedView view viewTy live ctx) owner =
+      Context.sharedLoans ctx owner.
+Proof. intros; split; reflexivity. Qed.
+
 Definition beforeContext (owner : Syntax.Name) (ty : Syntax.Ty) :=
   fromResourceBits owner ty true false.
 Definition startedContext (owner : Syntax.Name) (ty : Syntax.Ty) :=
@@ -252,6 +286,20 @@ Proof.
     startedContext, beforeContext, fromResourceBits,
     SurfaceBorrowLoanStateCorrespondence.setCoreLoan; simpl.
   repeat rewrite String.eqb_refl.
+  reflexivity.
+Qed.
+
+
+Theorem represented_scoped_escape_cannot_consume_owner :
+  forall owner view ty viewTy,
+    Context.consumeLinear owner
+      (withScopedView view viewTy true (startedContext owner ty)) =
+    Context.ConsumeError (Context.OwnerBorrowed owner).
+Proof.
+  intros owner view ty viewTy.
+  unfold Context.consumeLinear, withScopedView; simpl.
+  unfold startedContext.
+  rewrite SurfaceBorrowLoanStateCorrespondence.set_core_loan_has_exact_target.
   reflexivity.
 Qed.
 
