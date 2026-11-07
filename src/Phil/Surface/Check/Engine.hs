@@ -6,6 +6,8 @@ module Phil.Surface.Check.Engine
   , traceSurfaceBorrowComponent
   , BorrowTracePhase (..)
   , BorrowTraceCheckpoint (..)
+  , BorrowTraceResourceObservation (..)
+  , observeBorrowTraceResource
   , BorrowTraceRun (..)
   ) where
 
@@ -155,6 +157,39 @@ data BorrowTraceCheckpoint = BorrowTraceCheckpoint
   , traceActiveLoans :: Set Name
   }
   deriving (Eq, Show)
+
+-- | Fail-closed, one-owner observation of the *recorded production*
+-- resource maps, not a value reconstructed from a phase label.
+-- Every key is examined: a foreign linear binding, an unexpected type, or
+-- a foreign active loan refuses the admitted single-owner fragment.
+data BorrowTraceResourceObservation = BorrowTraceResourceObservation
+  { borrowObservedPhase :: BorrowTracePhase
+  , borrowObservedOwnerPresent :: Bool
+  , borrowObservedLoanActive :: Bool
+  }
+  deriving (Eq, Show)
+
+observeBorrowTraceResource
+  :: Name -> Name -> Ty -> BorrowTraceCheckpoint
+  -> Maybe BorrowTraceResourceObservation
+observeBorrowTraceResource expectedOwner expectedView expectedType checkpoint
+  | traceOwnerName checkpoint /= expectedOwner = Nothing
+  | traceViewName checkpoint /= expectedView = Nothing
+  | otherwise = do
+      linearPresent <- case Map.toList (traceLinearOwners checkpoint) of
+        [] -> Just False
+        [(name, ty)]
+          | name == expectedOwner && ty == expectedType -> Just True
+        _ -> Nothing
+      loanActive <- case Set.toList (traceActiveLoans checkpoint) of
+        [] -> Just False
+        [name] | name == expectedOwner -> Just True
+        _ -> Nothing
+      Just BorrowTraceResourceObservation
+        { borrowObservedPhase = tracePhase checkpoint
+        , borrowObservedOwnerPresent = linearPresent
+        , borrowObservedLoanActive = loanActive
+        }
 
 data BorrowTraceRun = BorrowTraceRun
   { traceOutcome :: Either SurfaceCheckError SurfaceCheckResult

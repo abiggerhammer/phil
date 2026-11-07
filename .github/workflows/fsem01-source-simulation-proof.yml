@@ -5,16 +5,22 @@ on:
     paths:
       - 'proof/Phil/Surface/SurfaceBoundedSourceSimulation.v'
       - 'proof/Phil/Surface/SurfaceObservationProducerFidelity.v'
+      - 'proof/Phil/Surface/SurfaceCheckerStateObservation.v'
       - 'docs/phase-1/formal-semantics-producer-fidelity-fsem01-v1.md'
       - 'scripts/fsem01_simulation_witness.py'
+      - 'src/Phil/Surface/Check/Engine.hs'
+      - 'test/Phase1FSEM01ObservationWireMain.hs'
       - '.github/workflows/fsem01-source-simulation-proof.yml'
   push:
     branches: [main]
     paths:
       - 'proof/Phil/Surface/SurfaceBoundedSourceSimulation.v'
       - 'proof/Phil/Surface/SurfaceObservationProducerFidelity.v'
+      - 'proof/Phil/Surface/SurfaceCheckerStateObservation.v'
       - 'docs/phase-1/formal-semantics-producer-fidelity-fsem01-v1.md'
       - 'scripts/fsem01_simulation_witness.py'
+      - 'src/Phil/Surface/Check/Engine.hs'
+      - 'test/Phase1FSEM01ObservationWireMain.hs'
       - '.github/workflows/fsem01-source-simulation-proof.yml'
 
 permissions:
@@ -59,7 +65,8 @@ jobs:
             proof/Phil/Surface/SurfaceBorrowStepErrorBridge.v \
             proof/Phil/Surface/SurfaceObservationWire.v \
             proof/Phil/Surface/SurfaceBoundedSourceSimulation.v \
-            proof/Phil/Surface/SurfaceObservationProducerFidelity.v
+            proof/Phil/Surface/SurfaceObservationProducerFidelity.v \
+            proof/Phil/Surface/SurfaceCheckerStateObservation.v
           do
             rocq c -Q proof/Phil Phil "$file"
           done
@@ -72,6 +79,7 @@ jobs:
           if grep -nE '^[[:space:]]*(Admitted[.]|Axiom[[:space:]]|Parameter[[:space:]])' \
               proof/Phil/Surface/SurfaceBoundedSourceSimulation.v \
               proof/Phil/Surface/SurfaceObservationProducerFidelity.v \
+              proof/Phil/Surface/SurfaceCheckerStateObservation.v \
               fsem01-source-proof/GeneratedSimulationWitness.v; then
             echo "Unproved global axiom or admission in source simulation"
             exit 1
@@ -81,5 +89,7 @@ jobs:
             proof/Phil/Surface/SurfaceBoundedSourceSimulation.vo \
             proof/Phil/Surface/SurfaceObservationProducerFidelity.v \
             proof/Phil/Surface/SurfaceObservationProducerFidelity.vo \
+            proof/Phil/Surface/SurfaceCheckerStateObservation.v \
+            proof/Phil/Surface/SurfaceCheckerStateObservation.vo \
             fsem01-source-proof/GeneratedSimulationWitness.v \
             fsem01-source-proof/GeneratedSimulationWitness.vo

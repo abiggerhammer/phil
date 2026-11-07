@@ -15,6 +15,9 @@ The important exceptions are documents that explicitly declare themselves curren
 
 ## Entry points for formal-methods review
 
+- [Normative Phase 1 surface EBNF](../../grammar/phase1-surface.ebnf) — authoritative concrete syntax and token forms; successful parsing is not semantic acceptance.
+- [Grammar-v1 status, lexical rules and versioning policy](surface-grammar-v1.md) — defines the concrete-syntax authority boundary and derivation of proof-facing grammar artifacts.
+- [Syntax–semantics completeness audit](syntax-semantics-completeness-v1.md) — reconciles programmer-expressible choices against the accepted Phase 1 contracts; it does not independently make typing rules normative.
 - [Phase 1 typing and semantics reader's guide](typing-and-semantics-reader-guide-v1.md) — non-normative map of existing semantic authorities, models and proof-scope caveats.
 - [Three worked typing-rule families](typing-rules-worked-examples-draft-v1.md) — illustrative positive/expected-negative examples; not all negatives are executable conformance witnesses yet.
 - [Formal-semantics judgment inventory (FSEM-00)](formal-semantics-judgment-inventory-v0.md) — proposed rule interfaces, translation boundaries and explicit outstanding evidence, tracked in [FSEM issue #1613](https://github.com/abiggerhammer/phil/issues/1613).
@@ -28,6 +31,7 @@ The important exceptions are documents that explicitly declare themselves curren
 - [FSEM-01 versioned source observation and checked wire decoder](formal-semantics-observation-wire-fsem01-v1.md) — deterministic, source-SHA256-bound actual checker artifacts uploaded by CI and evaluated byte-for-byte by a Rocq-proved decoder; producer refinement still open.
 - [FSEM-01 bounded source-observation simulation](formal-semantics-source-simulation-fsem01-v1.md) — conditional Rocq replay with exact producer-binding and finite catalog premises, plus CI witnesses over real source-derived artifacts; no universal Haskell refinement.
 - [FSEM-01 bounded observation producer-fidelity proof](formal-semantics-producer-fidelity-fsem01-v1.md) — by-construction preservation of all source-run artifact fields and injective snapshot encoding, with checker-state extraction still a tested trust boundary.
+- [FSEM-01 checker-state resource observation bridge](formal-semantics-checker-state-observation-fsem01-v1.md) — exact observed one-owner Haskell Map/Set flags, Rocq resource-context lookup lemmas and start/end/return correspondence; cross-language state refinement remains open.
 
 These review documents do not replace accepted semantic contracts, the normative grammar, the Logic Ledger, or exact-commit proof and conformance results.
 

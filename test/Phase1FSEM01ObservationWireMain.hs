@@ -21,7 +21,12 @@ import Phil.Core.Static
   , emptyStaticContext
   )
 import Phil.Core.Syntax (Control (Return), Name (..), RefTerm (..), Ty (..))
-import Phil.Surface.Check.Engine (BorrowTraceCheckpoint (..), BorrowTracePhase (..))
+import Phil.Surface.Check.Engine
+  ( BorrowTraceCheckpoint (..)
+  , BorrowTracePhase (..)
+  , BorrowTraceResourceObservation (..)
+  , observeBorrowTraceResource
+  )
 import Phil.Surface.Check.Types
   ( RejectionClass (..), SurfaceCheckError (..), SurfaceCheckResult (..) )
 import Phil.Surface.GrammarV1.BinderScope
@@ -191,22 +196,19 @@ parseFunction source = do
         _ -> failWith "fixture is not a function declaration"
     _ -> failWith "fixture did not have exactly one declaration"
 
-checkpointCode :: GrammarV1ResolvedBinder -> BorrowTraceCheckpoint
-  -> Either String Text
-checkpointCode owner cut = do
+-- Use the actual Engine observer, whose input is the recorded
+-- ResourceContext projection, rather than inferring flags from phase tags.
+checkpointCode
+  :: GrammarV1ResolvedBinder -> GrammarV1ResolvedBinder
+  -> BorrowTraceCheckpoint -> Either String Text
+checkpointCode owner view cut = do
   let ownerName = grammarV1ResolvedBinderCoreName owner
-      binding = Map.lookup ownerName (traceLinearOwners cut)
-      loan = Set.member ownerName (traceActiveLoans cut)
-  ensure (traceOwnerName cut == ownerName)
-    "checkpoint changed exact owner name"
-  ensure (binding == Nothing || binding == Just expectedTy)
-    "checkpoint used unexpected linear owner type"
-  ensure (Map.size (traceLinearOwners cut) == if binding == Nothing then 0 else 1)
-    "checkpoint has extra linear owners"
-  ensure (Set.size (traceActiveLoans cut) == if loan then 1 else 0)
-    "checkpoint has extra shared loans"
-  Right (phaseCode (tracePhase cut) <>
-    showBit (binding /= Nothing) <> showBit loan)
+      viewName = grammarV1ResolvedBinderCoreName view
+  observation <- maybe (failWith "source checkpoint has foreign owner, view, type, or loan")
+    Right (observeBorrowTraceResource ownerName viewName expectedTy cut)
+  Right (phaseCode (borrowObservedPhase observation) <>
+    showBit (borrowObservedOwnerPresent observation) <>
+    showBit (borrowObservedLoanActive observation))
 
 observedOutcome
   :: Either GrammarV1BorrowResourceError SurfaceCheckResult
@@ -256,7 +258,7 @@ observeSource root source = do
                         traceViewName cut == viewName)
            (grammarV1TraceCheckpoints trace))
     "trace lost exact owner or view name"
-  codes <- mapM (checkpointCode owner) (grammarV1TraceCheckpoints trace)
+  codes <- mapM (checkpointCode owner view) (grammarV1TraceCheckpoints trace)
   outcome <- observedOutcome (grammarV1TraceOutcome trace)
   let o = Observation
         { obsSourceSHA256 = digestSource source
@@ -370,7 +372,21 @@ checkProducerProjection (filename, source, artifact) = do
   ensure (all (\cut -> traceOwnerName cut == ownerName &&
                        traceViewName cut == viewName) cuts)
     "real source checkpoint changed exact identity"
-  codes <- mapM (checkpointCode owner) cuts
+  -- Check the production observer independently against the raw Haskell
+  -- Map/Set snapshot, including the *whole* admitted single-owner domain.
+  mapM_ (\cut -> do
+    observed <- maybe (Left "real resource snapshot was rejected") Right
+      (observeBorrowTraceResource ownerName viewName expectedTy cut)
+    let binding = Map.lookup ownerName (traceLinearOwners cut)
+        loan = Set.member ownerName (traceActiveLoans cut)
+    ensure (borrowObservedPhase observed == tracePhase cut &&
+            borrowObservedOwnerPresent observed == (binding /= Nothing) &&
+            borrowObservedLoanActive observed == loan &&
+            Map.size (traceLinearOwners cut) == if binding == Nothing then 0 else 1)
+      "observer mismatches actual checker-state owner map"
+    ensure (Set.size (traceActiveLoans cut) == if loan then 1 else 0)
+      "observer mismatches actual checker-state shared-loan set") cuts
+  codes <- mapM (checkpointCode owner view) cuts
   outcome <- observedOutcome (grammarV1TraceOutcome traced)
   let projected =
         [ digestSource source
@@ -389,6 +405,7 @@ checkProducerProjection (filename, source, artifact) = do
   let first = head cuts
       other = Name "unauthorized-owner"
       badOwnerName = first { traceOwnerName = other }
+      badViewName = first { traceViewName = other }
       badOwnerType = first
         { traceLinearOwners = Map.insert ownerName
             (TyBytes (RefNat 9)) (traceLinearOwners first) }
@@ -397,13 +414,13 @@ checkProducerProjection (filename, source, artifact) = do
             (traceLinearOwners first) }
       extraLoan = first
         { traceActiveLoans = Set.insert other (traceActiveLoans first) }
-  ensure (all (\cut -> case checkpointCode owner cut of
+  ensure (all (\cut -> case checkpointCode owner view cut of
             Left _ -> True
             Right _ -> False)
-            [badOwnerName, badOwnerType, extraOwner, extraLoan])
+            [badOwnerName, badViewName, badOwnerType, extraOwner, extraLoan])
     "mutated production checkpoint silently passed the field projection"
   let wrongPhase = first { tracePhase = TraceEscapeRejected }
-  wrongCode <- checkpointCode owner wrongPhase
+  wrongCode <- checkpointCode owner view wrongPhase
   ensure (not (validObservation (artifact
     { obsTrace = Text.intercalate "," (wrongCode : drop 1 codes) })))
     "fabricated error phase was accepted as a valid full trace"
