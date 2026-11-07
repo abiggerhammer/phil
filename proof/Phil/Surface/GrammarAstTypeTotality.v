@@ -1,8 +1,12 @@
 From Stdlib Require Import Lists.List Strings.String.
 
 From Phil.Surface Require Import
+  GrammarDerivation
+  GrammarAstSourceHeader
+  GrammarAstTopLevelSpine
   GrammarAstTypeSpine
-  GrammarAstTopLevelTotality.
+  GrammarAstTopLevelTotality
+  GrammarDeterminacySimpleResolverSoundness.
 
 Import ListNotations.
 Open Scope string_scope.
@@ -82,6 +86,7 @@ Lemma phase1_surface_nonreference_type_item_matches_tag :
       phase1_surface_nonreference_type_tag_of_index index = Some tag.
 Proof.
   intros index item Hnth.
+  unfold phase1_surface_nonreference_type_items_for_totality in Hnth.
   destruct index as [|index]; cbn in Hnth.
   - exists Phase1UnitType. reflexivity.
   - destruct index as [|index]; cbn in Hnth.
@@ -108,7 +113,7 @@ Proof.
                                        ***** exists Phase1RefinementType. reflexivity.
                                        ***** destruct index as [|index]; cbn in Hnth.
                                              ------ exists Phase1TupleType. reflexivity.
-                                             ------ discriminate Hnth.
+                                             ------ destruct index; cbn in Hnth; discriminate Hnth.
 Qed.
 
 Theorem phase1_surface_normalize_nonreference_type_spine_total_from_derivation :
@@ -138,9 +143,9 @@ Proof.
   destruct
     (phase1_surface_nonreference_type_item_matches_tag index item Hnth)
     as [tag Htag].
-  let type_value := constr:(
+  pose (type_value :=
     {| phase1_nonreference_type_spine_tag := tag;
-       phase1_nonreference_type_spine_selected_tree := selected |}) in
+       phase1_nonreference_type_spine_selected_tree := selected |}).
   assert (Hnormalize :
     phase1_surface_normalize_nonreference_type_spine tree = Some type_value).
   {
@@ -193,7 +198,7 @@ Proof.
           (AtAlternative 0))
         input rest selected Hselected)
       as [nonreference [Hnonreference Hround_trip]].
-    let type_value := constr:(Phase1NonreferenceTypeSpine nonreference) in
+    pose (type_value := Phase1NonreferenceTypeSpine nonreference).
     assert (Hnormalize :
       phase1_surface_normalize_type_spine tree = Some type_value).
     {
@@ -214,7 +219,7 @@ Proof.
   - destruct index as [|index].
     + cbn in Hnth.
       inversion Hnth; subst item.
-      let type_value := constr:(Phase1NamedTypeSpine selected) in
+      pose (type_value := Phase1NamedTypeSpine selected).
       assert (Hnormalize :
         phase1_surface_normalize_type_spine tree = Some type_value).
       {
@@ -230,6 +235,5 @@ Proof.
       * exact Hnormalize.
       * eapply phase1_surface_normalize_type_spine_round_trip.
         exact Hnormalize.
-    + cbn in Hnth.
-      discriminate Hnth.
+    + destruct index; cbn in Hnth; discriminate Hnth.
 Qed.
