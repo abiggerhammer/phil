@@ -31,6 +31,7 @@ The important exceptions are documents that explicitly declare themselves curren
 - [FSEM-01 versioned source observation and checked wire decoder](formal-semantics-observation-wire-fsem01-v1.md) — deterministic, source-SHA256-bound actual checker artifacts uploaded by CI and evaluated byte-for-byte by a Rocq-proved decoder; producer refinement still open.
 - [FSEM-01 bounded source-observation simulation](formal-semantics-source-simulation-fsem01-v1.md) — conditional Rocq replay with exact producer-binding and finite catalog premises, plus CI witnesses over real source-derived artifacts; no universal Haskell refinement.
 - [FSEM-01 bounded observation producer-fidelity proof](formal-semantics-producer-fidelity-fsem01-v1.md) — by-construction preservation of all source-run artifact fields and injective snapshot encoding, with checker-state extraction still a tested trust boundary.
+- [FSEM-01 checker-state resource observation bridge](formal-semantics-checker-state-observation-fsem01-v1.md) — exact observed one-owner Haskell Map/Set flags, Rocq resource-context lookup lemmas and start/end/return correspondence; cross-language state refinement remains open.
 
 These review documents do not replace accepted semantic contracts, the normative grammar, the Logic Ledger, or exact-commit proof and conformance results.
 
