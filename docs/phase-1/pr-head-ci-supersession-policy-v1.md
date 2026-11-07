@@ -24,9 +24,9 @@ FSEM's `fsem-claim-guard.yml` and `fsem-claim-release.yml` implement the exact-c
 
 ## Enforcement
 
-The reviewed set of 47 workflows is recorded in [`scripts/ci/pr-concurrency-covered.txt`](../../scripts/ci/pr-concurrency-covered.txt). [`scripts/ci/check_pr_concurrency.py`](../../scripts/ci/check_pr_concurrency.py) requires each to retain the exact PR trigger, group expression and event-gated cancellation. [`scripts/ci/test_pr_concurrency.py`](../../scripts/ci/test_pr_concurrency.py) tests isolation across PRs/workflows and non-PR run IDs, plus common regressions.
+The reviewed set of 47 ordinary workflows plus the policy workflow itself (48 entries) is recorded in [`scripts/ci/pr-concurrency-covered.txt`](../../scripts/ci/pr-concurrency-covered.txt). [`scripts/ci/check_pr_concurrency.py`](../../scripts/ci/check_pr_concurrency.py) requires each to retain the exact PR trigger, group expression and event-gated cancellation. [`scripts/ci/test_pr_concurrency.py`](../../scripts/ci/test_pr_concurrency.py) tests isolation across PRs/workflows and non-PR run IDs, plus common regressions.
 
-The read-only [PR CI Supersession Policy workflow](../../.github/workflows/pr-ci-supersession-policy.yml) runs whenever workflows or its policy files change. To make this policy strictly mandatory, add its `verify-pr-head-supersession` check to the repository required-check ruleset after its first green run.
+The main `CI` job also runs both policy checks as a fast preflight before LLVM/Haskell setup. The independent read-only [PR CI Supersession Policy workflow](../../.github/workflows/pr-ci-supersession-policy.yml) runs whenever workflows or its policy files change. To make this policy strictly mandatory, add its `verify-pr-head-supersession` check to the repository required-check ruleset after its first green run.
 
 ## Next increments
 
