@@ -4,12 +4,16 @@ on:
   pull_request:
     paths:
       - 'proof/Phil/Surface/SurfaceBoundedSourceSimulation.v'
+      - 'proof/Phil/Surface/SurfaceObservationProducerFidelity.v'
+      - 'docs/phase-1/formal-semantics-producer-fidelity-fsem01-v1.md'
       - 'scripts/fsem01_simulation_witness.py'
       - '.github/workflows/fsem01-source-simulation-proof.yml'
   push:
     branches: [main]
     paths:
       - 'proof/Phil/Surface/SurfaceBoundedSourceSimulation.v'
+      - 'proof/Phil/Surface/SurfaceObservationProducerFidelity.v'
+      - 'docs/phase-1/formal-semantics-producer-fidelity-fsem01-v1.md'
       - 'scripts/fsem01_simulation_witness.py'
       - '.github/workflows/fsem01-source-simulation-proof.yml'
 
@@ -54,7 +58,8 @@ jobs:
             proof/Phil/Surface/SurfaceRepresentedBorrowTrace.v \
             proof/Phil/Surface/SurfaceBorrowStepErrorBridge.v \
             proof/Phil/Surface/SurfaceObservationWire.v \
-            proof/Phil/Surface/SurfaceBoundedSourceSimulation.v
+            proof/Phil/Surface/SurfaceBoundedSourceSimulation.v \
+            proof/Phil/Surface/SurfaceObservationProducerFidelity.v
           do
             rocq c -Q proof/Phil Phil "$file"
           done
@@ -66,6 +71,7 @@ jobs:
           set -euo pipefail
           if grep -nE '^[[:space:]]*(Admitted[.]|Axiom[[:space:]]|Parameter[[:space:]])' \
               proof/Phil/Surface/SurfaceBoundedSourceSimulation.v \
+              proof/Phil/Surface/SurfaceObservationProducerFidelity.v \
               fsem01-source-proof/GeneratedSimulationWitness.v; then
             echo "Unproved global axiom or admission in source simulation"
             exit 1
@@ -73,5 +79,7 @@ jobs:
           sha256sum \
             proof/Phil/Surface/SurfaceBoundedSourceSimulation.v \
             proof/Phil/Surface/SurfaceBoundedSourceSimulation.vo \
+            proof/Phil/Surface/SurfaceObservationProducerFidelity.v \
+            proof/Phil/Surface/SurfaceObservationProducerFidelity.vo \
             fsem01-source-proof/GeneratedSimulationWitness.v \
             fsem01-source-proof/GeneratedSimulationWitness.vo

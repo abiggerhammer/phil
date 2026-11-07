@@ -126,3 +126,7 @@ signature.
 connect a real emitted artifact to a machine-checked model replay.
 That is a useful simulation theorem with a deliberately bounded domain,
 not a Phase 1 source type-soundness certificate.
+
+## Subsequent pure producer-projection fidelity slice
+
+[The producer-fidelity proof](formal-semantics-producer-fidelity-fsem01-v1.md) constructs both a source-run record and artifact from the same modeled raw checkpoint sequence and proves every field agrees, eliminating a separately postulated `SourceBindsArtifact` relation **for these constructed records**. It also proves each checkpoint code injectively preserves its phase and actual owner/loan bits. Real Haskell checker-state extraction, Unicode and SHA-256 remain explicitly outside the theorem.
