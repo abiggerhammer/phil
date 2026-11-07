@@ -76,9 +76,17 @@ Lemma split_first_colon_preserves_digit_prefix :
       Some (String digit tail, suffix).
 Proof.
   intros digit tail suffix Hdigit Htail.
-  simpl.
+  change
+    ( (if Ascii.eqb digit ":"%char
+       then Some (EmptyString, tail ++ (":" ++ suffix))
+       else match splitFirstColon (tail ++ (":" ++ suffix)) with
+            | Some (head, rest) => Some (String digit head, rest)
+            | None => None
+            end)
+      = Some (String digit tail, suffix)).
   rewrite Hdigit.
-  now rewrite Htail.
+  rewrite Htail.
+  reflexivity.
 Qed.
 
 Lemma split_render_uint :
