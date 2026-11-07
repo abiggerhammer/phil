@@ -1,0 +1,77 @@
+name: FSEM-01 Bounded Source Simulation Proof
+
+on:
+  pull_request:
+    paths:
+      - 'proof/Phil/Surface/SurfaceBoundedSourceSimulation.v'
+      - 'scripts/fsem01_simulation_witness.py'
+      - '.github/workflows/fsem01-source-simulation-proof.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'proof/Phil/Surface/SurfaceBoundedSourceSimulation.v'
+      - 'scripts/fsem01_simulation_witness.py'
+      - '.github/workflows/fsem01-source-simulation-proof.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  rocq-catalog-source-simulation:
+    runs-on: ubuntu-latest
+    container:
+      image: rocq/rocq-prover:9.2.0
+      options: --user root
+    steps:
+      - uses: actions/checkout@v4
+      - name: Preflight pure witness generator on committed golden specimens
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 -m py_compile scripts/fsem01_simulation_witness.py
+          python3 scripts/fsem01_simulation_witness.py \
+            --artifact-dir test/fixtures/fsem01-observation-v1/expected \
+            --output fsem01-source-proof/GeneratedSimulationWitness.v
+      - name: Compile conditional source proof and golden specimen witnesses
+        shell: bash
+        run: |
+          set -euo pipefail
+          export PATH="/home/rocq/.opam/${COMPILER}/bin:$PATH"
+          for file in \
+            proof/Phil/Core/Syntax.v \
+            proof/Phil/Core/Context.v \
+            proof/Phil/Core/BindingSemantics.v \
+            proof/Phil/Core/ContextJoin.v \
+            proof/Phil/Core/ProcessJoin.v \
+            proof/Phil/Core/ResourceJoin.v \
+            proof/Phil/Core/ResourceScope.v \
+            proof/Phil/Surface/SurfaceBinderScopeCore.v \
+            proof/Phil/Surface/SurfaceLetPatternScope.v \
+            proof/Phil/Surface/SurfaceBorrowViewScope.v \
+            proof/Phil/Surface/SurfaceBorrowLoanStateCorrespondence.v \
+            proof/Phil/Surface/SurfaceBinderNameEncoding.v \
+            proof/Phil/Surface/SurfaceDeclarationIdentityBridge.v \
+            proof/Phil/Surface/SurfaceRepresentedBorrowTrace.v \
+            proof/Phil/Surface/SurfaceBorrowStepErrorBridge.v \
+            proof/Phil/Surface/SurfaceObservationWire.v \
+            proof/Phil/Surface/SurfaceBoundedSourceSimulation.v
+          do
+            rocq c -Q proof/Phil Phil "$file"
+          done
+          rocq c -Q proof/Phil Phil \
+            fsem01-source-proof/GeneratedSimulationWitness.v
+      - name: Reject admissions and record exact source/proof hashes
+        shell: bash
+        run: |
+          set -euo pipefail
+          if grep -nE '^[[:space:]]*(Admitted[.]|Axiom[[:space:]]|Parameter[[:space:]])' \
+              proof/Phil/Surface/SurfaceBoundedSourceSimulation.v \
+              fsem01-source-proof/GeneratedSimulationWitness.v; then
+            echo "Unproved global axiom or admission in source simulation"
+            exit 1
+          fi
+          sha256sum \
+            proof/Phil/Surface/SurfaceBoundedSourceSimulation.v \
+            proof/Phil/Surface/SurfaceBoundedSourceSimulation.vo \
+            fsem01-source-proof/GeneratedSimulationWitness.v \
+            fsem01-source-proof/GeneratedSimulationWitness.vo

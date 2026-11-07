@@ -150,3 +150,7 @@ by the real source-derived checker** at the decoder boundary.
 source-to-model simulation relation for the admitted fragment, stating
 precisely which producer/decoder properties are trusted and which
 properties are proved. Do not graduate a normative rule yet.
+
+## Subsequent bounded source-run simulation proof
+
+[The bounded source-observation simulation theorem](formal-semantics-source-simulation-fsem01-v1.md) introduces explicit `SourceBindsArtifact` and finite `SourceOwnerCatalog` premises, then composes the exact-byte Rocq decoder with the terminal/no-successor model replay. CI compiles four generated witnesses over real source-derived artifacts. This is a **conditional** source-observation simulation for those records, not a proof that every Haskell checker execution emits faithful evidence.
