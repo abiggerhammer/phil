@@ -203,6 +203,27 @@ Proof.
 Qed.
 
 
+Theorem reconstructed_non_linear_maps_are_empty :
+  forall owner ty present loaned,
+    Context.unrestrictedBindings
+      (fromResourceBits owner ty present loaned) = emptyBindings /\
+    Context.affineBindings
+      (fromResourceBits owner ty present loaned) = emptyBindings.
+Proof. intros; split; reflexivity. Qed.
+
+Theorem reconstructed_foreign_owner_and_loan_absent :
+  forall owner ty present loaned candidate,
+    String.eqb candidate owner = false ->
+    Context.linearBindings (fromResourceBits owner ty present loaned)
+      candidate = None /\
+    Context.sharedLoans (fromResourceBits owner ty present loaned)
+      candidate = false.
+Proof.
+  intros owner ty present loaned candidate Hforeign.
+  unfold fromResourceBits; simpl.
+  now rewrite Hforeign.
+Qed.
+
 (* The checker temporarily installs a SharedBytes view as an unrestricted
    binding. Its own type is a second abstract Ty in Rocq; the wire's exact
    SharedBytes tag is checked independently. *)
