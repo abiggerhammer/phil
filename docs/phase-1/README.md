@@ -23,6 +23,7 @@ The important exceptions are documents that explicitly declare themselves curren
 - [FSEM-01 first Rocq loan-transition proof slice](formal-semantics-exact-loan-transition-model-fsem01-v1.md) — conditional identity-preserving linear loan start/end proofs and explicit unproved Haskell/source encoding boundaries.
 - [FSEM-01 binder-name encoding proof and production Text checks](formal-semantics-binder-name-encoding-fsem01-v1.md) — ASCII-string injectivity theorem with Haskell canonical codec tests; Unicode/Text representation and declaration-ID bridges remain explicit.
 - [FSEM-01 bounded declaration-root representation](formal-semantics-declaration-identity-bridge-fsem01-v1.md) — duplicate-free finite catalog relation between normalized declaration IDs and actual Haskell root keys; catalog stability and Unicode refinement remain explicit.
+- [FSEM-01 represented production loan-state checkpoints](formal-semantics-represented-loan-trace-fsem01-v1.md) — model start/close/terminal and rejected-prefix proofs, plus source-derived production trace ↔ bounded catalog identity and membership tests; no universal Haskell refinement.
 
 These review documents do not replace accepted semantic contracts, the normative grammar, the Logic Ledger, or exact-commit proof and conformance results.
 
