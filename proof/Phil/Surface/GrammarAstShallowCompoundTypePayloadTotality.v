@@ -480,68 +480,68 @@ Proof.
     [| | | |spelling |spelling |float_value |tag selected].
   - exists type_value, Phase1PrimitiveUnitType,
       (Phase1ShallowPriorNonreferenceType Phase1PrimitiveUnitType).
-    repeat split; try assumption; try reflexivity.
-    cbn. exact Hprimitive_tree.
+    repeat split; try assumption; try reflexivity;
+    try (cbn; exact Hprimitive_tree).
   - exists type_value, Phase1PrimitiveBoolType,
       (Phase1ShallowPriorNonreferenceType Phase1PrimitiveBoolType).
-    repeat split; try assumption; try reflexivity.
-    cbn. exact Hprimitive_tree.
+    repeat split; try assumption; try reflexivity;
+    try (cbn; exact Hprimitive_tree).
   - exists type_value, Phase1PrimitiveCharType,
       (Phase1ShallowPriorNonreferenceType Phase1PrimitiveCharType).
-    repeat split; try assumption; try reflexivity.
-    cbn. exact Hprimitive_tree.
+    repeat split; try assumption; try reflexivity;
+    try (cbn; exact Hprimitive_tree).
   - exists type_value, Phase1PrimitiveStringType,
       (Phase1ShallowPriorNonreferenceType Phase1PrimitiveStringType).
-    repeat split; try assumption; try reflexivity.
-    cbn. exact Hprimitive_tree.
+    repeat split; try assumption; try reflexivity;
+    try (cbn; exact Hprimitive_tree).
   - exists type_value, (Phase1PrimitiveUintType spelling),
       (Phase1ShallowPriorNonreferenceType (Phase1PrimitiveUintType spelling)).
-    repeat split; try assumption; try reflexivity.
-    cbn. exact Hprimitive_tree.
+    repeat split; try assumption; try reflexivity;
+    try (cbn; exact Hprimitive_tree).
   - exists type_value, (Phase1PrimitiveSintType spelling),
       (Phase1ShallowPriorNonreferenceType (Phase1PrimitiveSintType spelling)).
-    repeat split; try assumption; try reflexivity.
-    cbn. exact Hprimitive_tree.
+    repeat split; try assumption; try reflexivity;
+    try (cbn; exact Hprimitive_tree).
   - exists type_value, (Phase1PrimitiveFloatType float_value),
       (Phase1ShallowPriorNonreferenceType (Phase1PrimitiveFloatType float_value)).
-    repeat split; try assumption; try reflexivity.
-    cbn. exact Hprimitive_tree.
+    repeat split; try assumption; try reflexivity;
+    try (cbn; exact Hprimitive_tree).
   - destruct tag.
     + exists type_value,
         (Phase1OpaqueNonreferenceType Phase1UnitType selected),
         (Phase1ShallowOpaqueNonreferenceType Phase1UnitType selected).
-      repeat split; try assumption; try reflexivity.
-      cbn. exact Hprimitive_tree.
+      repeat split; try assumption; try reflexivity;
+      try (cbn; exact Hprimitive_tree).
     + exists type_value,
         (Phase1OpaqueNonreferenceType Phase1BoolType selected),
         (Phase1ShallowOpaqueNonreferenceType Phase1BoolType selected).
-      repeat split; try assumption; try reflexivity.
-      cbn. exact Hprimitive_tree.
+      repeat split; try assumption; try reflexivity;
+      try (cbn; exact Hprimitive_tree).
     + exists type_value,
         (Phase1OpaqueNonreferenceType Phase1CharType selected),
         (Phase1ShallowOpaqueNonreferenceType Phase1CharType selected).
-      repeat split; try assumption; try reflexivity.
-      cbn. exact Hprimitive_tree.
+      repeat split; try assumption; try reflexivity;
+      try (cbn; exact Hprimitive_tree).
     + exists type_value,
         (Phase1OpaqueNonreferenceType Phase1StringType selected),
         (Phase1ShallowOpaqueNonreferenceType Phase1StringType selected).
-      repeat split; try assumption; try reflexivity.
-      cbn. exact Hprimitive_tree.
+      repeat split; try assumption; try reflexivity;
+      try (cbn; exact Hprimitive_tree).
     + exists type_value,
         (Phase1OpaqueNonreferenceType Phase1UintType selected),
         (Phase1ShallowOpaqueNonreferenceType Phase1UintType selected).
-      repeat split; try assumption; try reflexivity.
-      cbn. exact Hprimitive_tree.
+      repeat split; try assumption; try reflexivity;
+      try (cbn; exact Hprimitive_tree).
     + exists type_value,
         (Phase1OpaqueNonreferenceType Phase1SintType selected),
         (Phase1ShallowOpaqueNonreferenceType Phase1SintType selected).
-      repeat split; try assumption; try reflexivity.
-      cbn. exact Hprimitive_tree.
+      repeat split; try assumption; try reflexivity;
+      try (cbn; exact Hprimitive_tree).
     + exists type_value,
         (Phase1OpaqueNonreferenceType Phase1FloatType selected),
         (Phase1ShallowOpaqueNonreferenceType Phase1FloatType selected).
-      repeat split; try assumption; try reflexivity.
-      cbn. exact Hprimitive_tree.
+      repeat split; try assumption; try reflexivity;
+      try (cbn; exact Hprimitive_tree).
     + assert (Hshape :
         PTNonterminal "nonreference_type_expression"
           (PTAlternative 7 selected) =
@@ -685,13 +685,13 @@ Proof.
     + exists type_value,
         (Phase1OpaqueNonreferenceType Phase1RefinementType selected),
         (Phase1ShallowOpaqueNonreferenceType Phase1RefinementType selected).
-      repeat split; try assumption; try reflexivity.
-      cbn. exact Hprimitive_tree.
+      repeat split; try assumption; try reflexivity;
+      try (cbn; exact Hprimitive_tree).
     + exists type_value,
         (Phase1OpaqueNonreferenceType Phase1TupleType selected),
         (Phase1ShallowOpaqueNonreferenceType Phase1TupleType selected).
-      repeat split; try assumption; try reflexivity.
-      cbn. exact Hprimitive_tree.
+      repeat split; try assumption; try reflexivity;
+      try (cbn; exact Hprimitive_tree).
 Qed.
 
 Theorem phase1_surface_normalize_shallow_compound_type_tree_total_from_derivation :
