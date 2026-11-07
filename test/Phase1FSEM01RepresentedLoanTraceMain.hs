@@ -16,7 +16,7 @@ import Phil.Core.Static
   , deriveDeclarationIdentity
   , emptyStaticContext
   )
-import Phil.Core.Syntax (Control (..), RefTerm (..), Ty (..))
+import Phil.Core.Syntax (Control (Return), RefTerm (..), Ty (..))
 import Phil.Surface.Check.Engine (BorrowTraceCheckpoint (..), BorrowTracePhase (..))
 import Phil.Surface.Check.Types
   ( RejectionClass (..), SurfaceCheckError (..), SurfaceCheckResult (..) )
