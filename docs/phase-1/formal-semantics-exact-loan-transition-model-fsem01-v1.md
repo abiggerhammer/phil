@@ -97,3 +97,7 @@ records source, compiled `.vo`, and document SHA-256 digests.
 Only a **green check on the final PR head** establishes that the proposed
 statements compiled. The remaining source/Haskell-to-model implementation
 correspondence must be checked separately before strengthening the claim.
+
+## Later exact binder-name representation slice
+
+[The FSEM-01 binder-name encoding proof and production Text conformance](formal-semantics-binder-name-encoding-fsem01-v1.md) adds a Rocq roundtrip/injectivity theorem for the exact ASCII length-prefix serialization shape and executable Haskell checks of the actual `GrammarV1BinderKey` → `Core.Name` producer, including Unicode roots. The `Data.Text`/Rocq `String` and persisted declaration-root representation bridges remain open; the name injection premise is not claimed globally for the concrete Haskell implementation.

@@ -1,0 +1,70 @@
+name: FSEM-01 Exact Binder Name Encoding
+
+on:
+  pull_request:
+    paths:
+      - 'proof/Phil/Surface/SurfaceBinderNameEncoding.v'
+      - 'src/Phil/Surface/GrammarV1/BinderScope.hs'
+      - 'test/Phase1FSEM01BinderNameMain.hs'
+      - 'docs/phase-1/formal-semantics-binder-name-encoding-fsem01-v1.md'
+      - '.github/workflows/fsem01-binder-name-encoding.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'proof/Phil/Surface/SurfaceBinderNameEncoding.v'
+      - 'src/Phil/Surface/GrammarV1/BinderScope.hs'
+      - 'test/Phase1FSEM01BinderNameMain.hs'
+      - 'docs/phase-1/formal-semantics-binder-name-encoding-fsem01-v1.md'
+      - '.github/workflows/fsem01-binder-name-encoding.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  rocq-exact-binder-name:
+    runs-on: ubuntu-latest
+    container:
+      image: rocq/rocq-prover:9.2.0
+      options: --user root
+    steps:
+      - uses: actions/checkout@v4
+      - name: Compile canonical ASCII binder-name injection
+        shell: bash
+        run: |
+          set -euo pipefail
+          export PATH="/home/rocq/.opam/${COMPILER}/bin:$PATH"
+          rocq c -Q proof/Phil Phil proof/Phil/Core/BindingSemantics.v
+          rocq c -Q proof/Phil Phil proof/Phil/Surface/SurfaceBinderNameEncoding.v
+      - name: No admissions; record exact proof SHA
+        shell: bash
+        run: |
+          set -euo pipefail
+          if grep -nE '^[[:space:]]*(Admitted[.]|Axiom[[:space:]]|Parameter[[:space:]])' \
+            proof/Phil/Surface/SurfaceBinderNameEncoding.v; then
+            echo "Unexpected admission or global axiom"
+            exit 1
+          fi
+          sha256sum \
+            proof/Phil/Surface/SurfaceBinderNameEncoding.v \
+            proof/Phil/Surface/SurfaceBinderNameEncoding.vo
+
+  haskell-binder-name-parity:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: haskell-actions/setup@v2
+        with:
+          ghc-version: '9.6.7'
+          cabal-version: 'latest'
+      - name: Build Haskell substrate with warnings as errors
+        run: cabal build lib:phil-core --ghc-options=-Werror
+      - name: Strict-check implementation and codec tests
+        shell: bash
+        run: |
+          set -euo pipefail
+          cabal exec -- ghc -isrc -Wall -Werror -fno-code \
+            src/Phil/Surface/GrammarV1/BinderScope.hs
+          cabal exec -- ghc -isrc -Wall -Werror -fno-code \
+            test/Phase1FSEM01BinderNameMain.hs
+      - name: Replay canonical Text encoder / decoder parity tests
+        run: cabal exec -- runghc -isrc -Wall -Werror test/Phase1FSEM01BinderNameMain.hs

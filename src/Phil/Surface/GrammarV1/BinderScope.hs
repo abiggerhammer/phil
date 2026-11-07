@@ -6,6 +6,8 @@ module Phil.Surface.GrammarV1.BinderScope
   , GrammarV1ResolvedBinder (..)
   , GrammarV1LexicalScope
   , GrammarV1BinderScopeError (..)
+  , grammarV1BinderCoreName
+  , grammarV1DecodeBinderCoreName
   , grammarV1RootLexicalScope
   , grammarV1EnterLexicalScope
   , grammarV1LeaveLexicalScope
@@ -23,6 +25,7 @@ import Data.Map.Strict (Map)
 import qualified Data.Map.Strict as Map
 import Data.Text (Text)
 import qualified Data.Text as Text
+import Text.Read (readMaybe)
 import Phil.Core.Static (DeclarationKey (..))
 import Phil.Core.Syntax (Name (..))
 import Phil.Surface.GrammarV1.Parser
@@ -153,7 +156,7 @@ grammarV1BindLocal binderKind sourceName scope =
                   (grammarV1ScopeNextOrdinal scope)
                 resolvedBinder = GrammarV1ResolvedBinder
                   { grammarV1ResolvedBinderKey = binderKey
-                  , grammarV1ResolvedBinderCoreName = binderCoreName binderKey
+                  , grammarV1ResolvedBinderCoreName = grammarV1BinderCoreName binderKey
                   , grammarV1ResolvedBinderKind = binderKind
                   , grammarV1ResolvedBinderDisplayName = displayName
                   , grammarV1ResolvedBinderSourceSpan = locatedSpan sourceName
@@ -296,8 +299,8 @@ firstActive displayName (frame : rest) =
 -- | Injectively encode declaration-root text plus local ordinal into the existing
 -- Core Name carrier. The length prefix prevents delimiter-shaped declaration keys
 -- from colliding. This is an internal semantic name, never the user's spelling.
-binderCoreName :: GrammarV1BinderKey -> Name
-binderCoreName (GrammarV1BinderKey (DeclarationKey rootText) ordinal) =
+grammarV1BinderCoreName :: GrammarV1BinderKey -> Name
+grammarV1BinderCoreName (GrammarV1BinderKey (DeclarationKey rootText) ordinal) =
   Name
     ( "$phil.local:"
       <> Text.pack (show (Text.length rootText))
@@ -306,3 +309,32 @@ binderCoreName (GrammarV1BinderKey (DeclarationKey rootText) ordinal) =
       <> ":"
       <> Text.pack (show ordinal)
     )
+
+-- | Decode only an exact canonical generated name. This is an observable
+-- representation check, not permission to derive a source binder from arbitrary
+-- authored identifiers. Generated ordinals are nonnegative machine Ints.
+-- Re-encoding rejects noncanonical length or ordinal syntax, even when an
+-- ordinary decimal parser could otherwise accept it.
+grammarV1DecodeBinderCoreName :: Name -> Maybe GrammarV1BinderKey
+grammarV1DecodeBinderCoreName supplied@(Name encoded) = do
+  payload <- Text.stripPrefix "$phil.local:" encoded
+  let (lengthDigits, separated) = Text.breakOn ":" payload
+  declaredLength <- readCanonicalNonnegativeInt lengthDigits
+  withRoot <- Text.stripPrefix ":" separated
+  if declaredLength > Text.length withRoot then Nothing else do
+    let (rootText, afterRoot) = Text.splitAt declaredLength withRoot
+    ordinalDigits <- Text.stripPrefix ":" afterRoot
+    ordinal <- readCanonicalNonnegativeInt ordinalDigits
+    let key = GrammarV1BinderKey (DeclarationKey rootText) ordinal
+    if grammarV1BinderCoreName key == supplied then Just key else Nothing
+
+readCanonicalNonnegativeInt :: Text -> Maybe Int
+readCanonicalNonnegativeInt digits
+  | Text.null digits = Nothing
+  | Text.length digits > Text.length (Text.pack (show (maxBound :: Int))) = Nothing
+  | not (Text.all (\char -> char >= '0' && char <= '9') digits) = Nothing
+  | otherwise = do
+      number <- readMaybe (Text.unpack digits)
+      if number >= 0 && Text.pack (show number) == digits
+        then Just number
+        else Nothing
