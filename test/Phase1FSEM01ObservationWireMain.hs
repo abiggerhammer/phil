@@ -477,26 +477,24 @@ renderRawContextState owner view cut = do
 
 -- Canonical model words are used by the *validator*, never to produce
 -- state. The producer above enumerates the real four ResourceContext fields.
-modelContextWord :: Text -> Text -> Text -> Text -> Text
-modelContextWord phase viewEntry ownerPresent loan =
-  Text.intercalate "/" [phase, viewEntry, "-", ownerPresent, loan]
+modelContextWord :: Text -> Text -> Text -> Text
+modelContextWord phase ownerPresent loan =
+  Text.intercalate "/" [phase, "-", "-", ownerPresent, loan]
 
 canonicalContextStates :: Observation -> Text
 canonicalContextStates observation =
   let owner = obsOwnerHex observation
       present = owner <> "=Bytes8"
-      view = obsViewHex observation <> "=SharedBytes"
-      state = \phase viewLive lin loan -> modelContextWord phase
-        (if viewLive then view else "-")
+      state = \phase lin loan -> modelContextWord phase
         (if lin then present else "-") (if loan then owner else "-")
   in if obsOutcome observation == positiveOutcome
        then Text.intercalate "," [
-         state "B" False True False, state "S" False True True,
-         state "N" True True True, state "C" False True False,
-         state "R" False False False]
+         state "B" True False, state "S" True True,
+         state "N" True True, state "C" True False,
+         state "R" False False]
        else Text.intercalate "," [
-         state "B" False True False, state "S" False True True,
-         state "E" True True True, state "X" True True True]
+         state "B" True False, state "S" True True,
+         state "E" True True, state "X" True True]
 
 contextFields :: Observation -> Text -> [Text]
 contextFields observation states =
@@ -544,16 +542,23 @@ checkCoreContextTransitions owner view cuts =
       ensure (CoreContext.startSharedLoan owner (contextOfCheckpoint before) ==
         Right (contextOfCheckpoint started))
         "real Core.Context loan start differs from source snapshot"
-      ensure (CoreContext.insertBinding Unrestricted view viewTy
-                (contextOfCheckpoint started) ==
-        Right (contextOfCheckpoint body))
-        "scoped SharedBytes view insertion differs from Core.Context"
-      let withoutView = (contextOfCheckpoint body)
-            { CoreContext.unrestrictedBindings =
-                Map.delete view (traceUnrestrictedOwners body) }
-      ensure (CoreContext.endSharedLoan owner withoutView ==
+      -- The production body checkpoint is recorded *after*
+      -- checkScopedValueBlock prunes the temporary SharedBytes binding.
+      ensure (contextOfCheckpoint started == contextOfCheckpoint body)
+        "safe body changed resources after scoped-view cleanup"
+      temporary <- case CoreContext.insertBinding Unrestricted view viewTy
+          (contextOfCheckpoint started) of
+        Left err -> Left ("synthetic view insertion failed: " <> show err)
+        Right context -> Right context
+      ensure (Map.lookup view (CoreContext.unrestrictedBindings temporary) ==
+                Just viewTy &&
+              temporary { CoreContext.unrestrictedBindings =
+                Map.delete view (CoreContext.unrestrictedBindings temporary) } ==
+                contextOfCheckpoint body)
+        "scoped SharedBytes insert/remove roundtrip disagrees with body cut"
+      ensure (CoreContext.endSharedLoan owner (contextOfCheckpoint body) ==
         Right (contextOfCheckpoint closed))
-        "real Core.Context loan end differs after removing scoped view"
+        "real Core.Context loan end differs after scoped cleanup"
       ensure (CoreContext.consumeLinear owner (contextOfCheckpoint closed) ==
         Right (expectedTy, contextOfCheckpoint returned))
         "real Core.Context terminal consume differs from source snapshot"
@@ -565,12 +570,19 @@ checkCoreContextTransitions owner view cuts =
       ensure (CoreContext.startSharedLoan owner (contextOfCheckpoint before) ==
         Right (contextOfCheckpoint started))
         "real Core.Context escape-path loan start differs from source snapshot"
-      ensure (CoreContext.insertBinding Unrestricted view viewTy
-                (contextOfCheckpoint started) ==
-        Right (contextOfCheckpoint escaping))
-        "escape-path scoped SharedBytes view insertion differs from Core.Context"
-      ensure (contextOfCheckpoint escaping == contextOfCheckpoint rejected)
-        "BorrowEscape prefix invented a closed or consumed resource context"
+      ensure (contextOfCheckpoint started == contextOfCheckpoint escaping &&
+              contextOfCheckpoint escaping == contextOfCheckpoint rejected)
+        "BorrowEscape prefix invented resource changes after scoped cleanup"
+      temporary <- case CoreContext.insertBinding Unrestricted view viewTy
+          (contextOfCheckpoint started) of
+        Left err -> Left ("synthetic escape view insertion failed: " <> show err)
+        Right context -> Right context
+      ensure (Map.lookup view (CoreContext.unrestrictedBindings temporary) ==
+                Just viewTy &&
+              temporary { CoreContext.unrestrictedBindings =
+                Map.delete view (CoreContext.unrestrictedBindings temporary) } ==
+                contextOfCheckpoint escaping)
+        "escape scoped SharedBytes insert/remove roundtrip disagrees with cut"
       ensure (CoreContext.consumeLinear owner (contextOfCheckpoint rejected) ==
         Left (CoreContext.OwnerBorrowed owner))
         "BorrowEscape resource incorrectly permitted terminal consumption"
