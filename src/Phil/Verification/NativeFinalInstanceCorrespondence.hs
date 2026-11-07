@@ -27,6 +27,13 @@ module Phil.Verification.NativeFinalInstanceCorrespondence
   , nativeReplayVerifierProfile
   , NativeManifestStageReplayError (..)
   , replayNativeManifestStageCoordinates
+  , NativeExactAcceptedConsumerReplay
+  , nativeExactReplayCheckedProducer
+  , nativeExactReplayCertifiedSource
+  , nativeExactReplayCertifiedRelease
+  , nativeExactReplayCoordinates
+  , NativeExactAcceptedConsumerReplayError (..)
+  , replayNativeExactAcceptedConsumers
   , NativeStageRevisionEquality
   , nativeStageRevisionEqualityOccurrence
   , nativeStageRevisionEqualityStageRevision
@@ -287,6 +294,53 @@ replayNativeManifestStageCoordinates witness suppliedManifest suppliedStage =
        || nativeFinalVerifierProfile authority /= nativeReplayVerifierProfile receipt
        then Left NativeReplayAuthorityCoordinatesDifferent
      else Right receipt
+
+-- | A second, read-only replay gate for full independently accepted *objects*.
+-- The earlier manifest/stage replay checked externally supplied manifest and
+-- stage coordinates; this gate additionally refuses replacement of the exact
+-- checked producer token, accepted VER-010 source envelope, or selected INT-005
+-- release envelope even when their projections happen to agree. The receipt's
+-- private constructor carries no new acceptance or stage-origin authority.
+data NativeExactAcceptedConsumerReplay = NativeExactAcceptedConsumerReplay
+  { nativeExactReplayCheckedProducer :: CertifiedSourceManifestBinding
+  , nativeExactReplayCertifiedSource :: CertifiedApplicationArtifact
+  , nativeExactReplayCertifiedRelease :: CertifiedReleaseArtifact
+  , nativeExactReplayCoordinates :: NativeManifestStageReplay
+  }
+  deriving (Eq, Show)
+
+data NativeExactAcceptedConsumerReplayError
+  = NativeExactReplayProducerDifferent
+  | NativeExactReplaySourceDifferent
+  | NativeExactReplayReleaseDifferent
+  | NativeExactReplayCoordinateMismatch NativeManifestStageReplayError
+  deriving (Eq, Show)
+
+-- | No caller-supplied full object may be promoted to native acceptance by
+-- matching just its manifestId, raw digest, revisions, or release coordinates.
+-- Matching exact whole objects allows a diagnostic recheck, not an independent
+-- producer or a proof that the architecture occurrence generated StageClosure.
+replayNativeExactAcceptedConsumers
+  :: NativeFinalInstanceCorrespondence
+  -> CertifiedSourceManifestBinding
+  -> CertifiedApplicationArtifact
+  -> CertifiedReleaseArtifact
+  -> Either NativeExactAcceptedConsumerReplayError NativeExactAcceptedConsumerReplay
+replayNativeExactAcceptedConsumers witness candidateProducer candidateSource candidateRelease
+  | candidateProducer /= nativeCorrespondenceSourceManifestBinding witness =
+      Left NativeExactReplayProducerDifferent
+  | candidateSource /= nativeCorrespondenceCertifiedSource witness =
+      Left NativeExactReplaySourceDifferent
+  | candidateRelease /= nativeCorrespondenceCertifiedRelease witness =
+      Left NativeExactReplayReleaseDifferent
+  | otherwise = do
+      coordinates <- either (Left . NativeExactReplayCoordinateMismatch) Right
+        (replayNativeManifestStageCoordinates
+          witness
+          (sourceManifestBindingManifest candidateProducer)
+          (certifiedReleaseStageClosure candidateRelease))
+      pure (NativeExactAcceptedConsumerReplay
+        candidateProducer candidateSource candidateRelease coordinates)
 
 -- | Equality of the architecture occurrence's canonical revision with the
 -- retained concrete stage's InstanceRevision. The constructor is private.

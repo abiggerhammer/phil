@@ -159,6 +159,22 @@ main = do
           , nativeManifestStageReplayRejectsChangedDigests source upload)
         , ( "Steve changed raw Systems digest cannot pass exact manifest-stage replay"
           , nativeManifestStageReplayRejectsChangedDigests source steve)
+        , ( "Upload exact accepted full-object replay retains checked producer and both envelopes"
+          , exactAcceptedConsumerReplayAccepts source upload)
+        , ( "Steve exact accepted full-object replay retains checked producer and both envelopes"
+          , exactAcceptedConsumerReplayAccepts source steve)
+        , ( "Upload declaration-only same-manifest producer cannot replace exact replay token"
+          , exactAcceptedConsumerReplayRejectsWeakProducer source upload)
+        , ( "Steve declaration-only same-manifest producer cannot replace exact replay token"
+          , exactAcceptedConsumerReplayRejectsWeakProducer source steve)
+        , ( "Upload independently accepted alternative source envelope cannot replace replay consumer"
+          , exactAcceptedConsumerReplayRejectsOtherSource source upload steve)
+        , ( "Steve independently accepted alternative source envelope cannot replace replay consumer"
+          , exactAcceptedConsumerReplayRejectsOtherSource source steve upload)
+        , ( "Upload independently accepted same-coordinate different-trust release rejects"
+          , exactAcceptedConsumerReplayRejectsOtherReleaseTrust source upload)
+        , ( "Steve independently accepted same-coordinate different-trust release rejects"
+          , exactAcceptedConsumerReplayRejectsOtherReleaseTrust source steve)
         , ( "Upload declaration-only token cannot replace final checked producer token"
           , declarationOnlyTokenCannotReplaceFinalProducer source upload)
         , ( "Steve declaration-only token cannot replace final checked producer token"
@@ -837,6 +853,138 @@ nativeManifestStageReplayRejectsChangedDigests source fixture =
                 && case replayNativeManifestStageCoordinates witness rootChallenge stage of
                     Left (NativeReplayLoweringRootDifferent _ _) -> True
                     _ -> False
+    _ -> False
+
+-- Full-object diagnostic replay over the exact independently accepted
+-- producer/source/release retained by the native final witness. Unlike replay
+-- of manifest and stage alone, this refuses a different accepted release with
+-- identical manifest/stage/LLVM projections but different residual trust.
+exactAcceptedConsumerReplayAccepts
+  :: GenericApplicationAssurance -> ReleaseFixture -> Bool
+exactAcceptedConsumerReplayAccepts source fixture =
+  case (producerInputs source, produceFixture source fixture) of
+    (Right (bundle, policy), Right (_, produced)) ->
+      case nativeAdapterPair source produced of
+        Nothing -> False
+        Just (sourceArtifact, release) ->
+          case closeNativeFinalInstanceCorrespondence
+              source (sourceInstanceDescriptor source) bundle policy
+              (fixtureContext produced) (fixtureLedger produced)
+              emptyProducerSelection sourceArtifact release of
+            Left _ -> False
+            Right witness ->
+              case replayNativeExactAcceptedConsumers witness
+                (nativeCorrespondenceSourceManifestBinding witness)
+                sourceArtifact release of
+                Left _ -> False
+                Right receipt ->
+                  nativeExactReplayCheckedProducer receipt
+                    == nativeCorrespondenceSourceManifestBinding witness
+                    && nativeExactReplayCertifiedSource receipt == sourceArtifact
+                    && nativeExactReplayCertifiedRelease receipt == release
+                    && nativeReplayRawDigest (nativeExactReplayCoordinates receipt)
+                      == NativeRawSystemsDigest (stageSystemsDigest (fixtureStage produced))
+                    && nativeReplayLoweringRoot (nativeExactReplayCoordinates receipt)
+                      == NativeLoweringRootDigest (stageLoweringRoot (fixtureStage produced))
+    _ -> False
+
+-- The declaration-only token has exactly the same accepted source assurance
+-- and complete manifest projections; its missing checked descriptor prevents
+-- substitution of the opaque producer, not merely of a digest or manifestId.
+exactAcceptedConsumerReplayRejectsWeakProducer
+  :: GenericApplicationAssurance -> ReleaseFixture -> Bool
+exactAcceptedConsumerReplayRejectsWeakProducer source fixture =
+  case (producerInputs source, produceFixture source fixture) of
+    (Right (bundle, policy), Right (checked, produced)) ->
+      case closeSourceManifestBinding source bundle policy
+          (fixtureContext produced) (fixtureLedger produced)
+          emptyProducerSelection of
+        Left _ -> False
+        Right weak ->
+          case nativeAdapterPair source produced of
+            Nothing -> False
+            Just (sourceArtifact, release) ->
+              case closeNativeFinalInstanceCorrespondence
+                  source (sourceInstanceDescriptor source) bundle policy
+                  (fixtureContext produced) (fixtureLedger produced)
+                  emptyProducerSelection sourceArtifact release of
+                Left _ -> False
+                Right witness ->
+                  weak /= checked
+                    && sourceManifestBindingManifest weak
+                      == sourceManifestBindingManifest checked
+                    && sourceManifestBindingSourceAssurance weak
+                      == sourceManifestBindingSourceAssurance checked
+                    && case replayNativeExactAcceptedConsumers witness
+                        weak sourceArtifact release of
+                        Left NativeExactReplayProducerDifferent -> True
+                        _ -> False
+    _ -> False
+
+-- Different independently accepted VER-010 source envelope with the same
+-- reusable source assurance but a different concrete StageClosure must fail.
+exactAcceptedConsumerReplayRejectsOtherSource
+  :: GenericApplicationAssurance -> ReleaseFixture -> ReleaseFixture -> Bool
+exactAcceptedConsumerReplayRejectsOtherSource source fixture other =
+  case (producerInputs source, produceFixture source fixture) of
+    (Right (bundle, policy), Right (_, produced)) ->
+      case (nativeAdapterPair source produced,
+            certifyApplicationArtifact source (fixtureStage other)) of
+        (Just (sourceArtifact, release), Right alternate) ->
+          case closeNativeFinalInstanceCorrespondence
+              source (sourceInstanceDescriptor source) bundle policy
+              (fixtureContext produced) (fixtureLedger produced)
+              emptyProducerSelection sourceArtifact release of
+            Left _ -> False
+            Right witness ->
+              alternate /= sourceArtifact
+                && certifiedApplicationSourceAssurance alternate
+                  == certifiedApplicationSourceAssurance sourceArtifact
+                && case replayNativeExactAcceptedConsumers witness
+                    (nativeCorrespondenceSourceManifestBinding witness)
+                    alternate release of
+                    Left NativeExactReplaySourceDifferent -> True
+                    _ -> False
+        _ -> False
+    _ -> False
+
+-- Both releases are independently accepted and share the complete manifest,
+-- concrete StageClosure and emitted LLVM. A changed residual-trust basis
+-- changes which exact CertifiedRelease was selected; replay must reject it.
+exactAcceptedConsumerReplayRejectsOtherReleaseTrust
+  :: GenericApplicationAssurance -> ReleaseFixture -> Bool
+exactAcceptedConsumerReplayRejectsOtherReleaseTrust source fixture =
+  case (fixtureTrust fixture, producerInputs source, produceFixture source fixture) of
+    (first : rest, Right (bundle, policy), Right (_, produced)) ->
+      case nativeAdapterPair source produced of
+        Nothing -> False
+        Just (sourceArtifact, original) ->
+          let changed = first
+                { releaseTrustBasis =
+                    releaseTrustBasis first <> " [different accepted trust basis]" }
+          in case (runReleaseWith produced
+                  (fixtureContext produced) (fixtureManifest produced)
+                  (fixtureLLVM produced) (changed : rest),
+                   closeNativeFinalInstanceCorrespondence
+                    source (sourceInstanceDescriptor source) bundle policy
+                    (fixtureContext produced) (fixtureLedger produced)
+                    emptyProducerSelection sourceArtifact original) of
+            (Right alternate, Right witness) ->
+              alternate /= original
+                && certifiedReleaseManifest alternate
+                  == certifiedReleaseManifest original
+                && certifiedReleaseStageClosure alternate
+                  == certifiedReleaseStageClosure original
+                && certifiedReleaseLLVMArtifact alternate
+                  == certifiedReleaseLLVMArtifact original
+                && certifiedReleaseTrustBoundaries alternate
+                  /= certifiedReleaseTrustBoundaries original
+                && case replayNativeExactAcceptedConsumers witness
+                    (nativeCorrespondenceSourceManifestBinding witness)
+                    sourceArtifact alternate of
+                    Left NativeExactReplayReleaseDifferent -> True
+                    _ -> False
+            _ -> False
     _ -> False
 
 -- This new consumer is deliberately *stronger* than the old caller-supplied
