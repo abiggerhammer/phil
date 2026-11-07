@@ -9,6 +9,9 @@ on:
       - 'proof/Phil/Surface/SurfaceBorrowViewScope.v'
       - 'src/Phil/Surface/GrammarV1/BorrowViewScope.hs'
       - 'src/Phil/Surface/GrammarV1/BorrowResourceSurface.hs'
+      - 'src/Phil/Surface/Check/Engine.hs'
+      - 'test/Phase1FSEM01BorrowResourceTraceMain.hs'
+      - 'docs/phase-1/formal-semantics-loan-transition-trace-fsem01-v1.md'
       - 'test/Phase1FSEM01BorrowResourceMain.hs'
       - 'docs/phase-1/formal-semantics-borrow-resource-bridge-fsem01-v1.md'
       - 'phil-core.cabal'
@@ -25,6 +28,9 @@ on:
       - 'proof/Phil/Surface/SurfaceBorrowViewScope.v'
       - 'src/Phil/Surface/GrammarV1/BorrowViewScope.hs'
       - 'src/Phil/Surface/GrammarV1/BorrowResourceSurface.hs'
+      - 'src/Phil/Surface/Check/Engine.hs'
+      - 'test/Phase1FSEM01BorrowResourceTraceMain.hs'
+      - 'docs/phase-1/formal-semantics-loan-transition-trace-fsem01-v1.md'
       - 'test/Phase1FSEM01BorrowResourceMain.hs'
       - 'docs/phase-1/formal-semantics-borrow-resource-bridge-fsem01-v1.md'
       - 'phil-core.cabal'
@@ -83,7 +89,8 @@ jobs:
             src/Phil/Surface/GrammarV1/BorrowResourceSurface.hs \
             src/Phil/Surface/GrammarV1/LetPatternScope.hs \
             test/Phase1GrammarV1BorrowViewScopeMain.hs \
-            test/Phase1FSEM01BorrowResourceMain.hs
+            test/Phase1FSEM01BorrowResourceMain.hs \
+            test/Phase1FSEM01BorrowResourceTraceMain.hs
           do
             cabal exec -- ghc -isrc -Wall -Werror -fno-code "$module"
           done
@@ -91,3 +98,5 @@ jobs:
         run: cabal exec -- runghc -Wall -Werror -isrc test/Phase1GrammarV1BorrowViewScopeMain.hs
       - name: Replay FSEM-01 source-derived production loan checks
         run: cabal exec -- runghc -Wall -Werror -isrc test/Phase1FSEM01BorrowResourceMain.hs
+      - name: Replay FSEM-01 concrete loan-state trace and checker parity
+        run: cabal exec -- runghc -Wall -Werror -isrc test/Phase1FSEM01BorrowResourceTraceMain.hs

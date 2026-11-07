@@ -199,3 +199,12 @@ For a future implementation/proof PR, acceptance requires:
 production checker and isolates a real `BorrowEscape` negative. The missing
 work is a precise, proved mapping of that implementation's identities,
 states, transitions and rejection outcomes to the normalized Rocq model.
+
+## Subsequent executable production checkpoints
+
+The [FSEM-01 production loan-state trace](formal-semantics-loan-transition-trace-fsem01-v1.md)
+makes the bounded B0–B4 and B3' production states observable by the **same**
+borrow evaluator as the ordinary checker. Its concrete `Core.Name`,
+`linearBindings` and `sharedLoans` checkpoints and negative error prefix
+are runnable evidence for constructing an eventual model correspondence.
+The source-to-Rocq owner encoding and simulation theorem remain **open**.
