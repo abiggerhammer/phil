@@ -27,6 +27,7 @@ import Phil.Core.Static
   )
 import Phil.Verification.ArtifactClosure
   ( CertifiedApplicationArtifact
+  , certifiedApplicationSourceAssurance
   , certifiedApplicationStageClosure
   , certifyApplicationArtifact
   )
@@ -176,6 +177,14 @@ main = do
           , finalWitnessRetainsAcceptedStage source upload)
         , ( "Steve final witness retains exact accepted full StageClosure"
           , finalWitnessRetainsAcceptedStage source steve)
+        , ( "Upload final witness retains complete independently accepted source envelope"
+          , finalWitnessRetainsAcceptedSource source upload)
+        , ( "Steve final witness retains complete independently accepted source envelope"
+          , finalWitnessRetainsAcceptedSource source steve)
+        , ( "Upload accepted same-source alternative StageClosure cannot replace source envelope"
+          , sameSourceDifferentStageCannotReplaceSourceEnvelope source upload steve)
+        , ( "Steve accepted same-source alternative StageClosure cannot replace source envelope"
+          , sameSourceDifferentStageCannotReplaceSourceEnvelope source steve upload)
         , ( "Upload final witness preserves exact independently accepted release envelope"
           , finalWitnessRetainsAcceptedRelease source upload)
         , ( "Steve final witness preserves exact independently accepted release envelope"
@@ -852,6 +861,69 @@ finalWitnessRetainsAcceptedStage source fixture =
                     == nativeFinalClosedContractRevision authority
     _ -> False
 
+
+-- | Complete independently accepted VER-010 source envelope is retained at
+-- the *same* witness boundary as the complete independently accepted release.
+-- The two StageClosure consumers must be exactly equal, while a source
+-- assurance projection alone does not constitute an accepted source artifact.
+finalWitnessRetainsAcceptedSource
+  :: GenericApplicationAssurance -> ReleaseFixture -> Bool
+finalWitnessRetainsAcceptedSource source fixture =
+  case (producerInputs source, produceFixture source fixture) of
+    (Right (bundle, policy), Right (_, produced)) ->
+      case nativeAdapterPair source produced of
+        Nothing -> False
+        Just (sourceArtifact, release) ->
+          case closeNativeFinalInstanceCorrespondence
+              source (sourceInstanceDescriptor source) bundle policy
+              (fixtureContext produced) (fixtureLedger produced)
+              emptyProducerSelection sourceArtifact release of
+            Left _ -> False
+            Right witness ->
+              let accepted = nativeCorrespondenceCertifiedSource witness
+              in accepted == sourceArtifact
+                && certifiedApplicationSourceAssurance accepted
+                    == nativeCorrespondenceSourceAssurance witness
+                && certifiedApplicationStageClosure accepted
+                    == nativeCorrespondenceStageClosure witness
+                && certifiedApplicationStageClosure accepted
+                    == certifiedReleaseStageClosure
+                         (nativeCorrespondenceCertifiedRelease witness)
+
+    _ -> False
+
+-- | Two independently certified VER-010 artifacts can carry the same
+-- accepted reusable source assurance and different complete StageClosures.
+-- A changed stage must be rejected at the actual existing release consumer
+-- gate even though the accepted source proof is unchanged. Unlike an identity
+-- projection, the final witness retains exactly which source envelope passed.
+sameSourceDifferentStageCannotReplaceSourceEnvelope
+  :: GenericApplicationAssurance -> ReleaseFixture -> ReleaseFixture -> Bool
+sameSourceDifferentStageCannotReplaceSourceEnvelope source fixture other =
+  case (producerInputs source, produceFixture source fixture) of
+    (Right (bundle, policy), Right (_, produced)) ->
+      case ( nativeAdapterPair source produced
+           , certifyApplicationArtifact source (fixtureStage other) ) of
+        (Just (original, release), Right alternative) ->
+          let close artifact = closeNativeFinalInstanceCorrespondence
+                source (sourceInstanceDescriptor source) bundle policy
+                (fixtureContext produced) (fixtureLedger produced)
+                emptyProducerSelection artifact release
+          in case close original of
+            Left _ -> False
+            Right witness ->
+              alternative /= original
+                && certifiedApplicationSourceAssurance alternative
+                    == certifiedApplicationSourceAssurance original
+                && certifiedApplicationStageClosure alternative
+                    /= certifiedApplicationStageClosure original
+                && nativeCorrespondenceCertifiedSource witness == original
+                && case close alternative of
+                    Left (NativeFinalInstanceReleaseRejected
+                      (SourceManifestNativeBindingRejected NativeFinalStageMismatch)) -> True
+                    _ -> False
+        _ -> False
+    _ -> False
 
 -- | The final exported opaque witness retains the *entire* accepted INT-005
 -- release, not just its manifest, stage coordinates, or closed-stage digest.

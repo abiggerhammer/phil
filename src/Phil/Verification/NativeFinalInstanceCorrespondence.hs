@@ -9,6 +9,7 @@ module Phil.Verification.NativeFinalInstanceCorrespondence
   , nativeCorrespondenceSourceAssurance
   , nativeCorrespondenceManifest
   , nativeCorrespondenceStageClosure
+  , nativeCorrespondenceCertifiedSource
   , nativeCorrespondenceCertifiedRelease
   , nativeCorrespondenceAuthority
   , NativeStageRevisionEquality
@@ -62,6 +63,7 @@ data NativeFinalInstanceCorrespondence = NativeFinalInstanceCorrespondence
   GenericApplicationAssurance
   AssuranceManifest
   ArchitectureInstanceDescriptor
+  CertifiedApplicationArtifact
   StageClosureBundle
   CertifiedReleaseArtifact
   NativeFinalAuthority
@@ -74,7 +76,7 @@ data NativeFinalInstanceCorrespondence = NativeFinalInstanceCorrespondence
 nativeCorrespondenceSourceAssurance
   :: NativeFinalInstanceCorrespondence -> GenericApplicationAssurance
 nativeCorrespondenceSourceAssurance
-  (NativeFinalInstanceCorrespondence source _ _ _ _ _) = source
+  (NativeFinalInstanceCorrespondence source _ _ _ _ _ _) = source
 
 -- | Preserve the entire independently checked INT-002 manifest through the
 -- exported final boundary. The checked producer token supplies it, and the
@@ -84,14 +86,14 @@ nativeCorrespondenceSourceAssurance
 nativeCorrespondenceManifest
   :: NativeFinalInstanceCorrespondence -> AssuranceManifest
 nativeCorrespondenceManifest
-  (NativeFinalInstanceCorrespondence _ manifest _ _ _ _) = manifest
+  (NativeFinalInstanceCorrespondence _ manifest _ _ _ _ _) = manifest
 
 -- | Complete checked producer descriptor at the final witness boundary.
 -- No new downstream StageClosure/provenance authority is inferred.
 nativeCorrespondenceArchitectureDescriptor
   :: NativeFinalInstanceCorrespondence -> ArchitectureInstanceDescriptor
 nativeCorrespondenceArchitectureDescriptor
-  (NativeFinalInstanceCorrespondence _ _ descriptor _ _ _) = descriptor
+  (NativeFinalInstanceCorrespondence _ _ descriptor _ _ _ _) = descriptor
 
 nativeCorrespondenceArchitectureInstance
   :: NativeFinalInstanceCorrespondence -> ArchitectureInstanceIdentity
@@ -103,10 +105,20 @@ nativeCorrespondenceArchitectureInstance =
 -- gate. Neither its closed revision nor its normalized Systems revision is a
 -- substitute for this concrete object. This read-only projection is not a
 -- stage-origin certificate or a Rocq representation.
+-- | The independently accepted VER-010 source artifact, not merely the
+-- matched source assurance and stage projections. The existing full-object
+-- consumer equality gate has already compared its StageClosure against the
+-- independently certified release. Retention does not authenticate an
+-- architecture occurrence as the producer of that StageClosure.
+nativeCorrespondenceCertifiedSource
+  :: NativeFinalInstanceCorrespondence -> CertifiedApplicationArtifact
+nativeCorrespondenceCertifiedSource
+  (NativeFinalInstanceCorrespondence _ _ _ sourceArtifact _ _ _) = sourceArtifact
+
 nativeCorrespondenceStageClosure
   :: NativeFinalInstanceCorrespondence -> StageClosureBundle
 nativeCorrespondenceStageClosure
-  (NativeFinalInstanceCorrespondence _ _ _ stage _ _) = stage
+  (NativeFinalInstanceCorrespondence _ _ _ _ stage _ _) = stage
 
 -- | Preserve the complete *supplied and independently certified* INT-005
 -- release envelope, including LLVM and declared residual trust, at the final
@@ -115,12 +127,12 @@ nativeCorrespondenceStageClosure
 nativeCorrespondenceCertifiedRelease
   :: NativeFinalInstanceCorrespondence -> CertifiedReleaseArtifact
 nativeCorrespondenceCertifiedRelease
-  (NativeFinalInstanceCorrespondence _ _ _ _ release _) = release
+  (NativeFinalInstanceCorrespondence _ _ _ _ _ release _) = release
 
 nativeCorrespondenceAuthority
   :: NativeFinalInstanceCorrespondence -> NativeFinalAuthority
 nativeCorrespondenceAuthority
-  (NativeFinalInstanceCorrespondence _ _ _ _ _ authority) = authority
+  (NativeFinalInstanceCorrespondence _ _ _ _ _ _ authority) = authority
 
 -- | Equality of the architecture occurrence's canonical revision with the
 -- retained concrete stage's InstanceRevision. The constructor is private.
@@ -171,6 +183,8 @@ data NativeFinalInstanceCorrespondenceError
 --   (4) independently accepted VER-010 source artifact and INT-005 release;
 --   (5) full manifest and retained StageClosure equality, including the
 --       actual raw Systems digest and lowering root, checked by the adapter.
+-- The accepted VER-010 source envelope is retained verbatim after these gates;
+-- it cannot be recreated by exporting its component projections alone.
 --
 -- The downstream native stage's InstanceRevision is NOT asserted equal to the
 -- architecture occurrence's InstanceRevision merely because both mention an
@@ -206,6 +220,7 @@ closeNativeFinalInstanceCorrespondence
       (sourceManifestBindingSourceAssurance produced)
       (sourceManifestBindingManifest produced)
       descriptor
+      sourceArtifact
       (certifiedReleaseStageClosure release)
       release
       authority)

@@ -771,6 +771,82 @@ Section NativeFinalInstanceTypedCorrespondence.
     Qed.
   End FullCertifiedReleaseToFinalWitness.
 
+
+  (*
+    Another DISTINCT accepted native envelope: VER-010 certification binds
+    complete accepted source proof to one exact StageClosure. Even though
+    the previous witness retained both projections, those projections were
+    not themselves a retained independently certified source object.
+    Abstract object/acceptance/equalities below are explicit EXTERNAL
+    premises, NOT a native producer, extraction, or Haskell-to-Rocq encoding.
+  *)
+  Section FullCertifiedSourceToFinalWitness.
+    Context {CertifiedSourceObject SourceAssuranceObject : Type}.
+    Context (sourceProof : CertifiedSourceObject -> SourceAssuranceObject).
+    Context (sourceProofIdentity : SourceAssuranceObject -> ApplicationIdentity).
+    Context (sourceStage : CertifiedSourceObject -> StageClosureObject).
+    Context (acceptedByNativeSourceProducer : CertifiedSourceObject -> Prop).
+
+    Definition ExactCertifiedSourcePreservedToFinalWitness
+      (w : NativeFinalInstanceCoordinates)
+      (accepted exported : CertifiedSourceObject) : Prop :=
+      NativeProducerConsumerBound w /\
+      acceptedByNativeSourceProducer accepted /\
+      sourceProofIdentity (sourceProof accepted) = acceptedApplication w /\
+      sourceStage accepted = sourceStageClosure w /\
+      accepted = exported.
+
+    Theorem accepted_certified_source_reaches_final_witness_exactly :
+      forall w accepted exported,
+        ExactCertifiedSourcePreservedToFinalWitness
+          w accepted exported ->
+        accepted = exported /\
+        sourceProof exported = sourceProof accepted /\
+        sourceStage exported = releaseStageClosure w /\
+        acceptedByNativeSourceProducer accepted /\
+        NativeProducerConsumerBound w.
+    Proof.
+      intros w accepted exported [Hbound [Hcert [Hsource [Hstage Heq]]]].
+      split; [exact Heq |].
+      split; [rewrite <- Heq; reflexivity |].
+      split.
+      - rewrite <- Heq. rewrite Hstage.
+        exact (proj1 (proj2 (proj2 Hbound))).
+      - split; [exact Hcert | exact Hbound].
+    Qed.
+
+    Theorem substituted_certified_source_cannot_bind :
+      forall w accepted exported,
+        accepted <> exported ->
+        ~ ExactCertifiedSourcePreservedToFinalWitness
+            w accepted exported.
+    Proof.
+      intros w accepted exported Hdiff [_ [_ [_ [_ Heq]]]].
+      exact (Hdiff Heq).
+    Qed.
+
+    Theorem same_source_proof_cannot_override_certified_source_envelope :
+      forall w accepted exported,
+        sourceProof accepted = sourceProof exported ->
+        accepted <> exported ->
+        ~ ExactCertifiedSourcePreservedToFinalWitness
+            w accepted exported.
+    Proof.
+      intros w accepted exported _ Hdiff [_ [_ [_ [_ Heq]]]].
+      exact (Hdiff Heq).
+    Qed.
+
+    Theorem source_envelope_stage_drift_blocks_exact_retention :
+      forall w accepted exported,
+        sourceStage accepted <> sourceStageClosure w ->
+        ~ ExactCertifiedSourcePreservedToFinalWitness
+            w accepted exported.
+    Proof.
+      intros w accepted exported Hdiff [_ [_ [_ [Heq _]]]].
+      exact (Hdiff Heq).
+    Qed.
+  End FullCertifiedSourceToFinalWitness.
+
 End NativeFinalInstanceTypedCorrespondence.
 
 (* A concrete logical counterexample, NOT an encoding of Haskell identity
