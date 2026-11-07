@@ -1,8 +1,10 @@
 name: CI
 
 concurrency:
-  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
-  cancel-in-progress: true
+  # Supersede older heads of the same PR in this workflow only.
+  # Non-PR runs have unique groups; main/release evidence is never cancelled.
+  group: ${{ github.workflow_ref }}-${{ github.event.pull_request.number || github.run_id }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 on:
   pull_request:
@@ -19,6 +21,11 @@ jobs:
     steps:
       - name: Check out repository
         uses: actions/checkout@v4
+
+      - name: Fast PR supersession policy preflight
+        run: |
+          python3 scripts/ci/test_pr_concurrency.py
+          python3 scripts/ci/check_pr_concurrency.py
 
       - name: Install and verify LLVM 18
         run: bash scripts/ci/setup-llvm18.sh

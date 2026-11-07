@@ -13,6 +13,10 @@ The important exceptions are documents that explicitly declare themselves curren
 - [`surface-grammar-v1.md`](surface-grammar-v1.md), together with [`../../grammar/phase1-surface.ebnf`](../../grammar/phase1-surface.ebnf), for the Phase 1 concrete-syntax epoch; and
 - any document whose own text explicitly states that it is a current normative specification rather than an implementation-slice record.
 
+## CI operational safety
+
+- [PR-head workflow supersession policy](pr-head-ci-supersession-policy-v1.md) — bounded migration of the highest-traffic PR checks to cancellation-safe concurrency groups, with automated guard tests and explicit exceptions for main/release and coordination workflows.
+
 ## Entry points for formal-methods review
 
 - [Normative Phase 1 surface EBNF](../../grammar/phase1-surface.ebnf) — authoritative concrete syntax and token forms; successful parsing is not semantic acceptance.

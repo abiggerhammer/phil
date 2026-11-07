@@ -1,0 +1,33 @@
+name: PR CI Supersession Policy
+
+concurrency:
+  group: ${{ github.workflow_ref }}-${{ github.event.pull_request.number || github.run_id }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+on:
+  pull_request:
+    paths:
+      - '.github/workflows/**'
+      - 'scripts/ci/check_pr_concurrency.py'
+      - 'scripts/ci/test_pr_concurrency.py'
+      - 'scripts/ci/pr-concurrency-covered.txt'
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/**'
+      - 'scripts/ci/check_pr_concurrency.py'
+      - 'scripts/ci/test_pr_concurrency.py'
+      - 'scripts/ci/pr-concurrency-covered.txt'
+
+permissions:
+  contents: read
+
+jobs:
+  verify-pr-head-supersession:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Test PR vs main/release cancellation invariants
+        run: python3 scripts/ci/test_pr_concurrency.py
+      - name: Enforce audited workflow policy at exact checkout
+        run: python3 scripts/ci/check_pr_concurrency.py
