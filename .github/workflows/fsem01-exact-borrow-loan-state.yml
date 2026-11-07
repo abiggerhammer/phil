@@ -1,0 +1,55 @@
+name: FSEM-01 Exact Borrow Loan State Correspondence
+
+on:
+  pull_request:
+    paths:
+      - 'proof/Phil/Surface/SurfaceBorrowLoanStateCorrespondence.v'
+      - 'docs/phase-1/formal-semantics-exact-loan-transition-model-fsem01-v1.md'
+      - '.github/workflows/fsem01-exact-borrow-loan-state.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'proof/Phil/Surface/SurfaceBorrowLoanStateCorrespondence.v'
+      - 'docs/phase-1/formal-semantics-exact-loan-transition-model-fsem01-v1.md'
+      - '.github/workflows/fsem01-exact-borrow-loan-state.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  rocq-exact-borrow-loan-state:
+    runs-on: ubuntu-latest
+    container:
+      image: rocq/rocq-prover:9.2.0
+      options: --user root
+    steps:
+      - uses: actions/checkout@v4
+      - name: Compile exact borrow-loan state and existing authorities
+        shell: bash
+        run: |
+          set -euo pipefail
+          export PATH="/home/rocq/.opam/${COMPILER}/bin:$PATH"
+          rocq c -Q proof/Phil Phil proof/Phil/Core/Syntax.v
+          rocq c -Q proof/Phil Phil proof/Phil/Core/Context.v
+          rocq c -Q proof/Phil Phil proof/Phil/Core/BindingSemantics.v
+          rocq c -Q proof/Phil Phil proof/Phil/Core/ContextJoin.v
+          rocq c -Q proof/Phil Phil proof/Phil/Core/ProcessJoin.v
+          rocq c -Q proof/Phil Phil proof/Phil/Core/ResourceJoin.v
+          rocq c -Q proof/Phil Phil proof/Phil/Core/ResourceScope.v
+          rocq c -Q proof/Phil Phil proof/Phil/Surface/SurfaceBinderScopeCore.v
+          rocq c -Q proof/Phil Phil proof/Phil/Surface/SurfaceLetPatternScope.v
+          rocq c -Q proof/Phil Phil proof/Phil/Surface/SurfaceBorrowViewScope.v
+          rocq c -Q proof/Phil Phil proof/Phil/Surface/SurfaceBorrowLoanStateCorrespondence.v
+      - name: Enforce no unproved admissions in new file
+        shell: bash
+        run: |
+          set -euo pipefail
+          if grep -nE '^[[:space:]]*(Admitted[.]|Axiom[[:space:]]|Parameter[[:space:]])' \
+              proof/Phil/Surface/SurfaceBorrowLoanStateCorrespondence.v; then
+            echo "Unexpected admission or unproved global assumption."
+            exit 1
+          fi
+          sha256sum \
+            proof/Phil/Surface/SurfaceBorrowLoanStateCorrespondence.v \
+            proof/Phil/Surface/SurfaceBorrowLoanStateCorrespondence.vo \
+            docs/phase-1/formal-semantics-exact-loan-transition-model-fsem01-v1.md
