@@ -121,7 +121,7 @@ Proof.
       unfold phase1_surface_normalize_proposition_atom_spine,
         phase1_surface_expect_nonterminal,
         phase1_surface_expect_alternative.
-      cbn. rewrite String.eqb_refl, Hvalidate. reflexivity.
+      cbn. repeat rewrite String.eqb_refl. rewrite Hvalidate. reflexivity.
     }
     exists atom. split; [exact Hnormalize|].
     eapply phase1_surface_normalize_proposition_atom_spine_round_trip.
@@ -232,7 +232,7 @@ Proof.
                 unfold phase1_surface_normalize_proposition_atom_spine,
                   phase1_surface_expect_nonterminal,
                   phase1_surface_expect_alternative.
-                cbn. rewrite String.eqb_refl, Hvalidate. reflexivity.
+                cbn. repeat rewrite String.eqb_refl. rewrite Hvalidate. reflexivity.
               }
               exists atom. split; [exact Hnormalize|].
               eapply phase1_surface_normalize_proposition_atom_spine_round_trip.
