@@ -1,0 +1,143 @@
+name: FSEM-01 Two-Owner Finite Context Frame
+
+concurrency:
+  # Cancel stale revisions of this exact PR; preserve main runs independently.
+  group: ${{ github.workflow_ref }}-${{ github.event.pull_request.number || github.run_id }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+on:
+  pull_request:
+    paths:
+      - 'test/Phase1FSEM01TwoOwnerContextMain.hs'
+      - 'proof/Phil/Surface/SurfaceTwoOwnerContext.v'
+      - 'scripts/fsem01_two_owner_witness.py'
+      - 'docs/phase-1/formal-semantics-two-owner-context-fsem01-v1.md'
+      - '.github/workflows/fsem01-two-owner-context.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'test/Phase1FSEM01TwoOwnerContextMain.hs'
+      - 'proof/Phil/Surface/SurfaceTwoOwnerContext.v'
+      - 'scripts/fsem01_two_owner_witness.py'
+      - 'docs/phase-1/formal-semantics-two-owner-context-fsem01-v1.md'
+      - '.github/workflows/fsem01-two-owner-context.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  derive-two-owners-and-check-real-core:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: haskell-actions/setup@v2
+        with:
+          ghc-version: '9.6.7'
+          cabal-version: 'latest'
+      - name: Strict production Haskell build and no-warning two-owner test
+        shell: bash
+        run: |
+          set -euo pipefail
+          cabal build lib:phil-core --ghc-options=-Werror
+          cabal exec -- ghc -isrc -Wall -Werror -fno-code \
+            test/Phase1FSEM01TwoOwnerContextMain.hs
+          cabal exec -- runghc -isrc -Wall -Werror \
+            test/Phase1FSEM01TwoOwnerContextMain.hs
+      - name: Extract source-bound OBS-V1 and two-owner CONTEXT2-V1
+        shell: bash
+        run: |
+          set -euo pipefail
+          cabal exec -- runghc -isrc -Wall -Werror \
+            test/Phase1FSEM01ObservationWireMain.hs \
+            --emit fsem01-source-obs
+          python3 scripts/fsem01_observation_wire.py \
+            --artifact-dir fsem01-source-obs \
+            --golden-dir test/fixtures/fsem01-observation-v1/expected
+          cabal exec -- runghc -isrc -Wall -Werror \
+            test/Phase1FSEM01TwoOwnerContextMain.hs \
+            --emit fsem01-two-owner
+          python3 -m py_compile scripts/fsem01_two_owner_witness.py
+          python3 scripts/fsem01_two_owner_witness.py \
+            --artifact-dir fsem01-two-owner \
+            --observation-dir fsem01-source-obs \
+            --output fsem01-generated/GeneratedTwoOwnerWitness.v
+          sha256sum fsem01-source-obs/*.obs fsem01-two-owner/*.ctx2 \
+            fsem01-generated/GeneratedTwoOwnerWitness.v
+      - uses: actions/upload-artifact@v4
+        with:
+          name: fsem01-exact-two-owner-v1
+          path: |
+            fsem01-source-obs/*.obs
+            fsem01-two-owner/*.ctx2
+            fsem01-generated/GeneratedTwoOwnerWitness.v
+          if-no-files-found: error
+          retention-days: 30
+
+  verify-two-owner-rocq-witness:
+    needs: derive-two-owners-and-check-real-core
+    runs-on: ubuntu-latest
+    container:
+      image: rocq/rocq-prover:9.2.0
+      options: --user root
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          name: fsem01-exact-two-owner-v1
+          path: fsem01-evidence
+      - name: Independently recompute downloaded exact-byte evidence
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 scripts/fsem01_observation_wire.py \
+            --artifact-dir fsem01-evidence/fsem01-source-obs \
+            --golden-dir test/fixtures/fsem01-observation-v1/expected
+          python3 scripts/fsem01_two_owner_witness.py \
+            --artifact-dir fsem01-evidence/fsem01-two-owner \
+            --observation-dir fsem01-evidence/fsem01-source-obs \
+            --output fsem01-evidence/recomputed/GeneratedTwoOwnerWitness.v
+          cmp fsem01-evidence/fsem01-generated/GeneratedTwoOwnerWitness.v \
+              fsem01-evidence/recomputed/GeneratedTwoOwnerWitness.v
+      - name: Compile bounded Context frame theorems and actual wire specimens
+        shell: bash
+        run: |
+          set -euo pipefail
+          export PATH="/home/rocq/.opam/${COMPILER}/bin:$PATH"
+          for file in \
+            proof/Phil/Core/Syntax.v \
+            proof/Phil/Core/Context.v \
+            proof/Phil/Core/BindingSemantics.v \
+            proof/Phil/Core/ContextJoin.v \
+            proof/Phil/Core/ProcessJoin.v \
+            proof/Phil/Core/ResourceJoin.v \
+            proof/Phil/Core/ResourceScope.v \
+            proof/Phil/Surface/SurfaceBinderScopeCore.v \
+            proof/Phil/Surface/SurfaceLetPatternScope.v \
+            proof/Phil/Surface/SurfaceBorrowViewScope.v \
+            proof/Phil/Surface/SurfaceBorrowLoanStateCorrespondence.v \
+            proof/Phil/Surface/SurfaceBinderNameEncoding.v \
+            proof/Phil/Surface/SurfaceRepresentedBorrowTrace.v \
+            proof/Phil/Surface/SurfaceBorrowStepErrorBridge.v \
+            proof/Phil/Surface/SurfaceObservationWire.v \
+            proof/Phil/Surface/SurfaceTwoOwnerContext.v
+          do
+            rocq c -Q proof/Phil Phil "$file"
+          done
+          rocq c -Q proof/Phil Phil \
+            fsem01-evidence/recomputed/GeneratedTwoOwnerWitness.v
+      - name: Reject unproved obligations and record proof/evidence hashes
+        shell: bash
+        run: |
+          set -euo pipefail
+          if grep -nE '^[[:space:]]*(Admitted[.]|Axiom[[:space:]]|Parameter[[:space:]])' \
+            proof/Phil/Surface/SurfaceTwoOwnerContext.v \
+            fsem01-evidence/recomputed/GeneratedTwoOwnerWitness.v; then
+            echo "Unproved FSEM-01 two-owner assumption or admission"
+            exit 1
+          fi
+          sha256sum proof/Phil/Surface/SurfaceTwoOwnerContext.v \
+            proof/Phil/Surface/SurfaceTwoOwnerContext.vo \
+            fsem01-evidence/fsem01-source-obs/*.obs \
+            fsem01-evidence/fsem01-two-owner/*.ctx2 \
+            fsem01-evidence/recomputed/GeneratedTwoOwnerWitness.v \
+            fsem01-evidence/recomputed/GeneratedTwoOwnerWitness.vo
