@@ -407,6 +407,12 @@ checkProducerProjection (filename, source, artifact) = do
       other = Name "unauthorized-owner"
       badOwnerName = first { traceOwnerName = other }
       badViewName = first { traceViewName = other }
+      extraUnrestricted = first
+        { traceUnrestrictedOwners = Map.insert other expectedTy
+            (traceUnrestrictedOwners first) }
+      extraAffine = first
+        { traceAffineOwners = Map.insert other expectedTy
+            (traceAffineOwners first) }
       badOwnerType = first
         { traceLinearOwners = Map.insert ownerName
             (TyBytes (RefNat 9)) (traceLinearOwners first) }
@@ -418,7 +424,8 @@ checkProducerProjection (filename, source, artifact) = do
   ensure (all (\cut -> case checkpointCode owner view cut of
             Left _ -> True
             Right _ -> False)
-            [badOwnerName, badViewName, badOwnerType, extraOwner, extraLoan])
+            [badOwnerName, badViewName, extraUnrestricted, extraAffine,
+             badOwnerType, extraOwner, extraLoan])
     "mutated production checkpoint silently passed the field projection"
   let wrongPhase = first { tracePhase = TraceEscapeRejected }
   wrongCode <- checkpointCode owner view wrongPhase
@@ -572,6 +579,31 @@ contextSpecimen (filename, source, artifact) = do
   wire <- encodeContextEvidence artifact owner view cuts
   ensure (validContextEvidence artifact wire)
     "actual full Map/Set representation failed strict CONTEXT-V1 validator"
+  let first = head cuts
+      other = Name "foreign-resource-owner"
+      foreignUnrestricted = first
+        { traceUnrestrictedOwners = Map.insert other expectedTy
+            (traceUnrestrictedOwners first) }
+      foreignAffine = first
+        { traceAffineOwners = Map.insert other expectedTy
+            (traceAffineOwners first) }
+      foreignLinear = first
+        { traceLinearOwners = Map.insert other expectedTy
+            (traceLinearOwners first) }
+      foreignLoan = first
+        { traceActiveLoans = Set.insert other (traceActiveLoans first) }
+      wrongType = first
+        { traceLinearOwners = Map.insert owner (TyBytes (RefNat 9))
+            (traceLinearOwners first) }
+      changedIdentity = first { traceOwnerName = other }
+      badRawStates = [foreignUnrestricted, foreignAffine, foreignLinear,
+                      foreignLoan, wrongType, changedIdentity]
+  mapM_ (\bad -> case encodeContextEvidence artifact owner view
+                   (bad : drop 1 cuts) of
+      Left _ -> Right ()
+      Right forged -> ensure (not (validContextEvidence artifact forged))
+        "tampered context map, loan or identity gained wire authority")
+    badRawStates
   let contextFile = Text.unpack (Text.replace ".obs" ".ctx" (Text.pack filename))
   Right (contextFile, wire)
 
