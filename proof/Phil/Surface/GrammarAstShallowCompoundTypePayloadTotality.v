@@ -552,7 +552,7 @@ Proof.
         - exact Hprimitive_tree.
         - rewrite Htree, Hsubtree. reflexivity.
       }
-      inversion Hshape; subst.
+      inversion Hshape; subst index branch_tree.
       cbn in Hnth.
       inversion Hnth; subst item.
       change
@@ -589,7 +589,7 @@ Proof.
         - exact Hprimitive_tree.
         - rewrite Htree, Hsubtree. reflexivity.
       }
-      inversion Hshape; subst.
+      inversion Hshape; subst index branch_tree.
       cbn in Hnth.
       inversion Hnth; subst item.
       destruct
@@ -622,7 +622,7 @@ Proof.
         - exact Hprimitive_tree.
         - rewrite Htree, Hsubtree. reflexivity.
       }
-      inversion Hshape; subst.
+      inversion Hshape; subst index branch_tree.
       cbn in Hnth.
       inversion Hnth; subst item.
       destruct
@@ -655,7 +655,7 @@ Proof.
         - exact Hprimitive_tree.
         - rewrite Htree, Hsubtree. reflexivity.
       }
-      inversion Hshape; subst.
+      inversion Hshape; subst index branch_tree.
       cbn in Hnth.
       inversion Hnth; subst item.
       change
