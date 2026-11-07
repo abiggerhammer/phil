@@ -3,6 +3,7 @@
 import base64
 import json
 import pathlib
+import urllib.parse
 import sys
 import unittest
 
@@ -31,6 +32,7 @@ class FakeGitHub:
     def __init__(self):
         self.refs = {}
         self.rec = None
+        self.commits = {}
         self.comments = []
         self.prs = []
         self.deleted = []
@@ -53,7 +55,9 @@ class FakeGitHub:
             self.rec = json.loads(payload["tree"][0]["content"])
             return {"sha": "d" * 40}
         if method == "POST" and endpoint == "/git/commits":
-            return {"sha": SHA_CLAIM}
+            sha = format(1000 + len(self.commits), "040x")
+            self.commits[sha] = self.rec
+            return {"sha": sha}
         if method == "POST" and endpoint == "/git/refs":
             key = payload["ref"]
             if key in self.refs:
@@ -66,10 +70,13 @@ class FakeGitHub:
                 raise f.ClaimFailure("GitHub 404: claim missing")
             return {"object": {"sha": self.refs[key]}}
         if method == "GET" and endpoint.startswith("/contents/" + f.CLAIM_FILE):
-            if self.rec is None:
+            name = urllib.parse.unquote(endpoint.partition("?ref=")[2])
+            ref = "refs/heads/" + name
+            if ref not in self.refs:
                 raise f.ClaimFailure("claim missing record")
+            record = self.commits[self.refs[ref]]
             return {"encoding": "base64", "content":
-                    base64.b64encode(json.dumps(self.rec).encode()).decode()}
+                    base64.b64encode(json.dumps(record).encode()).decode()}
         if method == "POST" and endpoint == f"/issues/{ISSUE}/comments":
             self.comments.append({"body": payload["body"]})
             return {"id": len(self.comments)}
@@ -110,7 +117,8 @@ class CoordinationTests(unittest.TestCase):
         self.assertIn(f.claim_ref("fsem-01"), api.refs)
         with self.assertRaisesRegex(f.ClaimFailure, "422"):
             f.acquire(api, "fsem-01", "formal-semantics/other", "chat:other")
-        self.assertEqual(api.rec["branch"], BRANCH)
+        winner_sha = api.refs[f.claim_ref("fsem-01")]
+        self.assertEqual(api.commits[winner_sha]["branch"], BRANCH)
         self.assertEqual(len(f.recorded_claims(api.comments)), 1)
 
     def test_verification_and_release_require_correct_pr(self):
