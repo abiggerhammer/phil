@@ -27,7 +27,6 @@ jobs:
           python3 scripts/test_fsem_claim.py
 
   exact-claim-before-pr:
-    if: github.event_name == 'pull_request'
     runs-on: ubuntu-latest
     steps:
       # Read controller from trusted main, not from an untrusted PR head.
@@ -40,8 +39,14 @@ jobs:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           PR_NUMBER: ${{ github.event.pull_request.number }}
           PR_BRANCH: ${{ github.event.pull_request.head.ref }}
+          EVENT_NAME: ${{ github.event_name }}
         run: |
           set -euo pipefail
+
+          if [[ "$EVENT_NAME" != "pull_request" ]]; then
+            echo "Non-PR event; exact formal-semantics claim is not applicable."
+            exit 0
+          fi
 
           is_fsem=false
           if [[ "$PR_BRANCH" == formal-semantics/* ]]; then
