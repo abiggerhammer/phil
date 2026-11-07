@@ -100,6 +100,7 @@ Proof.
   all: cbn [DecimalString.NilEmpty.string_of_uint];
        apply split_first_colon_preserves_digit_prefix;
        [reflexivity | apply IHd].
+  Show.
 Qed.
 
 Lemma split_render_nat :
