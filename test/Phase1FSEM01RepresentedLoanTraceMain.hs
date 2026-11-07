@@ -189,6 +189,62 @@ observeProductionCut catalog owner view cut = do
     , modelLoan = loaned
     }
 
+-- | An independently checked relation on every pair of ACTUAL production
+-- checkpoints. A rejection or terminal return has no outgoing rule.
+observedStep :: ModelCut -> ModelCut -> Either String ()
+observedStep prior next = do
+  assert (modelKey next == modelKey prior)
+    "step silently changed the represented owner identity"
+  event <- case (modelPhase prior, modelPhase next) of
+    (Before, Started) -> Right BeginLoan
+    (Started, BodyResult False) -> Right (CheckBody False)
+    (Started, BodyResult True) -> Right (CheckBody True)
+    (BodyResult False, Closed) -> Right EndLoan
+    (Closed, Returned) -> Right ReturnOwner
+    (BodyResult True, Rejected) -> Right RejectEscape
+    _ -> Left ("illegal loan step: " <> show prior <> " -> " <> show next)
+  let priorState = ModelState
+        (modelPhase prior) (modelLinear prior) (modelLoan prior)
+      expectedState = ModelState
+        (modelPhase next) (modelLinear next) (modelLoan next)
+  actualState <- applyStep priorState event
+  assert (actualState == expectedState)
+    ("step changed linear/loan membership unexpectedly: " <> show prior
+      <> " -> " <> show next)
+
+validateObservedSteps :: [ModelCut] -> Either String ()
+validateObservedSteps [] = Left "empty production trace cannot certify a path"
+validateObservedSteps (first : rest) = do
+  assert (first == ModelCut (modelKey first) Before True False)
+    "production trace does not start with an unloaned linear owner"
+  _ <- foldM (\previous current -> do
+      observedStep previous current
+      Right current) first rest
+  Right ()
+
+-- | Outcome classification is checked against the ACTUAL production result.
+-- A prefix, a wrong error class or a post-error continuation fails closed.
+validateTraceCertificate
+  :: [ModelCut]
+  -> Either GrammarV1BorrowResourceError SurfaceCheckResult
+  -> Either String ()
+validateTraceCertificate cuts outcome = do
+  validateObservedSteps cuts
+  case (last cuts, outcome) of
+    (ModelCut _ Returned False False, Right checked) ->
+      assert (checkedTerminalControls checked == [Return expectedTy])
+        "terminal model path disagrees with production Bytes[8] return"
+    (ModelCut _ Rejected True True,
+      Left (GrammarV1BorrowResourceProductionError err)) ->
+        assert (surfaceErrorClass err == BorrowEscape
+          && surfaceErrorDetail err == "shared view escapes its lexical scope")
+          "rejection certificate lacked the exact production BorrowEscape result"
+    _ -> Left "trace end state and actual production outcome disagree"
+
+isRejected :: Either String a -> Bool
+isRejected (Left _) = True
+isRejected (Right _) = False
+
 checkTrace :: Catalog -> DeclarationKey -> Bool -> Text -> Either String ()
 checkTrace catalog root escapes label = do
   parsed <- parseFun label (if escapes then escapingBody else safeBody)
@@ -218,6 +274,7 @@ checkTrace catalog root escapes label = do
     ("production loan-state trace does not commute with represented model"
       <> "\nactual = " <> show observed
       <> "\nmodel = " <> show expected)
+  validateTraceCertificate observed (grammarV1TraceOutcome trace)
   if escapes
     then case grammarV1TraceOutcome trace of
       Left (GrammarV1BorrowResourceProductionError err) -> do
@@ -292,6 +349,56 @@ testDistinctCatalogOrdering = do
   assert (decoded == Just (grammarV1ResolvedBinderKey (grammarV1TraceOwnerBinder trace)))
     "production Core name depended on model catalog ordering"
 
+-- | Tamper with real source-derived checkpoints and outcomes. The bounded
+-- observer must reject every forged continuation and corrupted error prefix.
+testTamperRejection :: Either String ()
+testTamperRejection = do
+  catalog <- catalogFrom roots
+  let root = head roots
+  parsed <- parseFun "tamper-negative" escapingBody
+  rejectedTrace <- case grammarV1CheckedBorrowResourceFunctionTrace
+      emptyStaticContext root parsed of
+    Just (Right trace) -> Right trace
+    other -> Left ("negative source not admitted: " <> show other)
+  cuts <- mapM (observeProductionCut catalog
+    (grammarV1TraceOwnerBinder rejectedTrace)
+    (grammarV1TraceViewBinder rejectedTrace))
+    (grammarV1TraceCheckpoints rejectedTrace)
+  let negativeOutcome = grammarV1TraceOutcome rejectedTrace
+  validateTraceCertificate cuts negativeOutcome
+  safeParsed <- parseFun "tamper-positive" safeBody
+  safeTrace <- case grammarV1CheckedBorrowResourceFunctionTrace
+      emptyStaticContext root safeParsed of
+    Just (Right trace) -> Right trace
+    other -> Left ("positive source not admitted: " <> show other)
+  let acceptedOutcome = grammarV1TraceOutcome safeTrace
+      key = modelKey (head cuts)
+      inventedClose = ModelCut key Closed True False
+      inventedReturn = ModelCut key Returned False False
+      wrongOwner = case cuts of
+        first : second : rest ->
+          first : second { modelKey = (-1, 777) } : rest
+        _ -> []
+      wrongMembership = case cuts of
+        first : second : rest ->
+          first : second { modelLoan = False } : rest
+        _ -> []
+      skippedLoanStart = case cuts of
+        first : _ : third : rest -> first : third : rest
+        _ -> []
+      truncated = take 3 cuts
+      mutations =
+        [ validateTraceCertificate (cuts ++ [inventedClose]) negativeOutcome
+        , validateTraceCertificate (cuts ++ [inventedReturn]) negativeOutcome
+        , validateTraceCertificate wrongOwner negativeOutcome
+        , validateTraceCertificate wrongMembership negativeOutcome
+        , validateTraceCertificate skippedLoanStart negativeOutcome
+        , validateTraceCertificate truncated negativeOutcome
+        , validateTraceCertificate cuts acceptedOutcome
+        ]
+  assert (all isRejected mutations)
+    "forged transition, incomplete negative trace or mismatch was certified"
+
 test :: String -> Either String () -> IO Bool
 test label outcome = case outcome of
   Right () -> putStrLn ("PASS: " <> label) >> pure True
@@ -307,6 +414,8 @@ main = do
         testCatalogAuthority
     , test "FSEM-01 catalog positions never rewrite production Core names"
         testDistinctCatalogOrdering
+    , test "FSEM-01 production BorrowEscape rejects forged trace extensions"
+        testTamperRejection
     ]
   if and results then pure () else exitFailure
 

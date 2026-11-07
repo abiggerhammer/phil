@@ -36,3 +36,7 @@ A separate fail-closed transition interpreter generates the expected successful 
 - **Out of scope.** Affine, pending receive, nested borrows, effects, arbitrary captures and whole-program satisfies C remain unproved.
 
 **Next step:** version the owner-catalog provenance, and establish one explicit source-to-model step/error relation with narrowly defined translation or extraction assumptions before claiming source-level preservation.
+
+## Following transition/error observation slice
+
+[The bounded transition/error bridge](formal-semantics-step-error-bridge-fsem01-v1.md) checks every adjacent production checkpoint against an explicit fail-closed model step and ties the terminal phase to the actual production checker outcome. It tests forged continuations after `BorrowEscape`, bad owner identities/loan flags, and mismatched outcomes. The Rocq theorem proves the model has no successor from rejected/returned states; it **does not** establish universal Haskell refinement or an extracted source small-step semantics.
