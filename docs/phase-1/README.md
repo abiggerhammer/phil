@@ -15,6 +15,9 @@ The important exceptions are documents that explicitly declare themselves curren
 
 ## Entry points for formal-methods review
 
+- [Normative Phase 1 surface EBNF](../../grammar/phase1-surface.ebnf) — authoritative concrete syntax and token forms; successful parsing is not semantic acceptance.
+- [Grammar-v1 status, lexical rules and versioning policy](surface-grammar-v1.md) — defines the concrete-syntax authority boundary and derivation of proof-facing grammar artifacts.
+- [Syntax–semantics completeness audit](syntax-semantics-completeness-v1.md) — reconciles programmer-expressible choices against the accepted Phase 1 contracts; it does not independently make typing rules normative.
 - [Phase 1 typing and semantics reader's guide](typing-and-semantics-reader-guide-v1.md) — non-normative map of existing semantic authorities, models and proof-scope caveats.
 - [Three worked typing-rule families](typing-rules-worked-examples-draft-v1.md) — illustrative positive/expected-negative examples; not all negatives are executable conformance witnesses yet.
 - [Formal-semantics judgment inventory (FSEM-00)](formal-semantics-judgment-inventory-v0.md) — proposed rule interfaces, translation boundaries and explicit outstanding evidence, tracked in [FSEM issue #1613](https://github.com/abiggerhammer/phil/issues/1613).
