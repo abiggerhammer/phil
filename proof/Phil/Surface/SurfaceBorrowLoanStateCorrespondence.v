@@ -104,11 +104,13 @@ Proof.
   destruct (Context.linearBindings context owner) as [ty |] eqn:Hlinear;
     try discriminate.
   inversion Hstart; subst next; clear Hstart.
-  repeat split.
+  split.
   - exact Hfree.
-  - exists ty. exact Hlinear.
-  - apply set_core_loan_has_exact_target.
-  - reflexivity.
+  - split.
+    + exists ty. exact Hlinear.
+    + split.
+      * apply set_core_loan_has_exact_target.
+      * reflexivity.
 Qed.
 
 Theorem end_linear_loan_requires_active_owner :
@@ -123,10 +125,11 @@ Proof.
   destruct (Context.sharedLoans context owner) eqn:Hactive;
     try discriminate.
   inversion Hend; subst next; clear Hend.
-  repeat split.
+  split.
   - exact Hactive.
-  - apply set_core_loan_has_exact_target.
-  - reflexivity.
+  - split.
+    + apply set_core_loan_has_exact_target.
+    + reflexivity.
 Qed.
 
 Theorem started_linear_loan_blocks_owner_consumption :
@@ -158,20 +161,22 @@ Proof.
   intros owner context ty Hfree Hlinear.
   exists (setCoreLoan owner true context).
   exists (setCoreLoan owner false (setCoreLoan owner true context)).
-  repeat split.
+  split.
   - unfold startLinearSharedLoan.
     rewrite Hfree, Hlinear.
     reflexivity.
-  - unfold endLinearSharedLoan.
-    rewrite set_core_loan_has_exact_target.
-    reflexivity.
-  - intro candidate.
-    unfold setCoreLoan; simpl.
-    destruct (String.eqb candidate owner) eqn:Heq.
-    + apply String.eqb_eq in Heq. subst candidate.
-      symmetry. exact Hfree.
-    + reflexivity.
-  - reflexivity.
+  - split.
+    + unfold endLinearSharedLoan.
+      rewrite set_core_loan_has_exact_target.
+      reflexivity.
+    + split.
+      * intro candidate.
+        unfold setCoreLoan; simpl.
+        destruct (String.eqb candidate owner) eqn:Heq.
+        -- apply String.eqb_eq in Heq. subst candidate.
+           symmetry. exact Hfree.
+        -- reflexivity.
+      * reflexivity.
 Qed.
 
 Section EncodedOwnerRelation.
@@ -245,13 +250,15 @@ Section EncodedOwnerRelation.
   Proof.
     intros context loans target ty Hrelated Hfree Hlinear.
     exists (setCoreLoan (nameOf target) true context).
-    repeat split.
+    split.
     - unfold startLinearSharedLoan.
       now rewrite Hfree, Hlinear.
-    - apply exact_loan_relation_preserved_by_one_name_update.
-      exact Hrelated.
-    - exact Hlinear.
-    - apply set_core_loan_has_exact_target.
+    - split.
+      + apply exact_loan_relation_preserved_by_one_name_update.
+        exact Hrelated.
+      + split.
+        * exact Hlinear.
+        * apply set_core_loan_has_exact_target.
   Qed.
 
   Theorem end_linear_loan_preserves_exact_owner_relation :
@@ -267,13 +274,15 @@ Section EncodedOwnerRelation.
   Proof.
     intros context loans target Hrelated Hactive.
     exists (setCoreLoan (nameOf target) false context).
-    repeat split.
+    split.
     - unfold endLinearSharedLoan.
       now rewrite Hactive.
-    - apply exact_loan_relation_preserved_by_one_name_update.
-      exact Hrelated.
-    - reflexivity.
-    - apply set_core_loan_has_exact_target.
+    - split.
+      + apply exact_loan_relation_preserved_by_one_name_update.
+        exact Hrelated.
+      + split.
+        * reflexivity.
+        * apply set_core_loan_has_exact_target.
   Qed.
 
   Theorem admitted_view_name_differs_from_exact_owner :
