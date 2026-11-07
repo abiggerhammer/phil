@@ -404,8 +404,8 @@ checkProducerProjection (filename, source, artifact) = do
     "mutated production checkpoint silently passed the field projection"
   let wrongPhase = first { tracePhase = TraceEscapeRejected }
   wrongCode <- checkpointCode owner wrongPhase
-  ensure (not (validObservation artifact
-    { obsTrace = Text.intercalate "," (wrongCode : drop 1 codes) }))
+  ensure (not (validObservation (artifact
+    { obsTrace = Text.intercalate "," (wrongCode : drop 1 codes) })))
     "fabricated error phase was accepted as a valid full trace"
   Right ()
 
