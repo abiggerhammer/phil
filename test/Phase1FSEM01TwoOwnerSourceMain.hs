@@ -16,19 +16,23 @@ import qualified Phil.Core.Context as Core
 import Phil.Core.Static
   ( DeclarationKey (..), emptyStaticContext )
 import Phil.Core.Syntax
-  ( Control (..), Name, RefTerm (..), Ty (..) )
+  ( Control (..), Mode (..), Name, ProductElementType (..)
+  , RefTerm (..), Ty (..) )
 import Phil.Surface.Check.Engine
   ( BorrowTraceCheckpoint (..), BorrowTracePhase (..) )
 import Phil.Surface.Check.Types
   ( RejectionClass (BorrowEscape), SurfaceCheckError (..)
   , SurfaceCheckResult (..) )
+import Phil.Core.CheckedBindingMode (CheckedTypeMode (..))
+import Phil.Surface.Check.Support (emptySurfaceState)
+import Phil.Surface.GrammarV1.CheckedType (grammarV1CheckedTypeMode)
 import Phil.Surface.GrammarV1.BinderScope
   ( GrammarV1ResolvedBinder (..) )
 import Phil.Surface.GrammarV1.BorrowResourceSurface
   ( GrammarV1BorrowResourceError (..) )
 import Phil.Surface.GrammarV1.Parser
   ( GrammarV1Declaration (..), GrammarV1TopLevelDecl (..)
-  , GrammarV1FunctionDecl, GrammarV1SourceFile (..)
+  , GrammarV1FunctionDecl (..), GrammarV1SourceFile (..)
   , parseGrammarV1StructuralSource )
 import Phil.Surface.GrammarV1.TwoOwnerBorrowResourceSurface
   ( GrammarV1TwoOwnerBorrowTrace (..)
@@ -45,6 +49,12 @@ root = DeclarationKey "decl.fsem01.source-two-owner.v1"
 
 bytes8 :: Ty
 bytes8 = TyBytes (RefNat 8)
+
+productType :: Ty
+productType = TyProduct
+  [ ProductElementType Linear bytes8
+  , ProductElementType Linear bytes8
+  ]
 
 assert :: Bool -> String -> Either String ()
 assert condition why =
@@ -126,16 +136,35 @@ checkIndependentSpectator primary spectator ctx = do
   assert (Core.sharedLoans afterSpectator == Set.singleton primary)
     "spectator use damaged primary active loan"
 
+-- Check the declared source tuple without importing the bridge's inferred
+-- result. This independently establishes exact element order, mode and Ty.
+checkDeclaredProduct :: Text -> Either String ()
+checkDeclaredProduct source = do
+  fn <- sourceFunction source
+  resultSource <- maybe (Left "missing source result type") Right
+    (grammarV1FunctionResultType fn)
+  case grammarV1CheckedTypeMode
+    emptyStaticContext emptySurfaceState (locatedValue resultSource) of
+    Just (Right (result, steps)) ->
+      assert (checkedBindingType result == productType &&
+              checkedBindingMode result == Linear &&
+              null steps)
+        "two-Bytes source tuple did not elaborate to the exact linear TyProduct"
+    other -> Left ("source product type was not accepted: " <> show other)
+
 checkAccepted :: Text -> Either String ()
 checkAccepted source = do
+  checkDeclaredProduct source
   traced <- checkSource source
   let primary = grammarV1ResolvedBinderCoreName (twoOwnerPrimaryBinder traced)
       spectator = grammarV1ResolvedBinderCoreName (twoOwnerSpectatorBinder traced)
       cuts = twoOwnerCheckpoints traced
       actualPhases = map tracePhase cuts
+  assert (twoOwnerExpectedProduct traced == productType)
+    "traced checker lost the exact source-derived TyProduct"
   assert (twoOwnerOutcome traced ==
-    Right (SurfaceCheckResult "loan" [Return (TyOpaque "Tuple[2]")]))
-    "accepted source did not complete via the two-owner tuple runtime"
+    Right (SurfaceCheckResult "loan" [Return productType]))
+    "production did not return the elementwise-checked TyProduct"
   assert
     (actualPhases ==
       [ TraceBeforeLoan, TraceLoanStarted, TraceBodyResult False
@@ -214,17 +243,21 @@ main = do
   escaping <- TextIO.readFile (sourceDir <> "escape.phil")
   reversed <- TextIO.readFile (sourceDir <> "reversed-return.phil")
   extra <- TextIO.readFile (sourceDir <> "third-owner.phil")
+  wrongWidth <- TextIO.readFile (sourceDir <> "wrong-product-width.phil")
+  unsupported <- TextIO.readFile (sourceDir <> "unsupported-product-element.phil")
   let result = do
         checkAccepted positive
         checkEscaping escaping
         checkUnsupported reversed "reversed return order"
         checkUnsupported extra "third linear parameter"
+        checkUnsupported wrongWidth "second product type has wrong Bytes width"
+        checkUnsupported unsupported "non-Bytes product element"
         -- The accepted/escaping source differs only in one final Unit
         -- expression within the borrow body, not in binder/type signatures.
         assert (Text.replace "view; unit;" "view;" positive == escaping)
           "negative is not the minimally modified escaping-view source"
   case result of
     Right () ->
-      putStrLn "PASS: single-source two-linear-owner borrow, tuple return, exact BorrowEscape"
+      putStrLn "PASS: single-source two-linear-owner exact TyProduct return and BorrowEscape"
     Left msg ->
       putStrLn ("FAIL: " <> msg) >> exitFailure
