@@ -125,3 +125,7 @@ it with the established name injection and the exact source-derived
 production trace. Only after preserving **identity, loan membership, step
 outcomes, and the rejected `BorrowEscape` prefix** can the FSEM-01
 source-to-model simulation obligation be narrowed or discharged.
+
+## Bounded declaration-root catalog bridge (subsequent slice)
+
+[The bounded declaration-identity representation bridge](formal-semantics-declaration-identity-bridge-fsem01-v1.md) adds a finite, duplicate-free Rocq catalog relation between `BindingSemantics.DeclarationIdentity := nat` and a represented declaration-root string, then composes it with the canonical binder-name injectivity theorem. The corresponding test observes **real** Haskell `DeclarationKey` roots obtained from `deriveDeclarationIdentity`. The bridge covers only listed roots in an exact catalog; it does not construct a global Text↔Rocq String bijection, establish representation stability across catalogs, or prove resource-transition simulation.
