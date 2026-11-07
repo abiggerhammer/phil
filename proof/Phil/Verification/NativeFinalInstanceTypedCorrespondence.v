@@ -1307,3 +1307,133 @@ Theorem native_wrong_role_decoding_fails :
     nativeDecodeRawSystemsDigestWire (nativeLoweringRootWire root) = None /\
     nativeDecodeLoweringRootWire (nativeRawSystemsDigestWire raw) = None.
 Proof. intros [raw] [root]. split; reflexivity. Qed.
+
+(*
+  #1584: second narrowly bounded native data-wire fragment. The native Haskell
+  newtypes SystemsArtifactRevision, Phase1StageContractRevision, and
+  ClosedStageContractRevision each wrap Text but carry INDEPENDENT meanings.
+  The S/C/F ASCII role tags are reversible and disjoint from one another and
+  the R/L raw digest/lowering-root tags. The string model proves algebraic
+  properties of the wire shape ONLY; it does not assume a Unicode Text ->
+  Rocq string serializer, independently accepted stage-production authority,
+  or a native digest/revision -> nat encoding.
+*)
+Record NativeSystemsRevisionRole := mkNativeSystemsRevisionRole {
+  systemsRevisionPayload : string
+}.
+Record NativeCommonRevisionRole := mkNativeCommonRevisionRole {
+  commonRevisionPayload : string
+}.
+Record NativeClosedRevisionRole := mkNativeClosedRevisionRole {
+  closedRevisionPayload : string
+}.
+
+Definition nativeSystemsRevisionWire (r : NativeSystemsRevisionRole) : string :=
+  "S" ++ systemsRevisionPayload r.
+Definition nativeCommonRevisionWire (r : NativeCommonRevisionRole) : string :=
+  "C" ++ commonRevisionPayload r.
+Definition nativeClosedRevisionWire (r : NativeClosedRevisionRole) : string :=
+  "F" ++ closedRevisionPayload r.
+
+Definition nativeDecodeSystemsRevisionWire (wire : string)
+  : option NativeSystemsRevisionRole :=
+  match wire with
+  | EmptyString => None
+  | String role payload =>
+      if Ascii.eqb role "S"%char
+      then Some (mkNativeSystemsRevisionRole payload)
+      else None
+  end.
+Definition nativeDecodeCommonRevisionWire (wire : string)
+  : option NativeCommonRevisionRole :=
+  match wire with
+  | EmptyString => None
+  | String role payload =>
+      if Ascii.eqb role "C"%char
+      then Some (mkNativeCommonRevisionRole payload)
+      else None
+  end.
+Definition nativeDecodeClosedRevisionWire (wire : string)
+  : option NativeClosedRevisionRole :=
+  match wire with
+  | EmptyString => None
+  | String role payload =>
+      if Ascii.eqb role "F"%char
+      then Some (mkNativeClosedRevisionRole payload)
+      else None
+  end.
+
+Theorem native_systems_revision_wire_injective :
+  forall a b, nativeSystemsRevisionWire a = nativeSystemsRevisionWire b -> a = b.
+Proof.
+  intros [a] [b] H.
+  unfold nativeSystemsRevisionWire in H.
+  simpl in H.
+  injection H as Heq. now subst.
+Qed.
+Theorem native_common_revision_wire_injective :
+  forall a b, nativeCommonRevisionWire a = nativeCommonRevisionWire b -> a = b.
+Proof.
+  intros [a] [b] H.
+  unfold nativeCommonRevisionWire in H.
+  simpl in H.
+  injection H as Heq. now subst.
+Qed.
+Theorem native_closed_revision_wire_injective :
+  forall a b, nativeClosedRevisionWire a = nativeClosedRevisionWire b -> a = b.
+Proof.
+  intros [a] [b] H.
+  unfold nativeClosedRevisionWire in H.
+  simpl in H.
+  injection H as Heq. now subst.
+Qed.
+
+Theorem native_systems_revision_wire_roundtrip :
+  forall a, nativeDecodeSystemsRevisionWire (nativeSystemsRevisionWire a) = Some a.
+Proof. intros [a]. reflexivity. Qed.
+Theorem native_common_revision_wire_roundtrip :
+  forall a, nativeDecodeCommonRevisionWire (nativeCommonRevisionWire a) = Some a.
+Proof. intros [a]. reflexivity. Qed.
+Theorem native_closed_revision_wire_roundtrip :
+  forall a, nativeDecodeClosedRevisionWire (nativeClosedRevisionWire a) = Some a.
+Proof. intros [a]. reflexivity. Qed.
+
+Theorem native_revision_role_wires_pairwise_disjoint :
+  forall s c f,
+    nativeSystemsRevisionWire s <> nativeCommonRevisionWire c /\
+    nativeSystemsRevisionWire s <> nativeClosedRevisionWire f /\
+    nativeCommonRevisionWire c <> nativeClosedRevisionWire f.
+Proof.
+  intros [s] [c] [f].
+  repeat split; intro H;
+    unfold nativeSystemsRevisionWire, nativeCommonRevisionWire,
+      nativeClosedRevisionWire in H;
+    simpl in H; discriminate H.
+Qed.
+
+Theorem native_revision_wrong_role_decoding_fails :
+  forall s c f,
+    nativeDecodeSystemsRevisionWire (nativeCommonRevisionWire c) = None /\
+    nativeDecodeSystemsRevisionWire (nativeClosedRevisionWire f) = None /\
+    nativeDecodeCommonRevisionWire (nativeSystemsRevisionWire s) = None /\
+    nativeDecodeCommonRevisionWire (nativeClosedRevisionWire f) = None /\
+    nativeDecodeClosedRevisionWire (nativeSystemsRevisionWire s) = None /\
+    nativeDecodeClosedRevisionWire (nativeCommonRevisionWire c) = None.
+Proof. intros [s] [c] [f]. repeat split; reflexivity. Qed.
+
+Theorem native_revision_and_digest_wire_images_disjoint :
+  forall raw root s c f,
+    nativeRawSystemsDigestWire raw <> nativeSystemsRevisionWire s /\
+    nativeRawSystemsDigestWire raw <> nativeCommonRevisionWire c /\
+    nativeRawSystemsDigestWire raw <> nativeClosedRevisionWire f /\
+    nativeLoweringRootWire root <> nativeSystemsRevisionWire s /\
+    nativeLoweringRootWire root <> nativeCommonRevisionWire c /\
+    nativeLoweringRootWire root <> nativeClosedRevisionWire f.
+Proof.
+  intros [raw] [root] [s] [c] [f].
+  repeat split; intro H;
+    unfold nativeRawSystemsDigestWire, nativeLoweringRootWire,
+      nativeSystemsRevisionWire, nativeCommonRevisionWire,
+      nativeClosedRevisionWire in H;
+    simpl in H; discriminate H.
+Qed.

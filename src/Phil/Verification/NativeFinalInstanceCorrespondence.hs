@@ -19,6 +19,12 @@ module Phil.Verification.NativeFinalInstanceCorrespondence
   , decodeNativeRawSystemsDigestWire
   , encodeNativeLoweringRootWire
   , decodeNativeLoweringRootWire
+  , encodeNativeSystemsRevisionWire
+  , decodeNativeSystemsRevisionWire
+  , encodeNativeCommonContractRevisionWire
+  , decodeNativeCommonContractRevisionWire
+  , encodeNativeClosedContractRevisionWire
+  , decodeNativeClosedContractRevisionWire
   , NativeManifestStageReplay
   , nativeReplayRawDigest
   , nativeReplayLoweringRoot
@@ -73,9 +79,9 @@ import Phil.Verification.CertifiedRelease
 import Phil.Systems.IR
   ( loweringLedgerRoot, systemsArtifactDigest, systemsArtifactLoweringLedger )
 import Phil.Systems.Phase1Stage
-  ( Phase1StageBundle (..), SystemsArtifactRevision, Phase1StageContractRevision )
+  ( Phase1StageBundle (..), SystemsArtifactRevision (..), Phase1StageContractRevision (..) )
 import Phil.Systems.StageClosure
-  ( StageClosureBundle (..), ClosedStageContractRevision, concreteSubjectStage )
+  ( StageClosureBundle (..), ClosedStageContractRevision (..), concreteSubjectStage )
 import Phil.Systems.SubjectCorrespondence
   ( SubjectStageBundle (..), SubjectStageRevision )
 import Phil.Verification.FinalAuthorityAdapter
@@ -228,6 +234,42 @@ decodeNativeLoweringRootWire :: Text -> Maybe NativeLoweringRootDigest
 decodeNativeLoweringRootWire wire =
   case Text.uncons wire of
     Just ('L', payload) -> Just (NativeLoweringRootDigest (Digest payload))
+    _ -> Nothing
+
+
+-- | The normalized Systems revision, common Phase-1 contract revision, and
+-- final closed contract revision are THREE independent native Text newtypes.
+-- S/C/F role tags deliberately differ from raw manifest R and lowering L.
+-- These partial data decoders provide lossless, role-separated transport;
+-- accepting a supplied wire does not certify that a revision was derived
+-- or that an architecture occurrence produced the accepted StageClosure.
+encodeNativeSystemsRevisionWire :: SystemsArtifactRevision -> Text
+encodeNativeSystemsRevisionWire (SystemsArtifactRevision value) = Text.cons 'S' value
+
+decodeNativeSystemsRevisionWire :: Text -> Maybe SystemsArtifactRevision
+decodeNativeSystemsRevisionWire wire =
+  case Text.uncons wire of
+    Just ('S', payload) -> Just (SystemsArtifactRevision payload)
+    _ -> Nothing
+
+encodeNativeCommonContractRevisionWire :: Phase1StageContractRevision -> Text
+encodeNativeCommonContractRevisionWire (Phase1StageContractRevision value) =
+  Text.cons 'C' value
+
+decodeNativeCommonContractRevisionWire :: Text -> Maybe Phase1StageContractRevision
+decodeNativeCommonContractRevisionWire wire =
+  case Text.uncons wire of
+    Just ('C', payload) -> Just (Phase1StageContractRevision payload)
+    _ -> Nothing
+
+encodeNativeClosedContractRevisionWire :: ClosedStageContractRevision -> Text
+encodeNativeClosedContractRevisionWire (ClosedStageContractRevision value) =
+  Text.cons 'F' value
+
+decodeNativeClosedContractRevisionWire :: Text -> Maybe ClosedStageContractRevision
+decodeNativeClosedContractRevisionWire wire =
+  case Text.uncons wire of
+    Just ('F', payload) -> Just (ClosedStageContractRevision payload)
     _ -> Nothing
 
 -- | Read-only replay of the exact accepted manifest/StageClosure consumer
