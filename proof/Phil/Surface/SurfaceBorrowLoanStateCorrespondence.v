@@ -110,7 +110,7 @@ Proof.
     + exists ty. reflexivity.
     + split.
       * apply set_core_loan_has_exact_target.
-      * reflexivity.
+      * simpl. exact Hlinear.
 Qed.
 
 Theorem end_linear_loan_requires_active_owner :
