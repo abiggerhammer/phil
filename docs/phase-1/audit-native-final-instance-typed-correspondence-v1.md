@@ -348,3 +348,47 @@ domains; predecessor source/assumption/erasure/final authority; complete
 verification and separate independent pinned final-delta approval. No changes
 to TCB, generated Phase 1 artifacts, historical audit evidence, or the original
 244 normative conformance cases. Independent audit freeze **NOT YET**.
+
+## 2026-11-07 — exact independently accepted VER-010 source envelope retention
+
+The previous exported native final witness retained complete checked source
+assurance and StageClosure independently, but discarded the exact
+`CertifiedApplicationArtifact` accepted by the VER-010 source consumer.
+Its opaque constructor is available only after `certifyApplicationArtifact`
+checks the complete StageClosure; the two component projections are not
+themselves that native acceptance. This successor retains the very same
+independently accepted VER-010 object, without reconstructing it, and exposes
+only a read-only `nativeCorrespondenceCertifiedSource` accessor. The
+high-level binder still requires exact complete accepted source assurance,
+the checked generic actuals and canonical descriptor, and the existing
+source/release whole-StageClosure equality.
+
+Strict Upload and Steve replay checks that the exported source envelope is
+the exact object supplied to the checked final consumer, and that its source
+proof and entire StageClosure agree with the previously retained accepted
+proof, stage, and complete INT-005 release. The adversarial cross-fixture
+replay independently certifies another source artifact using the **same**
+source proof and a **different**, verified StageClosure; the existing native
+final gate must reject it with `NativeFinalStageMismatch`. This establishes
+the scope of the accepted source-to-stage *pair*, not that this canonical
+architecture occurrence generated either stage.
+
+A separately typed Rocq `CertifiedSourceObject` and
+`SourceAssuranceObject` give conditional full-envelope transport,
+same-source-proof substitution rejection, and stage-drift rejection. Four
+mandatory `Print Assumptions` queries cover these bounded theorems.
+`acceptedByNativeSourceProducer` is an **external** predicate and no model
+proposition is promoted to native verifier authority. There is no invented
+Haskell-to-Rocq `nat` encoding, totality or injectivity assertion.
+
+**Remaining-premise ledger:** verified canonical architecture-occurrence-key
+to concrete StageClosure/selected-release production provenance, competent
+native-to-Rocq typed representations and injectivity across source, native
+manifest and raw Systems digest/lowering root, normalized Systems revision,
+common Phase1StageContractRevision, final ClosedStageContractRevision,
+subject/instance/realization/profile and complete accepted release; source,
+assumption, erasure and final predecessor authority; full
+`FixedFinalAuthorityAdapter` / `FinalArtifactCertified`; independent public
+release-byte replay and pinned independent final-delta signoff. No TCB,
+generated Phase-1 artifact, normative conformance or historical audit change.
+Original 244 cases are preserved, independent freeze verdict **NOT YET**.
