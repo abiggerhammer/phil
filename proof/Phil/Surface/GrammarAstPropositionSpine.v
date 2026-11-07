@@ -436,11 +436,11 @@ Proof.
     "proposition_and" tree body Hnode).
   rewrite (phase1_surface_expect_sequence_round_trip body items Hsequence).
   rewrite (phase1_surface_exact2_round_trip items first_tree rest_tree Hitems).
-  rewrite (phase1_surface_normalize_proposition_not_spine_round_trip
+  rewrite <- (phase1_surface_normalize_proposition_not_spine_round_trip
     first_tree first Hfirst).
   rewrite (phase1_surface_expect_repetition_round_trip
     rest_tree rest_trees Hrepetition).
-  rewrite (phase1_surface_normalize_proposition_and_suffixes_round_trip
+  rewrite <- (phase1_surface_normalize_proposition_and_suffixes_round_trip
     rest_trees rest Hrest).
   reflexivity.
 Qed.
@@ -598,11 +598,11 @@ Proof.
     "proposition_or" tree body Hnode).
   rewrite (phase1_surface_expect_sequence_round_trip body items Hsequence).
   rewrite (phase1_surface_exact2_round_trip items first_tree rest_tree Hitems).
-  rewrite (phase1_surface_normalize_proposition_and_spine_round_trip
+  rewrite <- (phase1_surface_normalize_proposition_and_spine_round_trip
     first_tree first Hfirst).
   rewrite (phase1_surface_expect_repetition_round_trip
     rest_tree rest_trees Hrepetition).
-  rewrite (phase1_surface_normalize_proposition_or_suffixes_round_trip
+  rewrite <- (phase1_surface_normalize_proposition_or_suffixes_round_trip
     rest_trees rest Hrest).
   reflexivity.
 Qed.
