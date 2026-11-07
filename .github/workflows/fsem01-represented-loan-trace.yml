@@ -1,0 +1,82 @@
+name: FSEM-01 Represented Production Loan Trace
+
+on:
+  pull_request:
+    paths:
+      - 'proof/Phil/Surface/SurfaceRepresentedBorrowTrace.v'
+      - 'test/Phase1FSEM01RepresentedLoanTraceMain.hs'
+      - 'docs/phase-1/formal-semantics-represented-loan-trace-fsem01-v1.md'
+      - '.github/workflows/fsem01-represented-loan-trace.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'proof/Phil/Surface/SurfaceRepresentedBorrowTrace.v'
+      - 'test/Phase1FSEM01RepresentedLoanTraceMain.hs'
+      - 'docs/phase-1/formal-semantics-represented-loan-trace-fsem01-v1.md'
+      - '.github/workflows/fsem01-represented-loan-trace.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  rocq-represented-owner-trace:
+    runs-on: ubuntu-latest
+    container:
+      image: rocq/rocq-prover:9.2.0
+      options: --user root
+    steps:
+      - uses: actions/checkout@v4
+      - name: Compile exact-model dependencies and represented trace theorem
+        shell: bash
+        run: |
+          set -euo pipefail
+          export PATH="/home/rocq/.opam/${COMPILER}/bin:$PATH"
+          for file in \
+            proof/Phil/Core/Syntax.v \
+            proof/Phil/Core/Context.v \
+            proof/Phil/Core/BindingSemantics.v \
+            proof/Phil/Core/ContextJoin.v \
+            proof/Phil/Core/ProcessJoin.v \
+            proof/Phil/Core/ResourceJoin.v \
+            proof/Phil/Core/ResourceScope.v \
+            proof/Phil/Surface/SurfaceBinderScopeCore.v \
+            proof/Phil/Surface/SurfaceLetPatternScope.v \
+            proof/Phil/Surface/SurfaceBorrowViewScope.v \
+            proof/Phil/Surface/SurfaceBorrowLoanStateCorrespondence.v \
+            proof/Phil/Surface/SurfaceBinderNameEncoding.v \
+            proof/Phil/Surface/SurfaceDeclarationIdentityBridge.v \
+            proof/Phil/Surface/SurfaceRepresentedBorrowTrace.v
+          do
+            rocq c -Q proof/Phil Phil "$file"
+          done
+      - name: Reject admissions and record exact-head proof hash
+        shell: bash
+        run: |
+          set -euo pipefail
+          if grep -nE '^[[:space:]]*(Admitted[.]|Axiom[[:space:]]|Parameter[[:space:]])' \
+            proof/Phil/Surface/SurfaceRepresentedBorrowTrace.v; then
+            echo "Found an admission or global axiom in trace proof"
+            exit 1
+          fi
+          sha256sum \
+            proof/Phil/Surface/SurfaceRepresentedBorrowTrace.v \
+            proof/Phil/Surface/SurfaceRepresentedBorrowTrace.vo
+
+  haskell-represented-production-trace:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: haskell-actions/setup@v2
+        with:
+          ghc-version: '9.6.7'
+          cabal-version: 'latest'
+      - name: Build production Haskell substrate
+        run: cabal build lib:phil-core --ghc-options=-Werror
+      - name: Strict typecheck production trace representation checks
+        run: |
+          set -euo pipefail
+          cabal exec -- ghc -isrc -Wall -Werror -fno-code \
+            test/Phase1FSEM01RepresentedLoanTraceMain.hs
+      - name: Replay accepted and rejected source-derived production traces
+        run: cabal exec -- runghc -isrc -Wall -Werror \
+          test/Phase1FSEM01RepresentedLoanTraceMain.hs
