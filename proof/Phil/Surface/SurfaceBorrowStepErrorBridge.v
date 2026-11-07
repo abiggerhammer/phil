@@ -167,9 +167,7 @@ Proof.
   intros [owner phase present loan] event Hphase.
   simpl in Hphase.
   subst phase.
-  unfold checkedAdvance; simpl.
-  destruct (andb (Bool.eqb present true) (Bool.eqb loan true));
-    destruct event; reflexivity.
+  destruct present, loan, event; reflexivity.
 Qed.
 
 Theorem no_continuation_after_terminal_return :
@@ -180,9 +178,7 @@ Proof.
   intros [owner phase present loan] event Hphase.
   simpl in Hphase.
   subst phase.
-  unfold checkedAdvance; simpl.
-  destruct (andb (Bool.eqb present false) (Bool.eqb loan false));
-    destruct event; reflexivity.
+  destruct present, loan, event; reflexivity.
 Qed.
 
 Fixpoint replay
