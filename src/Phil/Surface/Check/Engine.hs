@@ -153,6 +153,8 @@ data BorrowTraceCheckpoint = BorrowTraceCheckpoint
   { tracePhase :: BorrowTracePhase
   , traceOwnerName :: Name
   , traceViewName :: Name
+  , traceUnrestrictedOwners :: Map.Map Name Ty
+  , traceAffineOwners :: Map.Map Name Ty
   , traceLinearOwners :: Map.Map Name Ty
   , traceActiveLoans :: Set Name
   }
@@ -175,6 +177,10 @@ observeBorrowTraceResource
 observeBorrowTraceResource expectedOwner expectedView expectedType checkpoint
   | traceOwnerName checkpoint /= expectedOwner = Nothing
   | traceViewName checkpoint /= expectedView = Nothing
+  -- checkScopedValueBlock prunes the temporary SharedBytes view before the
+  -- observed body-result checkpoint; it is not live at these cut points.
+  | not (Map.null (traceUnrestrictedOwners checkpoint)) = Nothing
+  | not (Map.null (traceAffineOwners checkpoint)) = Nothing
   | otherwise = do
       linearPresent <- case Map.toList (traceLinearOwners checkpoint) of
         [] -> Just False
@@ -269,6 +275,8 @@ snapshotBorrow phase owner view state =
     { tracePhase = phase
     , traceOwnerName = owner
     , traceViewName = Name view
+    , traceUnrestrictedOwners = unrestrictedBindings context
+    , traceAffineOwners = affineBindings context
     , traceLinearOwners = linearBindings context
     , traceActiveLoans = sharedLoans context
     }

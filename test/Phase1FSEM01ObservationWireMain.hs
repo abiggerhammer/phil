@@ -3,6 +3,7 @@
 module Main (main) where
 
 import qualified Crypto.Hash.SHA256 as SHA256
+import qualified Phil.Core.Context as CoreContext
 import qualified Data.ByteString as BS
 import qualified Data.Map.Strict as Map
 import qualified Data.Set as Set
@@ -20,7 +21,7 @@ import Phil.Core.Static
   , deriveDeclarationIdentity
   , emptyStaticContext
   )
-import Phil.Core.Syntax (Control (Return), Name (..), RefTerm (..), Ty (..))
+import Phil.Core.Syntax (Control (Return), Mode (Unrestricted), Name (..), RefSort (..), RefTerm (..), Ty (..))
 import Phil.Surface.Check.Engine
   ( BorrowTraceCheckpoint (..)
   , BorrowTracePhase (..)
@@ -406,6 +407,12 @@ checkProducerProjection (filename, source, artifact) = do
       other = Name "unauthorized-owner"
       badOwnerName = first { traceOwnerName = other }
       badViewName = first { traceViewName = other }
+      extraUnrestricted = first
+        { traceUnrestrictedOwners = Map.insert other expectedTy
+            (traceUnrestrictedOwners first) }
+      extraAffine = first
+        { traceAffineOwners = Map.insert other expectedTy
+            (traceAffineOwners first) }
       badOwnerType = first
         { traceLinearOwners = Map.insert ownerName
             (TyBytes (RefNat 9)) (traceLinearOwners first) }
@@ -417,7 +424,8 @@ checkProducerProjection (filename, source, artifact) = do
   ensure (all (\cut -> case checkpointCode owner view cut of
             Left _ -> True
             Right _ -> False)
-            [badOwnerName, badViewName, badOwnerType, extraOwner, extraLoan])
+            [badOwnerName, badViewName, extraUnrestricted, extraAffine,
+             badOwnerType, extraOwner, extraLoan])
     "mutated production checkpoint silently passed the field projection"
   let wrongPhase = first { tracePhase = TraceEscapeRejected }
   wrongCode <- checkpointCode owner view wrongPhase
@@ -426,11 +434,221 @@ checkProducerProjection (filename, source, artifact) = do
     "fabricated error phase was accepted as a valid full trace"
   Right ()
 
+
+-- FSEM-01 CONTEXT-V1 is a separate full admitted-resource-state carrier.
+-- Unlike OBS-V1, its words contain the actual finite map entries, type tags,
+-- and set members read at *every* recorded production checkpoint.
+-- Only the strictly bounded Bytes[8] single-linear-owner fragment is valid.
+contextVersion :: Text
+contextVersion = "PHIL-FSEM01-CONTEXT-V1|"
+
+viewTy :: Ty
+viewTy = TyOpaqueSorted "SharedBytes" (SortFiniteSeq (SortUInt 8))
+
+renderContextMap :: Map.Map Name Ty -> Either String Text
+renderContextMap entries =
+  case Map.toAscList entries of
+    [] -> Right "-"
+    pairs -> do
+      encoded <- mapM (\(name, ty) -> do
+        tag <- if ty == expectedTy then Right "Bytes8"
+          else if ty == viewTy then Right "SharedBytes"
+          else Left "unsupported resource binding type in CONTEXT-V1"
+        Right (utf8Hex (unName name) <> "=" <> tag)) pairs
+      Right (Text.intercalate "," encoded)
+
+renderContextSet :: Set.Set Name -> Text
+renderContextSet members =
+  case Set.toAscList members of
+    [] -> "-"
+    names -> Text.intercalate "," (map (utf8Hex . unName) names)
+
+renderRawContextState
+  :: Name -> Name -> BorrowTraceCheckpoint -> Either String Text
+renderRawContextState owner view cut = do
+  ensure (traceOwnerName cut == owner && traceViewName cut == view)
+    "context-wire checkpoint changed binder identity"
+  unrestricted <- renderContextMap (traceUnrestrictedOwners cut)
+  affine <- renderContextMap (traceAffineOwners cut)
+  linear <- renderContextMap (traceLinearOwners cut)
+  let loans = renderContextSet (traceActiveLoans cut)
+  Right (Text.intercalate "/" [phaseCode (tracePhase cut),
+    unrestricted, affine, linear, loans])
+
+-- Canonical model words are used by the *validator*, never to produce
+-- state. The producer above enumerates the real four ResourceContext fields.
+modelContextWord :: Text -> Text -> Text -> Text
+modelContextWord phase ownerPresent loan =
+  Text.intercalate "/" [phase, "-", "-", ownerPresent, loan]
+
+canonicalContextStates :: Observation -> Text
+canonicalContextStates observation =
+  let owner = obsOwnerHex observation
+      present = owner <> "=Bytes8"
+      state = \phase lin loan -> modelContextWord phase
+        (if lin then present else "-") (if loan then owner else "-")
+  in if obsOutcome observation == positiveOutcome
+       then Text.intercalate "," [
+         state "B" True False, state "S" True True,
+         state "N" True True, state "C" True False,
+         state "R" False False]
+       else Text.intercalate "," [
+         state "B" True False, state "S" True True,
+         state "E" True True, state "X" True True]
+
+contextFields :: Observation -> Text -> [Text]
+contextFields observation states =
+  [obsSourceSHA256 observation, obsRootHex observation,
+   obsOwnerHex observation, obsViewHex observation,
+   states, obsOutcome observation]
+
+-- Keep source names as Haskell Name values; no unverified hex -> Text decoding.
+encodeContextEvidence
+  :: Observation -> Name -> Name -> [BorrowTraceCheckpoint]
+  -> Either String Text
+encodeContextEvidence observation owner view cuts = do
+  states <- mapM (renderRawContextState owner view) cuts
+  Right (contextVersion <> Text.concat (map frame
+    (contextFields observation (Text.intercalate "," states))))
+
+validContextEvidence :: Observation -> Text -> Bool
+validContextEvidence observation wire =
+  case Text.stripPrefix contextVersion wire >>= parseFrames 6 of
+    Just (fields, suffix) ->
+      Text.null suffix &&
+      fields == contextFields observation (canonicalContextStates observation) &&
+      wire == contextVersion <> Text.concat (map frame fields)
+    Nothing -> False
+
+contextOfCheckpoint :: BorrowTraceCheckpoint -> CoreContext.ResourceContext
+contextOfCheckpoint cut = CoreContext.ResourceContext
+  { CoreContext.unrestrictedBindings = traceUnrestrictedOwners cut
+  , CoreContext.affineBindings = traceAffineOwners cut
+  , CoreContext.linearBindings = traceLinearOwners cut
+  , CoreContext.sharedLoans = traceActiveLoans cut
+  }
+
+-- Independently replay the *real* Core.Context operations against successive
+-- production snapshots. No phase label is used to synthesize a successor.
+checkCoreContextTransitions
+  :: Name -> Name -> [BorrowTraceCheckpoint] -> Either String ()
+checkCoreContextTransitions owner view cuts =
+  case cuts of
+    [before, started, body, closed, returned] -> do
+      ensure (map tracePhase cuts ==
+        [TraceBeforeLoan, TraceLoanStarted, TraceBodyResult False,
+         TraceLoanClosed, TraceOwnerReturned])
+        "unexpected positive resource transition phases"
+      ensure (CoreContext.startSharedLoan owner (contextOfCheckpoint before) ==
+        Right (contextOfCheckpoint started))
+        "real Core.Context loan start differs from source snapshot"
+      -- The production body checkpoint is recorded *after*
+      -- checkScopedValueBlock prunes the temporary SharedBytes binding.
+      ensure (contextOfCheckpoint started == contextOfCheckpoint body)
+        "safe body changed resources after scoped-view cleanup"
+      temporary <- case CoreContext.insertBinding Unrestricted view viewTy
+          (contextOfCheckpoint started) of
+        Left err -> Left ("synthetic view insertion failed: " <> show err)
+        Right context -> Right context
+      ensure (Map.lookup view (CoreContext.unrestrictedBindings temporary) ==
+                Just viewTy &&
+              temporary { CoreContext.unrestrictedBindings =
+                Map.delete view (CoreContext.unrestrictedBindings temporary) } ==
+                contextOfCheckpoint body)
+        "scoped SharedBytes insert/remove roundtrip disagrees with body cut"
+      ensure (CoreContext.endSharedLoan owner (contextOfCheckpoint body) ==
+        Right (contextOfCheckpoint closed))
+        "real Core.Context loan end differs after scoped cleanup"
+      ensure (CoreContext.consumeLinear owner (contextOfCheckpoint closed) ==
+        Right (expectedTy, contextOfCheckpoint returned))
+        "real Core.Context terminal consume differs from source snapshot"
+    [before, started, escaping, rejected] -> do
+      ensure (map tracePhase cuts ==
+        [TraceBeforeLoan, TraceLoanStarted, TraceBodyResult True,
+         TraceEscapeRejected])
+        "unexpected escape-prefix resource phases"
+      ensure (CoreContext.startSharedLoan owner (contextOfCheckpoint before) ==
+        Right (contextOfCheckpoint started))
+        "real Core.Context escape-path loan start differs from source snapshot"
+      ensure (contextOfCheckpoint started == contextOfCheckpoint escaping &&
+              contextOfCheckpoint escaping == contextOfCheckpoint rejected)
+        "BorrowEscape prefix invented resource changes after scoped cleanup"
+      temporary <- case CoreContext.insertBinding Unrestricted view viewTy
+          (contextOfCheckpoint started) of
+        Left err -> Left ("synthetic escape view insertion failed: " <> show err)
+        Right context -> Right context
+      ensure (Map.lookup view (CoreContext.unrestrictedBindings temporary) ==
+                Just viewTy &&
+              temporary { CoreContext.unrestrictedBindings =
+                Map.delete view (CoreContext.unrestrictedBindings temporary) } ==
+                contextOfCheckpoint escaping)
+        "escape scoped SharedBytes insert/remove roundtrip disagrees with cut"
+      ensure (CoreContext.consumeLinear owner (contextOfCheckpoint rejected) ==
+        Left (CoreContext.OwnerBorrowed owner))
+        "BorrowEscape resource incorrectly permitted terminal consumption"
+    _ -> Left "unadmitted resource context trace shape"
+
+contextSpecimen :: (FilePath, Text, Observation)
+  -> Either String (FilePath, Text)
+contextSpecimen (filename, source, artifact) = do
+  sample <- case filter ((== filename) . specimenName) specimens of
+    [match] -> Right match
+    _ -> Left "unknown resource-context source specimen"
+  parsed <- parseFunction source
+  traced <- case grammarV1CheckedBorrowResourceFunctionTrace
+      emptyStaticContext (specimenRoot sample) parsed of
+    Just (Right actual) -> Right actual
+    other -> Left ("resource-context trace unavailable: " <> show other)
+  let owner = grammarV1ResolvedBinderCoreName (grammarV1TraceOwnerBinder traced)
+      view = grammarV1ResolvedBinderCoreName (grammarV1TraceViewBinder traced)
+      cuts = grammarV1TraceCheckpoints traced
+  checkCoreContextTransitions owner view cuts
+  wire <- encodeContextEvidence artifact owner view cuts
+  ensure (validContextEvidence artifact wire)
+    "actual full Map/Set representation failed strict CONTEXT-V1 validator"
+  let first = head cuts
+      other = Name "foreign-resource-owner"
+      foreignUnrestricted = first
+        { traceUnrestrictedOwners = Map.insert other expectedTy
+            (traceUnrestrictedOwners first) }
+      foreignAffine = first
+        { traceAffineOwners = Map.insert other expectedTy
+            (traceAffineOwners first) }
+      foreignLinear = first
+        { traceLinearOwners = Map.insert other expectedTy
+            (traceLinearOwners first) }
+      foreignLoan = first
+        { traceActiveLoans = Set.insert other (traceActiveLoans first) }
+      wrongType = first
+        { traceLinearOwners = Map.insert owner (TyBytes (RefNat 9))
+            (traceLinearOwners first) }
+      changedIdentity = first { traceOwnerName = other }
+      badRawStates = [foreignUnrestricted, foreignAffine, foreignLinear,
+                      foreignLoan, wrongType, changedIdentity]
+  mapM_ (\bad -> case encodeContextEvidence artifact owner view
+                   (bad : drop 1 cuts) of
+      Left _ -> Right ()
+      Right forged -> ensure (not (validContextEvidence artifact forged))
+        "tampered context map, loan or identity gained wire authority")
+    badRawStates
+  let contextFile = Text.unpack (Text.replace ".obs" ".ctx" (Text.pack filename))
+  Right (contextFile, wire)
+
 emit :: FilePath -> [(FilePath, Text, Observation)] -> IO ()
 emit directory observations = do
   createDirectoryIfMissing True directory
   mapM_ (\(name, _, artifact) -> TextIO.writeFile
       (directory <> "/" <> name) (encodeObservation artifact)) observations
+
+-- Backwards compatibility: --emit remains OBS-V1-only. The new mode
+-- deliberately adds CONTEXT-V1 sidecars for independent state witnesses.
+emitWithContexts :: FilePath -> [(FilePath, Text, Observation)] -> IO ()
+emitWithContexts directory observations = do
+  emit directory observations
+  case traverse contextSpecimen observations of
+    Left reason -> fail reason
+    Right contexts -> mapM_ (\(name, wire) ->
+      TextIO.writeFile (directory <> "/" <> name) wire) contexts
 
 main :: IO ()
 main = do
@@ -441,14 +659,19 @@ main = do
     Right observations ->
       case traverse (\observation -> do
               checkOne observation
-              checkProducerProjection observation) observations of
+              checkProducerProjection observation
+              _ <- contextSpecimen observation
+              Right ()) observations of
         Left reason -> putStrLn ("FAIL: " <> reason) >> exitFailure
         Right _ -> case args of
           [] -> putStrLn "PASS: four source-derived v1 artifacts and fail-closed decoder/tamper checks"
           ["--emit", directory] -> do
             emit directory observations
             putStrLn ("PASS: emitted four source-derived v1 artifacts in " <> directory)
-          _ -> putStrLn "Usage: no args, or --emit DIR" >> exitFailure
+          ["--emit-context", directory] -> do
+            emitWithContexts directory observations
+            putStrLn ("PASS: emitted four OBS-V1 and four CONTEXT-V1 artifacts in " <> directory)
+          _ -> putStrLn "Usage: no args, --emit DIR, or --emit-context DIR" >> exitFailure
 
 mapLeft :: (a -> b) -> Either a c -> Either b c
 mapLeft f = either (Left . f) Right
