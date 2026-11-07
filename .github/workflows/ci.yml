@@ -22,6 +22,11 @@ jobs:
       - name: Check out repository
         uses: actions/checkout@v4
 
+      - name: Fast PR supersession policy preflight
+        run: |
+          python3 scripts/ci/test_pr_concurrency.py
+          python3 scripts/ci/check_pr_concurrency.py
+
       - name: Install and verify LLVM 18
         run: bash scripts/ci/setup-llvm18.sh
 
