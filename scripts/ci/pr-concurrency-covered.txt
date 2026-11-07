@@ -1,4 +1,4 @@
-# Ordinary PR checks observed in #1644; deliberate protocol/coordination exceptions excluded.
+# 47 ordinary PR workflows from #1644, plus this guard (48 checked workflows).
 begin-policy-choice-proofs.yml
 ci.yml
 digest-validation-proofs.yml
@@ -43,6 +43,7 @@ phase1-surface-parser-recognizer-completeness.yml
 phase1-surface-parser-structural-rank-bound.yml
 phase1-surface-parser-total-fuel.yml
 phase1-warning-free-haskell-integration.yml
+pr-ci-supersession-policy.yml
 proofs.yml
 storage-proofs.yml
 test-evidence-certification.yml
