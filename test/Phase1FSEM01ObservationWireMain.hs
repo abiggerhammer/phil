@@ -344,6 +344,71 @@ checkOne (_, source, actual) = do
     "root-binding check failed to distinguish forged root"
   Right ()
 
+-- | Independently reconstruct the projection from ACTUAL checker snapshots.
+-- The producer is required to preserve every observed phase, owner name and
+-- membership bit. Forged Map/Set contents must fail before serialization.
+checkProducerProjection :: (FilePath, Text, Observation) -> Either String ()
+checkProducerProjection (filename, source, artifact) = do
+  sample <- case filter ((== filename) . specimenName) specimens of
+    [match] -> Right match
+    _ -> Left ("unknown specimen identity: " <> filename)
+  parsed <- parseFunction source
+  traced <- case grammarV1CheckedBorrowResourceFunctionTrace
+      emptyStaticContext (specimenRoot sample) parsed of
+    Just (Right actual) -> Right actual
+    other -> Left ("source-derived trace unavailable: " <> show other)
+  let owner = grammarV1TraceOwnerBinder traced
+      view = grammarV1TraceViewBinder traced
+      ownerName = grammarV1ResolvedBinderCoreName owner
+      viewName = grammarV1ResolvedBinderCoreName view
+      cuts = grammarV1TraceCheckpoints traced
+      ordinary = grammarV1CheckedBorrowResourceFunction
+        emptyStaticContext (specimenRoot sample) parsed
+  ensure (ordinary == Just (grammarV1TraceOutcome traced))
+    "ordinary checker outcome diverged from raw trace outcome"
+  ensure (not (null cuts)) "producer has no state snapshots to encode"
+  ensure (all (\cut -> traceOwnerName cut == ownerName &&
+                       traceViewName cut == viewName) cuts)
+    "real source checkpoint changed exact identity"
+  codes <- mapM (checkpointCode owner) cuts
+  outcome <- observedOutcome (grammarV1TraceOutcome traced)
+  let projected =
+        [ digestSource source
+        , utf8Hex (unDeclarationKey (specimenRoot sample))
+        , utf8Hex (unName ownerName)
+        , utf8Hex (unName viewName)
+        , Text.pack (show (grammarV1BinderOrdinal
+            (grammarV1ResolvedBinderKey owner)))
+        , Text.pack (show (grammarV1BinderOrdinal
+            (grammarV1ResolvedBinderKey view)))
+        , Text.intercalate "," codes
+        , outcome
+        ]
+  ensure (observationFields artifact == projected)
+    "producer changed at least one original source, identity, state or outcome field"
+  let first = head cuts
+      other = Name "unauthorized-owner"
+      badOwnerName = first { traceOwnerName = other }
+      badOwnerType = first
+        { traceLinearOwners = Map.insert ownerName
+            (TyBytes (RefNat 9)) (traceLinearOwners first) }
+      extraOwner = first
+        { traceLinearOwners = Map.insert other expectedTy
+            (traceLinearOwners first) }
+      extraLoan = first
+        { traceActiveLoans = Set.insert other (traceActiveLoans first) }
+  ensure (all (cut -> case checkpointCode owner cut of
+            Left _ -> True
+            Right _ -> False)
+            [badOwnerName, badOwnerType, extraOwner, extraLoan])
+    "mutated production checkpoint silently passed the field projection"
+  let wrongPhase = first { tracePhase = TraceEscapeRejected }
+  wrongCode <- checkpointCode owner wrongPhase
+  ensure (not (validObservation artifact
+    { obsTrace = Text.intercalate "," (wrongCode : drop 1 codes) }))
+    "fabricated error phase was accepted as a valid full trace"
+  Right ()
+
 emit :: FilePath -> [(FilePath, Text, Observation)] -> IO ()
 emit directory observations = do
   createDirectoryIfMissing True directory
@@ -357,7 +422,9 @@ main = do
   case sequence generated of
     Left reason -> putStrLn ("FAIL: " <> reason) >> exitFailure
     Right observations ->
-      case traverse checkOne observations of
+      case traverse (\observation -> do
+              checkOne observation
+              checkProducerProjection observation) observations of
         Left reason -> putStrLn ("FAIL: " <> reason) >> exitFailure
         Right _ -> case args of
           [] -> putStrLn "PASS: four source-derived v1 artifacts and fail-closed decoder/tamper checks"
