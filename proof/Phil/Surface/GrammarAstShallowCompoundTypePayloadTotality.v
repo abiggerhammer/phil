@@ -733,9 +733,9 @@ Proof.
         input rest selected Hselected)
       as [type_value [primitive [refined
           [Houter [Hprimitive [Hshallow Hround]]]]]].
-    let outer_type := constr:(Phase1NonreferenceTypeSpine type_value) in
-    let primitive_type := constr:(Phase1PrimitiveNonreferenceTypeSpine primitive) in
-    let result := constr:(Phase1ShallowCompoundNonreferenceTypeSpine refined) in
+    pose (outer_type := Phase1NonreferenceTypeSpine type_value).
+    pose (primitive_type := Phase1PrimitiveNonreferenceTypeSpine primitive).
+    pose (result := Phase1ShallowCompoundNonreferenceTypeSpine refined).
     assert (Htype :
       phase1_surface_normalize_type_spine tree = Some outer_type).
     {
@@ -773,9 +773,9 @@ Proof.
   - destruct index as [|index].
     + cbn in Hnth.
       inversion Hnth; subst item.
-      let outer_type := constr:(Phase1NamedTypeSpine selected) in
-      let primitive_type := constr:(Phase1PrimitiveNamedTypeSpine selected) in
-      let result := constr:(Phase1ShallowCompoundNamedTypeSpine selected) in
+      pose (outer_type := Phase1NamedTypeSpine selected).
+      pose (primitive_type := Phase1PrimitiveNamedTypeSpine selected).
+      pose (result := Phase1ShallowCompoundNamedTypeSpine selected).
       assert (Htype :
         phase1_surface_normalize_type_spine tree = Some outer_type).
       {
