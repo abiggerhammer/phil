@@ -156,10 +156,10 @@ def claim_comment(record: dict, commit_sha: str) -> str:
     metadata = dict(record, claim_commit=commit_sha)
     return (
         f"{MARKER}\n"
-        f"**Claimed:** \`{record['slice']}\` by \`{record['actor']}\` "
-        f"for branch \`{record['branch']}\`. Claim ref: \`{claim_ref(record['slice'])}\`.\n"
+        f"**Claimed:** `{record['slice']}` by `{record['actor']}` "
+        f"for branch `{record['branch']}`. Claim ref: `{claim_ref(record['slice'])}`.\n"
         "This is a reservation, **not** a PR merge or a proof result.\n"
-        "\n\`\`\`json\n" + json.dumps(metadata, sort_keys=True) + "\n\`\`\`\n"
+        "\n```json\n" + json.dumps(metadata, sort_keys=True) + "\n```\n"
     )
 
 
@@ -169,7 +169,7 @@ def recorded_claims(comments: list) -> list[dict]:
         body = comment.get("body") or ""
         if not body.startswith(MARKER):
             continue
-        match = re.search(r"\`\`\`json\n(\{[^\n]*\})\n\`\`\`", body)
+        match = re.search(r"```json\n(\{[^\n]*\})\n```", body)
         if not match:
             raise ClaimFailure("malformed FSEM claim audit comment")
         record = json.loads(match.group(1))
@@ -313,7 +313,7 @@ def release(api: GitHub, number: int):
     path = claim_ref(slice_key).removeprefix("refs/")
     api.request("DELETE", "/git/refs/" + path)
     api.request("POST", f"/issues/{TRACKING_ISSUE}/comments", {
-        "body": (f"{RELEASE_MARKER}\nReleased \`{slice_key}\` claim \`{sha}\` "
+        "body": (f"{RELEASE_MARKER}\nReleased `{slice_key}` claim `{sha}` "
                  f"after [PR #{number}](https://github.com/{api.repo}/pull/{number}) "
                  "closed. This says nothing about proof or merge quality.")
     })
