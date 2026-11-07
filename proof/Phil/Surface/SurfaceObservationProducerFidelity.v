@@ -238,12 +238,8 @@ Theorem rejected_producer_record_cannot_continue :
         SurfaceBoundedSourceSimulation.SourceRejectedBorrowEscape)
       (event :: suffix) = None.
 Proof.
-  intros inputs owner event suffix Hvalid.
-  pose proof
-    (rejected_producer_record_simulates inputs owner Hvalid)
-    as [_ [_ Hterminal]].
-  simpl.
-  rewrite (Hterminal event).
+  intros inputs owner event suffix _.
+  apply SurfaceBorrowStepErrorBridge.rejection_cannot_replay_nonempty_suffix.
   reflexivity.
 Qed.
 
