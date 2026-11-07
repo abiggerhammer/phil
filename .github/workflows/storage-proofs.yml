@@ -1,5 +1,11 @@
 name: Storage Proofs
 
+concurrency:
+  # Supersede older heads of the same PR in this workflow only.
+  # Non-PR runs have unique groups; main/release evidence is never cancelled.
+  group: ${{ github.workflow_ref }}-${{ github.event.pull_request.number || github.run_id }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
 on:
   pull_request:
     paths:
