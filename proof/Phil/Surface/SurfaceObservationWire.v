@@ -239,6 +239,57 @@ Proof.
   tauto.
 Qed.
 
+Theorem decoded_wire_replays_one_terminal_model :
+  forall raw artifact owner,
+    decodeArtifact raw = Some artifact ->
+    (traceCodes artifact = "B10,S11,N11,C10,R00" /\
+     terminalCode artifact = "OK:Bytes8" /\
+     SurfaceBorrowStepErrorBridge.replay
+       (SurfaceBorrowStepErrorBridge.modeledCut owner
+         SurfaceRepresentedBorrowTrace.ModelBeforeLoan)
+       [SurfaceBorrowStepErrorBridge.EventBegin;
+        SurfaceBorrowStepErrorBridge.EventBodySafe;
+        SurfaceBorrowStepErrorBridge.EventClose;
+        SurfaceBorrowStepErrorBridge.EventReturn] =
+       Some (SurfaceBorrowStepErrorBridge.modeledCut owner
+         SurfaceRepresentedBorrowTrace.ModelOwnerReturned)) \/
+    (traceCodes artifact = "B10,S11,E11,X11" /\
+     terminalCode artifact =
+       "ERR:BorrowEscape:shared view escapes its lexical scope" /\
+     SurfaceBorrowStepErrorBridge.replay
+       (SurfaceBorrowStepErrorBridge.modeledCut owner
+         SurfaceRepresentedBorrowTrace.ModelBeforeLoan)
+       [SurfaceBorrowStepErrorBridge.EventBegin;
+        SurfaceBorrowStepErrorBridge.EventBodyEscapes;
+        SurfaceBorrowStepErrorBridge.EventRejectBorrowEscape] =
+       Some (SurfaceBorrowStepErrorBridge.modeledCut owner
+         SurfaceRepresentedBorrowTrace.ModelEscapeRejected)).
+Proof.
+  intros raw artifact owner Hdecoded.
+  pose proof
+    (decoded_artifact_has_consistent_outcome raw artifact Hdecoded)
+    as Hcodes.
+  unfold knownTraceOutcome in Hcodes.
+  apply Bool.orb_true_iff in Hcodes.
+  destruct Hcodes as [Hsuccess | Hescape].
+  - left.
+    apply Bool.andb_true_iff in Hsuccess.
+    destruct Hsuccess as [Htrace Houtcome].
+    apply String.eqb_eq in Htrace.
+    apply String.eqb_eq in Houtcome.
+    split; [exact Htrace |].
+    split; [exact Houtcome |].
+    apply SurfaceBorrowStepErrorBridge.accepted_borrow_step_replay.
+  - right.
+    apply Bool.andb_true_iff in Hescape.
+    destruct Hescape as [Htrace Houtcome].
+    apply String.eqb_eq in Htrace.
+    apply String.eqb_eq in Houtcome.
+    split; [exact Htrace |].
+    split; [exact Houtcome |].
+    apply SurfaceBorrowStepErrorBridge.rejected_borrow_step_replay.
+Qed.
+
 (*
   The Haskell producer and a second Python validator are not theorem-proven
   equivalent to this String decoder. CI builds a Rocq witness from the exact
