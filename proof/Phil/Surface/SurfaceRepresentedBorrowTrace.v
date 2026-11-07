@@ -201,10 +201,9 @@ Proof.
 Qed.
 
 Theorem successful_trace_closes_before_terminal_return :
-  forall first second,
-    admittedPositivePhases ++ [first; second] =
+  admittedPositivePhases =
     [ModelBeforeLoan; ModelLoanStarted; ModelBodyResult false;
-     ModelLoanClosed; ModelOwnerReturned; first; second].
+     ModelLoanClosed; ModelOwnerReturned].
 Proof. reflexivity. Qed.
 
 (*
