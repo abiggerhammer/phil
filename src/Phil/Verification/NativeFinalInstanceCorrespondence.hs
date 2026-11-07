@@ -15,6 +15,10 @@ module Phil.Verification.NativeFinalInstanceCorrespondence
   , nativeCorrespondenceAuthority
   , NativeRawSystemsDigest (..)
   , NativeLoweringRootDigest (..)
+  , encodeNativeRawSystemsDigestWire
+  , decodeNativeRawSystemsDigestWire
+  , encodeNativeLoweringRootWire
+  , decodeNativeLoweringRootWire
   , NativeManifestStageReplay
   , nativeReplayRawDigest
   , nativeReplayLoweringRoot
@@ -44,8 +48,9 @@ module Phil.Verification.NativeFinalInstanceCorrespondence
   ) where
 
 import Data.Text (Text)
+import qualified Data.Text as Text
 import Phil.Assurance.Types
-  ( AssuranceLedger, AssuranceManifest (..), Digest, VerificationContext )
+  ( AssuranceLedger, AssuranceManifest (..), Digest (..), VerificationContext )
 import Phil.Core.Static
   ( ArchitectureInstanceDescriptor
   , ArchitectureInstanceIdentity (..)
@@ -198,6 +203,32 @@ newtype NativeRawSystemsDigest = NativeRawSystemsDigest
 newtype NativeLoweringRootDigest = NativeLoweringRootDigest
   { unNativeLoweringRootDigest :: Digest }
   deriving (Eq, Show)
+
+-- | Role-tagged, lossless *data* representation of the two independently
+-- named native Digest uses. The leading ASCII role octet makes their wire
+-- images disjoint even if the digest payloads happen to be identical.
+-- Do not normalize or hash again: the entire native Text payload is retained.
+-- Neither decoder independently accepts a manifest, supplies a Rocq encoding,
+-- or establishes architecture-occurrence-to-StageClosure provenance.
+encodeNativeRawSystemsDigestWire :: NativeRawSystemsDigest -> Text
+encodeNativeRawSystemsDigestWire (NativeRawSystemsDigest (Digest value)) =
+  Text.cons 'R' value
+
+decodeNativeRawSystemsDigestWire :: Text -> Maybe NativeRawSystemsDigest
+decodeNativeRawSystemsDigestWire wire =
+  case Text.uncons wire of
+    Just ('R', payload) -> Just (NativeRawSystemsDigest (Digest payload))
+    _ -> Nothing
+
+encodeNativeLoweringRootWire :: NativeLoweringRootDigest -> Text
+encodeNativeLoweringRootWire (NativeLoweringRootDigest (Digest value)) =
+  Text.cons 'L' value
+
+decodeNativeLoweringRootWire :: Text -> Maybe NativeLoweringRootDigest
+decodeNativeLoweringRootWire wire =
+  case Text.uncons wire of
+    Just ('L', payload) -> Just (NativeLoweringRootDigest (Digest payload))
+    _ -> Nothing
 
 -- | Read-only replay of the exact accepted manifest/StageClosure consumer
 -- projections. The private constructor does not assert architecture-occurrence
