@@ -27,10 +27,7 @@ jobs:
           python3 scripts/test_fsem_claim.py
 
   exact-claim-before-pr:
-    if: >-
-      github.event_name == 'pull_request' &&
-      (startsWith(github.event.pull_request.head.ref, 'formal-semantics/') ||
-       contains(github.event.pull_request.labels.*.name, 'lane: formal-semantics'))
+    if: github.event_name == 'pull_request'
     runs-on: ubuntu-latest
     steps:
       # Read controller from trusted main, not from an untrusted PR head.
@@ -38,13 +35,23 @@ jobs:
         with:
           ref: ${{ github.event.pull_request.base.sha }}
           persist-credentials: false
-      - name: Validate exclusive claim on exact PR
+      - name: Validate exclusive claim on exact PR, or satisfy required context for unrelated PRs
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           PR_NUMBER: ${{ github.event.pull_request.number }}
           PR_BRANCH: ${{ github.event.pull_request.head.ref }}
+          IS_FSEM: ${{ startsWith(github.event.pull_request.head.ref, 'formal-semantics/') || contains(github.event.pull_request.labels.*.name, 'lane: formal-semantics') }}
         run: |
           set -euo pipefail
+
+          # The repository ruleset requires this named check for every PR.
+          # Non-FSEM PRs must therefore emit a successful check context rather
+          # than omitting the job entirely.
+          if [[ "$IS_FSEM" != "true" ]]; then
+            echo "Non-FSEM PR; exact formal-semantics claim is not required."
+            exit 0
+          fi
+
           # Exact-number exceptions only: historical #1627 and bootstrap #1629.
           # Do not exempt a reusable branch prefix from future checks.
           if [[ "$PR_NUMBER" == "1627" || "$PR_NUMBER" == "1629" ]]; then
