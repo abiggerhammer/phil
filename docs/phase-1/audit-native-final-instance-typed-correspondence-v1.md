@@ -519,3 +519,45 @@ still unproved. Public-release byte verification and pinned independent
 final-delta signoff remain separate gates. Strict GHC, Rocq, LLVM and TCB
 policies are untouched; no generated Phase-1 artifacts or original 244
 normative cases are changed. Independent audit freeze: **NOT YET**.
+
+
+## 2026-11-07 — reversible raw-digest / lowering-root role wire
+
+This independently scoped intermediate representation addresses just **two** of
+the still-abstract native-to-Rocq fields: the independently accepted manifest's
+raw Systems artifact digest and its lowering-ledger root. Haskell's existing
+private accepted-manifest/StageClosure replay is unchanged. After it has accepted
+the exact checked producer, source envelope and selected release, the new
+read-only wire codec prefixes the raw Systems digest's **complete native Text**
+with ASCII `R`, and the lowering root's complete native Text with ASCII `L`.
+The two decoders are partial on the role character and recover the original
+domain-specific `Digest` wrapper with **no normalization**. The role tags make
+the two encoded images disjoint even if the native payloads are equal. These are
+transport *data*, never a manifest acceptance producer or a stage-origin
+certificate.
+
+Executable strict Upload and Steve tests feed actual accepted manifest/stage
+digests through the codec, check both exact roundtrips, check alignment to the
+accepted manifest's two distinct fields, and reject both cross-role
+substitutions. The Rocq extension models the corresponding ASCII role-prefix
+format over `string` payloads with **distinct native digest role records**,
+proving each role's injectivity, both roundtrips, cross-role disjointness and
+wrong-role decoder rejection. Six named `Print Assumptions` queries are
+required by the exact proof job.
+
+**Remaining-premise ledger:** This is a complete reversible tagged *wire
+fragment* for two textual digest roles, not a complete native-to-Rocq bridge:
+Haskell `Data.Text`/Unicode-to-Rocq `string` serialization agreement,
+canonical digest-validation domain, and all other field encodings (accepted
+GenericApplicationIdentity, exact actuals/architecture occurrence, manifest
+identity, normalized SystemsArtifactRevision, common
+Phase1StageContractRevision, closed ClosedStageContractRevision,
+subject/instance/realization/profile and complete StageClosure/CertifiedRelease)
+remain to be established with competent representation evidence. In
+particular, the raw digest and lowering root remain separate from those
+revision domains. Model `string` facts do not derive native acceptance.
+Authenticated occurrence-to-actual-StageClosure origin, predecessor authority,
+complete FixedFinalAuthorityAdapter/FinalArtifactCertified, independent release
+**bytes** and pinned independent final-delta signoff all remain open. No
+changed TCB, LLVM/Rocq/GHC policy, generated files, public release or 244
+normative cases. Independent Phase 1 audit freeze: **NOT YET**.

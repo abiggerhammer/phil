@@ -1222,3 +1222,88 @@ Section NativeExactAcceptedConsumerObjectReplay.
     apply Hdiff. now rewrite Heq.
   Qed.
 End NativeExactAcceptedConsumerObjectReplay.
+
+(*
+  #1584: the FIRST concrete native-to-model data-wire slice covers ONLY
+  native raw Systems Digest versus lowering-ledger-root Digest. Both native
+  values are Text under distinct Haskell newtypes; the existing replay reads
+  them from independently accepted manifest/stage objects. We can prove the
+  role-tag constructor is injective and disjoint for Rocq string payloads,
+  without inventing a nat encoding, authority predicate or equality between
+  these two digest domains. A full Unicode Text <-> Rocq string reflection
+  and accepted-object representation remain independent premises.
+*)
+From Stdlib Require Import Strings.String Strings.Ascii.
+Open Scope string_scope.
+
+Record NativeRawSystemsDigestRole := mkNativeRawSystemsDigestRole {
+  rawSystemsDigestPayload : string
+}.
+Record NativeLoweringRootDigestRole := mkNativeLoweringRootDigestRole {
+  loweringRootDigestPayload : string
+}.
+
+Definition nativeRawSystemsDigestWire (d : NativeRawSystemsDigestRole) : string :=
+  "R" ++ rawSystemsDigestPayload d.
+Definition nativeLoweringRootWire (d : NativeLoweringRootDigestRole) : string :=
+  "L" ++ loweringRootDigestPayload d.
+
+Definition nativeDecodeRawSystemsDigestWire (wire : string)
+  : option NativeRawSystemsDigestRole :=
+  match wire with
+  | EmptyString => None
+  | String role payload =>
+      if Ascii.eqb role "R"%char
+      then Some (mkNativeRawSystemsDigestRole payload)
+      else None
+  end.
+
+Definition nativeDecodeLoweringRootWire (wire : string)
+  : option NativeLoweringRootDigestRole :=
+  match wire with
+  | EmptyString => None
+  | String role payload =>
+      if Ascii.eqb role "L"%char
+      then Some (mkNativeLoweringRootDigestRole payload)
+      else None
+  end.
+
+Theorem native_raw_digest_wire_injective :
+  forall a b, nativeRawSystemsDigestWire a = nativeRawSystemsDigestWire b -> a = b.
+Proof.
+  intros [a] [b] H.
+  unfold nativeRawSystemsDigestWire in H.
+  simpl in H.
+  injection H as Heq. now subst.
+Qed.
+
+Theorem native_lowering_root_wire_injective :
+  forall a b, nativeLoweringRootWire a = nativeLoweringRootWire b -> a = b.
+Proof.
+  intros [a] [b] H.
+  unfold nativeLoweringRootWire in H.
+  simpl in H.
+  injection H as Heq. now subst.
+Qed.
+
+Theorem native_raw_digest_wire_roundtrip :
+  forall a, nativeDecodeRawSystemsDigestWire (nativeRawSystemsDigestWire a) = Some a.
+Proof. intros [a]. reflexivity. Qed.
+
+Theorem native_lowering_root_wire_roundtrip :
+  forall a, nativeDecodeLoweringRootWire (nativeLoweringRootWire a) = Some a.
+Proof. intros [a]. reflexivity. Qed.
+
+Theorem native_digest_roles_have_disjoint_wires :
+  forall raw root, nativeRawSystemsDigestWire raw <> nativeLoweringRootWire root.
+Proof.
+  intros [raw] [root] H.
+  unfold nativeRawSystemsDigestWire, nativeLoweringRootWire in H.
+  simpl in H. discriminate H.
+Qed.
+
+Theorem native_wrong_role_decoding_fails :
+  forall raw root,
+    nativeDecodeRawSystemsDigestWire (nativeLoweringRootWire root) = None /\
+    nativeDecodeLoweringRootWire (nativeRawSystemsDigestWire raw) = None.
+Proof. intros [raw] [root]. split; reflexivity. Qed.

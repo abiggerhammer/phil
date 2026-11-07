@@ -155,6 +155,10 @@ main = do
           , nativeManifestStageReplayAccepts source upload)
         , ( "Steve accepted manifest-stage replay preserves distinct digest and revision domains"
           , nativeManifestStageReplayAccepts source steve)
+        , ( "Upload real accepted digest roles survive exact reversible tagged wire"
+          , nativeDigestRoleWireReplayAccepts source upload)
+        , ( "Steve real accepted digest roles survive exact reversible tagged wire"
+          , nativeDigestRoleWireReplayAccepts source steve)
         , ( "Upload changed raw Systems digest cannot pass exact manifest-stage replay"
           , nativeManifestStageReplayRejectsChangedDigests source upload)
         , ( "Steve changed raw Systems digest cannot pass exact manifest-stage replay"
@@ -815,6 +819,45 @@ nativeManifestStageReplayAccepts source fixture =
                     && nativeReplayCommonRevision view == nativeFinalCommonContractRevision authority
                     && nativeReplayClosedRevision view == nativeFinalClosedContractRevision authority
                     && nativeReplayVerifierProfile view == nativeFinalVerifierProfile authority
+    _ -> False
+
+-- | Strict executable transport check over actual independently accepted
+-- Upload/Steve objects, not caller-invented revision values. Exact reversible
+-- Text payloads and disjoint R/L role tags are tested in both directions.
+-- This is a bounded native wire property, not a native-to-Rocq Unicode proof.
+nativeDigestRoleWireReplayAccepts
+  :: GenericApplicationAssurance -> ReleaseFixture -> Bool
+nativeDigestRoleWireReplayAccepts source fixture =
+  case (producerInputs source, produceFixture source fixture) of
+    (Right (bundle, policy), Right (_, produced)) ->
+      case nativeAdapterPair source produced of
+        Nothing -> False
+        Just (sourceArtifact, release) ->
+          case closeNativeFinalInstanceCorrespondence
+              source (sourceInstanceDescriptor source) bundle policy
+              (fixtureContext produced) (fixtureLedger produced)
+              emptyProducerSelection sourceArtifact release of
+            Left _ -> False
+            Right witness ->
+              case replayNativeManifestStageCoordinates witness
+                (nativeCorrespondenceManifest witness)
+                (nativeCorrespondenceStageClosure witness) of
+                Left _ -> False
+                Right view ->
+                  let raw = nativeReplayRawDigest view
+                      root = nativeReplayLoweringRoot view
+                      rawWire = encodeNativeRawSystemsDigestWire raw
+                      rootWire = encodeNativeLoweringRootWire root
+                      acceptedManifest = nativeCorrespondenceManifest witness
+                  in raw == NativeRawSystemsDigest
+                        (manifestImplementationDigest acceptedManifest)
+                    && root == NativeLoweringRootDigest
+                        (manifestLoweringLedgerRoot acceptedManifest)
+                    && decodeNativeRawSystemsDigestWire rawWire == Just raw
+                    && decodeNativeLoweringRootWire rootWire == Just root
+                    && rawWire /= rootWire
+                    && decodeNativeRawSystemsDigestWire rootWire == Nothing
+                    && decodeNativeLoweringRootWire rawWire == Nothing
     _ -> False
 
 -- | Adversarial same-manifest-ID projections. Neither modified manifest is an
