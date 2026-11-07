@@ -292,6 +292,23 @@ def verify(api: GitHub, number: int):
     print(f"PASS: PR #{number} owns {slice_key} via {claim_ref(slice_key)} @ {sha}")
 
 
+def abort_unopened(api: GitHub, slice_key: str, actor: str):
+    """Explicitly abandon a claim that has no open PR; never time-expire it."""
+    record, sha = live_claim(api, slice_key)
+    if record["actor"] != actor:
+        raise ClaimFailure("only the recorded claimant may request normal abandonment")
+    competitors = conflicts(list(api.pages("/pulls?state=open")), slice_key)
+    if competitors:
+        raise ClaimFailure(f"open PR(s) {competitors}: close the PR before release")
+    require_issue_record(api, record, sha)
+    api.request("DELETE", "/git/refs/" + claim_ref(slice_key).removeprefix("refs/"))
+    api.request("POST", f"/issues/{TRACKING_ISSUE}/comments", {
+        "body": (f"{RELEASE_MARKER}\nAbandoned unopened `{slice_key}` "
+                 f"claim `{sha}` by `{actor}`; no PR was open.")
+    })
+    print(f"Abandoned unopened {slice_key} claim")
+
+
 def release(api: GitHub, number: int):
     pr = api.request("GET", f"/pulls/{number}")
     if pr.get("state") != "closed":
@@ -322,7 +339,7 @@ def release(api: GitHub, number: int):
 
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("command", choices=("acquire", "announce", "verify", "release"))
+    parser.add_argument("command", choices=("acquire", "announce", "verify", "release", "abort"))
     parser.add_argument("--slice", dest="slice_key")
     parser.add_argument("--branch")
     parser.add_argument("--actor")
@@ -339,6 +356,10 @@ def main(argv: list[str] | None = None) -> int:
             if not args.slice_key:
                 raise ClaimFailure("announce needs --slice")
             announce(api, args.slice_key)
+        elif args.command == "abort":
+            if not args.slice_key or not args.actor:
+                raise ClaimFailure("abort needs --slice and --actor")
+            abort_unopened(api, args.slice_key, args.actor)
         else:
             if not args.pr or args.pr < 1:
                 raise ClaimFailure(f"{args.command} needs --pr NUMBER")
