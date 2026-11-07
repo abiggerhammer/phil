@@ -23,7 +23,7 @@ import Phil.Surface.GrammarV1.ParameterBodyScope
 import Phil.Surface.GrammarV1.Parser
   ( GrammarV1Block (..)
   , GrammarV1Closure (..)
-  , GrammarV1Expression
+  , GrammarV1Expression (..)
   , GrammarV1FunctionDecl (..)
   , GrammarV1Statement (..)
   )
@@ -42,6 +42,7 @@ data GrammarV1CheckedLetScopeStep
   | GrammarV1CheckedLetOccurrenceStep
       (Located GrammarV1Statement)
       GrammarV1CheckedLocalValueOccurrence
+  | GrammarV1CheckedLetUnitStep (Located GrammarV1Statement)
   deriving (Eq, Show)
 
 data GrammarV1CheckedLetScopeTrace = GrammarV1CheckedLetScopeTrace
@@ -127,6 +128,12 @@ checkedStatements scope (source@(Located _ statement) : rest) =
             remainder
     GrammarV1ReturnStatement expression ->
       checkedOccurrenceStatement scope source expression rest
+    GrammarV1ExpressionStatement (Located _ GrammarV1UnitExpression) -> do
+      remainder <- checkedStatements scope rest
+      Just $ fmap
+        (\(steps, finalScope) ->
+          (GrammarV1CheckedLetUnitStep source : steps, finalScope))
+        remainder
     GrammarV1ExpressionStatement expression ->
       checkedOccurrenceStatement scope source expression rest
 

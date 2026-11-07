@@ -8,6 +8,10 @@ on:
       - 'proof/Phil/Surface/SurfaceLetPatternScope.v'
       - 'proof/Phil/Surface/SurfaceBorrowViewScope.v'
       - 'src/Phil/Surface/GrammarV1/BorrowViewScope.hs'
+      - 'src/Phil/Surface/GrammarV1/BorrowResourceSurface.hs'
+      - 'test/Phase1FSEM01BorrowResourceMain.hs'
+      - 'docs/phase-1/formal-semantics-borrow-resource-bridge-fsem01-v1.md'
+      - 'phil-core.cabal'
       - 'src/Phil/Surface/GrammarV1/LetPatternScope.hs'
       - 'test/Phase1GrammarV1BorrowViewScopeMain.hs'
       - 'docs/phase-1/surface-borrow-view-scope-proof-v1.md'
@@ -20,6 +24,10 @@ on:
       - 'proof/Phil/Surface/SurfaceLetPatternScope.v'
       - 'proof/Phil/Surface/SurfaceBorrowViewScope.v'
       - 'src/Phil/Surface/GrammarV1/BorrowViewScope.hs'
+      - 'src/Phil/Surface/GrammarV1/BorrowResourceSurface.hs'
+      - 'test/Phase1FSEM01BorrowResourceMain.hs'
+      - 'docs/phase-1/formal-semantics-borrow-resource-bridge-fsem01-v1.md'
+      - 'phil-core.cabal'
       - 'src/Phil/Surface/GrammarV1/LetPatternScope.hs'
       - 'test/Phase1GrammarV1BorrowViewScopeMain.hs'
       - 'docs/phase-1/surface-borrow-view-scope-proof-v1.md'
@@ -72,10 +80,14 @@ jobs:
           set -euo pipefail
           for module in \
             src/Phil/Surface/GrammarV1/BorrowViewScope.hs \
+            src/Phil/Surface/GrammarV1/BorrowResourceSurface.hs \
             src/Phil/Surface/GrammarV1/LetPatternScope.hs \
-            test/Phase1GrammarV1BorrowViewScopeMain.hs
+            test/Phase1GrammarV1BorrowViewScopeMain.hs \
+            test/Phase1FSEM01BorrowResourceMain.hs
           do
             cabal exec -- ghc -isrc -Wall -Werror -fno-code "$module"
           done
       - name: Replay SURF-009 borrow-view scope corpus
         run: cabal exec -- runghc -Wall -Werror -isrc test/Phase1GrammarV1BorrowViewScopeMain.hs
+      - name: Replay FSEM-01 source-derived production loan checks
+        run: cabal exec -- runghc -Wall -Werror -isrc test/Phase1FSEM01BorrowResourceMain.hs

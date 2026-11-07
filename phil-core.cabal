@@ -206,6 +206,12 @@ library
       Phil.Surface.GrammarV1.Lexer
       Phil.Surface.GrammarV1.Parser
       Phil.Surface.GrammarV1.ProgramSurface
+      Phil.Surface.GrammarV1.BinderScope
+      Phil.Surface.GrammarV1.ParameterBodyScope
+      Phil.Surface.GrammarV1.PatternBinderScope
+      Phil.Surface.GrammarV1.LetPatternScope
+      Phil.Surface.GrammarV1.BorrowViewScope
+      Phil.Surface.GrammarV1.BorrowResourceSurface
       Phil.Surface.GrammarV1.ReferenceKernelBridge
       Phil.Surface.GrammarV1.ReferenceToken
       SurfaceGrammarRecognizerKernel
