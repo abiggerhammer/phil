@@ -250,7 +250,7 @@ Proof.
               exists atom. split; [exact Hnormalize|].
               eapply phase1_surface_normalize_proposition_atom_spine_round_trip.
               exact Hnormalize.
-           ++ cbn in Hnth. discriminate Hnth.
+           ++ destruct index; cbn in Hnth; discriminate Hnth.
 Qed.
 
 Theorem phase1_surface_normalize_proposition_not_spine_total_from_derivation :
@@ -349,7 +349,7 @@ Proof.
       exists proposition. split; [exact Hnormalize|].
       eapply phase1_surface_normalize_proposition_not_spine_round_trip.
       exact Hnormalize.
-    + cbn in Hnth. discriminate Hnth.
+    + destruct index; cbn in Hnth; discriminate Hnth.
 Qed.
 
 Lemma phase1_surface_normalize_proposition_and_suffix_total_from_derivation :
