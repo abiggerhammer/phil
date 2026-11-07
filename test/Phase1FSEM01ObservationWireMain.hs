@@ -11,7 +11,15 @@ import qualified Data.Text as Text
 import qualified Data.Text.Encoding as TextEncoding
 import qualified Data.Text.IO as TextIO
 import Numeric (showHex)
-import Phil.Core.Static (DeclarationKey (..), emptyStaticContext)
+import Phil.Core.Static
+  ( DeclarationDescriptor (..)
+  , DeclarationIdentity (..)
+  , DeclarationKey (..)
+  , DeclarationPresentation (..)
+  , SemanticForm (..)
+  , deriveDeclarationIdentity
+  , emptyStaticContext
+  )
 import Phil.Core.Syntax (Control (Return), Name (..), RefTerm (..), Ty (..))
 import Phil.Surface.Check.Engine (BorrowTraceCheckpoint (..), BorrowTracePhase (..))
 import Phil.Surface.Check.Types
@@ -272,16 +280,26 @@ data Specimen = Specimen
   , specimenRoot :: DeclarationKey
   }
 
+deriveRoot :: Text -> DeclarationKey
+deriveRoot root =
+  identityDeclarationKey (deriveDeclarationIdentity DeclarationDescriptor
+    { declarationPresentation =
+        DeclarationPresentation "observed-borrow" ["fsem", "wire-v1"]
+    , declarationKey = DeclarationKey root
+    , declarationInterfaceSemantics = SemanticAtom "bytes8-interface"
+    , declarationDefinitionSemantics = SemanticAtom "loan-v1"
+    })
+
 specimens :: [Specimen]
 specimens =
   [ Specimen "positive-ascii.obs" "test/fixtures/fsem01-observation-v1/positive.phil"
-      (DeclarationKey "decl.FSEM01ObservationV1")
+      (deriveRoot "decl.FSEM01ObservationV1")
   , Specimen "escape-ascii.obs" "test/fixtures/fsem01-observation-v1/escape.phil"
-      (DeclarationKey "decl.FSEM01ObservationV1")
+      (deriveRoot "decl.FSEM01ObservationV1")
   , Specimen "positive-unicode.obs" "test/fixtures/fsem01-observation-v1/positive.phil"
-      (DeclarationKey "decl.é:猫")
+      (deriveRoot "decl.é:猫")
   , Specimen "escape-unicode.obs" "test/fixtures/fsem01-observation-v1/escape.phil"
-      (DeclarationKey "decl.é:猫")
+      (deriveRoot "decl.é:猫")
   ]
 
 makeSpecimen :: Specimen -> IO (Either String (FilePath, Text, Observation))
