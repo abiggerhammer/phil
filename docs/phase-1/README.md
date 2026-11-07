@@ -21,6 +21,7 @@ The important exceptions are documents that explicitly declare themselves curren
 - [FSEM-01 proposed loan-state correspondence](formal-semantics-loan-state-correspondence-fsem01-v0.md) — exact source binder/production resource identities, an explicit candidate Rocq relation, and undischarged source-to-model proof obligations (non-normative).
 - [FSEM-01 executable production loan-state trace](formal-semantics-loan-transition-trace-fsem01-v1.md) — same checker transitions, exact live-owner/loan checkpoints and escaped-view error-prefix tests; not a source-to-Rocq theorem.
 - [FSEM-01 first Rocq loan-transition proof slice](formal-semantics-exact-loan-transition-model-fsem01-v1.md) — conditional identity-preserving linear loan start/end proofs and explicit unproved Haskell/source encoding boundaries.
+- [FSEM-01 binder-name encoding proof and production Text checks](formal-semantics-binder-name-encoding-fsem01-v1.md) — ASCII-string injectivity theorem with Haskell canonical codec tests; Unicode/Text representation and declaration-ID bridges remain explicit.
 
 These review documents do not replace accepted semantic contracts, the normative grammar, the Logic Ledger, or exact-commit proof and conformance results.
 
