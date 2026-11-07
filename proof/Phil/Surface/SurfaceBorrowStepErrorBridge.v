@@ -101,9 +101,7 @@ Theorem modeled_cut_well_formed :
   forall owner phase, wellFormedCut (modeledCut owner phase).
 Proof.
   intros owner phase.
-  unfold wellFormedCut, modeledCut.
-  destruct (expectedOwnerBits phase) as [present loan].
-  reflexivity.
+  destruct phase; reflexivity.
 Qed.
 
 Theorem checked_advance_preserves_owner :
