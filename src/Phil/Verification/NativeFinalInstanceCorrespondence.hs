@@ -13,6 +13,20 @@ module Phil.Verification.NativeFinalInstanceCorrespondence
   , nativeCorrespondenceCertifiedSource
   , nativeCorrespondenceCertifiedRelease
   , nativeCorrespondenceAuthority
+  , NativeRawSystemsDigest (..)
+  , NativeLoweringRootDigest (..)
+  , NativeManifestStageReplay
+  , nativeReplayRawDigest
+  , nativeReplayLoweringRoot
+  , nativeReplaySubjectRevision
+  , nativeReplayInstanceRevision
+  , nativeReplayRealizationRevision
+  , nativeReplaySystemsRevision
+  , nativeReplayCommonRevision
+  , nativeReplayClosedRevision
+  , nativeReplayVerifierProfile
+  , NativeManifestStageReplayError (..)
+  , replayNativeManifestStageCoordinates
   , NativeStageRevisionEquality
   , nativeStageRevisionEqualityOccurrence
   , nativeStageRevisionEqualityStageRevision
@@ -22,27 +36,48 @@ module Phil.Verification.NativeFinalInstanceCorrespondence
   , closeNativeFinalInstanceCorrespondence
   ) where
 
-import Phil.Assurance.Types (AssuranceLedger, AssuranceManifest, VerificationContext)
+import Data.Text (Text)
+import Phil.Assurance.Types
+  ( AssuranceLedger, AssuranceManifest (..), Digest, VerificationContext )
 import Phil.Core.Static
   ( ArchitectureInstanceDescriptor
   , ArchitectureInstanceIdentity (..)
   , InstanceRevision
+  , RealizationRevision
   , deriveArchitectureInstanceIdentity
   )
 import Phil.Verification (ApplicationAssurancePolicy)
 import Phil.Verification.ArtifactClosure
   ( CertifiedApplicationArtifact
   , certifiedApplicationSourceAssurance
+  , certifiedApplicationStageClosure
   )
 import Phil.Verification.Bundle (VerificationBundle)
 import Phil.Verification.CertifiedRelease
   ( CertifiedReleaseArtifact
+  , certifiedReleaseManifest
   , certifiedReleaseStageClosure
   )
-import Phil.Systems.StageClosure (StageClosureBundle)
+import Phil.Systems.IR
+  ( loweringLedgerRoot, systemsArtifactDigest, systemsArtifactLoweringLedger )
+import Phil.Systems.Phase1Stage
+  ( Phase1StageBundle (..), SystemsArtifactRevision, Phase1StageContractRevision )
+import Phil.Systems.StageClosure
+  ( StageClosureBundle (..), ClosedStageContractRevision, concreteSubjectStage )
+import Phil.Systems.SubjectCorrespondence
+  ( SubjectStageBundle (..), SubjectStageRevision )
 import Phil.Verification.FinalAuthorityAdapter
   ( NativeFinalAuthority
   , nativeFinalInstanceRevision
+  , nativeFinalRawSystemsDigest
+  , nativeFinalLoweringRoot
+  , nativeFinalManifestId
+  , nativeFinalSubjectRevision
+  , nativeFinalRealizationRevision
+  , nativeFinalSystemsRevision
+  , nativeFinalCommonContractRevision
+  , nativeFinalClosedContractRevision
+  , nativeFinalVerifierProfile
   )
 import Phil.Verification.GenericAssurance (GenericApplicationAssurance)
 import Phil.Verification.ManifestClosure (ManifestClosureSelection)
@@ -145,6 +180,113 @@ nativeCorrespondenceAuthority
   :: NativeFinalInstanceCorrespondence -> NativeFinalAuthority
 nativeCorrespondenceAuthority
   (NativeFinalInstanceCorrespondence _ _ _ _ _ _ _ authority) = authority
+
+-- | Native assurance stores these both as 'Digest'; the wrappers distinguish
+-- the raw Systems *byte digest* from the independently named lowering-ledger
+-- root. Neither is the normalized SystemsArtifactRevision.
+newtype NativeRawSystemsDigest = NativeRawSystemsDigest
+  { unNativeRawSystemsDigest :: Digest }
+  deriving (Eq, Show)
+
+newtype NativeLoweringRootDigest = NativeLoweringRootDigest
+  { unNativeLoweringRootDigest :: Digest }
+  deriving (Eq, Show)
+
+-- | Read-only replay of the exact accepted manifest/StageClosure consumer
+-- projections. The private constructor does not assert architecture-occurrence
+-- provenance or a native-to-Rocq representation.
+data NativeManifestStageReplay = NativeManifestStageReplay
+  { nativeReplayRawDigest :: NativeRawSystemsDigest
+  , nativeReplayLoweringRoot :: NativeLoweringRootDigest
+  , nativeReplaySubjectRevision :: SubjectStageRevision
+  , nativeReplayInstanceRevision :: InstanceRevision
+  , nativeReplayRealizationRevision :: RealizationRevision
+  , nativeReplaySystemsRevision :: SystemsArtifactRevision
+  , nativeReplayCommonRevision :: Phase1StageContractRevision
+  , nativeReplayClosedRevision :: ClosedStageContractRevision
+  , nativeReplayVerifierProfile :: Text
+  }
+  deriving (Eq, Show)
+
+data NativeManifestStageReplayError
+  = NativeReplayProducerConsumerDrift
+  | NativeReplaySuppliedStageDifferent
+  | NativeReplaySuppliedManifestDifferent
+  | NativeReplayRawSystemsDifferent NativeRawSystemsDigest NativeRawSystemsDigest
+  | NativeReplayLoweringRootDifferent NativeLoweringRootDigest NativeLoweringRootDigest
+  | NativeReplayAuthorityCoordinatesDifferent
+  deriving (Eq, Show)
+
+-- | Replay actual saved native objects, rather than trust a caller-supplied
+-- model equality. The source/manifest producer, accepted VER-010 source and
+-- INT-005 release are retained whole by the upstream private witness. The
+-- supplied manifest and stage must be those same *whole* objects. This is an
+-- equality diagnostic, not an independent acceptor for unverified inputs.
+--
+-- Candidate manifest digest and lowering root are compared to the raw
+-- SystemsArtifact projections BEFORE the full-object candidate equality
+-- gate, so an adversarial same-ID but changed digest/root gets its precise
+-- domain-specific failure instead of an ambiguous revision mismatch.
+replayNativeManifestStageCoordinates
+  :: NativeFinalInstanceCorrespondence
+  -> AssuranceManifest
+  -> StageClosureBundle
+  -> Either NativeManifestStageReplayError NativeManifestStageReplay
+replayNativeManifestStageCoordinates witness suppliedManifest suppliedStage =
+  let producer = nativeCorrespondenceSourceManifestBinding witness
+      sourceObject = nativeCorrespondenceCertifiedSource witness
+      releaseObject = nativeCorrespondenceCertifiedRelease witness
+      storedManifest = nativeCorrespondenceManifest witness
+      storedStage = nativeCorrespondenceStageClosure witness
+      authority = nativeCorrespondenceAuthority witness
+      subject = concreteSubjectStage (stageClosureConcrete suppliedStage)
+      common = subjectStageBase subject
+      systems = phase1StageSystemsArtifact common
+      manifestRaw = NativeRawSystemsDigest
+        (manifestImplementationDigest suppliedManifest)
+      actualRaw = NativeRawSystemsDigest (systemsArtifactDigest systems)
+      manifestRoot = NativeLoweringRootDigest
+        (manifestLoweringLedgerRoot suppliedManifest)
+      actualRoot = NativeLoweringRootDigest
+        (loweringLedgerRoot (systemsArtifactLoweringLedger systems))
+      receipt = NativeManifestStageReplay
+        actualRaw actualRoot
+        (subjectStageRevision subject)
+        (phase1StageInstanceRevision common)
+        (phase1StageRealizationRevision common)
+        (phase1StageSystemsArtifactRevision common)
+        (phase1StageContractRevision common)
+        (stageClosureContractRevision suppliedStage)
+        (phase1StageVerifierProfileRevision common)
+  in if sourceManifestBindingSourceAssurance producer
+          /= nativeCorrespondenceSourceAssurance witness
+       || certifiedApplicationSourceAssurance sourceObject
+          /= nativeCorrespondenceSourceAssurance witness
+       || sourceManifestBindingManifest producer /= storedManifest
+       || certifiedReleaseManifest releaseObject /= storedManifest
+       || certifiedApplicationStageClosure sourceObject /= storedStage
+       || certifiedReleaseStageClosure releaseObject /= storedStage
+       then Left NativeReplayProducerConsumerDrift
+     else if suppliedStage /= storedStage
+       then Left NativeReplaySuppliedStageDifferent
+     else if manifestRaw /= actualRaw
+       then Left (NativeReplayRawSystemsDifferent manifestRaw actualRaw)
+     else if manifestRoot /= actualRoot
+       then Left (NativeReplayLoweringRootDifferent manifestRoot actualRoot)
+     else if suppliedManifest /= storedManifest
+       then Left NativeReplaySuppliedManifestDifferent
+     else if nativeFinalManifestId authority /= manifestId suppliedManifest
+       || nativeFinalRawSystemsDigest authority /= unNativeRawSystemsDigest actualRaw
+       || nativeFinalLoweringRoot authority /= unNativeLoweringRootDigest actualRoot
+       || nativeFinalSubjectRevision authority /= nativeReplaySubjectRevision receipt
+       || nativeFinalInstanceRevision authority /= nativeReplayInstanceRevision receipt
+       || nativeFinalRealizationRevision authority /= nativeReplayRealizationRevision receipt
+       || nativeFinalSystemsRevision authority /= nativeReplaySystemsRevision receipt
+       || nativeFinalCommonContractRevision authority /= nativeReplayCommonRevision receipt
+       || nativeFinalClosedContractRevision authority /= nativeReplayClosedRevision receipt
+       || nativeFinalVerifierProfile authority /= nativeReplayVerifierProfile receipt
+       then Left NativeReplayAuthorityCoordinatesDifferent
+     else Right receipt
 
 -- | Equality of the architecture occurrence's canonical revision with the
 -- retained concrete stage's InstanceRevision. The constructor is private.

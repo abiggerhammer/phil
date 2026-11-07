@@ -951,6 +951,117 @@ Section NativeFinalInstanceTypedCorrespondence.
 
 End NativeFinalInstanceTypedCorrespondence.
 
+(*
+  Separately typed model of the native replay of *actual full objects*:
+  checked source-manifest producer, independently accepted VER-010 source,
+  independently accepted INT-005 release, raw Systems digest, lowering root,
+  normalized Systems revision and the three distinct stage contract identities.
+  This conditional theorem is NOT a Haskell extraction, acceptance producer,
+  instance-to-stage origin proof, or conversion into nat.
+*)
+Section NativeExactManifestStageReplay.
+  Context
+    {CheckedProducer NativeManifest NativeStage CertifiedSource CertifiedRelease
+     NativeRawDigest NativeLoweringRoot SubjectRevision StageInstanceRevision
+     RealizationRevision NormalizedSystemsRevision CommonStageContractRevision
+     ClosedStageContractRevision VerifierProfileRevision : Type}.
+  Context (producerManifest : CheckedProducer -> NativeManifest).
+  Context (releaseManifest : CertifiedRelease -> NativeManifest).
+  Context (sourceStage : CertifiedSource -> NativeStage).
+  Context (releaseStage : CertifiedRelease -> NativeStage).
+  Context (manifestRaw : NativeManifest -> NativeRawDigest).
+  Context (stageRaw : NativeStage -> NativeRawDigest).
+  Context (manifestRoot : NativeManifest -> NativeLoweringRoot).
+  Context (stageRoot : NativeStage -> NativeLoweringRoot).
+  Context (stageSubject : NativeStage -> SubjectRevision).
+  Context (stageInstance : NativeStage -> StageInstanceRevision).
+  Context (stageRealization : NativeStage -> RealizationRevision).
+  Context (stageSystems : NativeStage -> NormalizedSystemsRevision).
+  Context (stageCommon : NativeStage -> CommonStageContractRevision).
+  Context (stageClosed : NativeStage -> ClosedStageContractRevision).
+  Context (stageProfile : NativeStage -> VerifierProfileRevision).
+
+  (* All six premises are external representations of distinct native
+     *object-level* gates. A model Prop cannot establish that the input
+     constructors were accepted by Haskell or that this stage was produced
+     by the checked architecture occurrence. *)
+  Definition NativeExactManifestStageReplayBound
+    (producer : CheckedProducer) (source : CertifiedSource)
+    (release : CertifiedRelease) (manifest : NativeManifest)
+    (stage : NativeStage) : Prop :=
+      producerManifest producer = manifest /\
+      releaseManifest release = manifest /\
+      sourceStage source = stage /\
+      releaseStage release = stage /\
+      manifestRaw manifest = stageRaw stage /\
+      manifestRoot manifest = stageRoot stage.
+
+  Theorem exact_manifest_stage_replay_preserves_full_consumers :
+    forall producer source release manifest stage,
+      NativeExactManifestStageReplayBound producer source release manifest stage ->
+      producerManifest producer = releaseManifest release /\
+      sourceStage source = releaseStage release /\
+      manifestRaw manifest = stageRaw stage /\
+      manifestRoot manifest = stageRoot stage.
+  Proof.
+    intros producer source release manifest stage
+      [Hproducer [Hrelease [Hsource [Hstage [Hraw Hroot]]]]].
+    repeat split.
+    - rewrite Hproducer, Hrelease. reflexivity.
+    - rewrite Hsource, Hstage. reflexivity.
+    - exact Hraw.
+    - exact Hroot.
+  Qed.
+
+  Theorem native_replay_raw_systems_drift_rejected :
+    forall producer source release manifest stage,
+      manifestRaw manifest <> stageRaw stage ->
+      ~ NativeExactManifestStageReplayBound producer source release manifest stage.
+  Proof.
+    intros producer source release manifest stage Hneq
+      [_ [_ [_ [_ [Heq _]]]]].
+    exact (Hneq Heq).
+  Qed.
+
+  Theorem native_replay_lowering_root_drift_rejected :
+    forall producer source release manifest stage,
+      manifestRoot manifest <> stageRoot stage ->
+      ~ NativeExactManifestStageReplayBound producer source release manifest stage.
+  Proof.
+    intros producer source release manifest stage Hneq
+      [_ [_ [_ [_ [_ Heq]]]]].
+    exact (Hneq Heq).
+  Qed.
+
+  Theorem equal_raw_and_root_cannot_replace_full_manifest :
+    forall producer source release manifest stage,
+      producerManifest producer <> manifest ->
+      manifestRaw (producerManifest producer) = manifestRaw manifest ->
+      manifestRoot (producerManifest producer) = manifestRoot manifest ->
+      ~ NativeExactManifestStageReplayBound producer source release manifest stage.
+  Proof.
+    intros producer source release manifest stage Hneq _ _
+      [Heq _].
+    exact (Hneq Heq).
+  Qed.
+
+  Theorem exact_release_stage_preserves_separately_typed_stage_coordinates :
+    forall producer source release manifest stage,
+      NativeExactManifestStageReplayBound producer source release manifest stage ->
+      stageSubject stage = stageSubject (releaseStage release) /\
+      stageInstance stage = stageInstance (releaseStage release) /\
+      stageRealization stage = stageRealization (releaseStage release) /\
+      stageSystems stage = stageSystems (releaseStage release) /\
+      stageCommon stage = stageCommon (releaseStage release) /\
+      stageClosed stage = stageClosed (releaseStage release) /\
+      stageProfile stage = stageProfile (releaseStage release).
+  Proof.
+    intros producer source release manifest stage
+      [_ [_ [_ [Hstage _]]]].
+    rewrite Hstage. repeat split; reflexivity.
+  Qed.
+End NativeExactManifestStageReplay.
+
 (* A concrete logical counterexample, NOT an encoding of Haskell identity
    values into nat: two distinct occurrence keys can carry one revision.
    The actual native equality decision also compares the occurrence key. *)

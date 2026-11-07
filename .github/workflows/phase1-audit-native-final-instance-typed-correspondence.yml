@@ -119,6 +119,11 @@ jobs:
           Print Assumptions substituted_checked_source_manifest_binding_cannot_bind.
           Print Assumptions declaration_only_binding_cannot_replace_checked_instance_token.
           Print Assumptions same_source_and_manifest_cannot_upgrade_declaration_only_binding.
+          Print Assumptions exact_manifest_stage_replay_preserves_full_consumers.
+          Print Assumptions native_replay_raw_systems_drift_rejected.
+          Print Assumptions native_replay_lowering_root_drift_rejected.
+          Print Assumptions equal_raw_and_root_cannot_replace_full_manifest.
+          Print Assumptions exact_release_stage_preserves_separately_typed_stage_coordinates.
           Print Assumptions fixed_adapter_full_certification_preserves_predecessors.
           EOF
           rocq c -Q proof/Phil Phil /tmp/NativeFinalInstanceAssumptions.v 2>&1 | tee typed-native-instance-assumptions.log

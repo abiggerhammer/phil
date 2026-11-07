@@ -151,6 +151,14 @@ main = do
           , finalWitnessRetainsCheckedSourceManifestBinding source upload)
         , ( "Steve final witness retains exact checked-instance source-manifest token"
           , finalWitnessRetainsCheckedSourceManifestBinding source steve)
+        , ( "Upload accepted manifest-stage replay preserves distinct digest and revision domains"
+          , nativeManifestStageReplayAccepts source upload)
+        , ( "Steve accepted manifest-stage replay preserves distinct digest and revision domains"
+          , nativeManifestStageReplayAccepts source steve)
+        , ( "Upload changed raw Systems digest cannot pass exact manifest-stage replay"
+          , nativeManifestStageReplayRejectsChangedDigests source upload)
+        , ( "Steve changed raw Systems digest cannot pass exact manifest-stage replay"
+          , nativeManifestStageReplayRejectsChangedDigests source steve)
         , ( "Upload declaration-only token cannot replace final checked producer token"
           , declarationOnlyTokenCannotReplaceFinalProducer source upload)
         , ( "Steve declaration-only token cannot replace final checked producer token"
@@ -754,6 +762,81 @@ declarationOnlyTokenCannotReplaceFinalProducer source fixture =
                     && case bindProducedFinalAuthority weak sourceArtifact release of
                         Left SourceManifestInstanceNotBound -> True
                         _ -> False
+    _ -> False
+
+-- | Replay the original independently accepted source/release stage and
+-- producer manifest through the concrete native projections. Revisions and
+-- raw digests remain separate *types* and are checked against the actual
+-- accepted StageClosure, not a synthetic Rocq nat representation.
+nativeManifestStageReplayAccepts
+  :: GenericApplicationAssurance -> ReleaseFixture -> Bool
+nativeManifestStageReplayAccepts source fixture =
+  case (producerInputs source, produceFixture source fixture) of
+    (Right (bundle, policy), Right (_, produced)) ->
+      case nativeAdapterPair source produced of
+        Nothing -> False
+        Just (sourceArtifact, release) ->
+          case closeNativeFinalInstanceCorrespondence
+              source (sourceInstanceDescriptor source) bundle policy
+              (fixtureContext produced) (fixtureLedger produced)
+              emptyProducerSelection sourceArtifact release of
+            Left _ -> False
+            Right witness ->
+              let stage = nativeCorrespondenceStageClosure witness
+                  authority = nativeCorrespondenceAuthority witness
+              in case replayNativeManifestStageCoordinates witness
+                    (nativeCorrespondenceManifest witness) stage of
+                Left _ -> False
+                Right view ->
+                  nativeReplayRawDigest view
+                      == NativeRawSystemsDigest (stageSystemsDigest stage)
+                    && nativeReplayLoweringRoot view
+                      == NativeLoweringRootDigest (stageLoweringRoot stage)
+                    && nativeReplaySubjectRevision view == nativeFinalSubjectRevision authority
+                    && nativeReplayInstanceRevision view == nativeFinalInstanceRevision authority
+                    && nativeReplayRealizationRevision view == nativeFinalRealizationRevision authority
+                    && nativeReplaySystemsRevision view == nativeFinalSystemsRevision authority
+                    && nativeReplayCommonRevision view == nativeFinalCommonContractRevision authority
+                    && nativeReplayClosedRevision view == nativeFinalClosedContractRevision authority
+                    && nativeReplayVerifierProfile view == nativeFinalVerifierProfile authority
+    _ -> False
+
+-- | Adversarial same-manifest-ID projections. Neither modified manifest is an
+-- accepted INT-002 artifact. Raw digest drift and lowering-root drift must
+-- each fail *in their own domain*, before any attempt to identify native
+-- manifest objects using just their manifestId or a stage revision.
+nativeManifestStageReplayRejectsChangedDigests
+  :: GenericApplicationAssurance -> ReleaseFixture -> Bool
+nativeManifestStageReplayRejectsChangedDigests source fixture =
+  case (producerInputs source, produceFixture source fixture) of
+    (Right (bundle, policy), Right (_, produced)) ->
+      case nativeAdapterPair source produced of
+        Nothing -> False
+        Just (sourceArtifact, release) ->
+          case closeNativeFinalInstanceCorrespondence
+              source (sourceInstanceDescriptor source) bundle policy
+              (fixtureContext produced) (fixtureLedger produced)
+              emptyProducerSelection sourceArtifact release of
+            Left _ -> False
+            Right witness ->
+              let manifest = nativeCorrespondenceManifest witness
+                  stage = nativeCorrespondenceStageClosure witness
+                  rawChallenge = manifest
+                    { manifestImplementationDigest = digestText "impl-audit-raw-digest-challenge" }
+                  rootChallenge = manifest
+                    { manifestLoweringLedgerRoot = digestText "impl-audit-lowering-root-challenge" }
+              in manifestId rawChallenge == manifestId manifest
+                && manifestId rootChallenge == manifestId manifest
+                && manifestImplementationDigest rawChallenge
+                    /= manifestImplementationDigest manifest
+                && manifestLoweringLedgerRoot rootChallenge
+                    /= manifestLoweringLedgerRoot manifest
+                && case replayNativeManifestStageCoordinates witness rawChallenge stage of
+                    Left (NativeReplayRawSystemsDifferent _ _) -> True
+                    _ -> False
+                && case replayNativeManifestStageCoordinates witness rootChallenge stage of
+                    Left (NativeReplayLoweringRootDifferent _ _) -> True
+                    _ -> False
     _ -> False
 
 -- This new consumer is deliberately *stronger* than the old caller-supplied
