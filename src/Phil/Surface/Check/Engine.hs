@@ -177,16 +177,11 @@ observeBorrowTraceResource
 observeBorrowTraceResource expectedOwner expectedView expectedType checkpoint
   | traceOwnerName checkpoint /= expectedOwner = Nothing
   | traceViewName checkpoint /= expectedView = Nothing
+  -- checkScopedValueBlock prunes the temporary SharedBytes view before the
+  -- observed body-result checkpoint; it is not live at these cut points.
+  | not (Map.null (traceUnrestrictedOwners checkpoint)) = Nothing
   | not (Map.null (traceAffineOwners checkpoint)) = Nothing
   | otherwise = do
-      -- The borrowed view really is an unrestricted binding *during* the
-      -- scoped body; reject any other entry or incorrect SharedBytes sort.
-      case Map.toList (traceUnrestrictedOwners checkpoint) of
-        [] -> Just ()
-        [(name, ty)]
-          | name == expectedView &&
-            ty == TyOpaqueSorted "SharedBytes" byteSequenceSort -> Just ()
-        _ -> Nothing
       linearPresent <- case Map.toList (traceLinearOwners checkpoint) of
         [] -> Just False
         [(name, ty)]
