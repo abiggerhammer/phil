@@ -67,6 +67,20 @@ Definition renderCheckpoint (cut : RawCheckpoint) : string :=
     (flagCode (checkpointOwnerPresent cut) ++
      flagCode (checkpointLoanActive cut)).
 
+(* Each 3-character checkpoint word distinguishes phase and both actual
+   membership bits. Nothing in this proof infers them from the phase. *)
+Theorem rendering_one_checkpoint_is_injective :
+  forall first second,
+    renderCheckpoint first = renderCheckpoint second -> first = second.
+Proof.
+  intros [phase1 linear1 loan1] [phase2 linear2 loan2] Heq.
+  destruct phase1; destruct phase2;
+    repeat match goal with
+    | b : bool |- _ => destruct b
+    end;
+    simpl in Heq; try discriminate; congruence.
+Qed.
+
 Definition renderCheckpoints (cuts : list RawCheckpoint) : string :=
   String.concat "," (List.map renderCheckpoint cuts).
 
