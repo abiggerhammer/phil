@@ -120,3 +120,7 @@ production trace and show that model owner identity and loan-membership
 transitions commute across each recorded checkpoint, with a separate
 negative-path correspondence theorem. Avoid reclassifying terminal
 return as a continuing join.
+
+## Subsequent represented production checkpoint slice
+
+[The represented production loan-trace evidence](formal-semantics-represented-loan-trace-fsem01-v1.md) composes the bounded catalog owner identity with existing Rocq loan-state models and tests source-derived production trace checkpoints against a fail-closed model. Terminal owner return is distinct from continuing joins; the rejected BorrowEscape prefix does not close or consume the owner. This is paired model proof and executable Haskell evidence, **not** a universal source-to-Rocq simulation or a Unicode representation theorem.
