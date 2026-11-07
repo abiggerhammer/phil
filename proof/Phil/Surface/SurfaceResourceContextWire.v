@@ -318,9 +318,14 @@ Theorem represented_scoped_escape_cannot_consume_owner :
     Context.ConsumeError (Context.OwnerBorrowed owner).
 Proof.
   intros owner view ty viewTy.
-  unfold Context.consumeLinear, withScopedView; simpl.
-  unfold startedContext.
-  rewrite SurfaceBorrowLoanStateCorrespondence.set_core_loan_has_exact_target.
+  (* The scoped view only changes unrestricted bindings. Reduce the
+     actual loan-set lookup directly rather than rewriting after simpl
+     has already removed the named setCoreLoan subexpression. *)
+  unfold Context.consumeLinear, withScopedView, startedContext,
+    SurfaceBorrowLoanStateCorrespondence.setCoreLoan,
+    beforeContext, fromResourceBits.
+  simpl.
+  repeat rewrite String.eqb_refl.
   reflexivity.
 Qed.
 
