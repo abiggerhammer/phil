@@ -40,14 +40,21 @@ jobs:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           PR_NUMBER: ${{ github.event.pull_request.number }}
           PR_BRANCH: ${{ github.event.pull_request.head.ref }}
-          IS_FSEM: ${{ startsWith(github.event.pull_request.head.ref, 'formal-semantics/') || contains(github.event.pull_request.labels.*.name, 'lane: formal-semantics') }}
         run: |
           set -euo pipefail
+
+          is_fsem=false
+          if [[ "$PR_BRANCH" == formal-semantics/* ]]; then
+            is_fsem=true
+          elif gh api "repos/$GITHUB_REPOSITORY/issues/$PR_NUMBER" --jq '.labels[].name' \
+            | grep -Fxq 'lane: formal-semantics'; then
+            is_fsem=true
+          fi
 
           # The repository ruleset requires this named check for every PR.
           # Non-FSEM PRs must therefore emit a successful check context rather
           # than omitting the job entirely.
-          if [[ "$IS_FSEM" != "true" ]]; then
+          if [[ "$is_fsem" != "true" ]]; then
             echo "Non-FSEM PR; exact formal-semantics claim is not required."
             exit 0
           fi
