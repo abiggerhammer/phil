@@ -169,7 +169,7 @@ Proof.
     unfold setCoreLoan; simpl.
     destruct (String.eqb candidate owner) eqn:Heq.
     + apply String.eqb_eq in Heq. subst candidate.
-      exact Hfree.
+      symmetry. exact Hfree.
     + reflexivity.
   - reflexivity.
 Qed.
