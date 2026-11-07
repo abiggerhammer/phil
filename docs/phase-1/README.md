@@ -19,6 +19,7 @@ The important exceptions are documents that explicitly declare themselves curren
 - [Three worked typing-rule families](typing-rules-worked-examples-draft-v1.md) — illustrative positive/expected-negative examples; not all negatives are executable conformance witnesses yet.
 - [Formal-semantics judgment inventory (FSEM-00)](formal-semantics-judgment-inventory-v0.md) — proposed rule interfaces, translation boundaries and explicit outstanding evidence, tracked in [FSEM issue #1613](https://github.com/abiggerhammer/phil/issues/1613).
 - [FSEM-01 proposed loan-state correspondence](formal-semantics-loan-state-correspondence-fsem01-v0.md) — exact source binder/production resource identities, an explicit candidate Rocq relation, and undischarged source-to-model proof obligations (non-normative).
+- [FSEM-01 executable production loan-state trace](formal-semantics-loan-transition-trace-fsem01-v1.md) — same checker transitions, exact live-owner/loan checkpoints and escaped-view error-prefix tests; not a source-to-Rocq theorem.
 - [FSEM-01 first Rocq loan-transition proof slice](formal-semantics-exact-loan-transition-model-fsem01-v1.md) — conditional identity-preserving linear loan start/end proofs and explicit unproved Haskell/source encoding boundaries.
 
 These review documents do not replace accepted semantic contracts, the normative grammar, the Logic Ledger, or exact-commit proof and conformance results.

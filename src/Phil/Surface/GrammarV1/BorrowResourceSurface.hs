@@ -2,7 +2,9 @@
 
 module Phil.Surface.GrammarV1.BorrowResourceSurface
   ( GrammarV1BorrowResourceError (..)
+  , GrammarV1BorrowResourceTrace (..)
   , grammarV1CheckedBorrowResourceFunction
+  , grammarV1CheckedBorrowResourceFunctionTrace
   ) where
 
 import qualified Data.Map.Strict as Map
@@ -11,7 +13,12 @@ import Phil.Core.CheckedBindingMode (CheckedTypeMode (..))
 import Phil.Core.Focusing (FocusingError)
 import Phil.Core.Static (DeclarationKey, StaticContext)
 import Phil.Core.Syntax (Control (..), Mode (..), Name (..), Ty (..))
-import Phil.Surface.Check.Engine (checkSurfaceComponent)
+import Phil.Surface.Check.Engine
+  ( BorrowTraceCheckpoint
+  , BorrowTraceRun (..)
+  , checkSurfaceComponent
+  , traceSurfaceBorrowComponent
+  )
 import Phil.Surface.Check.Support (emptySurfaceState, shapeForType)
 import Phil.Surface.Check.Types
   ( InitialBinding (..)
@@ -66,6 +73,64 @@ data GrammarV1BorrowResourceError
   | GrammarV1BorrowResourceResultMismatch Ty [Control]
   deriving (Eq, Show)
 
+-- | Identity-bearing, production-derived observer result. The checker
+-- outcome stays inside this record so a rejected escaping view retains its
+-- pre-rejection checkpoints. Early scope/type errors have no production trace
+-- and remain in the outer Either; unsupported source is Nothing.
+data GrammarV1BorrowResourceTrace = GrammarV1BorrowResourceTrace
+  { grammarV1TraceOwnerBinder :: GrammarV1ResolvedBinder
+  , grammarV1TraceViewBinder :: GrammarV1ResolvedBinder
+  , grammarV1TraceCheckpoints :: [BorrowTraceCheckpoint]
+  , grammarV1TraceOutcome :: Either GrammarV1BorrowResourceError SurfaceCheckResult
+  }
+  deriving (Eq, Show)
+
+-- | Existing accepted/rejected checker API. Both this API and the observation
+-- API below use precisely the same bounded source projection and checker code.
+grammarV1CheckedBorrowResourceFunction
+  :: StaticContext
+  -> DeclarationKey
+  -> GrammarV1FunctionDecl
+  -> Maybe (Either GrammarV1BorrowResourceError SurfaceCheckResult)
+grammarV1CheckedBorrowResourceFunction =
+  grammarV1WithBorrowResourceFunction observe
+  where
+    observe ty _ _ environment component =
+      Just (finalizeProductionOutcome ty
+        (checkSurfaceComponent environment component))
+
+-- | Observe the actual production evaluator for the same admitted source
+-- fragment. This is neither a general source function checker nor a Rocq
+-- simulation proof.
+grammarV1CheckedBorrowResourceFunctionTrace
+  :: StaticContext
+  -> DeclarationKey
+  -> GrammarV1FunctionDecl
+  -> Maybe (Either GrammarV1BorrowResourceError GrammarV1BorrowResourceTrace)
+grammarV1CheckedBorrowResourceFunctionTrace =
+  grammarV1WithBorrowResourceFunction observe
+  where
+    observe ty owner view environment component = do
+      observed <- traceSurfaceBorrowComponent environment component
+      Just $ Right GrammarV1BorrowResourceTrace
+        { grammarV1TraceOwnerBinder = owner
+        , grammarV1TraceViewBinder = view
+        , grammarV1TraceCheckpoints = traceCheckpoints observed
+        , grammarV1TraceOutcome =
+            finalizeProductionOutcome ty (traceOutcome observed)
+        }
+
+finalizeProductionOutcome
+  :: Ty
+  -> Either SurfaceCheckError SurfaceCheckResult
+  -> Either GrammarV1BorrowResourceError SurfaceCheckResult
+finalizeProductionOutcome ty outcome = do
+  checked <- mapLeft GrammarV1BorrowResourceProductionError outcome
+  if checkedTerminalControls checked == [Return ty]
+    then Right checked
+    else Left (GrammarV1BorrowResourceResultMismatch ty
+      (checkedTerminalControls checked))
+
 -- | Check a deliberately small parameter-bearing Grammar-v1 function body
 -- through the existing production surface checker and its *real* shared-loan
 -- resource state:
@@ -83,12 +148,18 @@ data GrammarV1BorrowResourceError
 --
 -- This validates the bounded body, *not* the 'satisfies C' contract, complete
 -- general source type checking, or a Source -> Core preservation theorem.
-grammarV1CheckedBorrowResourceFunction
-  :: StaticContext
+grammarV1WithBorrowResourceFunction
+  :: (Ty
+      -> GrammarV1ResolvedBinder
+      -> GrammarV1ResolvedBinder
+      -> SurfaceEnvironment
+      -> Located Component
+      -> Maybe (Either GrammarV1BorrowResourceError result))
+  -> StaticContext
   -> DeclarationKey
   -> GrammarV1FunctionDecl
-  -> Maybe (Either GrammarV1BorrowResourceError SurfaceCheckResult)
-grammarV1CheckedBorrowResourceFunction staticContext declarationKey source
+  -> Maybe (Either GrammarV1BorrowResourceError result)
+grammarV1WithBorrowResourceFunction observe staticContext declarationKey source
   | not (null (grammarV1FunctionGenericParams source)) = Nothing
   | not (null (grammarV1FunctionRequirements source)) = Nothing
   | otherwise = do
@@ -173,13 +244,7 @@ grammarV1CheckedBorrowResourceFunction staticContext declarationKey source
                             { surfaceInitialBindings = Map.singleton ownerText
                                 (InitialBinding Linear ty (shapeForType ty))
                             }
-                      Just $ do
-                        checked <- mapLeft GrammarV1BorrowResourceProductionError $
-                          checkSurfaceComponent environment synthetic
-                        if checkedTerminalControls checked == [Return ty]
-                          then Right checked
-                          else Left (GrammarV1BorrowResourceResultMismatch ty
-                            (checkedTerminalControls checked))
+                      observe ty parameterBinder viewBinder environment synthetic
         Right _ -> Nothing
 
 semanticName :: GrammarV1ResolvedBinder -> Text

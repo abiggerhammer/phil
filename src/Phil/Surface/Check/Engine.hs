@@ -3,6 +3,10 @@
 
 module Phil.Surface.Check.Engine
   ( checkSurfaceComponent
+  , traceSurfaceBorrowComponent
+  , BorrowTracePhase (..)
+  , BorrowTraceCheckpoint (..)
+  , BorrowTraceRun (..)
   ) where
 
 import Control.Monad (foldM, unless, when)
@@ -128,6 +132,110 @@ checkSurfaceComponent environment locatedComponent = do
   Right SurfaceCheckResult
     { checkedComponentName = componentName (locatedValue locatedComponent)
     , checkedTerminalControls = map toCoreControl finalPaths
+    }
+
+-- | Concrete checkpoints from the *same* production borrow evaluator used by
+-- ordinary checking. These are not an abstract small-step semantics or a
+-- source-to-Rocq simulation proof. 'TraceBodyResult' records whether the
+-- borrow expression's resulting runtime value contains this owner's view.
+data BorrowTracePhase
+  = TraceBeforeLoan
+  | TraceLoanStarted
+  | TraceBodyResult Bool
+  | TraceEscapeRejected
+  | TraceLoanClosed
+  | TraceOwnerReturned
+  deriving (Eq, Show)
+
+data BorrowTraceCheckpoint = BorrowTraceCheckpoint
+  { tracePhase :: BorrowTracePhase
+  , traceOwnerName :: Name
+  , traceViewName :: Name
+  , traceLinearOwners :: Map.Map Name Ty
+  , traceActiveLoans :: Set Name
+  }
+  deriving (Eq, Show)
+
+data BorrowTraceRun = BorrowTraceRun
+  { traceOutcome :: Either SurfaceCheckError SurfaceCheckResult
+  , traceCheckpoints :: [BorrowTraceCheckpoint]
+  }
+  deriving (Eq, Show)
+
+-- | Bounded observation API for a two-statement synthetic component:
+-- one borrow expression statement followed by one return. The ordinary
+-- checker continues to use 'evalBorrow', which delegates to the *same*
+-- traced evaluator and discards checkpoints. Error outcomes preserve the
+-- checkpoints reached before failure, not an invented post-error state.
+-- Unsupported statement shapes return Nothing (non-competence).
+traceSurfaceBorrowComponent
+  :: SurfaceEnvironment
+  -> Located Component
+  -> Maybe BorrowTraceRun
+traceSurfaceBorrowComponent environment locatedComponent =
+  case blockStatements (locatedValue (componentBody component)) of
+    [ Located borrowSpan
+        (ExpressionStatement borrow@(Located _ (BorrowExpression owner view body)))
+      , returned@(Located _ (ReturnStatement _))
+      ] -> Just (run borrowSpan borrow owner view body returned)
+    _ -> Nothing
+  where
+    component = locatedValue locatedComponent
+
+    run borrowSpan borrow owner view body returned =
+      case initializeState environment component of
+        Left err -> BorrowTraceRun (Left err) []
+        Right initial ->
+          case checkProvides environment initial component of
+            Left err -> BorrowTraceRun (Left err) []
+            Right () ->
+              let (borrowed, points) =
+                    evalBorrowTraced environment initial borrow owner view body
+              in case borrowed of
+                   Left err -> BorrowTraceRun (Left err) points
+                   Right paths ->
+                     case do
+                       discarded <- mapM (discardValue borrowSpan) paths
+                       joined <- joinExclusive borrowSpan discarded
+                       concat <$> mapM (checkStatement environment returned) joined
+                     of
+                       Left err -> BorrowTraceRun (Left err) points
+                       Right returnedPaths ->
+                         let returnPoints =
+                               case points of
+                                 first : _ ->
+                                   [ snapshotBorrow TraceOwnerReturned
+                                       (traceOwnerName first)
+                                       view
+                                       (pathState path)
+                                   | path <- returnedPaths
+                                   , case pathControl path of
+                                       PathReturn _ -> True
+                                       _ -> False
+                                   ]
+                                 [] -> []
+                             allPoints = points ++ returnPoints
+                         in case mapM
+                             (finalizePath environment (locatedSpan locatedComponent))
+                             returnedPaths of
+                              Left err -> BorrowTraceRun (Left err) allPoints
+                              Right finalPaths -> BorrowTraceRun
+                                (Right SurfaceCheckResult
+                                  { checkedComponentName = componentName component
+                                  , checkedTerminalControls = map toCoreControl finalPaths
+                                  })
+                                allPoints
+
+snapshotBorrow :: BorrowTracePhase -> Name -> Text -> SurfaceState
+  -> BorrowTraceCheckpoint
+snapshotBorrow phase owner view state =
+  let context = resourceContext (stateCore state)
+  in BorrowTraceCheckpoint
+    { tracePhase = phase
+    , traceOwnerName = owner
+    , traceViewName = Name view
+    , traceLinearOwners = linearBindings context
+    , traceActiveLoans = sharedLoans context
     }
 
 initializeState :: SurfaceEnvironment -> Component -> Either SurfaceCheckError SurfaceState
@@ -1008,57 +1116,114 @@ evalBorrow
   -> Text
   -> Located Block
   -> Either SurfaceCheckError [SurfacePath]
-evalBorrow environment state located ownerExpression viewName body = do
-  ownerName <- namedExpression BorrowEscape ownerExpression
-  ownerMeta <- lookupMeta ownerExpression (unName ownerName) state
-  (view, loaned) <- case bindingType ownerMeta of
-    TyPendingRecv _ -> do
-      (raw, context) <- mapRecognition located $
-        beginRawLoan ownerName (resourceContext (stateCore state))
-      Right
-        ( ScalarValue Unrestricted
-            (TyOpaqueSorted "RawBytes" byteSequenceSort)
-            (PendingRawShape raw)
-        , state { stateCore = (stateCore state) { resourceContext = context } }
-        )
-    _
-      | bindingMode ownerMeta == Linear || bindingMode ownerMeta == Affine -> do
-          context <- mapCore (locatedSpan located) BorrowEscape $
-            startSharedLoan ownerName (resourceContext (stateCore state))
-          Right
-            ( ScalarValue Unrestricted
-                (TyOpaqueSorted "SharedBytes" byteSequenceSort)
-                (BorrowedViewShape ownerName (stableByteOwner ownerMeta))
-            , state { stateCore = (stateCore state) { resourceContext = context } }
-            )
-      | otherwise -> throw ownerExpression BorrowEscape
-          "borrow requires an affine or linear owner"
-  withView <- insertBindingMeta (locatedSpan located) viewName
-    (BindingMeta Unrestricted (scalarType view) (scalarShape view)) loaned
-  bodyPaths <- checkScopedValueBlock environment state withView body
-  mapM (finish ownerName) bodyPaths
-  where
-    stableByteOwner meta =
-      case bindingShape meta of
-        OwnedBytesShape _ stable -> stable
-        _ -> Nothing
+evalBorrow environment state located ownerExpression viewName body =
+  fst (evalBorrowTraced environment state located ownerExpression viewName body)
 
-    finish owner path
-      | pathControl path /= PathContinue =
-          throw located BorrowEscape "borrow body terminates before the loan ends"
-      | otherwise = do
-          case pathValue path of
-            Just value | containsBorrowedView owner value ->
-              throw located BorrowEscape "shared view escapes its lexical scope"
-            _ -> Right ()
-          state1 <- removeScopedBinding (locatedSpan located) viewName (pathState path)
-          context <- mapCore (locatedSpan located) BorrowEscape $
-            endSharedLoan owner (resourceContext (stateCore state1))
-          Right path
-            { pathState = state1
-                { stateCore = (stateCore state1) { resourceContext = context }
-                }
-            }
+-- | The normal evaluator and the observation API share *one* transition
+-- implementation. Unlike Either alone, the paired result retains checkpoints
+-- reached before a rejection. No later state is fabricated on that path.
+evalBorrowTraced
+  :: SurfaceEnvironment
+  -> SurfaceState
+  -> Located SurfaceExpression
+  -> Located SurfaceExpression
+  -> Text
+  -> Located Block
+  -> (Either SurfaceCheckError [SurfacePath], [BorrowTraceCheckpoint])
+evalBorrowTraced environment state located ownerExpression viewName body =
+  case do
+    ownerName <- namedExpression BorrowEscape ownerExpression
+    ownerMeta <- lookupMeta ownerExpression (unName ownerName) state
+    Right (ownerName, ownerMeta)
+  of
+    Left err -> (Left err, [])
+    Right (ownerName, ownerMeta) ->
+      let entry = snapshotBorrow TraceBeforeLoan ownerName viewName state
+      in case begin ownerName ownerMeta of
+           Left err -> (Left err, [entry])
+           Right (view, loaned) ->
+             let started = snapshotBorrow TraceLoanStarted ownerName viewName loaned
+                 prefix = [entry, started]
+             in case insertBindingMeta (locatedSpan located) viewName
+                 (BindingMeta Unrestricted (scalarType view) (scalarShape view))
+                 loaned of
+                  Left err -> (Left err, prefix)
+                  Right withView ->
+                    case checkScopedValueBlock environment state withView body of
+                      Left err -> (Left err, prefix)
+                      Right bodyPaths ->
+                        let (finished, suffix) = finishAll ownerName bodyPaths
+                        in (finished, prefix ++ suffix)
+  where
+    begin ownerName ownerMeta = case bindingType ownerMeta of
+      TyPendingRecv _ -> do
+        (raw, context) <- mapRecognition located $
+          beginRawLoan ownerName (resourceContext (stateCore state))
+        Right
+          ( ScalarValue Unrestricted
+              (TyOpaqueSorted "RawBytes" byteSequenceSort)
+              (PendingRawShape raw)
+          , state { stateCore = (stateCore state) { resourceContext = context } }
+          )
+      _
+        | bindingMode ownerMeta == Linear || bindingMode ownerMeta == Affine -> do
+            context <- mapCore (locatedSpan located) BorrowEscape $
+              startSharedLoan ownerName (resourceContext (stateCore state))
+            Right
+              ( ScalarValue Unrestricted
+                  (TyOpaqueSorted "SharedBytes" byteSequenceSort)
+                  (BorrowedViewShape ownerName (stableByteOwner ownerMeta))
+              , state { stateCore = (stateCore state) { resourceContext = context } }
+              )
+        | otherwise -> throw ownerExpression BorrowEscape
+            "borrow requires an affine or linear owner"
+
+    stableByteOwner meta = case bindingShape meta of
+      OwnedBytesShape _ stable -> stable
+      _ -> Nothing
+
+    finishAll _ [] = (Right [], [])
+    finishAll ownerName (path : rest) =
+      let (current, currentPoints) = finishOne ownerName path
+      in case current of
+           Left err -> (Left err, currentPoints)
+           Right next ->
+             let (remaining, remainingPoints) = finishAll ownerName rest
+             in (fmap (next :) remaining, currentPoints ++ remainingPoints)
+
+    finishOne ownerName path =
+      let escapes = case pathValue path of
+            Just value -> containsBorrowedView ownerName value
+            Nothing -> False
+          bodyPoint =
+            snapshotBorrow (TraceBodyResult escapes) ownerName viewName
+              (pathState path)
+      in if pathControl path /= PathContinue
+           then (throw located BorrowEscape
+                   "borrow body terminates before the loan ends", [bodyPoint])
+           else if escapes
+             then ( throw located BorrowEscape
+                      "shared view escapes its lexical scope"
+                  , [ bodyPoint
+                    , snapshotBorrow TraceEscapeRejected ownerName viewName
+                        (pathState path)
+                    ])
+             else case removeScopedBinding (locatedSpan located) viewName
+                 (pathState path) of
+               Left err -> (Left err, [bodyPoint])
+               Right state1 ->
+                 case mapCore (locatedSpan located) BorrowEscape $
+                     endSharedLoan ownerName (resourceContext (stateCore state1)) of
+                   Left err -> (Left err, [bodyPoint])
+                   Right context ->
+                     let closed = state1
+                           { stateCore = (stateCore state1)
+                               { resourceContext = context }
+                           }
+                     in ( Right path { pathState = closed }
+                        , [ bodyPoint
+                          , snapshotBorrow TraceLoanClosed ownerName viewName closed
+                          ])
 
 containsBorrowedView :: Name -> RuntimeValue -> Bool
 containsBorrowedView _ RuntimeUnit = False
