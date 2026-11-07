@@ -74,7 +74,7 @@ Lemma split_render_uint :
       (DecimalString.NilEmpty.string_of_uint d ++ (":" ++ suffix)) =
     Some (DecimalString.NilEmpty.string_of_uint d, suffix).
 Proof.
-  induction d; intro suffix; simpl; try rewrite IHd; reflexivity.
+  induction d; intro suffix; simpl; try (rewrite (IHd suffix)); reflexivity.
 Qed.
 
 Lemma split_render_nat :
