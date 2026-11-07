@@ -13,9 +13,9 @@ Open Scope string_scope.
   carrier. Production emits the exact four finite collections from its
   traced Core.ResourceContext: unrestricted, affine, linear, shared loans.
 
-  The currently admitted fragment requires the first two maps empty,
-  exactly one Bytes[8] linear binding before consumption, and no foreign
-  loan member. The phase is an independent field; membership is not
+  The currently admitted fragment permits only a scoped SharedBytes view
+  in the unrestricted map during the body, an empty affine map, exactly
+  one Bytes[8] linear owner before consumption, and no foreign loan. The phase is an independent field; membership is not
   computed from it by the Haskell exporter.
 
   This proof models checked finite membership extensionally in Core.Context.
@@ -57,25 +57,27 @@ Proof. intros [? ? ? ? ? ?]; reflexivity. Qed.
    Empty collections use "-", and an admitted linear map entry includes
    the exact owner name bytes and the type tag, rather than a presence bit. *)
 Definition stateWord
-  (phase owner : string) (linearPresent loanActive : bool) : string :=
-  phase ++ "/-/-/" ++
+  (phase owner view : string)
+  (viewLive linearPresent loanActive : bool) : string :=
+  phase ++ "/" ++
+    (if viewLive then view ++ "=SharedBytes" else "-") ++ "/-/" ++
     (if linearPresent then owner ++ "=Bytes8" else "-") ++ "/" ++
     (if loanActive then owner else "-").
 
-Definition acceptedStates (owner : string) : string :=
+Definition acceptedStates (owner view : string) : string :=
   String.concat "," [
-    stateWord "B" owner true false;
-    stateWord "S" owner true true;
-    stateWord "N" owner true true;
-    stateWord "C" owner true false;
-    stateWord "R" owner false false].
+    stateWord "B" owner view false true false;
+    stateWord "S" owner view false true true;
+    stateWord "N" owner view true true true;
+    stateWord "C" owner view false true false;
+    stateWord "R" owner view false false false].
 
-Definition escapeStates (owner : string) : string :=
+Definition escapeStates (owner view : string) : string :=
   String.concat "," [
-    stateWord "B" owner true false;
-    stateWord "S" owner true true;
-    stateWord "E" owner true true;
-    stateWord "X" owner true true].
+    stateWord "B" owner view false true false;
+    stateWord "S" owner view false true true;
+    stateWord "E" owner view true true true;
+    stateWord "X" owner view true true true].
 
 Definition validState (a : StateArtifact) : bool :=
   (Nat.eqb (String.length (stateHash a)) 64 &&
@@ -83,9 +85,9 @@ Definition validState (a : StateArtifact) : bool :=
   SurfaceObservationWire.canonicalHex (stateRootHex a) &&
   SurfaceObservationWire.canonicalHex (stateOwnerHex a) &&
   SurfaceObservationWire.canonicalHex (stateViewHex a) &&
-  ((String.eqb (stateWords a) (acceptedStates (stateOwnerHex a)) &&
+  ((String.eqb (stateWords a) (acceptedStates (stateOwnerHex a) (stateViewHex a)) &&
     String.eqb (stateOutcome a) "OK:Bytes8") ||
-   (String.eqb (stateWords a) (escapeStates (stateOwnerHex a)) &&
+   (String.eqb (stateWords a) (escapeStates (stateOwnerHex a) (stateViewHex a)) &&
     String.eqb (stateOutcome a)
       "ERR:BorrowEscape:shared view escapes its lexical scope")).
 
@@ -148,10 +150,10 @@ Definition bindsObservation
   String.eqb (stateOwnerHex state) (SurfaceObservationWire.ownerNameHex obs) &&
   String.eqb (stateViewHex state) (SurfaceObservationWire.viewNameHex obs) &&
   String.eqb (stateOutcome state) (SurfaceObservationWire.terminalCode obs) &&
-  ((String.eqb (stateWords state) (acceptedStates (stateOwnerHex state)) &&
+  ((String.eqb (stateWords state) (acceptedStates (stateOwnerHex state) (stateViewHex state)) &&
     String.eqb (SurfaceObservationWire.traceCodes obs)
       "B10,S11,N11,C10,R00") ||
-   (String.eqb (stateWords state) (escapeStates (stateOwnerHex state)) &&
+   (String.eqb (stateWords state) (escapeStates (stateOwnerHex state) (stateViewHex state)) &&
     String.eqb (SurfaceObservationWire.traceCodes obs) "B10,S11,E11,X11")).
 
 Theorem bound_evidence_preserves_source_hash :
