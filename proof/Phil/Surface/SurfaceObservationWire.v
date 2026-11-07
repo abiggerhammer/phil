@@ -35,7 +35,10 @@ Definition parseFrame (wire : string) : option (string * string) :=
       match SurfaceBinderNameEncoding.readNat lengthDigits with
       | None => None
       | Some len =>
-          SurfaceBinderNameEncoding.takeChars len contents
+          if String.eqb lengthDigits
+               (SurfaceBinderNameEncoding.renderNat len)
+          then SurfaceBinderNameEncoding.takeChars len contents
+          else None
       end
   end.
 
@@ -47,6 +50,7 @@ Proof.
   unfold parseFrame, frameWithTail.
   rewrite SurfaceBinderNameEncoding.split_render_nat.
   rewrite SurfaceBinderNameEncoding.read_render_nat.
+  rewrite String.eqb_refl.
   apply SurfaceBinderNameEncoding.take_exact_root.
 Qed.
 
