@@ -134,6 +134,15 @@ jobs:
           Print Assumptions native_lowering_root_wire_roundtrip.
           Print Assumptions native_digest_roles_have_disjoint_wires.
           Print Assumptions native_wrong_role_decoding_fails.
+          Print Assumptions native_systems_revision_wire_injective.
+          Print Assumptions native_common_revision_wire_injective.
+          Print Assumptions native_closed_revision_wire_injective.
+          Print Assumptions native_systems_revision_wire_roundtrip.
+          Print Assumptions native_common_revision_wire_roundtrip.
+          Print Assumptions native_closed_revision_wire_roundtrip.
+          Print Assumptions native_revision_role_wires_pairwise_disjoint.
+          Print Assumptions native_revision_wrong_role_decoding_fails.
+          Print Assumptions native_revision_and_digest_wire_images_disjoint.
           Print Assumptions fixed_adapter_full_certification_preserves_predecessors.
           EOF
           rocq c -Q proof/Phil Phil /tmp/NativeFinalInstanceAssumptions.v 2>&1 | tee typed-native-instance-assumptions.log

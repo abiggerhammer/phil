@@ -561,3 +561,42 @@ complete FixedFinalAuthorityAdapter/FinalArtifactCertified, independent release
 **bytes** and pinned independent final-delta signoff all remain open. No
 changed TCB, LLVM/Rocq/GHC policy, generated files, public release or 244
 normative cases. Independent Phase 1 audit freeze: **NOT YET**.
+
+## 2026-11-07 — independent normalized Systems / common / closed revision wires
+
+The actual accepted StageClosure's normalized `SystemsArtifactRevision`, common
+`Phase1StageContractRevision` and final `ClosedStageContractRevision` are
+distinct native `Text` newtypes. This successor adds exactly three reversible
+ASCII role-tagged data encodings (`S`, `C`, `F`), retaining their *entire*
+payloads and rejecting foreign roles. These tags are also disjoint from the
+separate accepted manifest's raw Systems digest (`R`) and lowering root (`L`).
+They do **not** equate any digest, revision or provenance domain.
+
+Strict Upload and Steve native tests first replay the independently accepted
+whole manifest and StageClosure through the existing checked producer, VER-010
+source and INT-005 release. They check exact revision-coordinate equality,
+lossless typed roundtrips, cross-role rejection and all five wire-role
+separations. Additional adversarial tests deliberately put the *same real
+accepted Systems revision payload* inside three other **unaccepted** role
+wrappers and two digest wrappers: cross-role decoding must still reject.
+No alternate stage or acceptance is manufactured.
+
+The Rocq `string` model proves three role-specific injectivity theorems, three
+roundtrips, within-revision disjointness, six wrong-decoder cases and six
+revision-versus-digest image separations. Nine named `Print Assumptions`
+queries are mandatory in the existing strict Rocq workflow.
+
+**Remaining-premise ledger:** Haskell `Data.Text` Unicode/Rocq `string`
+representation agreement is **not proved**, nor canonical revision derivation
+by decoding a wire. Accepted GenericApplicationIdentity/actuals/instance,
+complete source assurance, independently accepted manifest and checked
+source producer, subject/instance/realization/profile, exact StageClosure and
+CertifiedRelease still need a full competent total/injective representation
+and an authenticated architecture-occurrence-to-concrete-stage production
+premise. Source/assumption/erasure/final predecessor authority, complete
+`FixedFinalAuthorityAdapter` and `FinalArtifactCertified` remain unproved.
+Model propositions are not native evidence; no native-to-Rocq `nat` map is
+invented. Public release-byte verification and independent pinned final-delta
+signoff are separate, uncredited gates. No Phase 1 TCB, strict GHC/LLVM/Rocq
+policy, generated Phase-1 outputs, independent-audit history or original 244
+normative cases are changed. Audit freeze verdict: **NOT YET**.

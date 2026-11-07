@@ -58,7 +58,7 @@ import Phil.Assurance.Types
   , ArtifactRef (..)
   , AssuranceLedger
   , AssuranceManifest (..)
-  , Digest
+  , Digest (..)
   , VerificationContext (..)
   , deriveManifestId
   , digestText
@@ -86,6 +86,7 @@ import Phil.Systems.IR
 import Phil.Systems.Phase1Stage
   ( Phase1StageBundle (..)
   , SystemsArtifactRevision (..)
+  , Phase1StageContractRevision (..)
   )
 import Phil.Systems.StageClosure
   ( ClosedStageContractRevision (..)
@@ -159,6 +160,14 @@ main = do
           , nativeDigestRoleWireReplayAccepts source upload)
         , ( "Steve real accepted digest roles survive exact reversible tagged wire"
           , nativeDigestRoleWireReplayAccepts source steve)
+        , ( "Upload accepted normalized/common/closed stage revisions roundtrip through disjoint role wires"
+          , nativeRevisionRoleWireReplayAccepts source upload)
+        , ( "Steve accepted normalized/common/closed stage revisions roundtrip through disjoint role wires"
+          , nativeRevisionRoleWireReplayAccepts source steve)
+        , ( "Upload equal-payload revision and digest role substitutions fail closed"
+          , nativeRevisionRoleEqualPayloadSubstitutionsReject source upload)
+        , ( "Steve equal-payload revision and digest role substitutions fail closed"
+          , nativeRevisionRoleEqualPayloadSubstitutionsReject source steve)
         , ( "Upload changed raw Systems digest cannot pass exact manifest-stage replay"
           , nativeManifestStageReplayRejectsChangedDigests source upload)
         , ( "Steve changed raw Systems digest cannot pass exact manifest-stage replay"
@@ -858,6 +867,119 @@ nativeDigestRoleWireReplayAccepts source fixture =
                     && rawWire /= rootWire
                     && decodeNativeRawSystemsDigestWire rootWire == Nothing
                     && decodeNativeLoweringRootWire rawWire == Nothing
+    _ -> False
+
+
+-- | The three distinct normalized/common/closed revision values are read
+-- from the actual accepted StageClosure through the existing whole-object
+-- replay, never reconstructed as unaccepted stage authority. Exact payload
+-- roundtrips must reject even valid wires with the wrong revision role.
+nativeRevisionRoleWireReplayAccepts
+  :: GenericApplicationAssurance -> ReleaseFixture -> Bool
+nativeRevisionRoleWireReplayAccepts source fixture =
+  case (producerInputs source, produceFixture source fixture) of
+    (Right (bundle, policy), Right (_, produced)) ->
+      case nativeAdapterPair source produced of
+        Nothing -> False
+        Just (sourceArtifact, release) ->
+          case closeNativeFinalInstanceCorrespondence
+              source (sourceInstanceDescriptor source) bundle policy
+              (fixtureContext produced) (fixtureLedger produced)
+              emptyProducerSelection sourceArtifact release of
+            Left _ -> False
+            Right witness ->
+              case replayNativeManifestStageCoordinates witness
+                (nativeCorrespondenceManifest witness)
+                (nativeCorrespondenceStageClosure witness) of
+                Left _ -> False
+                Right view ->
+                  let systems = nativeReplaySystemsRevision view
+                      common = nativeReplayCommonRevision view
+                      closed = nativeReplayClosedRevision view
+                      systemsWire = encodeNativeSystemsRevisionWire systems
+                      commonWire = encodeNativeCommonContractRevisionWire common
+                      closedWire = encodeNativeClosedContractRevisionWire closed
+                      rawWire = encodeNativeRawSystemsDigestWire
+                        (nativeReplayRawDigest view)
+                      rootWire = encodeNativeLoweringRootWire
+                        (nativeReplayLoweringRoot view)
+                      authority = nativeCorrespondenceAuthority witness
+                  in systems == nativeFinalSystemsRevision authority
+                    && common == nativeFinalCommonContractRevision authority
+                    && closed == nativeFinalClosedContractRevision authority
+                    && decodeNativeSystemsRevisionWire systemsWire == Just systems
+                    && decodeNativeCommonContractRevisionWire commonWire == Just common
+                    && decodeNativeClosedContractRevisionWire closedWire == Just closed
+                    && systemsWire /= commonWire
+                    && systemsWire /= closedWire
+                    && commonWire /= closedWire
+                    && systemsWire /= rawWire
+                    && systemsWire /= rootWire
+                    && commonWire /= rawWire
+                    && commonWire /= rootWire
+                    && closedWire /= rawWire
+                    && closedWire /= rootWire
+                    && decodeNativeSystemsRevisionWire commonWire == Nothing
+                    && decodeNativeSystemsRevisionWire closedWire == Nothing
+                    && decodeNativeCommonContractRevisionWire systemsWire == Nothing
+                    && decodeNativeCommonContractRevisionWire closedWire == Nothing
+                    && decodeNativeClosedContractRevisionWire systemsWire == Nothing
+                    && decodeNativeClosedContractRevisionWire commonWire == Nothing
+                    && decodeNativeRawSystemsDigestWire systemsWire == Nothing
+                    && decodeNativeLoweringRootWire closedWire == Nothing
+    _ -> False
+
+-- | Genuine accepted replay provides a payload, but the other wrappers
+-- below are explicitly UNACCEPTED role-collision probes. Equal underlying
+-- Text never upgrades one stage revision or manifest digest into another.
+nativeRevisionRoleEqualPayloadSubstitutionsReject
+  :: GenericApplicationAssurance -> ReleaseFixture -> Bool
+nativeRevisionRoleEqualPayloadSubstitutionsReject source fixture =
+  case (producerInputs source, produceFixture source fixture) of
+    (Right (bundle, policy), Right (_, produced)) ->
+      case nativeAdapterPair source produced of
+        Nothing -> False
+        Just (sourceArtifact, release) ->
+          case closeNativeFinalInstanceCorrespondence
+              source (sourceInstanceDescriptor source) bundle policy
+              (fixtureContext produced) (fixtureLedger produced)
+              emptyProducerSelection sourceArtifact release of
+            Left _ -> False
+            Right witness ->
+              case replayNativeManifestStageCoordinates witness
+                (nativeCorrespondenceManifest witness)
+                (nativeCorrespondenceStageClosure witness) of
+                Left _ -> False
+                Right view ->
+                  let payload = unSystemsArtifactRevision
+                        (nativeReplaySystemsRevision view)
+                      systemsWire = encodeNativeSystemsRevisionWire
+                        (SystemsArtifactRevision payload)
+                      commonWire = encodeNativeCommonContractRevisionWire
+                        (Phase1StageContractRevision payload)
+                      closedWire = encodeNativeClosedContractRevisionWire
+                        (ClosedStageContractRevision payload)
+                      rawWire = encodeNativeRawSystemsDigestWire
+                        (NativeRawSystemsDigest (Digest payload))
+                      rootWire = encodeNativeLoweringRootWire
+                        (NativeLoweringRootDigest (Digest payload))
+                  in systemsWire /= commonWire
+                    && systemsWire /= closedWire
+                    && commonWire /= closedWire
+                    && systemsWire /= rawWire
+                    && systemsWire /= rootWire
+                    && commonWire /= rawWire
+                    && commonWire /= rootWire
+                    && closedWire /= rawWire
+                    && closedWire /= rootWire
+                    && decodeNativeSystemsRevisionWire commonWire == Nothing
+                    && decodeNativeSystemsRevisionWire closedWire == Nothing
+                    && decodeNativeCommonContractRevisionWire systemsWire == Nothing
+                    && decodeNativeCommonContractRevisionWire closedWire == Nothing
+                    && decodeNativeClosedContractRevisionWire systemsWire == Nothing
+                    && decodeNativeClosedContractRevisionWire commonWire == Nothing
+                    && decodeNativeRawSystemsDigestWire closedWire == Nothing
+                    && decodeNativeLoweringRootWire systemsWire == Nothing
     _ -> False
 
 -- | Adversarial same-manifest-ID projections. Neither modified manifest is an
