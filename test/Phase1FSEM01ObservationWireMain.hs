@@ -397,7 +397,7 @@ checkProducerProjection (filename, source, artifact) = do
             (traceLinearOwners first) }
       extraLoan = first
         { traceActiveLoans = Set.insert other (traceActiveLoans first) }
-  ensure (all (cut -> case checkpointCode owner cut of
+  ensure (all (\cut -> case checkpointCode owner cut of
             Left _ -> True
             Right _ -> False)
             [badOwnerName, badOwnerType, extraOwner, extraLoan])
