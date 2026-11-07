@@ -1,4 +1,4 @@
-# First 47 ordinary #1644 wave + policy workflow + 19 audited INT-008/009 and FSEM-01 checks (67 total).
+# First 47 ordinary #1644 wave + guard + 19 audited INT-008/009/FSEM-01 checks + new FSEM-01 two-owner workflow (68 total).
 begin-policy-choice-proofs.yml
 ci.yml
 digest-validation-proofs.yml
@@ -12,6 +12,7 @@ fsem01-represented-loan-trace.yml
 fsem01-resource-context-wire.yml
 fsem01-source-simulation-proof.yml
 fsem01-transition-error-bridge.yml
+fsem01-two-owner-context.yml
 hello-policy-validation-proofs.yml
 local-runtime-choice-proofs.yml
 payload-cancel-choice-proofs.yml

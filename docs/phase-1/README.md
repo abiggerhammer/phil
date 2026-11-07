@@ -37,6 +37,7 @@ The important exceptions are documents that explicitly declare themselves curren
 - [FSEM-01 bounded observation producer-fidelity proof](formal-semantics-producer-fidelity-fsem01-v1.md) — by-construction preservation of all source-run artifact fields and injective snapshot encoding, with checker-state extraction still a tested trust boundary.
 - [FSEM-01 checker-state resource observation bridge](formal-semantics-checker-state-observation-fsem01-v1.md) — exact observed one-owner Haskell Map/Set flags, Rocq resource-context lookup lemmas and start/end/return correspondence; cross-language state refinement remains open.
 - [FSEM-01 full bounded resource-context wire](formal-semantics-resource-context-wire-fsem01-v1.md) — exact four-map/set checkpoint extraction, real Haskell start/end/consume transition replay, Rocq-decoded full-state evidence; universal cross-language refinement still open.
+- [FSEM-01 two-owner Core frame and context2 wire](formal-semantics-two-owner-context-fsem01-v1.md) — separate source-resolved owner identities, real two-owner Haskell Core operations, independent versioned wire and Rocq frame lemmas; full two-owner source elaboration remains open.
 
 These review documents do not replace accepted semantic contracts, the normative grammar, the Logic Ledger, or exact-commit proof and conformance results.
 
