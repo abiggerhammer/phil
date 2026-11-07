@@ -1,12 +1,17 @@
-# 47 ordinary PR workflows from #1644, plus this guard (48 checked workflows).
+# First 47 ordinary #1644 wave + policy workflow + 19 audited INT-008/009 and FSEM-01 checks (67 total).
 begin-policy-choice-proofs.yml
 ci.yml
 digest-validation-proofs.yml
 exact-receive-proofs.yml
 exact-send-proofs.yml
+fsem01-binder-name-encoding.yml
+fsem01-declaration-identity-bridge.yml
+fsem01-exact-borrow-loan-state.yml
 fsem01-observation-wire.yml
+fsem01-represented-loan-trace.yml
 fsem01-resource-context-wire.yml
 fsem01-source-simulation-proof.yml
+fsem01-transition-error-bridge.yml
 hello-policy-validation-proofs.yml
 local-runtime-choice-proofs.yml
 payload-cancel-choice-proofs.yml
@@ -35,7 +40,21 @@ phase1-int-001-steve-ordinary-provider-source.yml
 phase1-int-004-portable-negative-conformance.yml
 phase1-int-005-certified-release.yml
 phase1-int-006-steve-release.yml
+phase1-int008-architecture-component-activation.yml
+phase1-int008-architecture-component-provisioning.yml
+phase1-int008-client-body-send-binding.yml
+phase1-int008-ping-rendezvous-terminal.yml
+phase1-int008-protocol-endpoint-parameter-resolution.yml
+phase1-int008-source-ping-terminal.yml
 phase1-int008-source-send-provisioning.yml
+phase1-int008-unrestricted-value-flow.yml
+phase1-int009-bounded-ping-loop-source.yml
+phase1-int009-bounded-ping-runtime.yml
+phase1-int009-bounded-ping-source-values.yml
+phase1-int009-interruptible-ping.yml
+phase1-int009-request-reply-runtime-output.yml
+phase1-int009-request-reply-source-shape.yml
+phase1-int009-unbounded-ping.yml
 phase1-resource-join-conformance.yml
 phase1-surface-borrow-view-scope-proofs.yml
 phase1-surface-determinacy-final.yml
