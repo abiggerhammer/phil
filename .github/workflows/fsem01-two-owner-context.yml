@@ -116,6 +116,7 @@ jobs:
             proof/Phil/Surface/SurfaceBorrowViewScope.v \
             proof/Phil/Surface/SurfaceBorrowLoanStateCorrespondence.v \
             proof/Phil/Surface/SurfaceBinderNameEncoding.v \
+            proof/Phil/Surface/SurfaceDeclarationIdentityBridge.v \
             proof/Phil/Surface/SurfaceRepresentedBorrowTrace.v \
             proof/Phil/Surface/SurfaceBorrowStepErrorBridge.v \
             proof/Phil/Surface/SurfaceObservationWire.v \
