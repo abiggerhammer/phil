@@ -349,6 +349,56 @@ testDistinctCatalogOrdering = do
   assert (decoded == Just (grammarV1ResolvedBinderKey (grammarV1TraceOwnerBinder trace)))
     "production Core name depended on model catalog ordering"
 
+-- | Tamper with real source-derived checkpoints and outcomes. The bounded
+-- observer must reject every forged continuation and corrupted error prefix.
+testTamperRejection :: Either String ()
+testTamperRejection = do
+  catalog <- catalogFrom roots
+  let root = head roots
+  parsed <- parseFun "tamper-negative" escapingBody
+  rejectedTrace <- case grammarV1CheckedBorrowResourceFunctionTrace
+      emptyStaticContext root parsed of
+    Just (Right trace) -> Right trace
+    other -> Left ("negative source not admitted: " <> show other)
+  cuts <- mapM (observeProductionCut catalog
+    (grammarV1TraceOwnerBinder rejectedTrace)
+    (grammarV1TraceViewBinder rejectedTrace))
+    (grammarV1TraceCheckpoints rejectedTrace)
+  let negativeOutcome = grammarV1TraceOutcome rejectedTrace
+  validateTraceCertificate cuts negativeOutcome
+  safeParsed <- parseFun "tamper-positive" safeBody
+  safeTrace <- case grammarV1CheckedBorrowResourceFunctionTrace
+      emptyStaticContext root safeParsed of
+    Just (Right trace) -> Right trace
+    other -> Left ("positive source not admitted: " <> show other)
+  let acceptedOutcome = grammarV1TraceOutcome safeTrace
+      key = modelKey (head cuts)
+      inventedClose = ModelCut key Closed True False
+      inventedReturn = ModelCut key Returned False False
+      wrongOwner = case cuts of
+        first : second : rest ->
+          first : second { modelKey = (-1, 777) } : rest
+        _ -> []
+      wrongMembership = case cuts of
+        first : second : rest ->
+          first : second { modelLoan = False } : rest
+        _ -> []
+      skippedLoanStart = case cuts of
+        first : _ : third : rest -> first : third : rest
+        _ -> []
+      truncated = take 3 cuts
+      mutations =
+        [ validateTraceCertificate (cuts ++ [inventedClose]) negativeOutcome
+        , validateTraceCertificate (cuts ++ [inventedReturn]) negativeOutcome
+        , validateTraceCertificate wrongOwner negativeOutcome
+        , validateTraceCertificate wrongMembership negativeOutcome
+        , validateTraceCertificate skippedLoanStart negativeOutcome
+        , validateTraceCertificate truncated negativeOutcome
+        , validateTraceCertificate cuts acceptedOutcome
+        ]
+  assert (all isRejected mutations)
+    "forged transition, incomplete negative trace or mismatch was certified"
+
 test :: String -> Either String () -> IO Bool
 test label outcome = case outcome of
   Right () -> putStrLn ("PASS: " <> label) >> pure True
@@ -364,6 +414,8 @@ main = do
         testCatalogAuthority
     , test "FSEM-01 catalog positions never rewrite production Core names"
         testDistinctCatalogOrdering
+    , test "FSEM-01 production BorrowEscape rejects forged trace extensions"
+        testTamperRejection
     ]
   if and results then pure () else exitFailure
 
