@@ -45,23 +45,25 @@ def parse(raw: bytes, header: bytes, count: int) -> list[str]:
     return frames(raw[len(header):], count)
 
 
-def state_word(phase: str, owner: str, present: bool, loaned: bool) -> str:
-    return "/".join([phase, "-", "-", owner + "=Bytes8" if present else "-",
-                     owner if loaned else "-"])
+def state_word(phase: str, owner: str, view: str,
+               view_live: bool, present: bool, loaned: bool) -> str:
+    return "/".join([
+        phase, view + "=SharedBytes" if view_live else "-", "-",
+        owner + "=Bytes8" if present else "-", owner if loaned else "-"])
 
 
-def expected_states(owner: str, outcome: str) -> str:
+def expected_states(owner: str, view: str, outcome: str) -> str:
     if outcome == POSITIVE:
-        states = [("B", True, False), ("S", True, True),
-                  ("N", True, True), ("C", True, False),
-                  ("R", False, False)]
+        states = [("B", False, True, False), ("S", False, True, True),
+                  ("N", True, True, True), ("C", False, True, False),
+                  ("R", False, False, False)]
     elif outcome == ESCAPE:
-        states = [("B", True, False), ("S", True, True),
-                  ("E", True, True), ("X", True, True)]
+        states = [("B", False, True, False), ("S", False, True, True),
+                  ("E", True, True, True), ("X", True, True, True)]
     else:
         raise ValueError("unknown terminal outcome")
-    return ",".join(state_word(phase, owner, present, loaned)
-                    for phase, present, loaned in states)
+    return ",".join(state_word(phase, owner, view, view_live, present, loaned)
+                    for phase, view_live, present, loaned in states)
 
 
 def check_pair(ctx: list[str], obs: list[str]) -> None:
@@ -75,7 +77,7 @@ def check_pair(ctx: list[str], obs: list[str]) -> None:
     if any(len(s) % 2 != 0 or re.fullmatch("[0-9a-f]*", s) is None
            for s in (root, owner, view)):
         raise ValueError("noncanonical hex identity")
-    if states != expected_states(owner, outcome):
+    if states != expected_states(owner, view, outcome):
         raise ValueError("unexpected resource maps, loans, phases or sequence")
     if obs[6] != ("B10,S11,N11,C10,R00" if outcome == POSITIVE
                   else "B10,S11,E11,X11"):
