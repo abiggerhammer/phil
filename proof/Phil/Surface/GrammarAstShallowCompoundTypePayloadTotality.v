@@ -556,9 +556,12 @@ Proof.
       cbn in Hnth.
       inversion Hnth; subst item.
       change
-        (Derives phase1_surface_rules _
+        (Derives phase1_surface_rules
+          (descend
+            (descend path (AtNonterminal "nonreference_type_expression"))
+            (AtAlternative 7))
           phase1_surface_bytes_payload_expression_for_totality
-          _ _ selected) in Hbranch.
+          input rest selected) in Hbranch.
       destruct
         (phase1_surface_normalize_bytes_payload_total_from_derivation
           _ _ _ selected Hbranch)
@@ -659,9 +662,12 @@ Proof.
       cbn in Hnth.
       inversion Hnth; subst item.
       change
-        (Derives phase1_surface_rules _
+        (Derives phase1_surface_rules
+          (descend
+            (descend path (AtNonterminal "nonreference_type_expression"))
+            (AtAlternative 10))
           phase1_surface_validated_payload_expression_for_totality
-          _ _ selected) in Hbranch.
+          input rest selected) in Hbranch.
       destruct
         (phase1_surface_normalize_validated_payload_total_from_derivation
           _ _ _ selected Hbranch)
