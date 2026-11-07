@@ -60,8 +60,11 @@ creates a downloadable GitHub Actions artifact named
   `decl.é:猫`.
 
 The files are created anew from the checked production interpreter
-**on the CI commit**, not from hand-written expected trace text or from
-a Rocq model evaluator. The fixed source fixtures and their SHA-256
+**on the CI commit**, not from a Rocq model evaluator. A byte-for-byte
+comparison against [committed golden specimens](../../test/fixtures/fsem01-observation-v1/expected)
+retains a stable, reviewable example artifact; CI fails if the actual
+producer disagrees. The goldens are fixture expectations, **not** claims of
+source-derived evidence until that comparison passes. The fixed source fixtures and their SHA-256
 digests bind each specimen to specific source bytes; the output is
 deterministic and does not include a wall-clock timestamp.
 
@@ -114,7 +117,7 @@ Reproduction on the checked commit:
 cabal build lib:phil-core --ghc-options=-Werror
 cabal exec -- runghc -isrc -Wall -Werror test/Phase1FSEM01ObservationWireMain.hs
 cabal exec -- runghc -isrc -Wall -Werror test/Phase1FSEM01ObservationWireMain.hs --emit fsem01-wire-artifacts
-python3 scripts/fsem01_observation_wire.py --artifact-dir fsem01-wire-artifacts --rocq-witness fsem01-wire-generated/GeneratedObservationWitness.v
+python3 scripts/fsem01_observation_wire.py --artifact-dir fsem01-wire-artifacts --golden-dir test/fixtures/fsem01-observation-v1/expected --rocq-witness fsem01-wire-generated/GeneratedObservationWitness.v
 ~~~
 
 The Rocq step of the workflow compiles the full dependency chain and
