@@ -189,8 +189,9 @@ def live_claim(api: GitHub, slice_key: str) -> tuple[dict, str]:
     sha = obj.get("sha") if isinstance(obj, dict) else None
     if not isinstance(sha, str) or not re.fullmatch(r"[0-9a-f]{40}", sha):
         raise ClaimFailure("malformed claim ref SHA")
-    name = "coord/fsem-claims/" + slice_key
-    query = urllib.parse.quote(name, safe="")
+    # Read the record from the immutable SHA we just looked up, not from a
+    # potentially moved branch name between API calls.
+    query = urllib.parse.quote(sha, safe="")
     item = api.request("GET", "/contents/" + CLAIM_FILE + "?ref=" + query)
     if not isinstance(item, dict) or item.get("encoding") != "base64":
         raise ClaimFailure("claim ref missing machine-readable record")
