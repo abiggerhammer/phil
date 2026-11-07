@@ -1,5 +1,9 @@
 name: FSEM-01 Exact Borrow Loan State Correspondence
 
+concurrency:
+  # Supersede obsolete same-PR checks only; never cancel non-PR runs.
+  group: ${{ github.workflow_ref }}-${{ github.event.pull_request.number || github.run_id }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 on:
   pull_request:
     paths:
