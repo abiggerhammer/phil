@@ -436,9 +436,33 @@ returnPath
 returnPath _ _ path | pathControl path /= PathContinue = Right path
 returnPath environment span' path = do
   let state = pathState path
-      ty = maybe TyUnit runtimeType (pathValue path)
+  ty <- case surfaceExpectedProductReturn environment of
+    Nothing -> Right (maybe TyUnit runtimeType (pathValue path))
+    Just expected -> case pathValue path of
+      Just (RuntimeTuple values)
+        | Just actual <- traverse observedProductElement values
+        , actual == expected ->
+            Right (TyProduct actual)
+      _ -> Left SurfaceCheckError
+        { surfaceErrorSpan = span'
+        , surfaceErrorClass = TypeMismatch
+        , surfaceErrorDetail =
+            "returned tuple elements do not match the checked product contract"
+        }
   ensureTerminalState environment span' Nothing state
   Right path { pathControl = PathReturn ty, pathValue = Nothing }
+
+-- A checked product expectation is necessary before returning a TyProduct.
+-- This avoids changing unrelated tuple expression semantics. Nested tuple
+-- return elaboration is deliberately not admitted here.
+observedProductElement :: RuntimeValue -> Maybe ProductElementType
+observedProductElement RuntimeUnit =
+  Just (ProductElementType Unrestricted TyUnit)
+observedProductElement (RuntimeScalar scalar) =
+  Just (ProductElementType
+    (decisionCarrierMode (scalarMode scalar) (scalarShape scalar))
+    (scalarType scalar))
+observedProductElement (RuntimeTuple _) = Nothing
 
 discardValue :: SourceSpan -> SurfacePath -> Either SurfaceCheckError SurfacePath
 discardValue _ path | pathControl path /= PathContinue = Right path

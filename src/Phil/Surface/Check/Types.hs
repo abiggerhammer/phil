@@ -55,6 +55,7 @@ import Phil.Core.Syntax
   , Proposition
   , RefSort
   , RefTerm
+  , ProductElementType (..)
   , Ty
   )
 import Phil.Core.Value
@@ -260,6 +261,8 @@ data SurfaceEnvironment = SurfaceEnvironment
   , surfaceReceiveExactRequirement :: Maybe Proposition
   , surfaceTerminalAllowances :: Map Outcome (Set Text)
   , surfaceExpectedProvides :: Maybe Ty
+  -- Optional checked source product-return contract; other tuple paths unchanged.
+  , surfaceExpectedProductReturn :: Maybe [ProductElementType]
   , surfaceLegacyReceiveFrameRaw :: Bool
   , surfaceReleaseTransitions :: [ReleaseTransitionContract]
   , surfaceSatisfiedReleaseRequirements :: Set ReleaseRequirement
@@ -329,6 +332,7 @@ emptySurfaceEnvironment staticContext = SurfaceEnvironment
   , surfaceReceiveExactRequirement = Nothing
   , surfaceTerminalAllowances = Map.empty
   , surfaceExpectedProvides = Nothing
+  , surfaceExpectedProductReturn = Nothing
   , surfaceLegacyReceiveFrameRaw = False
   , surfaceReleaseTransitions = []
   , surfaceSatisfiedReleaseRequirements = Set.empty

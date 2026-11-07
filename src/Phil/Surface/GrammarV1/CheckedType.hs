@@ -53,6 +53,7 @@ import Phil.Surface.GrammarV1.Parser
   ( GrammarV1StaticArgument (..)
   , GrammarV1Type (..)
   )
+import Phil.Surface.Syntax (Located (..))
 
 grammarV1CheckedType
   :: StaticContext
@@ -61,6 +62,28 @@ grammarV1CheckedType
   -> Maybe (Either FocusingError (Ty, [FocusStep]))
 grammarV1CheckedType staticContext state sourceType =
   case sourceType of
+    -- Bounded closed product type: exactly two independently checked Bytes[N]
+    -- elements. The mode and type of each element become Core TyProduct data.
+    -- Other/nested/unnamed source tuple forms remain unsupported.
+    GrammarV1TupleType
+      [Located _ first@(GrammarV1BytesType _),
+       Located _ second@(GrammarV1BytesType _)] -> do
+      left <- grammarV1CheckedTypeMode staticContext state first
+      right <- grammarV1CheckedTypeMode staticContext state second
+      pure $ do
+        (leftChecked, leftSteps) <- left
+        (rightChecked, rightSteps) <- right
+        Right
+          ( TyProduct
+              [ ProductElementType
+                  (checkedBindingMode leftChecked)
+                  (checkedBindingType leftChecked)
+              , ProductElementType
+                  (checkedBindingMode rightChecked)
+                  (checkedBindingType rightChecked)
+              ]
+          , leftSteps ++ rightSteps
+          )
     GrammarV1ProofType _ ->
       grammarV1CheckedProofType staticContext state sourceType
     GrammarV1RefinementType _ _ _ ->
