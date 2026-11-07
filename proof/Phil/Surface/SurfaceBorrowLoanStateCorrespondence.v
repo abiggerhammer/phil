@@ -105,9 +105,9 @@ Proof.
     try discriminate.
   inversion Hstart; subst next; clear Hstart.
   split.
-  - exact Hfree.
+  - reflexivity.
   - split.
-    + exists ty. exact Hlinear.
+    + exists ty. reflexivity.
     + split.
       * apply set_core_loan_has_exact_target.
       * reflexivity.
@@ -126,7 +126,7 @@ Proof.
     try discriminate.
   inversion Hend; subst next; clear Hend.
   split.
-  - exact Hactive.
+  - reflexivity.
   - split.
     + apply set_core_loan_has_exact_target.
     + reflexivity.
