@@ -1,0 +1,137 @@
+name: FSEM-01 Full Resource Context Wire
+
+on:
+  pull_request:
+    paths:
+      - 'src/Phil/Surface/Check/Engine.hs'
+      - 'test/Phase1FSEM01ObservationWireMain.hs'
+      - 'proof/Phil/Surface/SurfaceResourceContextWire.v'
+      - 'scripts/fsem01_resource_context_witness.py'
+      - 'docs/phase-1/formal-semantics-resource-context-wire-fsem01-v1.md'
+      - '.github/workflows/fsem01-resource-context-wire.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'src/Phil/Surface/Check/Engine.hs'
+      - 'test/Phase1FSEM01ObservationWireMain.hs'
+      - 'proof/Phil/Surface/SurfaceResourceContextWire.v'
+      - 'scripts/fsem01_resource_context_witness.py'
+      - 'docs/phase-1/formal-semantics-resource-context-wire-fsem01-v1.md'
+      - '.github/workflows/fsem01-resource-context-wire.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  real-source-context-extraction:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: haskell-actions/setup@v2
+        with:
+          ghc-version: '9.6.7'
+          cabal-version: 'latest'
+      - name: Strict production checker build
+        run: cabal build lib:phil-core --ghc-options=-Werror
+      - name: Warning-free actual source checker and resource trace tests
+        shell: bash
+        run: |
+          set -euo pipefail
+          cabal exec -- ghc -isrc -Wall -Werror -fno-code \
+            test/Phase1FSEM01ObservationWireMain.hs
+          cabal exec -- runghc -isrc -Wall -Werror \
+            test/Phase1FSEM01ObservationWireMain.hs
+      - name: Extract exact full Core.ResourceContext snapshots
+        shell: bash
+        run: |
+          set -euo pipefail
+          cabal exec -- runghc -isrc -Wall -Werror \
+            test/Phase1FSEM01ObservationWireMain.hs \
+            --emit fsem01-context-artifacts
+          python3 -m py_compile scripts/fsem01_resource_context_witness.py
+          python3 scripts/fsem01_resource_context_witness.py \
+            --artifact-dir fsem01-context-artifacts \
+            --observation-dir fsem01-context-artifacts \
+            --output fsem01-generated/GeneratedContextWitness.v
+          sha256sum fsem01-context-artifacts/*.obs \
+            fsem01-context-artifacts/*.ctx \
+            fsem01-generated/GeneratedContextWitness.v
+      - uses: actions/upload-artifact@v4
+        with:
+          name: fsem01-real-context-v1
+          path: |
+            fsem01-context-artifacts/*.obs
+            fsem01-context-artifacts/*.ctx
+            fsem01-generated/GeneratedContextWitness.v
+          if-no-files-found: error
+          retention-days: 30
+
+  rocq-exact-context-decoder:
+    needs: real-source-context-extraction
+    runs-on: ubuntu-latest
+    container:
+      image: rocq/rocq-prover:9.2.0
+      options: --user root
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          name: fsem01-real-context-v1
+          path: fsem01-evidence
+      - name: Revalidate exact downloaded bytes and regenerate Rocq witnesses
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 scripts/fsem01_resource_context_witness.py \
+            --artifact-dir fsem01-evidence/fsem01-context-artifacts \
+            --observation-dir fsem01-evidence/fsem01-context-artifacts \
+            --output fsem01-evidence/recomputed/GeneratedContextWitness.v
+          cmp fsem01-evidence/fsem01-generated/GeneratedContextWitness.v \
+              fsem01-evidence/recomputed/GeneratedContextWitness.v
+      - name: Compile independently checked Context decoder and source witnesses
+        shell: bash
+        run: |
+          set -euo pipefail
+          export PATH="/home/rocq/.opam/${COMPILER}/bin:$PATH"
+          for file in \
+            proof/Phil/Core/Syntax.v \
+            proof/Phil/Core/Context.v \
+            proof/Phil/Core/BindingSemantics.v \
+            proof/Phil/Core/ContextJoin.v \
+            proof/Phil/Core/ProcessJoin.v \
+            proof/Phil/Core/ResourceJoin.v \
+            proof/Phil/Core/ResourceScope.v \
+            proof/Phil/Surface/SurfaceBinderScopeCore.v \
+            proof/Phil/Surface/SurfaceLetPatternScope.v \
+            proof/Phil/Surface/SurfaceBorrowViewScope.v \
+            proof/Phil/Surface/SurfaceBorrowLoanStateCorrespondence.v \
+            proof/Phil/Surface/SurfaceBinderNameEncoding.v \
+            proof/Phil/Surface/SurfaceDeclarationIdentityBridge.v \
+            proof/Phil/Surface/SurfaceRepresentedBorrowTrace.v \
+            proof/Phil/Surface/SurfaceBorrowStepErrorBridge.v \
+            proof/Phil/Surface/SurfaceObservationWire.v \
+            proof/Phil/Surface/SurfaceBoundedSourceSimulation.v \
+            proof/Phil/Surface/SurfaceObservationProducerFidelity.v \
+            proof/Phil/Surface/SurfaceCheckerStateObservation.v \
+            proof/Phil/Surface/SurfaceResourceContextWire.v
+          do
+            rocq c -Q proof/Phil Phil "$file"
+          done
+          rocq c -Q proof/Phil Phil \
+            fsem01-evidence/recomputed/GeneratedContextWitness.v
+      - name: No admissions and provenance of exact model and witness bytes
+        shell: bash
+        run: |
+          set -euo pipefail
+          if grep -nE '^[[:space:]]*(Admitted[.]|Axiom[[:space:]]|Parameter[[:space:]])' \
+              proof/Phil/Surface/SurfaceResourceContextWire.v \
+              fsem01-evidence/recomputed/GeneratedContextWitness.v; then
+            echo "Unproved global admission in resource-context bridge"
+            exit 1
+          fi
+          sha256sum proof/Phil/Surface/SurfaceResourceContextWire.v \
+            proof/Phil/Surface/SurfaceResourceContextWire.vo \
+            fsem01-evidence/fsem01-context-artifacts/*.ctx \
+            fsem01-evidence/fsem01-context-artifacts/*.obs \
+            fsem01-evidence/recomputed/GeneratedContextWitness.v \
+            fsem01-evidence/recomputed/GeneratedContextWitness.vo
