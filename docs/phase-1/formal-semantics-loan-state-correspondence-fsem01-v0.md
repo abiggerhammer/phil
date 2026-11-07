@@ -199,3 +199,7 @@ For a future implementation/proof PR, acceptance requires:
 production checker and isolates a real `BorrowEscape` negative. The missing
 work is a precise, proved mapping of that implementation's identities,
 states, transitions and rejection outcomes to the normalized Rocq model.
+
+## Subsequent first proof slice
+
+[The exact linear loan transition model](formal-semantics-exact-loan-transition-model-fsem01-v1.md) adds Rocq theorems about owner-name loan membership, preserving unrelated bindings, blocked linear consumption, and a **conditional** relation to abstract ResourceOwner loan sets. Its name/owner encoders are injective *hypotheses*, not verified Haskell source-to-model functions; it does not prove escaping-value rejection or a source-to-Rocq simulation. Review the exact-head CI evidence separately.
