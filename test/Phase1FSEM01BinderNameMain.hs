@@ -54,7 +54,7 @@ roots =
   , "é"
   , "e\x0301"
   , "🐈"
-  , "👩‍💻"
+  , "\x1f469\&\x200d\&\x1f4bb"
   , "猫:fish"
   , "a\0b"
   ]
@@ -101,7 +101,7 @@ unicodeLengthExamples = do
         [ (GrammarV1BinderKey (DeclarationKey "é") 3, "$phil.local:1:é:3")
         , (GrammarV1BinderKey (DeclarationKey "🐈") 4, "$phil.local:1:🐈:4")
         , (GrammarV1BinderKey (DeclarationKey "e\x0301") 5, "$phil.local:2:e\x0301:5")
-        , (GrammarV1BinderKey (DeclarationKey "👩‍💻") 6, "$phil.local:3:👩‍💻:6")
+        , (GrammarV1BinderKey (DeclarationKey "\x1f469\&\x200d\&\x1f4bb") 6, "$phil.local:3:\x1f469\&\x200d\&\x1f4bb:6")
         ]
   mapM_
     (\(key, expected) ->
