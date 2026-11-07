@@ -642,6 +642,7 @@ Proof.
     as [proposition_or |] eqn:Hor; try discriminate Hnormalize.
   inversion Hnormalize; subst proposition.
   unfold phase1_surface_proposition_spine_tree.
+  cbn [phase1_proposition_spine_or].
   rewrite (phase1_surface_expect_nonterminal_round_trip
     "proposition" tree body Hnode).
   rewrite (phase1_surface_normalize_proposition_or_spine_round_trip
