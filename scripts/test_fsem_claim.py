@@ -148,6 +148,18 @@ class CoordinationTests(unittest.TestCase):
             f.release(api, 99)
         self.assertIn(f.claim_ref("fsem-01"), api.refs)
 
+    def test_unopened_abandonment_requires_matching_actor_and_no_open_pr(self):
+        api = FakeGitHub()
+        f.acquire(api, "fsem-01", BRANCH, "chat:docs-lane")
+        with self.assertRaisesRegex(f.ClaimFailure, "recorded claimant"):
+            f.abort_unopened(api, "fsem-01", "chat:other")
+        api.prs = [pr()]
+        with self.assertRaisesRegex(f.ClaimFailure, "open PR"):
+            f.abort_unopened(api, "fsem-01", "chat:docs-lane")
+        api.prs = []
+        f.abort_unopened(api, "fsem-01", "chat:docs-lane")
+        self.assertNotIn(f.claim_ref("fsem-01"), api.refs)
+
     def test_open_competitor_blocks_claimed_pr(self):
         api = FakeGitHub()
         f.acquire(api, "fsem-01", BRANCH, "chat:docs-lane")
