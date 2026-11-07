@@ -1,0 +1,32 @@
+name: FSEM Slice Claim Release
+
+on:
+  pull_request_target:
+    types: [closed]
+
+permissions:
+  contents: write
+  issues: write
+  pull-requests: read
+
+jobs:
+  release-exact-closed-claim:
+    if: >-
+      startsWith(github.event.pull_request.head.ref, 'formal-semantics/') &&
+      contains(github.event.pull_request.labels.*.name, 'lane: formal-semantics') &&
+      contains(github.event.pull_request.body, 'FSEM-Slice:')
+    runs-on: ubuntu-latest
+    steps:
+      # pull_request_target loads trusted BASE workflow and BASE code only.
+      # Never execute PR head code with this write-capable token.
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.base.ref }}
+          persist-credentials: false
+      - name: Release only the claim for this exact closed PR
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+        run: |
+          set -euo pipefail
+          python3 scripts/fsem_claim.py release --pr "$PR_NUMBER"
