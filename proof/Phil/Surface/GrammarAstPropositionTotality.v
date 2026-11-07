@@ -113,7 +113,7 @@ Proof.
       (phase1_surface_validate_named_node_total_from_derivation
         "relation_proposition" _ _ _ selected Hselected)
       as Hvalidate.
-    let atom := constr:(Phase1RelationPropositionAtom selected) in
+    pose (Phase1RelationPropositionAtom selected) as atom.
     assert (Hnormalize :
       phase1_surface_normalize_proposition_atom_spine tree = Some atom).
     {
@@ -184,7 +184,7 @@ Proof.
           (literal_derivation_is_exact
             phase1_surface_rules _ "true" _ _ selected Hselected)
           as [tail [_ [_ Hselected_tree]]].
-        let atom := constr:(Phase1TruePropositionAtom) in
+        pose (Phase1TruePropositionAtom) as atom.
         assert (Hnormalize :
           phase1_surface_normalize_proposition_atom_spine tree = Some atom).
         {
@@ -204,7 +204,7 @@ Proof.
              (literal_derivation_is_exact
                phase1_surface_rules _ "false" _ _ selected Hselected)
              as [tail [_ [_ Hselected_tree]]].
-           let atom := constr:(Phase1FalsePropositionAtom) in
+           pose (Phase1FalsePropositionAtom) as atom.
            assert (Hnormalize :
              phase1_surface_normalize_proposition_atom_spine tree = Some atom).
            {
@@ -224,7 +224,7 @@ Proof.
                 (phase1_surface_validate_named_node_total_from_derivation
                   "claim_application" _ _ _ selected Hselected)
                 as Hvalidate.
-              let atom := constr:(Phase1ClaimPropositionAtom selected) in
+              pose (Phase1ClaimPropositionAtom selected) as atom.
               assert (Hnormalize :
                 phase1_surface_normalize_proposition_atom_spine tree = Some atom).
               {
@@ -316,7 +316,7 @@ Proof.
         (phase1_surface_normalize_proposition_atom_spine_total_from_derivation
           _ _ _ selected Hselected)
         as [atom [Hatom Hatom_tree]].
-      let proposition := constr:(Phase1AtomPropositionSpine atom) in
+      pose (Phase1AtomPropositionSpine atom) as proposition.
       assert (Hnormalize :
         phase1_surface_normalize_proposition_not_spine tree = Some proposition).
       {
@@ -643,8 +643,7 @@ Proof.
       (descend path (AtNonterminal "proposition"))
       input rest subtree Hbody)
     as [proposition_or [Hor Hor_tree]].
-  let proposition := constr:(
-    {| phase1_proposition_spine_or := proposition_or |}) in
+  pose ({| phase1_proposition_spine_or := proposition_or |}) as proposition.
   assert (Hnormalize :
     phase1_surface_normalize_proposition_spine tree = Some proposition).
   {
