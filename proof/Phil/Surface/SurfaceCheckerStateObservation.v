@@ -4,7 +4,7 @@ From Phil.Core Require Import Syntax Context.
 From Phil.Surface Require Import
   SurfaceRepresentedBorrowTrace
   SurfaceBorrowLoanStateCorrespondence
-  SurfaceObservationProducerFidelity.
+  SurfaceBorrowStepErrorBridge SurfaceObservationProducerFidelity.
 
 Import ListNotations.
 
@@ -93,6 +93,17 @@ Proof.
   now rewrite Hlinear, Hloan.
 Qed.
 
+Theorem source_observation_renders_exact_state_bits :
+  forall phase owner ctx,
+    SurfaceObservationProducerFidelity.renderCheckpoint
+      (observeContext phase owner ctx) =
+    SurfaceObservationProducerFidelity.checkpointCode phase ++
+      (SurfaceObservationProducerFidelity.flagCode
+         (Context.bindingPresent owner (Context.linearBindings ctx)) ++
+       SurfaceObservationProducerFidelity.flagCode
+         (Context.sharedLoans ctx owner)).
+Proof. reflexivity. Qed.
+
 Theorem before_loan_observes_real_unloaned_owner :
   forall owner ctx ty,
     Context.linearBindings ctx owner = Some ty ->
@@ -106,25 +117,6 @@ Proof.
   apply exact_bits_produce_canonical_snapshot.
   - unfold Context.bindingPresent. rewrite Hty. reflexivity.
   - exact Hfree.
-Qed.
-
-Theorem successful_start_observes_real_active_loan :
-  forall owner ctx started ty phase,
-    Context.linearBindings ctx owner = Some ty ->
-    SurfaceBorrowLoanStateCorrespondence.startLinearSharedLoan
-      owner ctx = Some started ->
-    observeContext phase owner started =
-      SurfaceObservationProducerFidelity.canonicalCheckpoint phase ->
-      Context.linearBindings started owner = Some ty /\
-      Context.sharedLoans started owner = true.
-Proof.
-  intros owner ctx started ty phase Hty Hstart _.
-  pose proof
-    (SurfaceBorrowLoanStateCorrespondence.start_linear_loan_requires_present_unloaned_owner
-      owner ctx started Hstart) as [_ [_ [Hloan Hsame]]].
-  split.
-  - rewrite Hsame. exact Hty.
-  - exact Hloan.
 Qed.
 
 Theorem after_start_exact_checkpoint :
