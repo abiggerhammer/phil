@@ -392,3 +392,50 @@ assumption, erasure and final predecessor authority; full
 release-byte replay and pinned independent final-delta signoff. No TCB,
 generated Phase-1 artifact, normative conformance or historical audit change.
 Original 244 cases are preserved, independent freeze verdict **NOT YET**.
+
+
+## 2026-11-07 — exact checked-instance source-manifest producer-token retention
+
+The checked source-manifest path already used an opaque
+`CertifiedSourceManifestBinding` whose private constructor distinguishes the
+strong checked-instance producer from the weaker declaration-only producer.
+The final native correspondence nevertheless retained only copied projections
+(source assurance, manifest and architecture descriptor), not the exact producer
+token that passed `bindProducedFinalAuthority`. This bounded successor retains
+that exact opaque checked-instance token and exposes only the read-only
+`nativeCorrespondenceSourceManifestBinding` accessor.
+
+Strict Upload and Steve replay requires whole-token equality between the actual
+checked producer and the exported final witness. The adversarial replay closes
+the declaration-only producer against the same source assurance, verification
+bundle, context, ledger and manifest selection. It therefore has the **same
+source assurance and same complete manifest** as the checked token, but no
+architecture descriptor. The real native final binder rejects that weaker token
+with `SourceManifestInstanceNotBound`, while the final witness retains the
+checked token unchanged. Equal source/manifest projections therefore cannot
+upgrade declaration-only authority into checked-instance producer authority.
+
+Typed Rocq adds an abstract `SourceManifestBindingObject` with separately typed
+source, manifest and optional descriptor projections plus an explicitly supplied
+native checked-producer predicate. Conditional exact-token transport, arbitrary
+token substitution rejection, declaration-only rejection, and the
+same-source/same-manifest negative theorem are compiled and covered by four
+`Print Assumptions` queries. These are representation obligations, not a
+Haskell extractor: the supplied predicate cannot manufacture native producer
+acceptance and no `nat` encoding is introduced.
+
+**Remaining-premise ledger:** this token proves only the already checked
+generic-actuals/architecture-instance-to-manifest producer boundary. It still
+does **not** authenticate that occurrence as the producer of the independently
+accepted concrete StageClosure or selected release; StageClosure still lacks an
+InstanceKey and revision equality remains insufficient. Concrete total/injective
+native-to-Rocq representations across source, manifest, raw Systems digest and
+lowering root, normalized SystemsArtifactRevision, common
+Phase1StageContractRevision, final ClosedStageContractRevision,
+subject/instance/realization/profile and complete accepted release remain open,
+as do predecessor source/assumption/erasure/final authority, complete
+`FixedFinalAuthorityAdapter` / `FinalArtifactCertified`, independent public
+release-byte verification and pinned independent final-delta signoff. TCB,
+generated Phase-1 artifacts, historical independent-audit evidence and all 244
+original normative conformance cases remain unchanged. Independent audit freeze
+verdict **NOT YET**.

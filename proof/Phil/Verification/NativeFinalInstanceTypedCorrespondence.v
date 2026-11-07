@@ -847,6 +847,108 @@ Section NativeFinalInstanceTypedCorrespondence.
     Qed.
   End FullCertifiedSourceToFinalWitness.
 
+
+  (*
+    Preserve the exact opaque checked-instance source-manifest producer token
+    across the final witness. Source and manifest projection equality alone is
+    insufficient: the declaration-only native producer can share both while
+    lacking the checked descriptor. All object representations and the native
+    checked-producer predicate remain EXTERNAL typed premises; this model does
+    not create native authority or StageClosure provenance.
+  *)
+  Section FullCheckedSourceManifestBindingToFinalWitness.
+    Context
+      {SourceManifestBindingObject SourceAssuranceObject NativeManifest
+       ArchitectureInstanceDescriptor : Type}.
+    Context (bindingSource :
+      SourceManifestBindingObject -> SourceAssuranceObject).
+    Context (bindingManifest :
+      SourceManifestBindingObject -> NativeManifest).
+    Context (bindingDescriptor :
+      SourceManifestBindingObject -> option ArchitectureInstanceDescriptor).
+    Context (sourceIdentity :
+      SourceAssuranceObject -> ApplicationIdentity).
+    Context (manifestIdentity :
+      NativeManifest -> ManifestIdentity).
+    Context (descriptorIdentity :
+      ArchitectureInstanceDescriptor -> ArchitectureInstanceIdentity).
+    Context (checkedByNativeInstanceProducer :
+      SourceManifestBindingObject -> Prop).
+
+    Definition ExactCheckedSourceManifestBindingPreservedToFinalWitness
+      (w : NativeFinalInstanceCoordinates)
+      (checked exported : SourceManifestBindingObject) : Prop :=
+      NativeProducerConsumerBound w /\
+      checkedByNativeInstanceProducer checked /\
+      sourceIdentity (bindingSource checked) = producedApplication w /\
+      manifestIdentity (bindingManifest checked) = producedManifest w /\
+      (exists descriptor,
+        bindingDescriptor checked = Some descriptor /\
+        descriptorIdentity descriptor = checkedArchitectureInstance w) /\
+      checked = exported.
+
+    Theorem checked_source_manifest_binding_reaches_final_witness_exactly :
+      forall w checked exported,
+        ExactCheckedSourceManifestBindingPreservedToFinalWitness
+          w checked exported ->
+        checked = exported /\
+        sourceIdentity (bindingSource exported) = producedApplication w /\
+        manifestIdentity (bindingManifest exported) = producedManifest w /\
+        (exists descriptor,
+          bindingDescriptor exported = Some descriptor /\
+          descriptorIdentity descriptor = checkedArchitectureInstance w) /\
+        checkedByNativeInstanceProducer checked /\
+        NativeProducerConsumerBound w.
+    Proof.
+      intros w checked exported
+        [Hbound [Hchecked [Hsource [Hmanifest [Hdescriptor Heq]]]]].
+      split; [exact Heq |].
+      split.
+      - rewrite <- Heq. exact Hsource.
+      - split.
+        + rewrite <- Heq. exact Hmanifest.
+        + split.
+          * destruct Hdescriptor as [descriptor [Hsome Hid]].
+            exists descriptor. rewrite <- Heq. split; assumption.
+          * split; [exact Hchecked | exact Hbound].
+    Qed.
+
+    Theorem substituted_checked_source_manifest_binding_cannot_bind :
+      forall w checked exported,
+        checked <> exported ->
+        ~ ExactCheckedSourceManifestBindingPreservedToFinalWitness
+            w checked exported.
+    Proof.
+      intros w checked exported Hdiff
+        [_ [_ [_ [_ [_ Heq]]]]].
+      exact (Hdiff Heq).
+    Qed.
+
+    Theorem declaration_only_binding_cannot_replace_checked_instance_token :
+      forall w checked exported,
+        bindingDescriptor exported = None ->
+        ~ ExactCheckedSourceManifestBindingPreservedToFinalWitness
+            w checked exported.
+    Proof.
+      intros w checked exported Hnone
+        [_ [_ [_ [_ [Hdescriptor Heq]]]]].
+      destruct Hdescriptor as [descriptor [Hsome _]].
+      rewrite Heq in Hsome. rewrite Hnone in Hsome. discriminate.
+    Qed.
+
+    Theorem same_source_and_manifest_cannot_upgrade_declaration_only_binding :
+      forall w checked exported,
+        bindingSource checked = bindingSource exported ->
+        bindingManifest checked = bindingManifest exported ->
+        bindingDescriptor exported = None ->
+        ~ ExactCheckedSourceManifestBindingPreservedToFinalWitness
+            w checked exported.
+    Proof.
+      intros w checked exported _ _ Hnone.
+      now apply declaration_only_binding_cannot_replace_checked_instance_token.
+    Qed.
+  End FullCheckedSourceManifestBindingToFinalWitness.
+
 End NativeFinalInstanceTypedCorrespondence.
 
 (* A concrete logical counterexample, NOT an encoding of Haskell identity
