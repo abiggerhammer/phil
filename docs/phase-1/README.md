@@ -25,6 +25,7 @@ The important exceptions are documents that explicitly declare themselves curren
 - [FSEM-01 bounded declaration-root representation](formal-semantics-declaration-identity-bridge-fsem01-v1.md) — duplicate-free finite catalog relation between normalized declaration IDs and actual Haskell root keys; catalog stability and Unicode refinement remain explicit.
 - [FSEM-01 represented production loan-state checkpoints](formal-semantics-represented-loan-trace-fsem01-v1.md) — model start/close/terminal and rejected-prefix proofs, plus source-derived production trace ↔ bounded catalog identity and membership tests; no universal Haskell refinement.
 - [FSEM-01 bounded transition and BorrowEscape error bridge](formal-semantics-step-error-bridge-fsem01-v1.md) — fail-closed model steps, no post-rejection successors, and actual production trace tampering tests; cross-language simulation still open.
+- [FSEM-01 versioned source observation and checked wire decoder](formal-semantics-observation-wire-fsem01-v1.md) — deterministic, source-SHA256-bound actual checker artifacts uploaded by CI and evaluated byte-for-byte by a Rocq-proved decoder; producer refinement still open.
 
 These review documents do not replace accepted semantic contracts, the normative grammar, the Logic Ledger, or exact-commit proof and conformance results.
 
