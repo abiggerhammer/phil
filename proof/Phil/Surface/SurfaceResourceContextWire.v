@@ -221,7 +221,8 @@ Theorem reconstructed_foreign_owner_and_loan_absent :
 Proof.
   intros owner ty present loaned candidate Hforeign.
   unfold fromResourceBits; simpl.
-  now rewrite Hforeign.
+  rewrite Hforeign.
+  split; reflexivity.
 Qed.
 
 (* The checker temporarily installs a SharedBytes view as an unrestricted
