@@ -102,7 +102,7 @@ Proof.
 Qed.
 
 Theorem distinct_catalog_positions_have_distinct_roots :
-  forall catalog first second root,
+  forall (catalog : list string) (first second : nat) (root : string),
     NoDup catalog ->
     nth_error catalog first = Some root ->
     nth_error catalog second = Some root ->
