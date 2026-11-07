@@ -292,7 +292,7 @@ Theorem represented_end_replays_context_operation :
 Proof.
   intros owner ty.
   unfold SurfaceBorrowLoanStateCorrespondence.endLinearSharedLoan,
-    closedContext.
+    closedContext, startedContext.
   rewrite SurfaceBorrowLoanStateCorrespondence.set_core_loan_has_exact_target.
   reflexivity.
 Qed.
