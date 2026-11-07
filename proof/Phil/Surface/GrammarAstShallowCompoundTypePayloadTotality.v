@@ -425,6 +425,7 @@ Proof.
   assert (Hnormalize :
     phase1_surface_normalize_validated_payload tree = Some payload).
   {
+    unfold payload.
     rewrite Htree, Hkeyword_tree, Hopen_tree, Hreference_tree,
       Hfirst_comma_tree, Hfirst_expression_tree,
       Hsecond_comma_tree, Hsecond_expression_tree, Hclose_tree.
