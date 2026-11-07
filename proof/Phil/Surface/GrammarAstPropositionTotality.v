@@ -344,7 +344,7 @@ Proof.
         unfold phase1_surface_normalize_proposition_not_spine,
           phase1_surface_expect_nonterminal,
           phase1_surface_expect_alternative.
-        cbn. rewrite String.eqb_refl, Hatom. reflexivity.
+        cbn. repeat rewrite String.eqb_refl. rewrite Hatom. reflexivity.
       }
       exists proposition. split; [exact Hnormalize|].
       eapply phase1_surface_normalize_proposition_not_spine_round_trip.
@@ -402,7 +402,8 @@ Proof.
         phase1_surface_exact2,
         phase1_surface_expect_literal;
       cbn;
-      rewrite String.eqb_refl, Hproposition_normalize;
+      repeat rewrite String.eqb_refl;
+      rewrite Hproposition_normalize;
       reflexivity
   end.
 Qed.
@@ -562,7 +563,8 @@ Proof.
         phase1_surface_exact2,
         phase1_surface_expect_literal;
       cbn;
-      rewrite String.eqb_refl, Hproposition_normalize;
+      repeat rewrite String.eqb_refl;
+      rewrite Hproposition_normalize;
       reflexivity
   end.
 Qed.
@@ -700,7 +702,7 @@ Proof.
     rewrite Htree.
     unfold phase1_surface_normalize_proposition_spine,
       phase1_surface_expect_nonterminal.
-    cbn. rewrite String.eqb_refl, Hor. reflexivity.
+    cbn. repeat rewrite String.eqb_refl. rewrite Hor. reflexivity.
   }
   exists proposition. split; [exact Hnormalize|].
   eapply phase1_surface_normalize_proposition_spine_round_trip.
