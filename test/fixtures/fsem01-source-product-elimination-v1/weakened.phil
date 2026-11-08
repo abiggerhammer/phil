@@ -1,0 +1,5 @@
+data Permit mode unrestricted = Permit(Bytes[8]);
+fn unpack(packet : (Permit, Bytes[8])) -> Bytes[8] satisfies C {
+  let (permit, payload) = packet;
+  return payload;
+}
