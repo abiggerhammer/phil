@@ -43,6 +43,7 @@ The important exceptions are documents that explicitly declare themselves curren
 - [FSEM-01 mixed flat products and finite contract preservation](formal-semantics-flat-product-fsem01-v1.md) — flat arity ≥2 and primitive mixed modes with conditional Rocq exact-contract lemmas; affine source typing/general refinement remain open.
 - [FSEM-01 finite resource contexts and early SURF-008 preflight](formal-semantics-finite-context-fsem01-v1.md) — arbitrary numbers of modeled owners, four-zone frames and exact Haskell Map/Set checks; implementation-to-Rocq refinement remains open.
 - [FSEM-01 source-declared affine nominal ownership](formal-semantics-source-affine-fsem01-v1.md) — exact admitted nominal mode provenance, executable borrow/consume/drop and rejection witnesses, and conditional Rocq frame lemmas; full source semantics still open.
+- [FSEM-01 mixed affine/linear source ownership](formal-semantics-mixed-affine-linear-fsem01-v1.md) — one parsed function with simultaneous externally admitted affine Permit and intrinsic Linear Bytes, exact production completion/escape errors, and conditional Rocq mixed-mode frame/debt lemmas.
 
 These review documents do not replace accepted semantic contracts, the normative grammar, the Logic Ledger, or exact-commit proof and conformance results.
 
