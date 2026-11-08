@@ -113,6 +113,9 @@ Theorem source_affine_consume_preserves_every_spectator :
     Context.sharedLoans after = Context.sharedLoans before.
 Proof.
   intros owner ty before after Hconsume.
+  pose proof
+    (SurfaceFiniteContextFrame.successful_affine_consume_frames_any_finite_context
+      owner ty before after Hconsume) as Hframe.
   unfold SurfaceFiniteContextFrame.consumeAffineModel in Hconsume.
   destruct (Context.sharedLoans before owner) eqn:Hloan;
     try discriminate.
@@ -120,10 +123,7 @@ Proof.
     try discriminate.
   inversion Hconsume; subst after; clear Hconsume.
   split.
-  - apply SurfaceFiniteContextFrame.successful_affine_consume_frames_any_finite_context.
-    unfold SurfaceFiniteContextFrame.consumeAffineModel.
-    rewrite Hloan, Hfound.
-    reflexivity.
+  - exact Hframe.
   - split.
     + simpl. unfold Context.deleteBinding.
       now rewrite String.eqb_refl.
