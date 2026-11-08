@@ -45,7 +45,7 @@ Proof.
   - reflexivity.
   - constructor.
     + simpl. intros [Heq | Hempty].
-      * apply Hdiff. exact Heq.
+      * apply Hdiff. symmetry. exact Heq.
       * contradiction.
     + constructor.
       * simpl. tauto.
@@ -111,9 +111,9 @@ Theorem source_product_consumption_prevents_reusing_linear_owner :
       Context.consumeLinear productName after <>
         Context.Consumed laterType later.
 Proof.
-  intros.
+  intros productName before after productTy Hconsume laterType later.
   eapply DataProduct.consuming_linear_product_is_one_shot.
-  exact H.
+  exact Hconsume.
 Qed.
 
 Theorem restored_linear_successor_cannot_be_silently_discarded :
