@@ -136,19 +136,14 @@ Proof.
   destruct (phase1_surface_normalize_static_type_argument_values rest)
     as [actual_rest |] eqn:Hrest; try discriminate Hnormalize.
   inversion Hnormalize; subst.
-  unfold phase1_surface_static_type_argument_list_spine_tree,
-    phase1_surface_static_argument_list_spine_tree.
-  cbn [phase1_static_type_argument_list_spine_first
-    phase1_static_type_argument_list_spine_rest
-    phase1_static_argument_list_spine_first
-    phase1_static_argument_list_spine_rest].
-  rewrite
-    (phase1_surface_normalize_static_type_argument_spine_round_trip
-      first actual_first Hfirst).
-  rewrite
-    (phase1_surface_normalize_static_type_argument_suffix_values_round_trip
-      rest actual_rest Hrest).
-  reflexivity.
+  exact
+    (f_equal2
+      (fun first_tree suffix_trees =>
+        PTSequence [first_tree; PTRepetition suffix_trees])
+      (phase1_surface_normalize_static_type_argument_spine_round_trip
+        first actual_first Hfirst)
+      (phase1_surface_normalize_static_type_argument_suffix_values_round_trip
+        rest actual_rest Hrest)).
 Qed.
 
 Definition phase1_surface_optional_static_type_argument_list_tree
