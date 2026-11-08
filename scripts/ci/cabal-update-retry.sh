@@ -20,7 +20,7 @@ for ((attempt=1; attempt<=max_attempts; attempt++)); do
     exit 1
   fi
 
-  delay=$((2 ** attempt))
+  delay=$((2 ** (attempt + 1)))
   printf 'cabal update failed; retrying after %ds\n' "$delay" >&2
   sleep "$delay"
 done
