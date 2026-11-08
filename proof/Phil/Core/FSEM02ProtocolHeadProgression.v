@@ -155,7 +155,7 @@ Theorem selected_branch_consumes_and_types_exact_successor :
     offeredContinuation label branches = Some continuation ->
     fsem02Progression (FSEM02Select label) (Select branches)
       endpoint successor context = StepSucceeded next ->
-    linearBindings next endpoint = None /\\
+    linearBindings next endpoint = None /\
     linearBindings next successor = Some (endpointType continuation).
 Proof.
   intros label branches endpoint successor context next continuation Hlabel Hstep.
