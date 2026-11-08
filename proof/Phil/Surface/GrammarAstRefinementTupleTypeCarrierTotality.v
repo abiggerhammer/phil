@@ -149,7 +149,7 @@ Proof.
         - exact Hshallow_tree.
         - rewrite Htree, Hsubtree. reflexivity.
       }
-      inversion Hshape; subst.
+      inversion Hshape; subst index branch_tree.
       cbn in Hnth.
       inversion Hnth; subst item.
       destruct
@@ -182,7 +182,7 @@ Proof.
         - exact Hshallow_tree.
         - rewrite Htree, Hsubtree. reflexivity.
       }
-      inversion Hshape; subst.
+      inversion Hshape; subst index branch_tree.
       cbn in Hnth.
       inversion Hnth; subst item.
       destruct
