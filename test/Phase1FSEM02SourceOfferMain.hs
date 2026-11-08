@@ -103,7 +103,7 @@ acceptedOffer input = do
       stepped <- mapLeft show $ checkProtocolAction
         (ProtocolOfferRequest endpoint successor instanceRevision serverRole label) initial
       let next = checkedProtocolContext stepped
-      continuation = checkedProtocolSuccessor stepped
+          continuation = checkedProtocolSuccessor stepped
       assert (protocolEndpointName <$> continuation == Just successor
            && protocolEndpointSession <$> continuation == Just (End outcome)
            && protocolEndpointInstance <$> continuation == Just instanceRevision
