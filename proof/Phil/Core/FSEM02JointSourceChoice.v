@@ -89,7 +89,7 @@ Proof.
     try discriminate.
   inversion Hjoint; subst; clear Hjoint.
   pose proof (selected_branch_consumes_and_types_exact_successor
-    chosen branches clientOld clientNext clientContext c continuation
+    chosen branches clientOld clientNext clientContext clientAfter continuation
     Hcontinuation Hclient) as [HclientGone HclientNext].
   unfold fsem02SourceOfferReplay in Hoffer.
   rewrite Hcovered in Hoffer.
@@ -99,7 +99,7 @@ Proof.
   { simpl. now rewrite Hcontinuation. }
   pose proof (continuing_head_exact_predecessor_and_successor
     (FSEM02Offer chosen) (Offer branches)
-    offerOld offerNext offerContext o continuation
+    offerOld offerNext offerContext offerAfter continuation
     Hselected Hoffer) as Hresources.
   destruct Hresources as [_ [_ [HofferGone [HofferNext _]]]].
   repeat split; assumption.
