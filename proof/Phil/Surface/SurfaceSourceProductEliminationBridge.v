@@ -77,7 +77,7 @@ Theorem source_product_success_preserves_two_element_arity :
   forall permitTy bytesTy successors,
     DataProduct.ProductEliminationAccepted
       (sourceAffineLinearContract permitTy bytesTy) successors ->
-    length successors = 2.
+    List.length successors = 2.
 Proof.
   intros permitTy bytesTy successors Haccepted.
   pose proof
