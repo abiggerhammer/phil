@@ -195,6 +195,10 @@ main = do
           , nativeCheckedOccurrenceIdentityPairReplayAccepts source upload)
         , ( "Steve checked occurrence (InstanceKey, InstanceRevision) pair roundtrips without stage-origin authority"
           , nativeCheckedOccurrenceIdentityPairReplayAccepts source steve)
+        , ( "Upload accepted generic declaration/interface D/V scalars replay; forged actuals cannot identify application"
+          , nativeGenericApplicationScalarReplayAccepts source upload)
+        , ( "Steve accepted generic declaration/interface D/V scalars replay; forged actuals cannot identify application"
+          , nativeGenericApplicationScalarReplayAccepts source steve)
         , ( "Upload changed raw Systems digest cannot pass exact manifest-stage replay"
           , nativeManifestStageReplayRejectsChangedDigests source upload)
         , ( "Steve changed raw Systems digest cannot pass exact manifest-stage replay"
@@ -1307,6 +1311,77 @@ nativeCheckedOccurrenceIdentityPairReplayAccepts source fixture =
                          (encodeNativeCheckedOccurrenceIdentityWires otherOccurrence)
                          /= Just occurrence
                     && stageEqualityOnly
+    _ -> False
+
+-- | The actual GenericApplicationIdentity includes a checked map of
+-- semantic arguments. D/V scalar wires are a reversible but INCOMPLETE
+-- projection: equal declaration/interface values cannot replace actuals,
+-- source assurance, checked producer binding or independently accepted
+-- manifest, VER-010 source and INT-005 release whole objects.
+nativeGenericApplicationScalarReplayAccepts
+  :: GenericApplicationAssurance -> ReleaseFixture -> Bool
+nativeGenericApplicationScalarReplayAccepts source fixture =
+  case (producerInputs source, produceFixture source fixture) of
+    (Right (bundle, policy), Right (_, produced)) ->
+      case nativeAdapterPair source produced of
+        Nothing -> False
+        Just (sourceArtifact, release) ->
+          case closeNativeFinalInstanceCorrespondence
+              source (sourceInstanceDescriptor source) bundle policy
+              (fixtureContext produced) (fixtureLedger produced)
+              emptyProducerSelection sourceArtifact release of
+            Left _ -> False
+            Right witness ->
+              case replayNativeExactAcceptedConsumers witness
+                (nativeCorrespondenceSourceManifestBinding witness)
+                (nativeCorrespondenceCertifiedSource witness)
+                (nativeCorrespondenceCertifiedRelease witness) of
+                Left _ -> False
+                Right _ ->
+                  let application = genericDischargeApplicationIdentity
+                        (genericApplicationAssuranceLineage
+                          (nativeCorrespondenceSourceAssurance witness))
+                      declaration = genericApplicationDeclarationKey application
+                      interfaceRevision = genericApplicationInterfaceRevision application
+                      (declarationWire, interfaceWire) =
+                        encodeNativeGenericApplicationScalarWires application
+                      forgedActuals = Map.insert
+                        (GenericStaticParameterKey "audit.impl.unaccepted.actual")
+                        (SemanticAtom "forged") (genericApplicationSemanticArguments application)
+                      forgedApplication = application
+                        { genericApplicationSemanticArguments = forgedActuals }
+                      wrongPairs =
+                        [ (encodeNativeOccurrenceKeyWire (InstanceKey (unDeclarationKey declaration)), interfaceWire)
+                        , (declarationWire, encodeNativeInstanceRevisionWire
+                            (InstanceRevision (unInterfaceRevision interfaceRevision)))
+                        , (interfaceWire, declarationWire)
+                        ]
+                      samePayloadForeign =
+                        [ encodeNativeRawSystemsDigestWire
+                            (NativeRawSystemsDigest (Digest (unDeclarationKey declaration)))
+                        , encodeNativeLoweringRootWire
+                            (NativeLoweringRootDigest (Digest (unDeclarationKey declaration)))
+                        , encodeNativeOccurrenceKeyWire
+                            (InstanceKey (unDeclarationKey declaration))
+                        , encodeNativeInstanceRevisionWire
+                            (InstanceRevision (unDeclarationKey declaration))
+                        ]
+                  in decodeNativeGenericApplicationScalarWires
+                       (declarationWire, interfaceWire)
+                       == Just (declaration, interfaceRevision)
+                    && decodeNativeGenericDeclarationWire declarationWire == Just declaration
+                    && decodeNativeGenericInterfaceWire interfaceWire == Just interfaceRevision
+                    && all (== Nothing)
+                         (map decodeNativeGenericApplicationScalarWires wrongPairs)
+                    && all (== Nothing)
+                         (map decodeNativeGenericDeclarationWire samePayloadForeign)
+                    && all (== Nothing)
+                         (map decodeNativeGenericInterfaceWire samePayloadForeign)
+                    && forgedApplication /= application
+                    && genericApplicationSemanticArguments forgedApplication
+                         /= genericApplicationSemanticArguments application
+                    && encodeNativeGenericApplicationScalarWires forgedApplication
+                         == (declarationWire, interfaceWire)
     _ -> False
 
 -- | Adversarial same-manifest-ID projections. Neither modified manifest is an
