@@ -1,4 +1,4 @@
-# Audited PR-only supersession workflows (71 total; includes FSEM early source-affine preflight).
+# Audited PR-only supersession workflows (72 total; includes mixed affine/linear early preflight).
 begin-policy-choice-proofs.yml
 ci.yml
 digest-validation-proofs.yml
@@ -8,6 +8,7 @@ fsem01-binder-name-encoding.yml
 fsem01-declaration-identity-bridge.yml
 fsem01-exact-borrow-loan-state.yml
 fsem01-finite-context-preflight.yml
+fsem01-mixed-affine-linear-preflight.yml
 fsem01-observation-wire.yml
 fsem01-represented-loan-trace.yml
 fsem01-resource-context-wire.yml
