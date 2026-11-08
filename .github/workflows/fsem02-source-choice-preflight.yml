@@ -18,7 +18,7 @@ on:
       - 'proof/Phil/Core/FSEM02ProtocolHeadProgression.v'
       - 'docs/phase-1/formal-semantics-protocol-progression-fsem02-v1.md'
       - 'docs/phase-1/formal-semantics-source-choice-fsem02-v1.md'
-      - '.github/workflows/fsem02-exact-head-preflight.yml'
+      - '.github/workflows/fsem02-source-choice-preflight.yml'
   pull_request:
     paths:
       - 'test/Phase1FSEM02ProtocolProgressionMain.hs'
@@ -30,7 +30,7 @@ on:
       - 'proof/Phil/Core/FSEM02ProtocolHeadProgression.v'
       - 'docs/phase-1/formal-semantics-protocol-progression-fsem02-v1.md'
       - 'docs/phase-1/formal-semantics-source-choice-fsem02-v1.md'
-      - '.github/workflows/fsem02-exact-head-preflight.yml'
+      - '.github/workflows/fsem02-source-choice-preflight.yml'
 
 permissions:
   contents: read
