@@ -1873,3 +1873,61 @@ Proof.
     discriminate H.
   - reflexivity.
 Qed.
+
+(* #1584 Q: checked semantic-actuals map KEY role only. This Rocq string
+   model does not serialize native SemanticForm, Map ordering, or Unicode
+   Data.Text. A decoded key is not an accepted generic application. *)
+Record NativeGenericStaticKeyRole := mkNativeGenericStaticKeyRole {
+  nativeGenericStaticKeyPayload : string
+}.
+Definition nativeGenericStaticKeyWire (k : NativeGenericStaticKeyRole) : string :=
+  "Q" ++ nativeGenericStaticKeyPayload k.
+Definition nativeDecodeGenericStaticKeyWire (w : string)
+  : option NativeGenericStaticKeyRole :=
+  match w with
+  | EmptyString => None
+  | String tag payload =>
+      if Ascii.eqb tag "Q"%char
+      then Some (mkNativeGenericStaticKeyRole payload) else None
+  end.
+Theorem native_generic_static_key_wire_roundtrip :
+  forall k, nativeDecodeGenericStaticKeyWire (nativeGenericStaticKeyWire k) = Some k.
+Proof. intros [k]. reflexivity. Qed.
+Theorem native_generic_static_key_wire_injective :
+  forall a b, nativeGenericStaticKeyWire a = nativeGenericStaticKeyWire b -> a = b.
+Proof.
+  intros [a] [b] H. unfold nativeGenericStaticKeyWire in H.
+  simpl in H. injection H as Heq. now subst.
+Qed.
+Theorem native_generic_static_key_wrong_role_reject :
+  forall key declaration interfaceRevision occurrence,
+    nativeDecodeGenericStaticKeyWire (nativeGenericDeclarationWire declaration) = None /\
+    nativeDecodeGenericStaticKeyWire (nativeGenericInterfaceWire interfaceRevision) = None /\
+    nativeDecodeGenericStaticKeyWire (nativeOccurrenceKeyWire occurrence) = None /\
+    nativeGenericStaticKeyWire key <> nativeGenericDeclarationWire declaration.
+Proof.
+  intros [key] [declaration] [interfaceRevision] [occurrence].
+  repeat split; try reflexivity.
+  intro H.
+  unfold nativeGenericStaticKeyWire, nativeGenericDeclarationWire in H.
+  simpl in H. discriminate H.
+Qed.
+(* A supplied bool is ONLY a countermodel value, not native SemanticForm. *)
+Record NativeGenericStaticKeyWithModelValue := mkNativeGenericStaticKeyWithModelValue {
+  nativeGenericStaticKeyModelKey : NativeGenericStaticKeyRole;
+  nativeGenericStaticKeyModelValue : bool
+}.
+Theorem native_generic_static_key_wire_cannot_identify_value :
+  exists a b : NativeGenericStaticKeyWithModelValue,
+    a <> b /\
+    nativeGenericStaticKeyWire (nativeGenericStaticKeyModelKey a) =
+    nativeGenericStaticKeyWire (nativeGenericStaticKeyModelKey b).
+Proof.
+  set (key := mkNativeGenericStaticKeyRole EmptyString).
+  exists (mkNativeGenericStaticKeyWithModelValue key true).
+  exists (mkNativeGenericStaticKeyWithModelValue key false).
+  split.
+  - intro H. apply (f_equal nativeGenericStaticKeyModelValue) in H.
+    discriminate H.
+  - reflexivity.
+Qed.

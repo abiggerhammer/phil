@@ -199,6 +199,10 @@ main = do
           , nativeGenericApplicationScalarReplayAccepts source upload)
         , ( "Steve accepted generic declaration/interface D/V scalars replay; forged actuals cannot identify application"
           , nativeGenericApplicationScalarReplayAccepts source steve)
+        , ( "Upload checked semantic-actuals Q-key domain replays; value changes and duplicate keys never become authority"
+          , nativeGenericActualsKeyDomainReplayAccepts source upload)
+        , ( "Steve checked semantic-actuals Q-key domain replays; value changes and duplicate keys never become authority"
+          , nativeGenericActualsKeyDomainReplayAccepts source steve)
         , ( "Upload changed raw Systems digest cannot pass exact manifest-stage replay"
           , nativeManifestStageReplayRejectsChangedDigests source upload)
         , ( "Steve changed raw Systems digest cannot pass exact manifest-stage replay"
@@ -1382,6 +1386,77 @@ nativeGenericApplicationScalarReplayAccepts source fixture =
                          /= genericApplicationSemanticArguments application
                     && encodeNativeGenericApplicationScalarWires forgedApplication
                          == (declarationWire, interfaceWire)
+    _ -> False
+
+-- | Q-key domain is read from the *actually checked* GenericApplicationIdentity,
+-- with independently accepted manifest, source and release whole-object replay.
+-- Key-domain equality is INSUFFICIENT to prove SemanticForm values equal. New
+-- adversarial application values below are never claimed to be accepted.
+nativeGenericActualsKeyDomainReplayAccepts
+  :: GenericApplicationAssurance -> ReleaseFixture -> Bool
+nativeGenericActualsKeyDomainReplayAccepts source fixture =
+  case (producerInputs source, produceFixture source fixture) of
+    (Right (bundle, policy), Right (_, produced)) ->
+      case nativeAdapterPair source produced of
+        Nothing -> False
+        Just (sourceArtifact, release) ->
+          case closeNativeFinalInstanceCorrespondence
+              source (sourceInstanceDescriptor source) bundle policy
+              (fixtureContext produced) (fixtureLedger produced)
+              emptyProducerSelection sourceArtifact release of
+            Left _ -> False
+            Right witness ->
+              case replayNativeExactAcceptedConsumers witness
+                (nativeCorrespondenceSourceManifestBinding witness)
+                (nativeCorrespondenceCertifiedSource witness)
+                (nativeCorrespondenceCertifiedRelease witness) of
+                Left _ -> False
+                Right _ ->
+                  let application = genericDischargeApplicationIdentity
+                        (genericApplicationAssuranceLineage
+                          (nativeCorrespondenceSourceAssurance witness))
+                      actuals = genericApplicationSemanticArguments application
+                      keys = Map.keys actuals
+                      actualWires = encodeNativeGenericActualsKeyDomainWires application
+                      probeKey = GenericStaticParameterKey "audit.impl.unaccepted.probe"
+                      probeWire = encodeNativeGenericStaticParameterKeyWire probeKey
+                      alteredActualsA = Map.insert probeKey (SemanticAtom "alpha") actuals
+                      alteredActualsB = Map.insert probeKey (SemanticAtom "beta") actuals
+                      alteredApplicationA = application
+                        { genericApplicationSemanticArguments = alteredActualsA }
+                      alteredApplicationB = application
+                        { genericApplicationSemanticArguments = alteredActualsB }
+                      foreignWires =
+                        [ encodeNativeGenericDeclarationWire
+                            (DeclarationKey (unGenericStaticParameterKey probeKey))
+                        , encodeNativeGenericInterfaceWire
+                            (InterfaceRevision (unGenericStaticParameterKey probeKey))
+                        , encodeNativeOccurrenceKeyWire
+                            (InstanceKey (unGenericStaticParameterKey probeKey))
+                        , encodeNativeRawSystemsDigestWire
+                            (NativeRawSystemsDigest (Digest (unGenericStaticParameterKey probeKey)))
+                        ]
+                  in decodeNativeGenericActualsKeyDomainWires actualWires == Just keys
+                    && decodeNativeGenericStaticParameterKeyWire probeWire == Just probeKey
+                    && decodeNativeGenericActualsKeyDomainWires
+                         (encodeNativeGenericActualsKeyDomainWires alteredApplicationA)
+                         == Just (Map.keys alteredActualsA)
+                    && alteredApplicationA /= alteredApplicationB
+                    && alteredActualsA /= alteredActualsB
+                    && encodeNativeGenericActualsKeyDomainWires alteredApplicationA
+                         == encodeNativeGenericActualsKeyDomainWires alteredApplicationB
+                    && decodeNativeGenericActualsKeyDomainWires
+                         [probeWire, probeWire] == Nothing
+                    && decodeNativeGenericActualsKeyDomainWires
+                         [ encodeNativeGenericStaticParameterKeyWire
+                             (GenericStaticParameterKey "z")
+                         , encodeNativeGenericStaticParameterKeyWire
+                             (GenericStaticParameterKey "a") ] == Nothing
+                    && all (== Nothing)
+                         (map decodeNativeGenericStaticParameterKeyWire foreignWires)
+                    && all (== Nothing)
+                         (map decodeNativeGenericActualsKeyDomainWires
+                           (map (: []) foreignWires))
     _ -> False
 
 -- | Adversarial same-manifest-ID projections. Neither modified manifest is an
