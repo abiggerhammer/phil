@@ -215,6 +215,7 @@ library
       Phil.Surface.GrammarV1.BorrowResourceSurface
       Phil.Surface.GrammarV1.DataVariants
       Phil.Surface.GrammarV1.SourceAffineResource
+      Phil.Surface.GrammarV1.SourceAffineProduct
       Phil.Surface.GrammarV1.TwoOwnerBorrowResourceSurface
       Phil.Surface.GrammarV1.ReferenceKernelBridge
       Phil.Surface.GrammarV1.ReferenceToken
