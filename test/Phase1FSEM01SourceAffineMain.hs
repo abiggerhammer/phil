@@ -14,7 +14,7 @@ import Phil.Core.NominalDataMode
   ( NominalModeError (..), NominalRestrictionJustification (..) )
 import Phil.Core.Static
   ( DeclarationKey (..), InterfaceRevision (..), emptyStaticContext )
-import Phil.Core.Syntax (Control (..), Mode (..), Name, Ty (..))
+import Phil.Core.Syntax (Control (..), Mode (..), Ty (..))
 import Phil.Surface.Check.Engine
   ( BorrowTraceCheckpoint (..), BorrowTracePhase (..) )
 import Phil.Surface.Check.Types

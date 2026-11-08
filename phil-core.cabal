@@ -170,6 +170,7 @@ library
       GenericStructuralKernel
       Phil.Core.CheckedBindingMode
       Phil.Core.DataMode
+      Phil.Core.NominalDataMode
       Phil.Core.DataModeKernelBridge
       Phil.Core.DataProductKernelBridge
       Phil.Core.FloatArithmetic
@@ -212,6 +213,7 @@ library
       Phil.Surface.GrammarV1.LetPatternScope
       Phil.Surface.GrammarV1.BorrowViewScope
       Phil.Surface.GrammarV1.BorrowResourceSurface
+      Phil.Surface.GrammarV1.DataVariants
       Phil.Surface.GrammarV1.SourceAffineResource
       Phil.Surface.GrammarV1.TwoOwnerBorrowResourceSurface
       Phil.Surface.GrammarV1.ReferenceKernelBridge

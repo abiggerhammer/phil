@@ -19,7 +19,7 @@ import Phil.Core.Generic.StaticActual
 import Phil.Core.NominalDataMode (NominalRestrictionJustification)
 import Phil.Core.Static
   ( DeclarationKey, InterfaceRevision, StaticContext )
-import Phil.Core.Syntax (Control (..), Mode (..), Name (..), Ty (..))
+import Phil.Core.Syntax (Mode (..), Name (..), Ty (..))
 import Phil.Surface.Check.Engine
   ( BorrowTraceCheckpoint
   , BorrowTraceRun (..)
@@ -60,7 +60,6 @@ import Phil.Surface.GrammarV1.Parser
   , GrammarV1FunctionDecl (..)
   , GrammarV1Statement (..)
   , GrammarV1TermParam (..)
-  , GrammarV1Type (..)
   )
 import Phil.Surface.Syntax
   ( Block (..), Component (..), Located (..)

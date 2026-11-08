@@ -93,13 +93,14 @@ Proof.
   pose proof
     (SurfaceFiniteContextFrame.successful_loan_start_activates_exact_owner
       owner before borrowed Hstart) as Hactive.
-  repeat split.
+  split.
   - exact Hactive.
-  - apply SurfaceFiniteContextFrame.borrowed_affine_owner_cannot_be_consumed.
-    exact Hactive.
-  - eapply
-      SurfaceFiniteContextFrame.successful_loan_start_frames_any_finite_context.
-    exact Hstart.
+  - split.
+    + apply SurfaceFiniteContextFrame.borrowed_affine_owner_cannot_be_consumed.
+      exact Hactive.
+    + exact
+        (SurfaceFiniteContextFrame.successful_loan_start_frames_any_finite_context
+          owner before borrowed Hstart).
 Qed.
 
 Theorem source_affine_consume_preserves_every_spectator :
