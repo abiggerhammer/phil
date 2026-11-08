@@ -4,6 +4,7 @@ From Phil.Surface Require Import
   GrammarDerivation
   GrammarDeterminacySimpleResolverSoundness
   GrammarAstGenericRequirementsTotality
+  GrammarAstTopLevelSpine
   GrammarAstStaticTypeArgumentPayloadSpine
   GrammarAstRefinementTupleTypePayloadSpine
   GrammarAstStaticArgumentsSpine
