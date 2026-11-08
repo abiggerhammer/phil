@@ -125,6 +125,8 @@ library
       Phil.Core.ProviderAuthorityQualification
       Phil.Core.ProviderQualification
       Phil.Core.ProviderQualificationIdentity
+      Phil.Core.ProcessActivation
+      Phil.Core.ProcessRendezvous
       Phil.Core.Protocol
       Phil.Core.Protocol.Family
       Phil.Core.Protocol.MessageAdmissibility
