@@ -114,6 +114,7 @@ Proof.
     (SurfaceFlatProductCorrespondence.checked_flat_product_preserves_arity
       eqTy Heq
       (nominalAffineLinearProduct permitTy bytesTy) actual Hmatch) as Hlen.
+  unfold nominalAffineLinearProduct in Hlen.
   simpl in Hlen.
   symmetry.
   exact Hlen.
