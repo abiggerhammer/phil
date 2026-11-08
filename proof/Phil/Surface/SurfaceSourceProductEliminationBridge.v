@@ -61,10 +61,10 @@ Proof.
   intros permit payload permitTy bytesTy Haccepted Heq.
   apply DataProduct.accepted_product_elimination_has_unique_successors
     in Haccepted.
-  subst payload.
-  inversion Haccepted as [| _ _ Hnot _].
-  apply Hnot.
-  simpl; auto.
+  apply NoDup_cons_iff in Haccepted.
+  destruct Haccepted as [Hnotin _].
+  apply Hnotin.
+  simpl; left; symmetry; exact Heq.
 Qed.
 
 Theorem source_product_wrong_arity_has_no_restoration_plan :
