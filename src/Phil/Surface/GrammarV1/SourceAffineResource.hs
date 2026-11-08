@@ -8,6 +8,8 @@ module Phil.Surface.GrammarV1.SourceAffineResource
   ( GrammarV1AffineSourceError (..)
   , GrammarV1AffineSourceTrace (..)
   , grammarV1CheckedAffineFunctionTrace
+  , GrammarV1MixedAffineLinearTrace (..)
+  , grammarV1CheckedMixedAffineLinearFunctionTrace
   ) where
 
 import qualified Data.Map.Strict as Map
@@ -273,3 +275,195 @@ bridgeStep _ (GrammarV1CheckedLetUnitStep
         Just (Located span' (ExpressionStatement
           (Located (locatedSpan source) UnitExpression)))
 bridgeStep _ _ = Nothing
+
+
+-- | FSEM-01: source-checked affine Permit and linear Bytes owner in the
+-- SAME two-parameter Grammar-v1 function and SAME production Surface run.
+-- These are separate structural obligations: Permit is optionally droppable,
+-- while Bytes must be moved before return. A failed return cannot be
+-- reinterpreted as successful terminal cleanup.
+data GrammarV1MixedAffineLinearTrace = GrammarV1MixedAffineLinearTrace
+  { mixedDeclarationKey :: DeclarationKey
+  , mixedInterfaceRevision :: InterfaceRevision
+  , mixedAffineBinder :: GrammarV1ResolvedBinder
+  , mixedLinearBinder :: GrammarV1ResolvedBinder
+  , mixedViewBinder :: GrammarV1ResolvedBinder
+  , mixedAffineCheckedMode :: CheckedTypeMode
+  , mixedLinearCheckedMode :: CheckedTypeMode
+  , mixedAffineTypeOrigin :: GrammarV1CheckedTypeModeOrigin
+  , mixedCheckpoints :: [BorrowTraceCheckpoint]
+  , mixedOutcome :: Either SurfaceCheckError SurfaceCheckResult
+  } deriving (Eq, Show)
+
+-- | Explicitly bounded two-owner elaboration. First parameter resolves to the
+-- *admitted* nominal affine declaration, second to an intrinsically linear
+-- Bytes[N] type. The result is exactly Unit or one of those two owner types.
+-- There is only one lexical borrow of the affine owner, followed by one return.
+-- Anything else is outside competence (Nothing), not silently validated.
+-- Source declaration/interface roots and lifecycle attestation are still
+-- supplied by the caller; satisfies C is NOT checked here.
+grammarV1CheckedMixedAffineLinearFunctionTrace
+  :: StaticContext
+  -> DeclarationKey
+  -> InterfaceRevision
+  -> Maybe NominalRestrictionJustification
+  -> GrammarV1DataDecl
+  -> DeclarationKey
+  -> GrammarV1FunctionDecl
+  -> Maybe (Either GrammarV1AffineSourceError GrammarV1MixedAffineLinearTrace)
+grammarV1CheckedMixedAffineLinearFunctionTrace
+    staticContext dataKey revision lifecycle dataDecl functionKey functionDecl
+  | grammarV1FunctionRecursive functionDecl = Nothing
+  | not (null (grammarV1FunctionGenericParams functionDecl)) = Nothing
+  | not (null (grammarV1FunctionRequirements functionDecl)) = Nothing
+  | otherwise = do
+      [Located _ permitParam, Located _ bytesParam] <-
+        pure (grammarV1FunctionTermParams functionDecl)
+      resultSource <- grammarV1FunctionResultType functionDecl
+      checkedData <- grammarV1CheckedClosedDataMode
+        staticContext lifecycle dataDecl
+      case checkedData of
+        Left err -> Just (Left (AffineSourceNominalError err))
+        Right admitted
+          | checkedDataStructuralMode admitted /= Affine -> Nothing
+          | otherwise -> do
+              let dataName = locatedValue (grammarV1DataName dataDecl)
+                  namedTy = TyOpaque dataName
+                  reference = ReferencedGenericStaticActual dataName
+                  resolved = GrammarV1ResolvedNamedTypeMode
+                    { resolvedNamedTypeReference = reference
+                    , resolvedNamedTypeKind = GenericTypeKind
+                    , resolvedNamedTypeDeclarationKey = dataKey
+                    , resolvedNamedTypeInterfaceRevision = revision
+                    , resolvedNamedTypeCheckedMode =
+                        CheckedTypeMode namedTy
+                          (checkedDataStructuralMode admitted)
+                    }
+                  checkType ty =
+                    grammarV1CheckedTypeModeWithNamedResolutions
+                      staticContext emptySurfaceState [resolved] ty
+              permitChecked <- checkType
+                (locatedValue (grammarV1TermParamType permitParam))
+              bytesChecked <- checkType
+                (locatedValue (grammarV1TermParamType bytesParam))
+              resultChecked <- checkType (locatedValue resultSource)
+              case (permitChecked, bytesChecked, resultChecked) of
+                (Left err, _, _) ->
+                  Just (Left (AffineSourceTypeError err))
+                (_, Left err, _) ->
+                  Just (Left (AffineSourceTypeError err))
+                (_, _, Left err) ->
+                  Just (Left (AffineSourceTypeError err))
+                (Right (permit, _), Right (bytes, _), Right (result, _)) ->
+                  let permitMode = checkedResolvedTypeMode permit
+                      bytesMode = checkedResolvedTypeMode bytes
+                      returnTy = checkedBindingType (checkedResolvedTypeMode result)
+                  in if permitMode == CheckedTypeMode namedTy Affine
+                      && checkedResolvedTypeModeOrigin permit ==
+                          GrammarV1NamedTypeModeOrigin reference dataKey revision
+                      && isCheckedLinearBytes bytesMode
+                      && (returnTy == TyUnit
+                        || returnTy == checkedBindingType bytesMode
+                        || returnTy == namedTy)
+                    then sourceBody permit bytesMode returnTy
+                    else Nothing
+  where
+    isCheckedLinearBytes binding = case checkedBindingType binding of
+      TyBytes _ -> checkedBindingMode binding == Linear
+      _ -> False
+
+    sourceBody permit bytesMode returnTy = do
+      [Located borrowSpan (GrammarV1ExpressionStatement borrow),
+       Located returnSpan (GrammarV1ReturnStatement returned)] <-
+        pure (grammarV1BlockStatements
+          (locatedValue (grammarV1FunctionBody functionDecl)))
+      case grammarV1FunctionParameterScope functionKey functionDecl of
+        Left err -> Just (Left (AffineSourceBinderError err))
+        Right ([permitBinder, bytesBinder], scope) -> do
+          checkedBorrow <- grammarV1CheckedBorrowViewInScope scope borrow
+          case checkedBorrow of
+            Left err -> Just (Left (AffineSourceBorrowError err))
+            Right (borrowTrace, afterScope) -> do
+              let owner = grammarV1CheckedBorrowOwner borrowTrace
+                  viewBinder = grammarV1CheckedBorrowViewBinder borrowTrace
+                  same a b = grammarV1ResolvedBinderKey a ==
+                    grammarV1ResolvedBinderKey b
+                  permitMode = checkedResolvedTypeMode permit
+              if not (same
+                  (grammarV1CheckedLocalValueBinder owner) permitBinder)
+                  then Nothing
+                  else do
+                    returnedExpression <- case (returnTy, locatedValue returned) of
+                      (TyUnit, GrammarV1UnitExpression) -> Just UnitExpression
+                      _ -> do
+                        occurrence <- grammarV1CheckedLocalValueOccurrenceInScope
+                          afterScope returned
+                        let returnedBinder =
+                              grammarV1CheckedLocalValueBinder occurrence
+                        if same returnedBinder bytesBinder &&
+                            returnTy == checkedBindingType bytesMode
+                          then Just (VariableExpression (semanticName bytesBinder))
+                          else if same returnedBinder permitBinder &&
+                              returnTy == checkedBindingType permitMode
+                            then Just (VariableExpression (semanticName permitBinder))
+                            else Nothing
+                    bodySteps <- mapM (bridgeStep viewBinder)
+                      (grammarV1CheckedBorrowBodySteps borrowTrace)
+                    Located _ (GrammarV1BorrowExpression sourceOwner _ sourceBlock)
+                      <- pure (grammarV1CheckedBorrowViewSource borrowTrace)
+                    let permitName = semanticName permitBinder
+                        bytesName = semanticName bytesBinder
+                        viewName = semanticName viewBinder
+                        borrowExpression = Located (locatedSpan borrow)
+                          (BorrowExpression
+                            (Located (locatedSpan sourceOwner)
+                              (VariableExpression permitName))
+                            viewName
+                            (Located (locatedSpan sourceBlock) (Block bodySteps)))
+                        projected = Located (locatedSpan
+                            (grammarV1FunctionBody functionDecl))
+                          (Block
+                            [ Located borrowSpan
+                                (ExpressionStatement borrowExpression)
+                            , Located returnSpan (ReturnStatement
+                                (Located (locatedSpan returned) returnedExpression))
+                            ])
+                        component = Located (locatedSpan
+                            (grammarV1FunctionBody functionDecl))
+                          (Component
+                            { componentName =
+                                locatedValue (grammarV1FunctionName functionDecl)
+                            , componentParameters = []
+                            , componentProvides = Nothing
+                            , componentBody = projected
+                            })
+                        environment = (emptySurfaceEnvironment staticContext)
+                          { surfaceInitialBindings = Map.fromList
+                              [ (permitName, InitialBinding
+                                  (checkedBindingMode permitMode)
+                                  (checkedBindingType permitMode)
+                                  (shapeForType (checkedBindingType permitMode)))
+                              , (bytesName, InitialBinding
+                                  (checkedBindingMode bytesMode)
+                                  (checkedBindingType bytesMode)
+                                  (shapeForType (checkedBindingType bytesMode)))
+                              ]
+                          }
+                    run <- traceSurfaceBorrowComponent environment component
+                    if checkSurfaceComponent environment component /=
+                        traceOutcome run
+                      then Nothing
+                      else Just (Right GrammarV1MixedAffineLinearTrace
+                        { mixedDeclarationKey = dataKey
+                        , mixedInterfaceRevision = revision
+                        , mixedAffineBinder = permitBinder
+                        , mixedLinearBinder = bytesBinder
+                        , mixedViewBinder = viewBinder
+                        , mixedAffineCheckedMode = permitMode
+                        , mixedLinearCheckedMode = bytesMode
+                        , mixedAffineTypeOrigin =
+                            checkedResolvedTypeModeOrigin permit
+                        , mixedCheckpoints = traceCheckpoints run
+                        , mixedOutcome = traceOutcome run
+                        })
+        Right _ -> Nothing
