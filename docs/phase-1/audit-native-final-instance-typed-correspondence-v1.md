@@ -640,3 +640,37 @@ signoff are separate uncredited gates. No generated outputs, TCB changes,
 GHC/LLVM/Rocq relaxations, historical audit evidence or original
 244 normative conformance cases change. Independent Phase 1 audit
 freeze verdict: **NOT YET**.
+
+## 2026-11-08 — accepted verifier-profile Text: read-only P role wire
+
+The actual accepted Phase1Stage verifier-profile revision is **plain native
+Text**, not a nominal VerifierProfileRevision newtype. A read-only
+NativeVerifierProfileText wrapper adds a reversible ASCII P-prefix whose
+image is separate from all eight existing manifest/stage roles (R/L,
+S/C/F, B/I/A). The decoder checks the role alone; it does not certify
+profile acceptance or create a new verifier-profile producer.
+
+Executable Upload and Steve tests replay the *exact* checked source-manifest
+producer and complete independently accepted VER-010 and INT-005 consumer
+objects. Their concrete accepted StageClosure profile must match native
+final authority, roundtrip, and reject all eight foreign wires. Negative
+tests reuse the exact accepted profile payload inside eight deliberately
+**unaccepted** foreign-role wrappers and verify that no foreign wire can
+decode as a profile; a changed P-payload remains mere data, not accepted
+authority. Four bounded Rocq string-model theorems and four Print Assumptions
+queries cover injectivity, roundtrip, disjointness and wrong-role decoding.
+
+**Remaining-premise ledger:** Haskell Data.Text Unicode serialization
+agreement with Rocq string is unproved. Generic actuals/InstanceKey,
+checked architecture occurrence, complete native manifest/stage/source and
+CertifiedRelease objects lack a total/injective cross-runtime representation.
+StageClosure lacks InstanceKey, so equal revisions and role wires cannot
+authenticate occurrence-to-concrete-StageClosure production or selected
+release origin. Source/assumption/erasure/final predecessors, complete
+FixedFinalAuthorityAdapter and FinalArtifactCertified remain unproved.
+No native-to-Rocq nat conversion or supplied model Prop has been promoted
+to native authority. Public release-byte verification and independent
+pinned final-delta signoff remain separate uncredited gates. The original
+244 normative cases, independent-audit history, generated Phase-1 outputs,
+Phase 1 TCB and strict GHC/LLVM/Rocq policy are unchanged. Independent
+Phase 1 audit-freeze verdict: **NOT YET**.
