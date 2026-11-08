@@ -239,7 +239,10 @@ Proof.
   destruct (phase1_surface_normalize_optional_static_type_argument_list items)
     as [actual |] eqn:Hitems; try discriminate Hnormalize.
   inversion Hnormalize; subst.
-  cbn.
+  unfold phase1_surface_static_type_arguments_spine_tree,
+    phase1_surface_static_arguments_spine_tree.
+  cbn [phase1_static_type_arguments_spine_items
+    phase1_static_arguments_spine_items].
   rewrite
     (phase1_surface_normalize_optional_static_type_argument_list_round_trip
       items actual Hitems).
