@@ -55,7 +55,8 @@ Proof.
     |tag selected].
   - exists type_value, primitive,
       (Phase1ShallowPriorNonreferenceType prior),
-      (Phase1RefinementTuplePriorNonreferenceType prior).
+      (Phase1RefinementTuplePriorNonreferenceType
+        (Phase1ShallowPriorNonreferenceType prior)).
     repeat split; try assumption; try reflexivity.
     cbn. exact Hshallow_tree.
   - exists type_value, primitive,
