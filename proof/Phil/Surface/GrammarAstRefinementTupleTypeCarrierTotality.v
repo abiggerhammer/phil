@@ -58,87 +58,87 @@ Proof.
       (Phase1RefinementTuplePriorNonreferenceType
         (Phase1ShallowPriorNonreferenceType prior)).
     repeat split; try assumption; try reflexivity.
-    cbn. exact Hshallow_tree.
+    all: cbn; exact Hshallow_tree.
   - exists type_value, primitive,
       (Phase1ShallowBytesType index_expression),
       (Phase1RefinementTuplePriorNonreferenceType
         (Phase1ShallowBytesType index_expression)).
     repeat split; try assumption; try reflexivity.
-    cbn. exact Hshallow_tree.
+    all: cbn; exact Hshallow_tree.
   - exists type_value, primitive,
       (Phase1ShallowFrameType reference_tree),
       (Phase1RefinementTuplePriorNonreferenceType
         (Phase1ShallowFrameType reference_tree)).
     repeat split; try assumption; try reflexivity.
-    cbn. exact Hshallow_tree.
+    all: cbn; exact Hshallow_tree.
   - exists type_value, primitive,
       (Phase1ShallowProofType proposition_tree),
       (Phase1RefinementTuplePriorNonreferenceType
         (Phase1ShallowProofType proposition_tree)).
     repeat split; try assumption; try reflexivity.
-    cbn. exact Hshallow_tree.
+    all: cbn; exact Hshallow_tree.
   - exists type_value, primitive,
       (Phase1ShallowValidatedType payload),
       (Phase1RefinementTuplePriorNonreferenceType
         (Phase1ShallowValidatedType payload)).
     repeat split; try assumption; try reflexivity.
-    cbn. exact Hshallow_tree.
+    all: cbn; exact Hshallow_tree.
   - destruct tag.
     + exists type_value, primitive,
         (Phase1ShallowOpaqueNonreferenceType Phase1UnitType selected),
         (Phase1RefinementTupleOpaqueNonreferenceType Phase1UnitType selected).
       repeat split; try assumption; try reflexivity.
-      cbn. exact Hshallow_tree.
+      all: cbn; exact Hshallow_tree.
     + exists type_value, primitive,
         (Phase1ShallowOpaqueNonreferenceType Phase1BoolType selected),
         (Phase1RefinementTupleOpaqueNonreferenceType Phase1BoolType selected).
       repeat split; try assumption; try reflexivity.
-      cbn. exact Hshallow_tree.
+      all: cbn; exact Hshallow_tree.
     + exists type_value, primitive,
         (Phase1ShallowOpaqueNonreferenceType Phase1CharType selected),
         (Phase1RefinementTupleOpaqueNonreferenceType Phase1CharType selected).
       repeat split; try assumption; try reflexivity.
-      cbn. exact Hshallow_tree.
+      all: cbn; exact Hshallow_tree.
     + exists type_value, primitive,
         (Phase1ShallowOpaqueNonreferenceType Phase1StringType selected),
         (Phase1RefinementTupleOpaqueNonreferenceType Phase1StringType selected).
       repeat split; try assumption; try reflexivity.
-      cbn. exact Hshallow_tree.
+      all: cbn; exact Hshallow_tree.
     + exists type_value, primitive,
         (Phase1ShallowOpaqueNonreferenceType Phase1UintType selected),
         (Phase1RefinementTupleOpaqueNonreferenceType Phase1UintType selected).
       repeat split; try assumption; try reflexivity.
-      cbn. exact Hshallow_tree.
+      all: cbn; exact Hshallow_tree.
     + exists type_value, primitive,
         (Phase1ShallowOpaqueNonreferenceType Phase1SintType selected),
         (Phase1RefinementTupleOpaqueNonreferenceType Phase1SintType selected).
       repeat split; try assumption; try reflexivity.
-      cbn. exact Hshallow_tree.
+      all: cbn; exact Hshallow_tree.
     + exists type_value, primitive,
         (Phase1ShallowOpaqueNonreferenceType Phase1FloatType selected),
         (Phase1RefinementTupleOpaqueNonreferenceType Phase1FloatType selected).
       repeat split; try assumption; try reflexivity.
-      cbn. exact Hshallow_tree.
+      all: cbn; exact Hshallow_tree.
     + exists type_value, primitive,
         (Phase1ShallowOpaqueNonreferenceType Phase1BytesType selected),
         (Phase1RefinementTupleOpaqueNonreferenceType Phase1BytesType selected).
       repeat split; try assumption; try reflexivity.
-      cbn. exact Hshallow_tree.
+      all: cbn; exact Hshallow_tree.
     + exists type_value, primitive,
         (Phase1ShallowOpaqueNonreferenceType Phase1FrameType selected),
         (Phase1RefinementTupleOpaqueNonreferenceType Phase1FrameType selected).
       repeat split; try assumption; try reflexivity.
-      cbn. exact Hshallow_tree.
+      all: cbn; exact Hshallow_tree.
     + exists type_value, primitive,
         (Phase1ShallowOpaqueNonreferenceType Phase1ProofType selected),
         (Phase1RefinementTupleOpaqueNonreferenceType Phase1ProofType selected).
       repeat split; try assumption; try reflexivity.
-      cbn. exact Hshallow_tree.
+      all: cbn; exact Hshallow_tree.
     + exists type_value, primitive,
         (Phase1ShallowOpaqueNonreferenceType Phase1ValidatedType selected),
         (Phase1RefinementTupleOpaqueNonreferenceType Phase1ValidatedType selected).
       repeat split; try assumption; try reflexivity.
-      cbn. exact Hshallow_tree.
+      all: cbn; exact Hshallow_tree.
     + assert (Hshape :
         PTNonterminal "nonreference_type_expression"
           (PTAlternative 11 selected) =
