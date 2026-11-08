@@ -131,15 +131,14 @@ grammarV1CheckedProductEliminationTrace
                     [affineMember, linearMember]
                       | TyBytes size <-
                           checkedBindingType (checkedResolvedTypeMode linearMember)
-                      , let expected =
-                          [ ProductElementType Affine namedTy
-                          , ProductElementType Linear (TyBytes size) ]
                       , checkedResolvedTypeMode affineMember ==
                           CheckedTypeMode namedTy Affine
                       , checkedBindingMode (checkedResolvedTypeMode linearMember) ==
                           Linear
                       , checkedResolvedFlatProductMode packet ==
-                          CheckedTypeMode (TyProduct expected) Linear
+                          CheckedTypeMode (TyProduct
+                            [ ProductElementType Affine namedTy
+                            , ProductElementType Linear (TyBytes size) ]) Linear
                       , checkedResolvedTypeModeOrigin affineMember ==
                           GrammarV1NamedTypeModeOrigin reference dataKey revision
                       , checkedResolvedTypeModeOrigin linearMember ==
