@@ -104,10 +104,10 @@ acceptedOffer input = do
         (ProtocolOfferRequest endpoint successor instanceRevision serverRole label) initial
       let next = checkedProtocolContext stepped
           continuation = checkedProtocolSuccessor stepped
-      assert (protocolEndpointName <$> continuation == Just successor
-           && protocolEndpointSession <$> continuation == Just (End outcome)
-           && protocolEndpointInstance <$> continuation == Just instanceRevision
-           && protocolEndpointRole <$> continuation == Just serverRole)
+      assert ((protocolEndpointName <$> continuation) == Just successor
+           && (protocolEndpointSession <$> continuation) == Just (End outcome)
+           && (protocolEndpointInstance <$> continuation) == Just instanceRevision
+           && (protocolEndpointRole <$> continuation) == Just serverRole)
         "offer lost source branch or exact successor contract"
       assert (Map.notMember endpoint (protocolEndpoints next)
            && Map.notMember endpoint (linearBindings (protocolResources next))
