@@ -142,7 +142,7 @@ grammarV1CheckedAffineProductFunctionTrace
                 (Left err, _, _) -> Just (Left (AffineProductTypeError err))
                 (_, Left err, _) -> Just (Left (AffineProductTypeError err))
                 (_, _, Left err) -> Just (Left (AffineProductTypeError err))
-                (Right (permit, _), Right (payload, _), Right product) ->
+                (Right (permit, _), Right (payload, _), Right checkedProduct) ->
                   let permitMode = checkedResolvedTypeMode permit
                       payloadMode = checkedResolvedTypeMode payload
                   in if permitMode == CheckedTypeMode namedTy Affine
@@ -150,14 +150,14 @@ grammarV1CheckedAffineProductFunctionTrace
                             GrammarV1NamedTypeModeOrigin
                               reference dataKey revision
                        && isLinearBytes payloadMode
-                    then sourceBody permit payload product
+                    then sourceBody permit payload checkedProduct
                     else Nothing
   where
     isLinearBytes mode = case checkedBindingType mode of
       TyBytes _ -> checkedBindingMode mode == Linear
       _ -> False
 
-    sourceBody permit payload product = do
+    sourceBody permit payload checkedProduct = do
       [Located borrowSpan (GrammarV1ExpressionStatement borrowed),
        Located returnSpan (GrammarV1ReturnStatement returned)] <-
         pure (grammarV1BlockStatements
@@ -189,7 +189,7 @@ grammarV1CheckedAffineProductFunctionTrace
                   Located _ (GrammarV1BorrowExpression sourceOwner _ sourceBlock)
                     <- pure (grammarV1CheckedBorrowViewSource borrowScope)
                   TyProduct expected <- pure
-                    (checkedBindingType (checkedResolvedFlatProductMode product))
+                    (checkedBindingType (checkedResolvedFlatProductMode checkedProduct))
                   let permitName = semanticName permitBinder
                       payloadName = semanticName payloadBinder
                       viewName = semanticName view
@@ -249,7 +249,7 @@ grammarV1CheckedAffineProductFunctionTrace
                       , affineProductCheckedReturn =
                           checkedResolvedFlatProductMode product
                       , affineProductReturnElements =
-                          checkedResolvedFlatProductElements product
+                          checkedResolvedFlatProductElements checkedProduct
                       , affineProductCheckpoints = traceCheckpoints run
                       , affineProductOutcome = traceOutcome run
                       })
