@@ -814,3 +814,38 @@ V interface roles remain distinct. No ad hoc nat encoding, new acceptance,
 TCB/LLVM/GHC/Rocq policy change, generated artifact modification, release
 public-byte credit or independent pinned final-delta signoff. Preserve the
 244 normative cases and historical independent audit; freeze **NOT YET**.
+
+## 2026-11-08 — partial native SemanticAtom M-value representation (issue #1584)
+
+After #1674's Q-role key-domain projection, the actual generic-actuals
+native value type is `SemanticForm`, a four-constructor sum:
+`SemanticAtom Text`, `SemanticOrdered [SemanticForm]`,
+`SemanticUnordered (Set SemanticForm)` and
+`SemanticRecord (Map Text SemanticForm)`. This bounded successor
+represents **only** `SemanticAtom` payloads via disjoint M-role wire;
+its partial encoder returns `Nothing` for all three structured
+constructors. Its decoder reconstructs a native `SemanticAtom` value,
+not an accepted application or semantic-actuals map. No `show`
+serialization, structure flattening, or role coercion.
+
+Strict Haskell Upload/Steve exact checked producer and independently
+accepted manifest, VER-010 source, INT-005 CertifiedRelease/StageClosure
+consumers are required before examining native actuals. All actual
+entries are examined by constructor; explicitly **unaccepted** probes
+demonstrate atom roundtrips, different atom values with identical
+Q-key domain, structural constructor rejection, and wrong-role rejection.
+Four conditional Rocq string-model theorems and named `Print Assumptions`
+cover atom wire roundtrip/injection, foreign key/declaration/interface
+tags and explicitly supplied model non-atom branches.
+
+**Remaining premises:** No native `Data.Text` Unicode to Rocq `string`
+proof; no `SemanticOrdered`/Unordered/Record value codec, cross-runtime
+canonical Set/Map order, complete actuals or source/manifest/stage/release
+reflection, authenticated architecture occurrence-to-StageClosure
+production, predecessor authority, FixedFinalAuthorityAdapter or
+FinalArtifactCertified. The Rocq constructor model is NOT the accepted
+Haskell `SemanticForm`; its model branches confer no native authority.
+No nat encoding, TCB/policy changes, generated output edits, release
+public-byte credit or independent pinned final-delta signoff. All prior
+R/L/S/C/F/B/I/A/P/K/D/V/Q typed domains remain distinct; preserve the
+244 normative cases and historical independent audit. Freeze **NOT YET**.

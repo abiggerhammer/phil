@@ -15,6 +15,7 @@ From Phil.Core Require Import Syntax Context SessionStep ConcurrencySemantics.
 Inductive FSEM02Action : Type :=
 | FSEM02Send
 | FSEM02Receive
+| FSEM02Select (label : string)
 | FSEM02Offer (label : string)
 | FSEM02Close (outcome : Outcome).
 
@@ -32,6 +33,11 @@ Definition selectedContinuation (action : FSEM02Action) (head : Session)
   match action, head with
   | FSEM02Send, Send _ _ continuation => Some (Some continuation)
   | FSEM02Receive, Receive _ _ continuation => Some (Some continuation)
+  | FSEM02Select label, Select branches =>
+      match offeredContinuation label branches with
+      | Some continuation => Some (Some continuation)
+      | None => None
+      end
   | FSEM02Offer label, Offer branches =>
       match offeredContinuation label branches with
       | Some continuation => Some (Some continuation)
@@ -111,6 +117,58 @@ Proof.
   unfold fsem02Progression, selectedContinuation.
   rewrite Hmissing.
   reflexivity.
+Qed.
+
+(*
+  A bounded, head-matched choice comparison: the selector's chosen label and
+  the offerer's externally supplied label yield the same LOCAL resource
+  transition on an identical admitted branch catalog. This does not prove
+  network rendezvous or that a source offer covers every branch.
+*)
+Theorem select_offer_identical_local_resource_step :
+  forall label branches endpoint successor context,
+    fsem02Progression (FSEM02Select label) (Select branches)
+      endpoint successor context =
+    fsem02Progression (FSEM02Offer label) (Offer branches)
+      endpoint successor context.
+Proof. reflexivity. Qed.
+
+Theorem unavailable_select_branch_rejects :
+  forall label branches endpoint successor context,
+    offeredContinuation label branches = None ->
+    fsem02Progression (FSEM02Select label) (Select branches)
+      endpoint successor context = StepFailed.
+Proof.
+  intros label branches endpoint successor context Hmissing.
+  unfold fsem02Progression, selectedContinuation.
+  rewrite Hmissing. reflexivity.
+Qed.
+
+Theorem select_wrong_head_is_rejected :
+  forall label outcome endpoint successor context,
+    fsem02Progression (FSEM02Select label) (End outcome)
+      endpoint successor context = StepFailed.
+Proof. reflexivity. Qed.
+
+Theorem selected_branch_consumes_and_types_exact_successor :
+  forall label branches endpoint successor context next continuation,
+    offeredContinuation label branches = Some continuation ->
+    fsem02Progression (FSEM02Select label) (Select branches)
+      endpoint successor context = StepSucceeded next ->
+    linearBindings next endpoint = None /\
+    linearBindings next successor = Some (endpointType continuation).
+Proof.
+  intros label branches endpoint successor context next continuation Hlabel Hstep.
+  assert (Hselected :
+    selectedContinuation (FSEM02Select label) (Select branches) =
+      Some (Some continuation)).
+  { simpl. now rewrite Hlabel. }
+  pose proof (continuing_head_exact_predecessor_and_successor
+    (FSEM02Select label) (Select branches)
+    endpoint successor context next continuation
+    Hselected Hstep) as Hresources.
+  destruct Hresources as [_ [_ [Hgone [Hnext _]]]].
+  split; assumption.
 Qed.
 
 Theorem wrong_terminal_outcome_rejects :

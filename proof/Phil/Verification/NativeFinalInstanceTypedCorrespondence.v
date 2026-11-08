@@ -1931,3 +1931,60 @@ Proof.
     discriminate H.
   - reflexivity.
 Qed.
+
+(* #1584 M: native SemanticForm has four distinct constructors; only
+   SemanticAtom Text has a reversible M wire. This is a conditional Rocq
+   string model, NOT a Data.Text Unicode correspondence or native acceptance. *)
+Record NativeSemanticAtomRole := mkNativeSemanticAtomRole {
+  nativeSemanticAtomPayload : string
+}.
+Definition nativeSemanticAtomWire (a : NativeSemanticAtomRole) : string :=
+  "M" ++ nativeSemanticAtomPayload a.
+Definition nativeDecodeSemanticAtomWire (w : string)
+  : option NativeSemanticAtomRole :=
+  match w with
+  | EmptyString => None
+  | String tag payload =>
+      if Ascii.eqb tag "M"%char
+      then Some (mkNativeSemanticAtomRole payload) else None
+  end.
+Theorem native_semantic_atom_wire_roundtrip :
+  forall a, nativeDecodeSemanticAtomWire (nativeSemanticAtomWire a) = Some a.
+Proof. intros [a]. reflexivity. Qed.
+Theorem native_semantic_atom_wire_injective :
+  forall a b, nativeSemanticAtomWire a = nativeSemanticAtomWire b -> a = b.
+Proof.
+  intros [a] [b] H. unfold nativeSemanticAtomWire in H.
+  simpl in H. injection H as Heq. now subst.
+Qed.
+Theorem native_semantic_atom_wrong_role_reject :
+  forall atom key declaration interfaceRevision,
+    nativeDecodeSemanticAtomWire (nativeGenericStaticKeyWire key) = None /\
+    nativeDecodeSemanticAtomWire (nativeGenericDeclarationWire declaration) = None /\
+    nativeDecodeSemanticAtomWire (nativeGenericInterfaceWire interfaceRevision) = None /\
+    nativeSemanticAtomWire atom <> nativeGenericStaticKeyWire key.
+Proof.
+  intros [atom] [key] [declaration] [interfaceRevision].
+  repeat split; try reflexivity.
+  intro H.
+  unfold nativeSemanticAtomWire, nativeGenericStaticKeyWire in H.
+  simpl in H. discriminate H.
+Qed.
+(* Constructor distinctions are explicitly SUPPLIED model data. This
+   model never claims to encode native SemanticOrdered/Unordered/Record. *)
+Inductive NativeSemanticConstructorModel : Type :=
+  | NativeModelSemanticAtom (payload : NativeSemanticAtomRole)
+  | NativeModelSemanticOrdered
+  | NativeModelSemanticUnordered
+  | NativeModelSemanticRecord.
+Definition nativeModelEncodeSemanticAtom (form : NativeSemanticConstructorModel)
+  : option string :=
+  match form with
+  | NativeModelSemanticAtom a => Some (nativeSemanticAtomWire a)
+  | _ => None
+  end.
+Theorem native_semantic_atom_model_nonatoms_fail_closed :
+  nativeModelEncodeSemanticAtom NativeModelSemanticOrdered = None /\
+  nativeModelEncodeSemanticAtom NativeModelSemanticUnordered = None /\
+  nativeModelEncodeSemanticAtom NativeModelSemanticRecord = None.
+Proof. repeat split; reflexivity. Qed.
