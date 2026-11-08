@@ -1768,3 +1768,108 @@ Proof.
   apply native_occurrence_key_wire_injective.
   exact (f_equal fst Heq).
 Qed.
+
+
+(* #1584: actual GenericApplicationIdentity has (DeclarationKey,
+   InterfaceRevision, Map GenericStaticParameterKey SemanticForm).
+   These D/V role-tagged string-model wires represent ONLY the first TWO
+   native Text newtype components; semantic actuals are not serialized.
+   They cannot establish generic application identity or native authority. *)
+Record NativeGenericDeclarationRole := mkNativeGenericDeclarationRole {
+  nativeGenericDeclarationPayload : string
+}.
+Record NativeGenericInterfaceRevisionRole := mkNativeGenericInterfaceRevisionRole {
+  nativeGenericInterfaceRevisionPayload : string
+}.
+Definition nativeGenericDeclarationWire (d : NativeGenericDeclarationRole) : string :=
+  "D" ++ nativeGenericDeclarationPayload d.
+Definition nativeGenericInterfaceWire (v : NativeGenericInterfaceRevisionRole) : string :=
+  "V" ++ nativeGenericInterfaceRevisionPayload v.
+Definition nativeDecodeGenericDeclarationWire (w : string)
+  : option NativeGenericDeclarationRole :=
+  match w with
+  | EmptyString => None
+  | String tag payload =>
+      if Ascii.eqb tag "D"%char
+      then Some (mkNativeGenericDeclarationRole payload) else None
+  end.
+Definition nativeDecodeGenericInterfaceWire (w : string)
+  : option NativeGenericInterfaceRevisionRole :=
+  match w with
+  | EmptyString => None
+  | String tag payload =>
+      if Ascii.eqb tag "V"%char
+      then Some (mkNativeGenericInterfaceRevisionRole payload) else None
+  end.
+Record NativeGenericScalarProjection := mkNativeGenericScalarProjection {
+  nativeGenericScalarDeclaration : NativeGenericDeclarationRole;
+  nativeGenericScalarInterface : NativeGenericInterfaceRevisionRole
+}.
+Definition nativeGenericScalarWires (p : NativeGenericScalarProjection)
+  : string * string :=
+  (nativeGenericDeclarationWire (nativeGenericScalarDeclaration p),
+   nativeGenericInterfaceWire (nativeGenericScalarInterface p)).
+Definition nativeDecodeGenericScalarWires (w : string * string)
+  : option NativeGenericScalarProjection :=
+  match nativeDecodeGenericDeclarationWire (fst w),
+        nativeDecodeGenericInterfaceWire (snd w) with
+  | Some d, Some v => Some (mkNativeGenericScalarProjection d v)
+  | _, _ => None
+  end.
+Theorem native_generic_declaration_wire_roundtrip :
+  forall d, nativeDecodeGenericDeclarationWire (nativeGenericDeclarationWire d) = Some d.
+Proof. intros [d]. reflexivity. Qed.
+Theorem native_generic_interface_wire_roundtrip :
+  forall v, nativeDecodeGenericInterfaceWire (nativeGenericInterfaceWire v) = Some v.
+Proof. intros [v]. reflexivity. Qed.
+Theorem native_generic_declaration_wire_injective :
+  forall a b, nativeGenericDeclarationWire a = nativeGenericDeclarationWire b -> a = b.
+Proof.
+  intros [a] [b] H. unfold nativeGenericDeclarationWire in H.
+  simpl in H. injection H as Heq. now subst.
+Qed.
+Theorem native_generic_interface_wire_injective :
+  forall a b, nativeGenericInterfaceWire a = nativeGenericInterfaceWire b -> a = b.
+Proof.
+  intros [a] [b] H. unfold nativeGenericInterfaceWire in H.
+  simpl in H. injection H as Heq. now subst.
+Qed.
+Theorem native_generic_scalar_projection_roundtrip :
+  forall p, nativeDecodeGenericScalarWires (nativeGenericScalarWires p) = Some p.
+Proof. intros [[d] [v]]. reflexivity. Qed.
+Theorem native_generic_scalar_wrong_role_reject :
+  forall key revision declaration interfaceRevision,
+    nativeDecodeGenericScalarWires
+      (nativeOccurrenceKeyWire key, nativeGenericInterfaceWire interfaceRevision) = None /\
+    nativeDecodeGenericScalarWires
+      (nativeGenericDeclarationWire declaration, nativeInstanceRevisionWire revision) = None /\
+    nativeGenericDeclarationWire declaration <> nativeGenericInterfaceWire interfaceRevision.
+Proof.
+  intros [key] [revision] [declaration] [interfaceRevision].
+  repeat split; try reflexivity.
+  intro H; unfold nativeGenericDeclarationWire, nativeGenericInterfaceWire in H;
+    simpl in H; discriminate H.
+Qed.
+(* Countermodel: even perfect reversible D/V data loses the native semantic
+   actuals field. The bool is an explicitly supplied model component, NOT
+   a claimed mapping of native SemanticForm or accepted proof evidence. *)
+Record NativeGenericWithModelActuals := mkNativeGenericWithModelActuals {
+  nativeGenericModelScalars : NativeGenericScalarProjection;
+  nativeGenericModelActuals : bool
+}.
+Theorem native_generic_scalar_wires_cannot_identify_actuals :
+  exists a b : NativeGenericWithModelActuals,
+    a <> b /\
+    nativeGenericScalarWires (nativeGenericModelScalars a) =
+      nativeGenericScalarWires (nativeGenericModelScalars b).
+Proof.
+  set (p := mkNativeGenericScalarProjection
+      (mkNativeGenericDeclarationRole EmptyString)
+      (mkNativeGenericInterfaceRevisionRole EmptyString)).
+  exists (mkNativeGenericWithModelActuals p true).
+  exists (mkNativeGenericWithModelActuals p false).
+  split.
+  - intro H. apply (f_equal nativeGenericModelActuals) in H.
+    discriminate H.
+  - reflexivity.
+Qed.
