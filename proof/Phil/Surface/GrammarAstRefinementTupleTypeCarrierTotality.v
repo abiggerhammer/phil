@@ -253,7 +253,6 @@ Proof.
         phase1_surface_expect_nonterminal,
         phase1_surface_expect_alternative.
       cbn.
-      rewrite String.eqb_refl.
       rewrite Houter.
       reflexivity.
     }
@@ -304,7 +303,6 @@ Proof.
           phase1_surface_expect_nonterminal,
           phase1_surface_expect_alternative.
         cbn.
-        rewrite String.eqb_refl.
         reflexivity.
       }
       assert (Hprimitive_type :
