@@ -9,6 +9,9 @@ module Phil.Surface.Check.Engine
   , SourceIfJoinRun (..)
   , checkSurfaceSourceIfJoinComponent
   , traceSurfaceSourceIfJoinComponent
+  , SourceScopedIfJoinRun (..)
+  , checkSurfaceScopedSourceIfJoinComponent
+  , traceSurfaceScopedSourceIfJoinComponent
   , BorrowTracePhase (..)
   , BorrowTraceCheckpoint (..)
   , BorrowTraceResourceObservation (..)
@@ -241,6 +244,133 @@ traceSurfaceSourceIfJoinComponent env locatedComponent thenBlock elseBlock after
       , sourceIfJoinContinuingCount = 0
       , sourceIfJoinTerminalCount = 0
       , sourceIfJoinOutcome = result }
+
+-- | A source-authorized, two-predecessor scope exit. Raw checkpoints are
+-- produced by the real production checkBlock before pruneScopedPath; the
+-- post-prune checkpoints are observed only if the actual scope exit succeeds.
+-- A failure has no fabricated post-prune or joined successor.
+data SourceScopedIfJoinRun = SourceScopedIfJoinRun
+  { scopedIfJoinBefore :: Maybe ResourceContext
+  , scopedIfJoinThenRaw :: [ResourceContext]
+  , scopedIfJoinThenPruned :: [ResourceContext]
+  , scopedIfJoinElseRaw :: [ResourceContext]
+  , scopedIfJoinElsePruned :: [ResourceContext]
+  , scopedIfJoinJoined :: Maybe ResourceContext
+  , scopedIfJoinOutcome :: Either SurfaceCheckError SurfaceCheckResult
+  } deriving (Eq, Show)
+
+-- | This non-tracing path uses exactly the existing production checker
+-- operations. It is an opt-in source-checked two-predecessor adapter, not
+-- a new generic SurfaceExpression if constructor.
+checkSurfaceScopedSourceIfJoinComponent
+  :: SurfaceEnvironment -> Located Component
+  -> Located Block -> Located Block -> [Located Statement]
+  -> Either SurfaceCheckError SurfaceCheckResult
+checkSurfaceScopedSourceIfJoinComponent env locatedComponent thenBlock elseBlock afterJoin = do
+  let component = locatedValue locatedComponent
+  initial <- initializeState env component
+  checkProvides env initial component
+  let scoped block = do
+        raw <- checkBlock env initial block
+        mapM
+          (pruneScopedPath (locatedSpan block)
+            (Map.keysSet (stateBindings initial)))
+          raw
+  left <- scoped thenBlock
+  right <- scoped elseBlock
+  joined <- joinExclusive (locatedSpan elseBlock) (left ++ right)
+  returned <- checkStatements env joined afterJoin
+  finished <- mapM
+    (finalizePath env (locatedSpan locatedComponent))
+    returned
+  Right SurfaceCheckResult
+    { checkedComponentName = componentName component
+    , checkedTerminalControls = map toCoreControl finished
+    }
+
+-- | The same production checks, with raw and pruned native contexts at
+-- each successful cut. A failed branch-pruning step records only its raw
+-- predecessor, not an imaginary continuing post-state or partner branch.
+traceSurfaceScopedSourceIfJoinComponent
+  :: SurfaceEnvironment -> Located Component
+  -> Located Block -> Located Block -> [Located Statement]
+  -> SourceScopedIfJoinRun
+traceSurfaceScopedSourceIfJoinComponent env locatedComponent thenBlock elseBlock afterJoin =
+  case initializeState env component of
+    Left err -> emptyRun (Left err)
+    Right initial -> case checkProvides env initial component of
+      Left err -> (emptyRun (Left err))
+        { scopedIfJoinBefore = Just (coreContext initial) }
+      Right () ->
+        let before = coreContext initial
+            incoming = Map.keysSet (stateBindings initial)
+            rawLeft = checkBlock env initial thenBlock
+        in case rawLeft of
+          Left err -> (emptyRun (Left err))
+            { scopedIfJoinBefore = Just before }
+          Right leftPaths ->
+            let leftRaw = map (coreContext . pathState) leftPaths
+                cleanedLeft = mapM
+                  (pruneScopedPath (locatedSpan thenBlock) incoming)
+                  leftPaths
+            in case cleanedLeft of
+              Left err -> (emptyRun (Left err))
+                { scopedIfJoinBefore = Just before
+                , scopedIfJoinThenRaw = leftRaw }
+              Right left ->
+                let leftClean = map (coreContext . pathState) left
+                    rawRight = checkBlock env initial elseBlock
+                in case rawRight of
+                  Left err -> (emptyRun (Left err))
+                    { scopedIfJoinBefore = Just before
+                    , scopedIfJoinThenRaw = leftRaw
+                    , scopedIfJoinThenPruned = leftClean }
+                  Right rightPaths ->
+                    let rightRaw = map (coreContext . pathState) rightPaths
+                        cleanedRight = mapM
+                          (pruneScopedPath (locatedSpan elseBlock) incoming)
+                          rightPaths
+                        snapshot errorValue rightClean joined = SourceScopedIfJoinRun
+                          { scopedIfJoinBefore = Just before
+                          , scopedIfJoinThenRaw = leftRaw
+                          , scopedIfJoinThenPruned = leftClean
+                          , scopedIfJoinElseRaw = rightRaw
+                          , scopedIfJoinElsePruned = rightClean
+                          , scopedIfJoinJoined = joined
+                          , scopedIfJoinOutcome = errorValue }
+                    in case cleanedRight of
+                      Left err -> snapshot (Left err) [] Nothing
+                      Right right ->
+                        let rightClean = map (coreContext . pathState) right
+                            allPaths = left ++ right
+                        in case joinExclusive (locatedSpan elseBlock) allPaths of
+                          Left err -> snapshot (Left err) rightClean Nothing
+                          Right joinedPaths ->
+                            let joinedContext =
+                                  case filter ((== PathContinue) . pathControl) joinedPaths of
+                                    [one] -> Just (coreContext (pathState one))
+                                    _ -> Nothing
+                                result = do
+                                  after <- checkStatements env joinedPaths afterJoin
+                                  finished <- mapM
+                                    (finalizePath env (locatedSpan locatedComponent))
+                                    after
+                                  Right SurfaceCheckResult
+                                    { checkedComponentName = componentName component
+                                    , checkedTerminalControls = map toCoreControl finished
+                                    }
+                            in snapshot result rightClean joinedContext
+  where
+    component = locatedValue locatedComponent
+    coreContext state = resourceContext (stateCore state)
+    emptyRun result = SourceScopedIfJoinRun
+      { scopedIfJoinBefore = Nothing
+      , scopedIfJoinThenRaw = []
+      , scopedIfJoinThenPruned = []
+      , scopedIfJoinElseRaw = []
+      , scopedIfJoinElsePruned = []
+      , scopedIfJoinJoined = Nothing
+      , scopedIfJoinOutcome = result }
 
 -- | Concrete checkpoints from the *same* production borrow evaluator used by
 -- ordinary checking. These are not an abstract small-step semantics or a

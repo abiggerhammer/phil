@@ -1,0 +1,10 @@
+data Permit mode affine = Permit(U64);
+fn choose(flag : Bool, permit : Permit, payload : Bytes[8]) -> Bytes[8] satisfies C {
+  if flag join state () {
+    let spare = permit;
+  } else {
+    unit;
+  };
+  spare;
+  return payload;
+}
