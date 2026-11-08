@@ -1,0 +1,112 @@
+name: FSEM-01 Typed Bool Join Telescope Early Preflight
+
+concurrency:
+  group: ${{ github.workflow_ref }}-${{ github.event.pull_request.number || github.run_id }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+on:
+  push:
+    branches:
+      - formal-semantics/fsem01-typed-join-telescope
+    paths:
+      - 'src/Phil/Surface/Check/Engine.hs'
+      - 'src/Phil/Surface/GrammarV1/SourceBoolJoinTelescope.hs'
+      - 'test/Phase1FSEM01BoolJoinTelescopeMain.hs'
+      - 'test/fixtures/fsem01-bool-join-telescope-v1/**'
+      - 'proof/Phil/Surface/SurfaceSourceBoolJoinTelescope.v'
+      - 'docs/phase-1/formal-semantics-bool-join-telescope-fsem01-v1.md'
+      - 'phil-core.cabal'
+      - '.github/workflows/fsem01-typed-join-telescope-preflight.yml'
+  pull_request:
+    paths:
+      - 'src/Phil/Surface/Check/Engine.hs'
+      - 'src/Phil/Surface/GrammarV1/SourceBoolJoinTelescope.hs'
+      - 'test/Phase1FSEM01BoolJoinTelescopeMain.hs'
+      - 'test/fixtures/fsem01-bool-join-telescope-v1/**'
+      - 'proof/Phil/Surface/SurfaceSourceBoolJoinTelescope.v'
+      - 'docs/phase-1/formal-semantics-bool-join-telescope-fsem01-v1.md'
+      - 'phil-core.cabal'
+      - '.github/workflows/fsem01-typed-join-telescope-preflight.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  source-if-join-haskell:
+    name: Strict checked Bool join-state predecessor and invariant conformance
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: haskell-actions/setup@v2
+        with:
+          ghc-version: '9.6.7'
+          cabal-version: 'latest'
+          cabal-update: false
+      - name: Update Hackage with bounded HTTP1 retry
+        shell: bash
+        run: bash scripts/ci/cabal-update-retry.sh
+      - name: Strict production library build
+        shell: bash
+        run: |
+          set -euo pipefail
+          cabal build lib:phil-core --ghc-options=-Werror
+      - name: Existing source grammar, join and ownership regressions
+        shell: bash
+        run: |
+          set -euo pipefail
+          for test in \
+            Phase1GrammarV1JoinLoopMain \
+            Phase1FSEM01TwoOwnerSourceMain \
+            Phase1FSEM01FlatProductMain \
+            Phase1FSEM01FiniteContextMain \
+            Phase1FSEM01SourceAffineMain \
+            Phase1FSEM01MixedAffineLinearMain \
+            Phase1FSEM01NominalAffineProductMain \
+            Phase1FSEM01SourceProductEliminationMain \
+            Phase1FSEM01SourceBranchJoinMain \
+            Phase1FSEM01AffineJoinScopeMain \
+            Phase1FSEM01BorrowResourceTraceMain \
+            Phase1FSEM01ScopedBorrowJoinMain
+          do
+            cabal exec -- runghc -isrc -Wall -Werror "test/$test.hs"
+          done
+      - name: Typecheck and run source one-slot Bool join telescope tests
+        shell: bash
+        run: |
+          set -euo pipefail
+          cabal exec -- ghc -isrc -Wall -Werror -fno-code \
+            test/Phase1FSEM01BoolJoinTelescopeMain.hs
+          cabal exec -- runghc -isrc -Wall -Werror \
+            test/Phase1FSEM01BoolJoinTelescopeMain.hs
+          sha256sum src/Phil/Surface/GrammarV1/SourceBoolJoinTelescope.hs \
+            src/Phil/Surface/Check/Engine.hs \
+            test/Phase1FSEM01BoolJoinTelescopeMain.hs
+
+  source-if-join-rocq:
+    name: Rocq one-slot Bool phi resource preservation and invariant evidence
+    runs-on: ubuntu-24.04
+    container:
+      image: rocq/rocq-prover:9.2.0
+      options: --user root
+    steps:
+      - uses: actions/checkout@v4
+      - name: Compile Bool join-state phi and invariant model without admissions
+        shell: bash
+        run: |
+          set -euo pipefail
+          export PATH="/home/rocq/.opam/$COMPILER/bin:$PATH"
+          for file in \
+            proof/Phil/Core/Syntax.v \
+            proof/Phil/Core/Context.v \
+            proof/Phil/Core/ContextJoin.v \
+            proof/Phil/Surface/SurfaceSourceBoolJoinTelescope.v
+          do
+            rocq c -Q proof/Phil Phil "$file"
+          done
+          if grep -nE '^[[:space:]]*(Admitted[.]|Axiom[[:space:]]|Parameter[[:space:]])' \
+            proof/Phil/Surface/SurfaceSourceBoolJoinTelescope.v; then
+            echo "Unproved FSEM branch join statement" >&2
+            exit 1
+          fi
+          sha256sum proof/Phil/Surface/SurfaceSourceBoolJoinTelescope.v \
+            proof/Phil/Surface/SurfaceSourceBoolJoinTelescope.vo

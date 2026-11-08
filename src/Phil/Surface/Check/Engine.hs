@@ -14,6 +14,10 @@ module Phil.Surface.Check.Engine
   , traceSurfaceScopedSourceIfJoinComponent
   , SourceBranchBorrowObservation (..)
   , traceSurfaceSourceBranchBorrow
+  , SourceBoolJoinInvariant (..)
+  , SourceBoolJoinRun (..)
+  , checkSurfaceSourceBoolJoinComponent
+  , traceSurfaceSourceBoolJoinComponent
   , BorrowTracePhase (..)
   , BorrowTraceCheckpoint (..)
   , BorrowTraceResourceObservation (..)
@@ -410,6 +414,193 @@ traceSurfaceSourceBranchBorrow env component branch =
                   in SourceBranchBorrowObservation cuts (fmap (const ()) outcome)
         _ -> Nothing
     _ -> Nothing
+
+-- | Only the source adapter may authorize these bounded propositions.
+-- ProvenTrue represents the literal proposition true; ProvenReflexive
+-- represents an equality whose two lexical occurrences resolve to the SAME
+-- checked post-join binder. Unproved is never silently assumed.
+data SourceBoolJoinInvariant
+  = SourceBoolInvariantProvenTrue
+  | SourceBoolInvariantProvenReflexive
+  | SourceBoolInvariantUnproved
+  deriving (Eq, Show)
+
+-- | Actual production resource cut points for a single Bool join-state slot.
+-- A failure records only the predecessor/join/telescope stages that were
+-- reached. The slot is introduced through insertBindingMeta, not fabricated
+-- as an arbitrary test-only ResourceContext.
+data SourceBoolJoinRun = SourceBoolJoinRun
+  { sourceBoolJoinBefore :: Maybe ResourceContext
+  , sourceBoolJoinThen :: Maybe ResourceContext
+  , sourceBoolJoinElse :: Maybe ResourceContext
+  , sourceBoolJoinCoreJoined :: Maybe ResourceContext
+  , sourceBoolJoinBound :: Maybe ResourceContext
+  , sourceBoolJoinThenType :: Maybe (Mode, Ty)
+  , sourceBoolJoinElseType :: Maybe (Mode, Ty)
+  , sourceBoolJoinOutcome :: Either SurfaceCheckError SurfaceCheckResult
+  } deriving (Eq, Show)
+
+-- | One checked source predecessor whose final expression really evaluates to
+-- an Unrestricted Bool. This is the PRODUCTION Surface checkValueBlock /
+-- pruneScopedPath path; ownership effects are not synthesized or ignored.
+checkBoolJoinPredecessor
+  :: SurfaceEnvironment -> SurfaceState -> Located Block
+  -> Either SurfaceCheckError SurfacePath
+checkBoolJoinPredecessor env initial block = do
+  raw <- checkValueBlock env initial block
+  pruned <- mapM
+    (pruneScopedPath (locatedSpan block) (Map.keysSet (stateBindings initial)))
+    raw
+  case pruned of
+    [path@(SurfacePath PathContinue _
+      (Just (RuntimeScalar scalar)))]
+      | scalarType scalar == TyBool
+      , decisionCarrierMode (scalarMode scalar) (scalarShape scalar)
+          == Unrestricted ->
+          Right path
+    _ -> throw block TypeMismatch
+      "join predecessor must produce one unrestricted Bool matching its checked state slot"
+
+-- | Invariant discharge is deliberately narrower than source proposition
+-- syntax. No caller-injected arbitrary logical predicate can be assumed.
+checkBoolJoinInvariant
+  :: SourceSpan -> SourceBoolJoinInvariant
+  -> Either SurfaceCheckError ()
+checkBoolJoinInvariant _ SourceBoolInvariantProvenTrue = Right ()
+checkBoolJoinInvariant _ SourceBoolInvariantProvenReflexive = Right ()
+checkBoolJoinInvariant span' SourceBoolInvariantUnproved =
+  Left SurfaceCheckError
+    { surfaceErrorSpan = span'
+    , surfaceErrorClass = MissingEvidence
+    , surfaceErrorDetail =
+        "join invariant has no checked proof for this bounded source telescope"
+    }
+
+-- | Exact production projection for a two-arm Grammar-v1 source if with
+-- one source-checked Bool slot, followed by ordinary source statements.
+checkSurfaceSourceBoolJoinComponent
+  :: SurfaceEnvironment -> Located Component
+  -> Located Block -> Located Block
+  -> SourceSpan -> Text -> SourceBoolJoinInvariant
+  -> [Located Statement]
+  -> Either SurfaceCheckError SurfaceCheckResult
+checkSurfaceSourceBoolJoinComponent env locatedComponent left right
+    joinSpan slotName invariant afterJoin = do
+  let component = locatedValue locatedComponent
+  initial <- initializeState env component
+  checkProvides env initial component
+  leftPath <- checkBoolJoinPredecessor env initial left
+  rightPath <- checkBoolJoinPredecessor env initial right
+  joinedPaths <- joinExclusive joinSpan [leftPath,rightPath]
+  joined <- case joinedPaths of
+    [SurfacePath PathContinue state _] -> Right state
+    _ -> throw locatedComponent IncompatibleBranchResidue
+      "checked Bool join requires exactly one continuing successor"
+  bound <- insertBindingMeta joinSpan slotName
+    (BindingMeta Unrestricted TyBool (shapeForType TyBool)) joined
+  checkBoolJoinInvariant joinSpan invariant
+  advanced <- checkStatements env [continuePath bound] afterJoin
+  finished <- mapM
+    (finalizePath env (locatedSpan locatedComponent))
+    advanced
+  Right SurfaceCheckResult
+    { checkedComponentName = componentName component
+    , checkedTerminalControls = map toCoreControl finished
+    }
+
+-- | Independent recording of the SAME production operations, preserving
+-- exact source-derived resource contexts and observed operand types.
+traceSurfaceSourceBoolJoinComponent
+  :: SurfaceEnvironment -> Located Component
+  -> Located Block -> Located Block
+  -> SourceSpan -> Text -> SourceBoolJoinInvariant
+  -> [Located Statement]
+  -> SourceBoolJoinRun
+traceSurfaceSourceBoolJoinComponent env locatedComponent left right
+    joinSpan slotName invariant afterJoin =
+  case initializeState env component of
+    Left err -> emptyRun (Left err)
+    Right initial -> case checkProvides env initial component of
+      Left err -> (emptyRun (Left err))
+        { sourceBoolJoinBefore = Just (context initial) }
+      Right () ->
+        let start = context initial
+            leftResult = checkBoolJoinPredecessor env initial left
+        in case leftResult of
+          Left err -> (emptyRun (Left err))
+            { sourceBoolJoinBefore = Just start }
+          Right leftPath ->
+            let l = context (pathState leftPath)
+                leftType = operandType leftPath
+                rightResult = checkBoolJoinPredecessor env initial right
+            in case rightResult of
+              Left err -> (emptyRun (Left err))
+                { sourceBoolJoinBefore = Just start
+                , sourceBoolJoinThen = Just l
+                , sourceBoolJoinThenType = leftType }
+              Right rightPath ->
+                let rr = context (pathState rightPath)
+                    rightType = operandType rightPath
+                    beforeJoined = SourceBoolJoinRun
+                      { sourceBoolJoinBefore = Just start
+                      , sourceBoolJoinThen = Just l
+                      , sourceBoolJoinElse = Just rr
+                      , sourceBoolJoinCoreJoined = Nothing
+                      , sourceBoolJoinBound = Nothing
+                      , sourceBoolJoinThenType = leftType
+                      , sourceBoolJoinElseType = rightType
+                      , sourceBoolJoinOutcome =
+                          Left SurfaceCheckError
+                            { surfaceErrorSpan = joinSpan
+                            , surfaceErrorClass = IncompatibleBranchResidue
+                            , surfaceErrorDetail =
+                                "source join has no completed successor"
+                            }
+                      }
+                in case joinExclusive joinSpan [leftPath,rightPath] of
+                  Left err -> beforeJoined { sourceBoolJoinOutcome = Left err }
+                  Right joinedPaths -> case joinedPaths of
+                    [SurfacePath PathContinue joined _] ->
+                      let afterCore = beforeJoined
+                            { sourceBoolJoinCoreJoined = Just (context joined) }
+                      in case insertBindingMeta joinSpan slotName
+                          (BindingMeta Unrestricted TyBool
+                            (shapeForType TyBool)) joined of
+                        Left err -> afterCore { sourceBoolJoinOutcome = Left err }
+                        Right bound ->
+                          let afterSlot = afterCore
+                                { sourceBoolJoinBound = Just (context bound) }
+                              outcome = do
+                                checkBoolJoinInvariant joinSpan invariant
+                                next <- checkStatements env
+                                  [continuePath bound] afterJoin
+                                final <- mapM
+                                  (finalizePath env (locatedSpan locatedComponent))
+                                  next
+                                Right SurfaceCheckResult
+                                  { checkedComponentName = componentName component
+                                  , checkedTerminalControls =
+                                      map toCoreControl final }
+                          in afterSlot { sourceBoolJoinOutcome = outcome }
+                    _ -> beforeJoined { sourceBoolJoinOutcome =
+                      throw locatedComponent IncompatibleBranchResidue
+                        "checked Bool join requires exactly one continuing successor" }
+  where
+    component = locatedValue locatedComponent
+    context state = resourceContext (stateCore state)
+    operandType path = case pathValue path of
+      Just (RuntimeScalar scalar) ->
+        Just (scalarMode scalar,scalarType scalar)
+      _ -> Nothing
+    emptyRun outcome = SourceBoolJoinRun
+      { sourceBoolJoinBefore = Nothing
+      , sourceBoolJoinThen = Nothing
+      , sourceBoolJoinElse = Nothing
+      , sourceBoolJoinCoreJoined = Nothing
+      , sourceBoolJoinBound = Nothing
+      , sourceBoolJoinThenType = Nothing
+      , sourceBoolJoinElseType = Nothing
+      , sourceBoolJoinOutcome = outcome }
 
 -- | Concrete checkpoints from the *same* production borrow evaluator used by
 -- ordinary checking. These are not an abstract small-step semantics or a
