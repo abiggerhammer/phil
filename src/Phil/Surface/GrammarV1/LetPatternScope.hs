@@ -126,6 +126,20 @@ checkedStatements scope (source@(Located _ statement) : rest) =
               , finalScope
               ))
             remainder
+    -- Source tuple operands remain separate exact lexical occurrences.
+    -- This is a bounded flat pair, not tuple resource typing or elaboration.
+    GrammarV1ExpressionStatement (Located _ (GrammarV1TupleExpression [first,second])) -> do
+      firstOccurrence <- grammarV1CheckedLocalValueOccurrenceInScope scope first
+      secondOccurrence <- grammarV1CheckedLocalValueOccurrenceInScope scope second
+      remainder <- checkedStatements scope rest
+      Just $ fmap
+        (\(steps, finalScope) ->
+          ( GrammarV1CheckedLetOccurrenceStep source firstOccurrence
+          : GrammarV1CheckedLetOccurrenceStep source secondOccurrence
+          : steps
+          , finalScope
+          ))
+        remainder
     GrammarV1ReturnStatement expression ->
       checkedOccurrenceStatement scope source expression rest
     GrammarV1ExpressionStatement (Located _ GrammarV1UnitExpression) -> do

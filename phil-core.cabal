@@ -231,6 +231,7 @@ library
       Phil.Surface.GrammarV1.SourceAffineIfJoinResource
       Phil.Surface.GrammarV1.SourceScopedBorrowJoin
       Phil.Surface.GrammarV1.SourceBoolJoinTelescope
+      Phil.Surface.GrammarV1.SourceTwoBoolJoinTelescope
       Phil.Surface.GrammarV1.ComponentSelectClose
       Phil.Surface.GrammarV1.ComponentOfferCoverage
       Phil.Surface.GrammarV1.ComponentOfferReplay

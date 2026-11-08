@@ -18,6 +18,9 @@ module Phil.Surface.Check.Engine
   , SourceBoolJoinRun (..)
   , checkSurfaceSourceBoolJoinComponent
   , traceSurfaceSourceBoolJoinComponent
+  , SourceTwoBoolJoinRun (..)
+  , checkSurfaceSourceTwoBoolJoinComponent
+  , traceSurfaceSourceTwoBoolJoinComponent
   , BorrowTracePhase (..)
   , BorrowTraceCheckpoint (..)
   , BorrowTraceResourceObservation (..)
@@ -601,6 +604,171 @@ traceSurfaceSourceBoolJoinComponent env locatedComponent left right
       , sourceBoolJoinThenType = Nothing
       , sourceBoolJoinElseType = Nothing
       , sourceBoolJoinOutcome = outcome }
+
+-- | Two exactly typed Bool join-state slots. All observation fields are native
+-- Surface/Core resource cuts. No post-error successor is fabricated.
+data SourceTwoBoolJoinRun = SourceTwoBoolJoinRun
+  { sourceTwoBoolJoinBefore :: Maybe ResourceContext
+  , sourceTwoBoolJoinThen :: Maybe ResourceContext
+  , sourceTwoBoolJoinElse :: Maybe ResourceContext
+  , sourceTwoBoolJoinCoreJoined :: Maybe ResourceContext
+  , sourceTwoBoolJoinFirstBound :: Maybe ResourceContext
+  , sourceTwoBoolJoinBothBound :: Maybe ResourceContext
+  , sourceTwoBoolJoinThenTypes :: Maybe [(Mode, Ty)]
+  , sourceTwoBoolJoinElseTypes :: Maybe [(Mode, Ty)]
+  , sourceTwoBoolJoinOutcome :: Either SurfaceCheckError SurfaceCheckResult
+  } deriving (Eq, Show)
+
+-- | Preserve the production checkValueBlock and pruneScopedPath boundary;
+-- require an actual two-element RuntimeTuple, not a synthetically supplied
+-- pair of scalar types or a bare single Bool.
+checkTwoBoolJoinPredecessor
+  :: SurfaceEnvironment -> SurfaceState -> Located Block
+  -> Either SurfaceCheckError SurfacePath
+checkTwoBoolJoinPredecessor env initial block = do
+  raw <- checkValueBlock env initial block
+  pruned <- mapM
+    (pruneScopedPath (locatedSpan block) (Map.keysSet (stateBindings initial)))
+    raw
+  case pruned of
+    [path@(SurfacePath PathContinue _
+      (Just (RuntimeTuple [RuntimeScalar first, RuntimeScalar second])))]
+      | validBool first && validBool second -> Right path
+    _ -> throw block TypeMismatch
+      "two-slot join predecessor requires a pair of unrestricted Bool values"
+  where
+    validBool scalar =
+      scalarType scalar == TyBool &&
+      decisionCarrierMode (scalarMode scalar) (scalarShape scalar)
+        == Unrestricted
+
+-- | Only the source-validated slot identities/types reach the native checker.
+-- Join both resource states before inserting EITHER post-join binder.
+checkSurfaceSourceTwoBoolJoinComponent
+  :: SurfaceEnvironment -> Located Component
+  -> Located Block -> Located Block
+  -> SourceSpan -> Text -> Text -> SourceBoolJoinInvariant
+  -> [Located Statement]
+  -> Either SurfaceCheckError SurfaceCheckResult
+checkSurfaceSourceTwoBoolJoinComponent env locatedComponent left right
+    joinSpan firstName secondName invariant afterJoin = do
+  let component = locatedValue locatedComponent
+  initial <- initializeState env component
+  checkProvides env initial component
+  leftPath <- checkTwoBoolJoinPredecessor env initial left
+  rightPath <- checkTwoBoolJoinPredecessor env initial right
+  joinedPaths <- joinExclusive joinSpan [leftPath,rightPath]
+  joined <- case joinedPaths of
+    [SurfacePath PathContinue state _] -> Right state
+    _ -> throw locatedComponent IncompatibleBranchResidue
+      "checked two-slot Bool join requires exactly one continuing successor"
+  firstBound <- insertBindingMeta joinSpan firstName
+    (BindingMeta Unrestricted TyBool (shapeForType TyBool)) joined
+  bothBound <- insertBindingMeta joinSpan secondName
+    (BindingMeta Unrestricted TyBool (shapeForType TyBool)) firstBound
+  checkBoolJoinInvariant joinSpan invariant
+  advanced <- checkStatements env [continuePath bothBound] afterJoin
+  finished <- mapM
+    (finalizePath env (locatedSpan locatedComponent)) advanced
+  Right SurfaceCheckResult
+    { checkedComponentName = componentName component
+    , checkedTerminalControls = map toCoreControl finished
+    }
+
+-- | Independent exact native replay of the same source-derived checker
+-- operations. A failed predecessor or insertion leaves only reached cuts.
+traceSurfaceSourceTwoBoolJoinComponent
+  :: SurfaceEnvironment -> Located Component
+  -> Located Block -> Located Block
+  -> SourceSpan -> Text -> Text -> SourceBoolJoinInvariant
+  -> [Located Statement]
+  -> SourceTwoBoolJoinRun
+traceSurfaceSourceTwoBoolJoinComponent env locatedComponent left right
+    joinSpan firstName secondName invariant afterJoin =
+  case initializeState env component of
+    Left err -> emptyRun (Left err)
+    Right initial -> case checkProvides env initial component of
+      Left err -> (emptyRun (Left err))
+        { sourceTwoBoolJoinBefore = Just (context initial) }
+      Right () ->
+        let start = context initial
+        in case checkTwoBoolJoinPredecessor env initial left of
+          Left err -> (emptyRun (Left err))
+            { sourceTwoBoolJoinBefore = Just start }
+          Right leftPath ->
+            let leftContext = context (pathState leftPath)
+                leftTypes = operandTypes leftPath
+            in case checkTwoBoolJoinPredecessor env initial right of
+              Left err -> (emptyRun (Left err))
+                { sourceTwoBoolJoinBefore = Just start
+                , sourceTwoBoolJoinThen = Just leftContext
+                , sourceTwoBoolJoinThenTypes = leftTypes }
+              Right rightPath ->
+                let rightContext = context (pathState rightPath)
+                    rightTypes = operandTypes rightPath
+                    beforeJoin = (emptyRun (throw locatedComponent
+                        IncompatibleBranchResidue
+                        "two-slot join has no completed successor"))
+                      { sourceTwoBoolJoinBefore = Just start
+                      , sourceTwoBoolJoinThen = Just leftContext
+                      , sourceTwoBoolJoinElse = Just rightContext
+                      , sourceTwoBoolJoinThenTypes = leftTypes
+                      , sourceTwoBoolJoinElseTypes = rightTypes }
+                in case joinExclusive joinSpan [leftPath,rightPath] of
+                  Left err -> beforeJoin { sourceTwoBoolJoinOutcome = Left err }
+                  Right joinedPaths -> case joinedPaths of
+                    [SurfacePath PathContinue joined _] ->
+                      let afterCore = beforeJoin
+                            { sourceTwoBoolJoinCoreJoined = Just (context joined) }
+                      in case insertBindingMeta joinSpan firstName
+                          (BindingMeta Unrestricted TyBool
+                            (shapeForType TyBool)) joined of
+                        Left err -> afterCore { sourceTwoBoolJoinOutcome = Left err }
+                        Right firstBound ->
+                          let afterFirst = afterCore
+                                { sourceTwoBoolJoinFirstBound = Just (context firstBound) }
+                          in case insertBindingMeta joinSpan secondName
+                              (BindingMeta Unrestricted TyBool
+                                (shapeForType TyBool)) firstBound of
+                            Left err -> afterFirst
+                              { sourceTwoBoolJoinOutcome = Left err }
+                            Right bothBound ->
+                              let afterBoth = afterFirst
+                                    { sourceTwoBoolJoinBothBound = Just (context bothBound) }
+                                  outcome = do
+                                    checkBoolJoinInvariant joinSpan invariant
+                                    next <- checkStatements env
+                                      [continuePath bothBound] afterJoin
+                                    final <- mapM
+                                      (finalizePath env (locatedSpan locatedComponent))
+                                      next
+                                    Right SurfaceCheckResult
+                                      { checkedComponentName = componentName component
+                                      , checkedTerminalControls = map toCoreControl final
+                                      }
+                              in afterBoth { sourceTwoBoolJoinOutcome = outcome }
+                    _ -> beforeJoin { sourceTwoBoolJoinOutcome =
+                      throw locatedComponent IncompatibleBranchResidue
+                        "checked two-slot Bool join requires exactly one continuing successor" }
+  where
+    component = locatedValue locatedComponent
+    context state = resourceContext (stateCore state)
+    operandTypes path = case pathValue path of
+      Just (RuntimeTuple [RuntimeScalar first, RuntimeScalar second]) ->
+        Just [ (scalarMode first, scalarType first)
+             , (scalarMode second, scalarType second) ]
+      _ -> Nothing
+    emptyRun outcome = SourceTwoBoolJoinRun
+      { sourceTwoBoolJoinBefore = Nothing
+      , sourceTwoBoolJoinThen = Nothing
+      , sourceTwoBoolJoinElse = Nothing
+      , sourceTwoBoolJoinCoreJoined = Nothing
+      , sourceTwoBoolJoinFirstBound = Nothing
+      , sourceTwoBoolJoinBothBound = Nothing
+      , sourceTwoBoolJoinThenTypes = Nothing
+      , sourceTwoBoolJoinElseTypes = Nothing
+      , sourceTwoBoolJoinOutcome = outcome
+      }
 
 -- | Concrete checkpoints from the *same* production borrow evaluator used by
 -- ordinary checking. These are not an abstract small-step semantics or a
