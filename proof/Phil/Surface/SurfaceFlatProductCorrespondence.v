@@ -31,7 +31,8 @@ Lemma same_product_mode_true :
   forall first second,
     sameProductMode first second = true -> first = second.
 Proof.
-  intros []; destruct second; simpl; try discriminate; reflexivity.
+  intros first second; destruct first, second; simpl;
+    try discriminate; reflexivity.
 Qed.
 
 Definition sameProductElement
