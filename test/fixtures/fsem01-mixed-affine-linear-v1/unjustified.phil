@@ -1,0 +1,5 @@
+data Permit mode affine = Permit(U64);
+fn use(permit : Permit, payload : Bytes[8]) -> Bytes[8] satisfies C {
+  borrow permit as view { view; unit; };
+  return payload;
+}
