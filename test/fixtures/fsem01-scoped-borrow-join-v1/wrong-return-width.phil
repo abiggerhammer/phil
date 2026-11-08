@@ -1,0 +1,8 @@
+fn choose(flag : Bool, payload : Bytes[8]) -> Bytes[9] satisfies C {
+  if flag join state () {
+    borrow payload as view { view; unit; };
+  } else {
+    unit;
+  };
+  return payload;
+}
