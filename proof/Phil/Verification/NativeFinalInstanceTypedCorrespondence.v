@@ -1570,3 +1570,70 @@ Proof.
       nativeCommonRevisionWire, nativeClosedRevisionWire in H;
     simpl in H; discriminate H.
 Qed.
+
+(* #1584: The actual native Phase1Stage verifier profile is plain Text,
+   not a nominal Haskell profile revision. This P-tagged string model
+   covers a read-only data role, NOT native acceptance, Unicode Text
+   serialization, an unproved nat encoding, or stage-origin evidence. *)
+Record NativeVerifierProfileTextRole := mkNativeVerifierProfileTextRole {
+  nativeVerifierProfileTextPayload : string
+}.
+Definition nativeVerifierProfileTextWire (p : NativeVerifierProfileTextRole) : string :=
+  "P" ++ nativeVerifierProfileTextPayload p.
+Definition nativeDecodeVerifierProfileTextWire (wire : string)
+  : option NativeVerifierProfileTextRole :=
+  match wire with
+  | EmptyString => None
+  | String role payload =>
+      if Ascii.eqb role "P"%char
+      then Some (mkNativeVerifierProfileTextRole payload)
+      else None
+  end.
+
+Theorem native_verifier_profile_text_wire_injective :
+  forall a b, nativeVerifierProfileTextWire a = nativeVerifierProfileTextWire b -> a = b.
+Proof.
+  intros [a] [b] H.
+  unfold nativeVerifierProfileTextWire in H.
+  simpl in H. injection H as Heq. now subst.
+Qed.
+
+Theorem native_verifier_profile_text_wire_roundtrip :
+  forall p, nativeDecodeVerifierProfileTextWire (nativeVerifierProfileTextWire p) = Some p.
+Proof. intros [p]. reflexivity. Qed.
+
+Theorem native_verifier_profile_text_wire_disjoint_from_eight_roles :
+  forall raw root sys common closed subject inst real profile,
+    nativeVerifierProfileTextWire profile <> nativeRawSystemsDigestWire raw /\
+    nativeVerifierProfileTextWire profile <> nativeLoweringRootWire root /\
+    nativeVerifierProfileTextWire profile <> nativeSystemsRevisionWire sys /\
+    nativeVerifierProfileTextWire profile <> nativeCommonRevisionWire common /\
+    nativeVerifierProfileTextWire profile <> nativeClosedRevisionWire closed /\
+    nativeVerifierProfileTextWire profile <> nativeSubjectRevisionWire subject /\
+    nativeVerifierProfileTextWire profile <> nativeInstanceRevisionWire inst /\
+    nativeVerifierProfileTextWire profile <> nativeRealizationRevisionWire real.
+Proof.
+  intros [raw] [root] [sys] [common] [closed] [subject] [inst] [real] [profile].
+  repeat split; intro H;
+    unfold nativeVerifierProfileTextWire, nativeRawSystemsDigestWire,
+      nativeLoweringRootWire, nativeSystemsRevisionWire,
+      nativeCommonRevisionWire, nativeClosedRevisionWire,
+      nativeSubjectRevisionWire, nativeInstanceRevisionWire,
+      nativeRealizationRevisionWire in H;
+    simpl in H; discriminate H.
+Qed.
+
+Theorem native_verifier_profile_text_wrong_role_decoders_fail :
+  forall raw root sys common closed subject inst real,
+    nativeDecodeVerifierProfileTextWire (nativeRawSystemsDigestWire raw) = None /\
+    nativeDecodeVerifierProfileTextWire (nativeLoweringRootWire root) = None /\
+    nativeDecodeVerifierProfileTextWire (nativeSystemsRevisionWire sys) = None /\
+    nativeDecodeVerifierProfileTextWire (nativeCommonRevisionWire common) = None /\
+    nativeDecodeVerifierProfileTextWire (nativeClosedRevisionWire closed) = None /\
+    nativeDecodeVerifierProfileTextWire (nativeSubjectRevisionWire subject) = None /\
+    nativeDecodeVerifierProfileTextWire (nativeInstanceRevisionWire inst) = None /\
+    nativeDecodeVerifierProfileTextWire (nativeRealizationRevisionWire real) = None.
+Proof.
+  intros [raw] [root] [sys] [common] [closed] [subject] [inst] [real].
+  repeat split; reflexivity.
+Qed.

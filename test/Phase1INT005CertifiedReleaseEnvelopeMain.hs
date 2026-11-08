@@ -179,6 +179,14 @@ main = do
           , nativeStageIdentityEqualPayloadRejects source upload)
         , ( "Steve equal-payload subject/instance/realization substitutions reject by role"
           , nativeStageIdentityEqualPayloadRejects source steve)
+        , ( "Upload accepted verifier-profile Text replays through isolated P-role wire"
+          , nativeVerifierProfileWireReplayAccepts source upload)
+        , ( "Steve accepted verifier-profile Text replays through isolated P-role wire"
+          , nativeVerifierProfileWireReplayAccepts source steve)
+        , ( "Upload same-payload forged profile versus eight other roles decodes fail closed"
+          , nativeVerifierProfileSamePayloadRejects source upload)
+        , ( "Steve same-payload forged profile versus eight other roles decodes fail closed"
+          , nativeVerifierProfileSamePayloadRejects source steve)
         , ( "Upload changed raw Systems digest cannot pass exact manifest-stage replay"
           , nativeManifestStageReplayRejectsChangedDigests source upload)
         , ( "Steve changed raw Systems digest cannot pass exact manifest-stage replay"
@@ -1080,6 +1088,94 @@ nativeStageIdentityEqualPayloadRejects source fixture =
                     && decodeNativeInstanceRevisionWire aWire == Nothing
                     && decodeNativeRealizationRevisionWire bWire == Nothing
                     && decodeNativeRealizationRevisionWire iWire == Nothing
+    _ -> False
+
+
+-- | Real profile value from exact accepted checked source, VER-010 and
+-- INT-005 objects. The role tag is a codec, not a profile acceptor.
+nativeVerifierProfileWireReplayAccepts
+  :: GenericApplicationAssurance -> ReleaseFixture -> Bool
+nativeVerifierProfileWireReplayAccepts source fixture =
+  case (producerInputs source, produceFixture source fixture) of
+    (Right (bundle, policy), Right (_, produced)) ->
+      case nativeAdapterPair source produced of
+        Nothing -> False
+        Just (sourceArtifact, release) ->
+          case closeNativeFinalInstanceCorrespondence
+              source (sourceInstanceDescriptor source) bundle policy
+              (fixtureContext produced) (fixtureLedger produced)
+              emptyProducerSelection sourceArtifact release of
+            Left _ -> False
+            Right witness ->
+              case replayNativeExactAcceptedConsumers witness
+                (nativeCorrespondenceSourceManifestBinding witness)
+                (nativeCorrespondenceCertifiedSource witness)
+                (nativeCorrespondenceCertifiedRelease witness) of
+                Left _ -> False
+                Right accepted ->
+                  let c = nativeExactReplayCoordinates accepted
+                      profile = NativeVerifierProfileText (nativeReplayVerifierProfile c)
+                      wire = encodeNativeVerifierProfileWire profile
+                      other =
+                        [ encodeNativeRawSystemsDigestWire (nativeReplayRawDigest c)
+                        , encodeNativeLoweringRootWire (nativeReplayLoweringRoot c)
+                        , encodeNativeSystemsRevisionWire (nativeReplaySystemsRevision c)
+                        , encodeNativeCommonContractRevisionWire (nativeReplayCommonRevision c)
+                        , encodeNativeClosedContractRevisionWire (nativeReplayClosedRevision c)
+                        , encodeNativeSubjectRevisionWire (nativeReplaySubjectRevision c)
+                        , encodeNativeInstanceRevisionWire (nativeReplayInstanceRevision c)
+                        , encodeNativeRealizationRevisionWire (nativeReplayRealizationRevision c)
+                        ]
+                  in unNativeVerifierProfileText profile ==
+                       nativeFinalVerifierProfile (nativeCorrespondenceAuthority witness)
+                    && decodeNativeVerifierProfileWire wire == Just profile
+                    && all (/= wire) other
+                    && all (== Nothing) (map decodeNativeVerifierProfileWire other)
+    _ -> False
+
+-- | Eight UNACCEPTED wrappers deliberately use exactly the accepted
+-- profile's Text payload; none may substitute for the profile role.
+-- A changed P-prefixed payload may still decode as data, but is not equal
+-- to the profile retained by the exact accepted consumer witness.
+nativeVerifierProfileSamePayloadRejects
+  :: GenericApplicationAssurance -> ReleaseFixture -> Bool
+nativeVerifierProfileSamePayloadRejects source fixture =
+  case (producerInputs source, produceFixture source fixture) of
+    (Right (bundle, policy), Right (_, produced)) ->
+      case nativeAdapterPair source produced of
+        Nothing -> False
+        Just (sourceArtifact, release) ->
+          case closeNativeFinalInstanceCorrespondence
+              source (sourceInstanceDescriptor source) bundle policy
+              (fixtureContext produced) (fixtureLedger produced)
+              emptyProducerSelection sourceArtifact release of
+            Left _ -> False
+            Right witness ->
+              case replayNativeExactAcceptedConsumers witness
+                (nativeCorrespondenceSourceManifestBinding witness)
+                (nativeCorrespondenceCertifiedSource witness)
+                (nativeCorrespondenceCertifiedRelease witness) of
+                Left _ -> False
+                Right accepted ->
+                  let payload = nativeReplayVerifierProfile (nativeExactReplayCoordinates accepted)
+                      profile = NativeVerifierProfileText payload
+                      actual = encodeNativeVerifierProfileWire profile
+                      foreign =
+                        [ encodeNativeRawSystemsDigestWire (NativeRawSystemsDigest (Digest payload))
+                        , encodeNativeLoweringRootWire (NativeLoweringRootDigest (Digest payload))
+                        , encodeNativeSystemsRevisionWire (SystemsArtifactRevision payload)
+                        , encodeNativeCommonContractRevisionWire (Phase1StageContractRevision payload)
+                        , encodeNativeClosedContractRevisionWire (ClosedStageContractRevision payload)
+                        , encodeNativeSubjectRevisionWire (SubjectStageRevision payload)
+                        , encodeNativeInstanceRevisionWire (InstanceRevision payload)
+                        , encodeNativeRealizationRevisionWire (RealizationRevision payload)
+                        ]
+                      altered = NativeVerifierProfileText (payload <> ".unaccepted")
+                  in Set.size (Set.fromList (actual : foreign)) == 9
+                    && all (== Nothing) (map decodeNativeVerifierProfileWire foreign)
+                    && decodeNativeVerifierProfileWire actual == Just profile
+                    && decodeNativeVerifierProfileWire
+                         (encodeNativeVerifierProfileWire altered) /= Just profile
     _ -> False
 
 -- | Adversarial same-manifest-ID projections. Neither modified manifest is an

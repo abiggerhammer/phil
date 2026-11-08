@@ -31,6 +31,9 @@ module Phil.Verification.NativeFinalInstanceCorrespondence
   , decodeNativeInstanceRevisionWire
   , encodeNativeRealizationRevisionWire
   , decodeNativeRealizationRevisionWire
+  , NativeVerifierProfileText (..)
+  , encodeNativeVerifierProfileWire
+  , decodeNativeVerifierProfileWire
   , NativeManifestStageReplay
   , nativeReplayRawDigest
   , nativeReplayLoweringRoot
@@ -309,6 +312,26 @@ decodeNativeRealizationRevisionWire :: Text -> Maybe RealizationRevision
 decodeNativeRealizationRevisionWire wire =
   case Text.uncons wire of
     Just ('A', payload) -> Just (RealizationRevision payload)
+    _ -> Nothing
+
+-- | The concrete verifier-profile revision is a plain Phase1Stage Text field,
+-- not a nominal Haskell revision type. This separate read-only role wrapper
+-- gives a lossless data wire without inventing profile acceptance or a
+-- native-to-Rocq serializer, and without certifying stage provenance.
+newtype NativeVerifierProfileText = NativeVerifierProfileText
+  { unNativeVerifierProfileText :: Text }
+  deriving (Eq, Show)
+
+-- | Reserved P role; other roles are raw R, lowering L, systems S,
+-- common C, closed F, subject B, instance I, realization A.
+encodeNativeVerifierProfileWire :: NativeVerifierProfileText -> Text
+encodeNativeVerifierProfileWire (NativeVerifierProfileText value) =
+  Text.cons 'P' value
+
+decodeNativeVerifierProfileWire :: Text -> Maybe NativeVerifierProfileText
+decodeNativeVerifierProfileWire wire =
+  case Text.uncons wire of
+    Just ('P', payload) -> Just (NativeVerifierProfileText payload)
     _ -> Nothing
 
 -- | Read-only replay of the exact accepted manifest/StageClosure consumer
