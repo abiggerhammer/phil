@@ -17,6 +17,8 @@ on:
       - 'app/RecognitionBundleCorrespondenceMain.hs'
       - 'scripts/ci/phase0-back-certification-rocq.sh'
       - 'scripts/ci/phase0-back-certification-certify.sh'
+      - 'scripts/ci/cabal-update-retry.sh'
+      - 'scripts/ci/test-cabal-update-retry.sh'
       - 'phil-core.cabal'
       - '.github/workflows/phase0-back-certification.yml'
   push:
@@ -29,6 +31,8 @@ on:
       - 'app/RecognitionBundleCorrespondenceMain.hs'
       - 'scripts/ci/phase0-back-certification-rocq.sh'
       - 'scripts/ci/phase0-back-certification-certify.sh'
+      - 'scripts/ci/cabal-update-retry.sh'
+      - 'scripts/ci/test-cabal-update-retry.sh'
       - 'phil-core.cabal'
       - '.github/workflows/phase0-back-certification.yml'
 
@@ -66,9 +70,18 @@ jobs:
           if-no-files-found: error
           retention-days: 14
 
+  retry-helper-control:
+    name: Hackage retry helper / deterministic tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Check bounded success/rejection behavior without network
+        shell: bash
+        run: bash scripts/ci/test-cabal-update-retry.sh
+
   certify:
     name: Certificates / ${{ matrix.profile }}
-    needs: rocq
+    needs: [rocq, retry-helper-control]
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
@@ -89,6 +102,11 @@ jobs:
         with:
           ghc-version: '9.6.7'
           cabal-version: 'latest'
+          # Prevent one-shot cabal update failure inside action setup.
+          cabal-update: false
+      - name: Update Hackage indices over HTTP/1.1 with bounded retries
+        shell: bash
+        run: bash scripts/ci/cabal-update-retry.sh
       - uses: actions/download-artifact@v4
         with:
           name: phase0-back-cert-${{ matrix.profile }}-checked
