@@ -21,9 +21,11 @@ import Phil.Core.ProcessRendezvous
   , checkProcessCommunication
   )
 import Phil.Core.Protocol
-  ( ProtocolContext
+  ( CheckedProtocolStep (..)
+  , ProtocolContext
+  , ProtocolRoleKey
   )
-import Phil.Core.Protocol.Family (BinaryProtocolInstance (..), ProtocolRoleKey)
+import Phil.Core.Protocol.Family (BinaryProtocolInstance (..))
 import Phil.Core.Static (DeclarationKey)
 import Phil.Core.Syntax (Name)
 import Phil.Surface.GrammarV1.BinderScope (GrammarV1ResolvedBinder (..))
