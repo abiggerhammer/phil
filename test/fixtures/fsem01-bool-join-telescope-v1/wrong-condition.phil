@@ -1,0 +1,9 @@
+fn choose(flag : Bool, alternative : Bool, payload : Bytes[8]) -> Bytes[8] satisfies C {
+  if payload join state (selected : Bool) invariant selected == selected {
+    flag;
+  } else {
+    alternative;
+  };
+  selected;
+  return payload;
+}

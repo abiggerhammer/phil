@@ -1,4 +1,4 @@
-# Audited PR-only supersession workflows (77 total; includes FSEM-01 source branch join early preflight).
+# Audited PR-only supersession workflows (78 total; includes FSEM-01 source branch join early preflight).
 begin-policy-choice-proofs.yml
 ci.yml
 digest-validation-proofs.yml
@@ -14,6 +14,7 @@ fsem01-product-elimination-preflight.yml
 fsem01-source-branch-join-preflight.yml
 fsem01-affine-join-scope-preflight.yml
 fsem01-scoped-borrow-join-preflight.yml
+fsem01-typed-join-telescope-preflight.yml
 fsem01-observation-wire.yml
 fsem01-represented-loan-trace.yml
 fsem01-resource-context-wire.yml
