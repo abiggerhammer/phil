@@ -61,6 +61,8 @@ source/Core negative choices, and a Rocq select/offer matched-local-step
 comparison. It does **not** claim source offer elaboration, restricted payload
 transfer, or general Haskell-to-Rocq refinement.
 
+The [bounded source offer coverage slice](../docs/phase-1/formal-semantics-source-offer-fsem02-v1.md) checks exact duplicate-free source role-arm coverage and establishes conditional Rocq continuation-existence for all represented labels. Its source return-unit arms have **not** been semantically executed or connected to a network rendezvous. FSEM-02 remains open.
+
 ## Session recursion slice
 
 ### PHIL-SESSION-REC-001 — finite head exposure

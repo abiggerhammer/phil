@@ -248,3 +248,90 @@ Proof.
       Hrendezvous Hrestricted) as [Hbefore Hafter].
   repeat split; assumption.
 Qed.
+
+(*
+  FSEM-02: conditional source-offer catalogue coverage.
+  Haskell independently checks payload-free source arm labels against a
+  source-checked role projection; this model assumes exact label coverage.
+  A source return-unit arm does NOT discharge the continuation or represent
+  rendezvous. The proof never asserts Haskell parser correctness.
+*)
+From Stdlib Require Import Lists.List.
+Import ListNotations.
+
+Fixpoint fsem02BranchLabels (branches : Branches) : list string :=
+  match branches with
+  | BNil => []
+  | BCons label _ _ rest => label :: fsem02BranchLabels rest
+  end.
+
+Definition fsem02SourceOfferCoverage
+  (sourceLabels : list string) (branches : Branches) : Prop :=
+  NoDup sourceLabels /\
+  (forall label, In label sourceLabels <-> In label (fsem02BranchLabels branches)).
+
+Theorem fsem02BranchMemberHasContinuation :
+  forall branches label,
+    In label (fsem02BranchLabels branches) ->
+    exists continuation, offeredContinuation label branches = Some continuation.
+Proof.
+  induction branches as [| candidate payload continuation rest IH].
+  - intros label Hmember. simpl in Hmember. contradiction.
+  - intros label Hmember. simpl in Hmember.
+    destruct Hmember as [Hequal | Hrest].
+    + subst candidate. simpl. rewrite String.eqb_refl.
+      eexists. reflexivity.
+    + simpl. destruct (String.eqb label candidate) eqn:Hmatch.
+      * eexists. reflexivity.
+      * exact (IH label Hrest).
+Qed.
+
+Theorem fsem02CoveredOfferLabelHasContinuation :
+  forall sourceLabels branches label,
+    fsem02SourceOfferCoverage sourceLabels branches ->
+    In label sourceLabels ->
+    exists continuation, offeredContinuation label branches = Some continuation.
+Proof.
+  intros sourceLabels branches label [_ Hcoverage] Hsource.
+  apply (proj1 (Hcoverage label)) in Hsource.
+  exact (fsem02BranchMemberHasContinuation branches label Hsource).
+Qed.
+
+Theorem fsem02CoveredOfferProgressesByExactHead :
+  forall sourceLabels branches label endpoint successor context,
+    fsem02SourceOfferCoverage sourceLabels branches ->
+    In label sourceLabels ->
+    exists continuation,
+      fsem02Progression (FSEM02Offer label) (Offer branches)
+        endpoint successor context =
+      continueEndpointResource endpoint successor continuation context.
+Proof.
+  intros sourceLabels branches label endpoint successor context Hcoverage Hin.
+  destruct (fsem02CoveredOfferLabelHasContinuation
+    sourceLabels branches label Hcoverage Hin) as [continuation Hhead].
+  exists continuation.
+  unfold fsem02Progression, selectedContinuation.
+  rewrite Hhead.
+  reflexivity.
+Qed.
+
+Theorem fsem02MissingSourceArmCannotBeComplete :
+  forall sourceLabels branches label,
+    In label (fsem02BranchLabels branches) ->
+    ~ In label sourceLabels ->
+    ~ fsem02SourceOfferCoverage sourceLabels branches.
+Proof.
+  intros sourceLabels branches label Hrole Hmissing [_ Hcoverage].
+  apply Hmissing.
+  apply (proj2 (Hcoverage label)).
+  exact Hrole.
+Qed.
+
+Theorem fsem02CoveredSourceArmsAreDistinct :
+  forall sourceLabels branches,
+    fsem02SourceOfferCoverage sourceLabels branches ->
+    NoDup sourceLabels.
+Proof.
+  intros sourceLabels branches [Hdistinct _].
+  exact Hdistinct.
+Qed.
