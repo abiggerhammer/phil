@@ -359,3 +359,36 @@ uncredited. [Supplemental Conformance Matrix Audit Reconciliation row 41](https:
 was appended and read back; original **244 normative cases (236 Exit,
 8 Profile)**, historical independent audit, TCB, generated artifacts and
 strict GHC/LLVM/Rocq controls remain unchanged. **Audit freeze: NOT YET.**
+
+## Implementation evidence — 2026-11-08: checked generic declaration/interface D/V projection
+
+[PR #1671](https://github.com/abiggerhammer/phil/pull/1671), controlling
+[issue #1584](https://github.com/abiggerhammer/phil/issues/1584), exact
+tested head `27d4dc04b18baca5aeae74d18b7933dcde8be84e`, merged as
+`31b4a542672a9ad64df96e483064a2e99a332be5` at
+**2026-11-08 10:53:07 UTC**. All **39/39 exact-head workflow runs** and
+**82/82 exact-head check runs** completed SUCCESS, zero failed/pending/skipped;
+protected [Hamster Merge Intent workflow 42473283988](https://github.com/abiggerhammer/phil/actions/runs/42473283988)
+and its merge job succeeded.
+
+**Executed bounded fragment:** The actual checked GenericApplicationIdentity
+has distinct DeclarationKey (D) and InterfaceRevision (V) native Text-newtype
+components; reversible role-tagged scalar wires retain these exactly.
+The decoder returns only a typed scalar pair, never an accepted application.
+Strict Haskell Upload/Steve replay requires the checked producer and
+independently accepted manifest, VER-010 and INT-005 whole consumers; wrong-role
+substitutions and a forged semantic-actuals counterexample prevent treating the
+D/V projection as complete identity. Seven bounded Rocq theorems and named
+Print Assumptions queries passed; a supplied bool in the countermodel is NOT a
+representation of native SemanticForm.
+
+**Remaining premises:** The complete actuals map, Data.Text Unicode ↔ Rocq
+string encoding and exact native-to-Rocq source/manifest/stage/release
+reflection are NOT proven. Nor are authenticated occurrence-to-StageClosure
+production, predecessor authority, FixedFinalAuthorityAdapter or
+FinalArtifactCertified. No ad hoc nat encoding or model Prop as native
+acceptance. Public release-byte verification and independently pinned
+final-delta signoff remain separate and uncredited. Original **244 normative
+cases** (236 Exit, 8 Profile), historical independent audit, Phase 1 TCB,
+generated outputs and strict GHC/LLVM/Rocq policies unchanged.
+**Independent Phase 1 audit-freeze verdict: NOT YET.**

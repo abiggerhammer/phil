@@ -781,3 +781,36 @@ or `FinalArtifactCertified`. Public release bytes and independent pinned
 final-delta signoff are separately uncredited. Original 244 normative cases,
 historical independent audit, TCB, generated outputs and strict GHC/LLVM/Rocq
 policies unchanged; independent freeze **NOT YET**.
+
+## 2026-11-08 — checked generic semantic-actuals Q-key domain (issue #1584)
+
+After merged #1671's reversible D/V scalar projection, this deliberately small
+successor represents native `GenericStaticParameterKey` as a distinct
+**Q-prefixed** wire. The checked `GenericApplicationIdentity` actually
+contains a `Map GenericStaticParameterKey SemanticForm`; the new native
+read-only projection encodes its **canonical ascending, unique key domain**.
+Its decoder rejects duplicate, out-of-order, and foreign-domain wire lists.
+The exact Upload/Steve native source/manifest producer, independently accepted
+manifest, VER-010 source and INT-005 CertifiedRelease/StageClosure consumers
+are replayed before reading that key domain. Adversarial maps with the **same
+keys but different actual semantic values** produce the same key wires; neither
+map is presented as independently accepted. Foreign D/V/K/R role substitutions
+fail closed. The Rocq string model checks scalar Q roundtrip/injectivity,
+foreign-role rejection and an explicit same-key/different-supplied-bool-value
+countermodel with four named `Print Assumptions`.
+
+**Nonclaims and remaining premises:** This is a key-domain data projection,
+not a codec for native `SemanticForm`, a total/injective Unicode
+`Data.Text` ↔ Rocq `string` translation, Map canonical-order refinement,
+or an accepted `GenericApplicationIdentity` reconstruction. The supplied
+Rocq `bool` is NOT native `SemanticForm` or producer authority. Exact
+semantic values, full accepted source/manifest/StageClosure/release object
+reflection, authenticated architecture occurrence-to-concrete StageClosure
+production, predecessor source/assumption/erasure/final authority,
+`FixedFinalAuthorityAdapter`, and `FinalArtifactCertified` remain unproved.
+R/L raw Systems digest/root, S/C/F normalized/common/closed stage, B/I/A
+subject/instance/realization, P profile, K occurrence key, D declaration and
+V interface roles remain distinct. No ad hoc nat encoding, new acceptance,
+TCB/LLVM/GHC/Rocq policy change, generated artifact modification, release
+public-byte credit or independent pinned final-delta signoff. Preserve the
+244 normative cases and historical independent audit; freeze **NOT YET**.

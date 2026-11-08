@@ -41,6 +41,10 @@ module Phil.Verification.NativeFinalInstanceCorrespondence
   , decodeNativeGenericInterfaceWire
   , encodeNativeGenericApplicationScalarWires
   , decodeNativeGenericApplicationScalarWires
+  , encodeNativeGenericStaticParameterKeyWire
+  , decodeNativeGenericStaticParameterKeyWire
+  , encodeNativeGenericActualsKeyDomainWires
+  , decodeNativeGenericActualsKeyDomainWires
   , NativeVerifierProfileText (..)
   , encodeNativeVerifierProfileWire
   , decodeNativeVerifierProfileWire
@@ -72,9 +76,10 @@ module Phil.Verification.NativeFinalInstanceCorrespondence
   , closeNativeFinalInstanceCorrespondence
   ) where
 
+import qualified Data.Map.Strict as Map
 import Data.Text (Text)
 import qualified Data.Text as Text
-import Phil.Core.Generic (GenericApplicationIdentity (..))
+import Phil.Core.Generic (GenericApplicationIdentity (..), GenericStaticParameterKey (..))
 import Phil.Assurance.Types
   ( AssuranceLedger, AssuranceManifest (..), Digest (..), VerificationContext )
 import Phil.Core.Static
@@ -403,6 +408,36 @@ decodeNativeGenericApplicationScalarWires
 decodeNativeGenericApplicationScalarWires (declarationWire, interfaceWire) =
   (,) <$> decodeNativeGenericDeclarationWire declarationWire
       <*> decodeNativeGenericInterfaceWire interfaceWire
+
+-- | Q identifies a static semantic-actuals MAP KEY, not a SemanticForm value.
+-- The checked GenericApplicationIdentity contains a Map from these native
+-- Text newtypes to structured SemanticForm values. Encoding its key domain
+-- cannot authenticate the map's values, equality, or producer provenance.
+encodeNativeGenericStaticParameterKeyWire :: GenericStaticParameterKey -> Text
+encodeNativeGenericStaticParameterKeyWire (GenericStaticParameterKey key) =
+  Text.cons 'Q' key
+
+decodeNativeGenericStaticParameterKeyWire :: Text -> Maybe GenericStaticParameterKey
+decodeNativeGenericStaticParameterKeyWire wire =
+  case Text.uncons wire of
+    Just ('Q', payload) -> Just (GenericStaticParameterKey payload)
+    _ -> Nothing
+
+-- | Canonical native key-domain diagnostic: Map.keys is ascending and unique.
+-- This does not serialize SemanticForm or reconstruct an accepted application.
+encodeNativeGenericActualsKeyDomainWires :: GenericApplicationIdentity -> [Text]
+encodeNativeGenericActualsKeyDomainWires =
+  map encodeNativeGenericStaticParameterKeyWire
+    . Map.keys . genericApplicationSemanticArguments
+
+-- | Only a canonical ascending, duplicate-free key list can be reconstructed.
+-- No semantic values, source assurance, or generic acceptance are produced.
+decodeNativeGenericActualsKeyDomainWires :: [Text] -> Maybe [GenericStaticParameterKey]
+decodeNativeGenericActualsKeyDomainWires wires = do
+  keys <- traverse decodeNativeGenericStaticParameterKeyWire wires
+  if keys == Map.keys (Map.fromList (map (\key -> (key, ())) keys))
+    then Just keys
+    else Nothing
 
 -- | The concrete verifier-profile revision is a plain Phase1Stage Text field,
 -- not a nominal Haskell revision type. This separate read-only role wrapper
