@@ -331,6 +331,5 @@ Proof.
       * exact Hresult.
       * eapply phase1_surface_normalize_refinement_tuple_type_tree_round_trip.
         exact Hresult.
-    + cbn in Hnth.
-      discriminate Hnth.
+    + destruct index; cbn in Hnth; discriminate Hnth.
 Qed.
