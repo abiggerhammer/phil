@@ -98,7 +98,7 @@ Theorem wrong_linear_element_mode_rejected :
 Proof.
   intros eqTy permitTy bytesTy.
   simpl.
-  destruct (eqTy permitTy permitTy); reflexivity.
+  now rewrite andb_false_r.
 Qed.
 
 Theorem nominal_product_exact_arity_after_checked_match :
