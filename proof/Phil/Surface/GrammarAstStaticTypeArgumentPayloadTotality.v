@@ -6,6 +6,7 @@ From Phil.Surface Require Import
   GrammarAstGenericRequirementsTotality
   GrammarAstStaticTypeArgumentPayloadSpine
   GrammarAstRefinementTupleTypePayloadSpine
+  GrammarAstStaticArgumentsSpine
   GrammarAstStaticArgumentsTotality
   GrammarAstRefinementTupleTypeCarrierTotality.
 

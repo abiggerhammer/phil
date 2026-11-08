@@ -136,7 +136,17 @@ Proof.
   destruct (phase1_surface_normalize_static_type_argument_values rest)
     as [actual_rest |] eqn:Hrest; try discriminate Hnormalize.
   inversion Hnormalize; subst.
-  cbn.
+  change
+    (PTSequence
+      [ phase1_surface_static_type_argument_spine_tree actual_first;
+        PTRepetition
+          (map phase1_surface_static_type_argument_suffix_tree actual_rest)
+      ] =
+     PTSequence
+      [ phase1_surface_static_argument_spine_tree first;
+        PTRepetition
+          (map phase1_surface_static_argument_suffix_tree rest)
+      ]).
   rewrite
     (phase1_surface_normalize_static_type_argument_spine_round_trip
       first actual_first Hfirst).
