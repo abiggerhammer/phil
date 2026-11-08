@@ -201,6 +201,8 @@ For the first bounded, non-normative FSEM-02 head/endpoint progression
 source-and-Core witness, see [FSEM-02 exact local protocol progression](formal-semantics-protocol-progression-fsem02-v1.md).
 It is not a source-to-Rocq refinement theorem or a network scheduler model.
 
+The further bounded [source-select/offer joint Core rendezvous](formal-semantics-source-joint-choice-fsem02-v1.md) combines independently parsed component programs with an externally supplied peer choice and a real atomic two-process Core transition. It deliberately does **not** certify combined source architecture/root authority, the restricted endpoint-owner ledger, payload transfer or universal Rocq correspondence.
+
 ## 5. Session protocols and communication
 
 A protocol specifies the legal sequence of send, receive, choice, offer,
