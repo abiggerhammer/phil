@@ -30,7 +30,8 @@ import Phil.Surface.Check.Types
   ( InitialBinding (..), SurfaceCheckError, SurfaceCheckResult
   , SurfaceEnvironment (..), emptySurfaceEnvironment )
 import Phil.Surface.GrammarV1.BinderScope
-  ( GrammarV1BinderScopeError, GrammarV1ResolvedBinder (..)
+  ( GrammarV1BinderScopeError, GrammarV1LexicalScope
+  , GrammarV1ResolvedBinder (..)
   , grammarV1FunctionParameterScope )
 import Phil.Surface.GrammarV1.BorrowViewScope
   ( GrammarV1BorrowViewScopeError, GrammarV1CheckedBorrowView (..)
@@ -258,7 +259,7 @@ semanticName :: GrammarV1ResolvedBinder -> Text
 semanticName = unName . grammarV1ResolvedBinderCoreName
 
 projectReturned
-  :: scope
+  :: GrammarV1LexicalScope
   -> GrammarV1ResolvedBinder
   -> GrammarV1ResolvedBinder
   -> Located GrammarV1Expression
