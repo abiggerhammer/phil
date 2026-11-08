@@ -51,6 +51,11 @@ module Phil.Verification.NativeFinalInstanceCorrespondence
   , decodeNativeSemanticOrderedAtomWires
   , encodeNativeSemanticUnorderedAtomWires
   , decodeNativeSemanticUnorderedAtomWires
+  , NativeSemanticRecordFieldText (..)
+  , encodeNativeSemanticRecordFieldWire
+  , decodeNativeSemanticRecordFieldWire
+  , encodeNativeSemanticRecordAtomFieldWires
+  , decodeNativeSemanticRecordAtomFieldWires
   , encodeNativeGenericAtomActualPairWires
   , decodeNativeGenericAtomActualPairWires
   , NativeVerifierProfileText (..)
@@ -500,6 +505,55 @@ decodeNativeSemanticUnorderedAtomWires wires = do
   if atoms == Set.toAscList members
     then Just (SemanticUnordered members)
     else Nothing
+
+-- | H is a new, read-only transport role for the *plain Text* field
+-- name of native SemanticRecord (Map Text SemanticForm). It is separate
+-- from R (raw Systems digest), L (lowering root), S/C/F stage revisions,
+-- B/I/A/P/K occurrence/stage identities, and D/V/Q/M generic/value roles.
+-- This wrapper is not a checked record field or acceptance credential.
+newtype NativeSemanticRecordFieldText = NativeSemanticRecordFieldText
+  { unNativeSemanticRecordFieldText :: Text }
+  deriving (Eq, Ord, Show)
+
+encodeNativeSemanticRecordFieldWire :: NativeSemanticRecordFieldText -> Text
+encodeNativeSemanticRecordFieldWire (NativeSemanticRecordFieldText field) =
+  Text.cons 'H' field
+
+decodeNativeSemanticRecordFieldWire :: Text -> Maybe NativeSemanticRecordFieldText
+decodeNativeSemanticRecordFieldWire wire =
+  case Text.uncons wire of
+    Just ('H', payload) -> Just (NativeSemanticRecordFieldText payload)
+    _ -> Nothing
+
+-- | Native SemanticRecord projection restricted to atom-only field values.
+-- Real Map.toAscList order is preserved. Never coerce a structured field
+-- value or treat a wire as accepted manifest/stage/release authority.
+encodeNativeSemanticRecordAtomFieldWires :: SemanticForm -> Maybe [(Text, Text)]
+encodeNativeSemanticRecordAtomFieldWires (SemanticRecord fields) =
+  traverse encodeField (Map.toAscList fields)
+  where
+    encodeField (key, value) = do
+      atomWire <- encodeNativeSemanticAtomWire value
+      pure (encodeNativeSemanticRecordFieldWire
+              (NativeSemanticRecordFieldText key), atomWire)
+encodeNativeSemanticRecordAtomFieldWires _ = Nothing
+
+-- | Return only an UNACCEPTED native SemanticRecord. The exact native Map
+-- Ord decides canonical key order; duplicate and out-of-order fields reject.
+-- No Text/Rocq string transport or native-to-Rocq Map comparison is claimed.
+decodeNativeSemanticRecordAtomFieldWires :: [(Text, Text)] -> Maybe SemanticForm
+decodeNativeSemanticRecordAtomFieldWires wires = do
+  fields <- traverse decodeField wires
+  let keys = map fst fields
+      canonicalKeys = Map.keys (Map.fromList (map (\key -> (key, ())) keys))
+  if keys == canonicalKeys
+    then Just (SemanticRecord (Map.fromList fields))
+    else Nothing
+  where
+    decodeField (keyWire, valueWire) = do
+      wrapped <- decodeNativeSemanticRecordFieldWire keyWire
+      value <- decodeNativeSemanticAtomWire valueWire
+      pure (unNativeSemanticRecordFieldText wrapped, value)
 
 -- | Read-only Q/M pairs for the atom-only subset of the *actual native*
 -- checked GenericApplicationIdentity semantic-actuals Map. Values of any

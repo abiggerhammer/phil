@@ -537,3 +537,39 @@ independent pinned final-delta signoff are still uncredited. Original
 **244 normative cases** (236 Exit, 8 Profile), historical independent
 audit, TCB, generated outputs and strict GHC/LLVM/Rocq policies unchanged.
 **Independent Phase 1 audit-freeze verdict: NOT YET.**
+
+## Implementation evidence — 2026-11-08: native SemanticUnordered atom-only M-set data
+
+[PR #1684](https://github.com/abiggerhammer/phil/pull/1684),
+[issue #1584](https://github.com/abiggerhammer/phil/issues/1584),
+exact tested head `238c8153853a3580a0f67d7c1d0e0bf492911ecf`,
+merged as `fd49992445aff76a05b8afd2a734f328f2d3105f`
+at **2026-11-08 20:51:04 UTC**. Independently refetched **37/37
+pull-request workflow runs SUCCESS and 80/80 exact-head check runs SUCCESS**
+(no failed, pending or skipped); protected
+[Hamster Merge Intent 42522079137](https://github.com/abiggerhammer/phil/actions/runs/42522079137)
+and its merge-pr job succeeded. Supplemental Conformance Matrix row **47**
+appended and all six cells read back.
+
+**Executed bounded result:** actual native SemanticUnordered (Set SemanticForm)
+atom-only M-wire list using native Set.toAscList, exact native canonical
+order and uniqueness on decode. Strict Haskell Upload/Steve checked producer,
+independently accepted manifest/VER-010 source and exact INT-005
+CertifiedRelease/StageClosure consumer replay, adversarial duplicate,
+out-of-order, foreign-role and structured-value rejection passed. Four
+conditional Rocq candidate M-list model theorems with named Print Assumptions
+passed. Rocq NoDup is an externally supplied list premise, NOT a native
+Set comparator or acceptance proof.
+
+**Nonclaims:** no total recursive SemanticForm, Data.Text/Rocq Unicode
+transport, native Set ↔ Rocq ordering, complete generic application/source/
+manifest/stage/release reflection, authenticated architecture occurrence
+to concrete StageClosure/selected CertifiedRelease, predecessor authority,
+FixedFinalAuthorityAdapter or FinalArtifactCertified. R/L raw Systems digest
+and lowering root, S/C/F normalized/common/closed stage revisions, B/I/A/P
+stage subject/instance/realization/profile, K/I checked occurrence and D/V/Q/M
+generic/value roles remain disjoint. No nat mapping or supplied model Prop
+promoted into native authority; public bytes and independent pinned
+final-delta signoff remain uncredited. Original **244 normative cases**,
+historical independent audit, TCB, generated outputs, strict GHC/LLVM/Rocq
+unchanged; independent Phase 1 audit freeze **NOT YET**.

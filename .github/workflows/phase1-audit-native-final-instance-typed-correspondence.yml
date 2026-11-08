@@ -191,6 +191,11 @@ jobs:
           Print Assumptions native_unordered_atom_candidate_model_injective.
           Print Assumptions native_unordered_atom_candidate_model_foreign_key_rejected.
           Print Assumptions native_unordered_atom_repeated_member_not_canonical_model.
+          Print Assumptions native_record_atom_entries_model_roundtrip.
+          Print Assumptions native_record_atom_entries_model_injective.
+          Print Assumptions native_record_atom_pair_model_wrong_role_reject.
+          Print Assumptions native_record_atom_pair_model_association_sensitive.
+          Print Assumptions native_record_atom_duplicate_field_not_canonical_model.
           Print Assumptions fixed_adapter_full_certification_preserves_predecessors.
           EOF
           rocq c -Q proof/Phil Phil /tmp/NativeFinalInstanceAssumptions.v 2>&1 | tee typed-native-instance-assumptions.log
