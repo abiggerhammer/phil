@@ -2090,8 +2090,8 @@ Fixpoint nativeDecodeGenericAtomActualPairsModel
   : option (list (NativeGenericStaticKeyRole * NativeSemanticAtomRole)) :=
   match wires with
   | [] => Some []
-  | pair :: rest =>
-      match nativeDecodeGenericAtomActualPairModel pair,
+  | wirePair :: rest =>
+      match nativeDecodeGenericAtomActualPairModel wirePair,
             nativeDecodeGenericAtomActualPairsModel rest with
       | Some entry, Some entries => Some (entry :: entries)
       | _, _ => None
