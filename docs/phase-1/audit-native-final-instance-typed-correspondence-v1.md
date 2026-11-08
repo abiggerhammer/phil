@@ -915,3 +915,39 @@ supplied model Prop as native authority, public release-byte or independently
 pinned final-delta signoff credit. Preserve original 244 normative cases,
 historical independent audit, Phase 1 TCB, generated artifacts, strict
 GHC/LLVM/Rocq policy and independent audit freeze **NOT YET**.
+
+## 2026-11-08 — native SemanticUnordered atom-only canonical Set projection (issue #1584)
+
+This bounded successor reuses only the previously established M-role scalar wire.
+Actual native `SemanticUnordered (Set.Set SemanticForm)` is represented by an
+M-wire list **only if every member is a SemanticAtom Text**. Encoding uses
+native `Set.toAscList`. Decoding rejects wrong-role wires, duplicate members,
+and any order unequal to the actual native Set's ascending order. Only an
+UNACCEPTED SemanticUnordered data value is returned; nested constructors and
+other top-level constructors fail closed.
+
+Strict Haskell Upload/Steve replay retains the checked source-manifest producer,
+independently accepted manifest and VER-010 source, and exact INT-005
+CertifiedRelease/StageClosure consumer objects. Adversarial sets challenge
+insertion-order independence, duplicate atoms (including separated duplicates),
+reversed canonical order, wrong-role substitutions, and nested values.
+
+Rocq deliberately models candidate typed M-list wire transport **separately**
+from native Set: four named Print Assumptions cover roundtrip with explicitly
+supplied NoDup canonicality premise, injectivity, foreign-key rejection, and
+impossibility of adjacent duplicate canonical members. No theorem imports a
+native Set comparator or derives sorting. The model's supplied NoDup condition
+is NOT native acceptance or StageClosure authority.
+
+Remaining premises: native Set Ord vs Rocq list comparison, Text Unicode/string
+transport, other SemanticForm constructors and total recursive serialization,
+accepted generic actuals and manifest/source/stage/release object reflection,
+authenticated architecture occurrence to concrete StageClosure and selected
+CertifiedRelease producer, predecessor authority, FixedFinalAuthorityAdapter
+and FinalArtifactCertified. All R/L raw digest/root, S/C/F normalized/common/
+closed stage revisions, B/I/A/P subject/instance/realization/profile, K/I
+occurrence and D/V/Q/M generic/value roles remain distinct. No nat encoding,
+supplied Prop promoted to native authority, public-byte verification or
+independent pinned final-delta signoff. Preserve 244 normative conformance
+cases, historical audit, Phase 1 TCB, generated outputs, strict GHC/LLVM/Rocq,
+and independent audit freeze **NOT YET**.

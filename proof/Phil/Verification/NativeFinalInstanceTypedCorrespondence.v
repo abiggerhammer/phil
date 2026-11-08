@@ -2134,3 +2134,49 @@ Proof.
   apply native_semantic_atom_wire_injective.
   exact (f_equal snd Heq).
 Qed.
+
+(* #1584 native SemanticUnordered atom-only *candidate* string-list MODEL.
+   NoDup is an externally supplied canonicality condition: no theorem here
+   derives the native Set Ord comparator or Data.Text/Rocq string transport. *)
+Definition nativeUnorderedAtomCandidateEncodeModel
+  (atoms : list NativeSemanticAtomRole) : list string :=
+  nativeEncodeOrderedAtomListModel atoms.
+Definition nativeUnorderedAtomCandidateDecodeModel
+  (wires : list string) : option (list NativeSemanticAtomRole) :=
+  nativeDecodeOrderedAtomListModel wires.
+Definition nativeUnorderedAtomCanonicalPremiseModel
+  (atoms : list NativeSemanticAtomRole) : Prop := NoDup atoms.
+Theorem native_unordered_atom_candidate_model_roundtrip :
+  forall atoms, nativeUnorderedAtomCanonicalPremiseModel atoms ->
+    nativeUnorderedAtomCandidateDecodeModel
+      (nativeUnorderedAtomCandidateEncodeModel atoms) = Some atoms.
+Proof.
+  intros atoms _. apply native_ordered_atom_list_model_roundtrip.
+Qed.
+Theorem native_unordered_atom_candidate_model_injective :
+  forall left right,
+    nativeUnorderedAtomCandidateEncodeModel left =
+    nativeUnorderedAtomCandidateEncodeModel right -> left = right.
+Proof.
+  intros left right H.
+  exact (native_ordered_atom_list_model_injective left right H).
+Qed.
+Theorem native_unordered_atom_candidate_model_foreign_key_rejected :
+  forall prefix suffix key,
+    nativeUnorderedAtomCandidateDecodeModel
+      (nativeUnorderedAtomCandidateEncodeModel prefix ++
+       nativeGenericStaticKeyWire key ::
+       nativeUnorderedAtomCandidateEncodeModel suffix) = None.
+Proof.
+  intros prefix suffix key.
+  apply native_ordered_atom_list_model_foreign_key_rejected.
+Qed.
+Theorem native_unordered_atom_repeated_member_not_canonical_model :
+  forall atom rest,
+    ~ nativeUnorderedAtomCanonicalPremiseModel (atom :: atom :: rest).
+Proof.
+  intros atom rest H.
+  apply NoDup_cons_iff in H.
+  destruct H as [Hnot _].
+  apply Hnot. left. reflexivity.
+Qed.

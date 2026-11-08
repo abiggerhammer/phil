@@ -49,6 +49,8 @@ module Phil.Verification.NativeFinalInstanceCorrespondence
   , decodeNativeSemanticAtomWire
   , encodeNativeSemanticOrderedAtomWires
   , decodeNativeSemanticOrderedAtomWires
+  , encodeNativeSemanticUnorderedAtomWires
+  , decodeNativeSemanticUnorderedAtomWires
   , encodeNativeGenericAtomActualPairWires
   , decodeNativeGenericAtomActualPairWires
   , NativeVerifierProfileText (..)
@@ -83,6 +85,7 @@ module Phil.Verification.NativeFinalInstanceCorrespondence
   ) where
 
 import qualified Data.Map.Strict as Map
+import qualified Data.Set as Set
 import Data.Text (Text)
 import qualified Data.Text as Text
 import Phil.Core.Generic (GenericApplicationIdentity (..), GenericStaticParameterKey (..))
@@ -477,6 +480,26 @@ encodeNativeSemanticOrderedAtomWires _ = Nothing
 decodeNativeSemanticOrderedAtomWires :: [Text] -> Maybe SemanticForm
 decodeNativeSemanticOrderedAtomWires wires =
   SemanticOrdered <$> traverse decodeNativeSemanticAtomWire wires
+
+-- | Partial native SemanticUnordered set of ONLY SemanticAtom members. The
+-- source Set.toAscList order is canonical for the native SemanticForm Ord
+-- instance, not an asserted Rocq ordering or Text/string codec. Neither a
+-- nested constructor nor an ordered/record/scalar value is accepted.
+encodeNativeSemanticUnorderedAtomWires :: SemanticForm -> Maybe [Text]
+encodeNativeSemanticUnorderedAtomWires (SemanticUnordered members) =
+  traverse encodeNativeSemanticAtomWire (Set.toAscList members)
+encodeNativeSemanticUnorderedAtomWires _ = Nothing
+
+-- | Fail closed on duplicate, out-of-order or wrong-role atoms. The decoded
+-- Set is an UNACCEPTED native data value, never release or stage authority.
+-- Ordering and uniqueness are checked against the real native Set Ord.
+decodeNativeSemanticUnorderedAtomWires :: [Text] -> Maybe SemanticForm
+decodeNativeSemanticUnorderedAtomWires wires = do
+  atoms <- traverse decodeNativeSemanticAtomWire wires
+  let members = Set.fromList atoms
+  if atoms == Set.toAscList members
+    then Just (SemanticUnordered members)
+    else Nothing
 
 -- | Read-only Q/M pairs for the atom-only subset of the *actual native*
 -- checked GenericApplicationIdentity semantic-actuals Map. Values of any
