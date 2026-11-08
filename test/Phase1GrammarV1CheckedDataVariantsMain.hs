@@ -18,6 +18,7 @@ import Phil.Core.Static
 import Phil.Core.Syntax
   ( Mode (..)
   , Name (..)
+  , ProductElementType (..)
   , Proposition (..)
   , RefSort (..)
   , RefTerm (..)
@@ -80,7 +81,8 @@ checkedDataVariants = do
     ]
   duplicate <- parseData "data Duplicate = Same | Same;"
   unknown <- parseData "data Unknown = Bad(Proof[Missing()]);"
-  unsupported <- parseData "data Unsupported = Nested((U8, Bool));"
+  flatProduct <- parseData "data FlatProduct = Holds((U8, Bool));"
+  unsupported <- parseData "data Unsupported = Nested((U8, (Bool, U32)));"
   freeDependency <- parseData "data Free = Packet(Bytes[n]);"
   generic <- parseData "data Box[T : Type] = Value(T);"
   constrained <- parseData "data Constrained requires { proposition true; } = Value(U8);"
@@ -130,8 +132,21 @@ checkedDataVariants = do
     "variant payload Core UnknownClaim collapsed into source non-competence"
 
   assert
+    (grammarV1CheckedDataVariants context flatProduct ==
+      Just (Right
+        [ GrammarV1CheckedVariant "Holds"
+            (Just (GrammarV1CheckedVariantTuple
+              [ (TyProduct
+                  [ ProductElementType Unrestricted (TyUInt 8)
+                  , ProductElementType Unrestricted TyBool
+                  ], [])
+              ]))
+        ]))
+    "flat product payload lost its exact element types, modes or variant shape"
+
+  assert
     (grammarV1CheckedDataVariants context unsupported == Nothing)
-    "unsupported nested tuple type bypassed the checked type competence wall"
+    "genuinely nested tuple type bypassed the checked type competence wall"
 
   assert
     (grammarV1CheckedDataVariants context freeDependency == Nothing)
