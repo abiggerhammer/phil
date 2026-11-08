@@ -270,6 +270,22 @@ Definition fsem02SourceOfferCoverage
   NoDup sourceLabels /\
   (forall label, In label sourceLabels <-> In label (fsem02BranchLabels branches)).
 
+Theorem fsem02BranchMemberHasContinuation :
+  forall branches label,
+    In label (fsem02BranchLabels branches) ->
+    exists continuation, offeredContinuation label branches = Some continuation.
+Proof.
+  induction branches as [| candidate payload continuation rest IH].
+  - intros label Hmember. simpl in Hmember. contradiction.
+  - intros label Hmember. simpl in Hmember.
+    destruct Hmember as [Hequal | Hrest].
+    + subst candidate. simpl. rewrite String.eqb_refl.
+      eexists. reflexivity.
+    + simpl. destruct (String.eqb label candidate) eqn:Hmatch.
+      * eexists. reflexivity.
+      * exact (IH label Hrest).
+Qed.
+
 Theorem fsem02CoveredOfferLabelHasContinuation :
   forall sourceLabels branches label,
     fsem02SourceOfferCoverage sourceLabels branches ->
@@ -278,17 +294,7 @@ Theorem fsem02CoveredOfferLabelHasContinuation :
 Proof.
   intros sourceLabels branches label [_ Hcoverage] Hsource.
   apply (proj1 (Hcoverage label)) in Hsource.
-  clear Hcoverage sourceLabels.
-  revert Hsource label.
-  induction branches as [| candidate payload continuation rest IH].
-  - intros label Hsource. simpl in Hsource. contradiction.
-  - intros label Hsource. simpl in Hsource.
-    destruct Hsource as [Hsame | Hrest].
-    + subst candidate. simpl. rewrite String.eqb_refl.
-      eexists. reflexivity.
-    + simpl. destruct (String.eqb label candidate) eqn:Hmatch.
-      * eexists. reflexivity.
-      * exact (IH label Hrest).
+  exact (fsem02BranchMemberHasContinuation branches label Hsource).
 Qed.
 
 Theorem fsem02CoveredOfferProgressesByExactHead :
