@@ -55,6 +55,12 @@ abstract proof endpoint token nor these finite tests proves universal
 Haskell/source-to-Rocq refinement; see
 [the bounded slice note](../docs/phase-1/formal-semantics-protocol-progression-fsem02-v1.md).
 
+The next bounded [source choice slice](../docs/phase-1/formal-semantics-source-choice-fsem02-v1.md)
+adds production source-resolved `select Label`/close binder identity, precise
+source/Core negative choices, and a Rocq select/offer matched-local-step
+comparison. It does **not** claim source offer elaboration, restricted payload
+transfer, or general Haskell-to-Rocq refinement.
+
 ## Session recursion slice
 
 ### PHIL-SESSION-REC-001 — finite head exposure

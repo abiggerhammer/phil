@@ -1,0 +1,17 @@
+protocol Choice {
+  role Client = select { Go => end Done | Cancel => end Cancel };
+  role Server = offer { Go => end Done | Cancel => end Cancel };
+}
+component ClientWorker(endpoint : Client[Choice]) {
+  let chosen = select Go on endpoint;
+  close endpoint;
+}
+architecture LocalChoice {
+  instance client = ClientWorker;
+  process client_run = client;
+  protocol choice = Choice;
+  role choice.Client = client;
+  role choice.Server = external;
+  bind client.endpoint = choice.Client;
+}
+program main = instantiate LocalChoice;

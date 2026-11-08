@@ -1,0 +1,110 @@
+name: FSEM-02 Source Choice Early Preflight
+
+concurrency:
+  group: ${{ github.workflow_ref }}-${{ github.event.pull_request.number || github.run_id }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+on:
+  push:
+    branches:
+      - formal-semantics/fsem02-source-choice-heads
+    paths:
+      - 'test/Phase1FSEM02ProtocolProgressionMain.hs'
+      - 'test/Phase1FSEM02SourceChoiceMain.hs'
+      - 'src/Phil/Surface/GrammarV1/ComponentSelectClose.hs'
+      - 'phil-core.cabal'
+      - 'test/fixtures/fsem02-source-choice-v1/**'
+      - 'test/fixtures/fsem02-protocol-progression-v1/**'
+      - 'proof/Phil/Core/FSEM02ProtocolHeadProgression.v'
+      - 'docs/phase-1/formal-semantics-protocol-progression-fsem02-v1.md'
+      - 'docs/phase-1/formal-semantics-source-choice-fsem02-v1.md'
+      - '.github/workflows/fsem02-source-choice-preflight.yml'
+  pull_request:
+    paths:
+      - 'test/Phase1FSEM02ProtocolProgressionMain.hs'
+      - 'test/Phase1FSEM02SourceChoiceMain.hs'
+      - 'src/Phil/Surface/GrammarV1/ComponentSelectClose.hs'
+      - 'phil-core.cabal'
+      - 'test/fixtures/fsem02-source-choice-v1/**'
+      - 'test/fixtures/fsem02-protocol-progression-v1/**'
+      - 'proof/Phil/Core/FSEM02ProtocolHeadProgression.v'
+      - 'docs/phase-1/formal-semantics-protocol-progression-fsem02-v1.md'
+      - 'docs/phase-1/formal-semantics-source-choice-fsem02-v1.md'
+      - '.github/workflows/fsem02-source-choice-preflight.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  source-and-core:
+    name: Strict source-selected choice and actual Core progression
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: haskell-actions/setup@v2
+        with:
+          ghc-version: '9.6.7'
+          cabal-version: 'latest'
+          cabal-update: false
+      - name: Update cabal indices with bounded retry
+        run: bash scripts/ci/cabal-update-retry.sh
+      - name: Strict production Haskell library
+        run: cabal build lib:phil-core --ghc-options=-Werror
+      - name: Typecheck and execute exact source and production protocol correspondence
+        shell: bash
+        run: |
+          set -euo pipefail
+          cabal exec -- ghc -isrc -Wall -Werror -fno-code test/Phase1FSEM02SourceChoiceMain.hs
+          cabal exec -- runghc -isrc -Wall -Werror test/Phase1FSEM02SourceChoiceMain.hs
+          cabal exec -- ghc -isrc -Wall -Werror -fno-code test/Phase1FSEM02ProtocolProgressionMain.hs
+          cabal exec -- runghc -isrc -Wall -Werror test/Phase1FSEM02ProtocolProgressionMain.hs
+          for test_main in \
+            Phase1ProtocolExactActionMain \
+            Phase1ProtocolStaleEndpointMain \
+            Phase1INT008SourcePingTerminalMain
+          do
+            cabal exec -- runghc -isrc -Wall -Werror "test/$test_main.hs"
+          done
+          sha256sum test/Phase1FSEM02SourceChoiceMain.hs src/Phil/Surface/GrammarV1/ComponentSelectClose.hs test/fixtures/fsem02-source-choice-v1/*.phil
+          sha256sum test/Phase1FSEM02ProtocolProgressionMain.hs test/fixtures/fsem02-protocol-progression-v1/*.phil
+
+  rocq:
+    name: Rocq 9.2 exact select/offer progression and negative proof controls
+    runs-on: ubuntu-24.04
+    container:
+      image: rocq/rocq-prover:9.2.0
+      options: --user root
+    steps:
+      - uses: actions/checkout@v4
+      - name: Compile exact SessionStep and ConcurrencySemantics dependencies
+        shell: bash
+        run: |
+          set -euo pipefail
+          export PATH="/home/rocq/.opam/${COMPILER}/bin:$PATH"
+          for file in \
+            proof/Phil/Core/Syntax.v \
+            proof/Phil/Core/Context.v \
+            proof/Phil/Core/ContextJoin.v \
+            proof/Phil/Core/ProcessJoin.v \
+            proof/Phil/Core/ProcessTerminal.v \
+            proof/Phil/Core/ArchitectureIdentity.v \
+            proof/Phil/Core/ArchitectureInstantiation.v \
+            proof/Phil/Core/ProviderReplacementQualification.v \
+            proof/Phil/Core/ArchitectureRealization.v \
+            proof/Phil/Systems/FactDisposition.v \
+            proof/Phil/Assurance/ValidityScope.v \
+            proof/Phil/Core/SystemsStageClosure.v \
+            proof/Phil/Core/SystemsGenericLowering.v \
+            proof/Phil/Core/ConcurrencySemantics.v \
+            proof/Phil/Core/SessionStep.v \
+            proof/Phil/Core/FSEM02ProtocolHeadProgression.v
+          do
+            rocq c -Q proof/Phil Phil "$file"
+          done
+          if grep -nE '^[[:space:]]*(Admitted[.]|Axiom[[:space:]]|Parameter[[:space:]])' \
+            proof/Phil/Core/FSEM02ProtocolHeadProgression.v; then
+            echo "New unproved FSEM-02 assumption" >&2
+            exit 1
+          fi
+          sha256sum proof/Phil/Core/FSEM02ProtocolHeadProgression.v \
+            proof/Phil/Core/FSEM02ProtocolHeadProgression.vo
