@@ -42,7 +42,7 @@ jobs:
           cabal exec -- runghc -isrc -Wall -Werror test/Phase1FSEM02SourceJointChoiceMain.hs
           cabal exec -- runghc -isrc -Wall -Werror test/Phase1FSEM02SourceOfferReplayMain.hs
           cabal exec -- runghc -isrc -Wall -Werror test/Phase1FSEM02SourceChoiceMain.hs
-          sha256sum src/Phil/Surface/GrammarV1/ComponentChoiceRendezvous.hs test/Phase1FSEM02SourceJointChoiceMain.hs test/fixtures/fsem02-source-offer-replay-v1/*.phil
+          sha256sum src/Phil/Surface/GrammarV1/ComponentChoiceRendezvous.hs test/Phase1FSEM02SourceJointChoiceMain.hs test/fixtures/fsem02-source-joint-choice-v1/*.phil test/fixtures/fsem02-source-offer-replay-v1/*.phil
   rocq:
     runs-on: ubuntu-24.04
     container:
