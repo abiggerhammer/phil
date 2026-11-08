@@ -1,0 +1,26 @@
+protocol Ping {
+  role Client = send (x : U8) then end Done;
+  role Server = receive (x : U8) then end Done;
+}
+component ClientWorker(endpoint : Client[Ping], payload : U8) {
+  let done = send payload on endpoint;
+  close done;
+}
+component ServerWorker(endpoint : Server[Ping]) {
+  let (done, received) = receive U8 on endpoint;
+  close done;
+}
+architecture LocalPing {
+  instance client = ClientWorker;
+  instance server = ServerWorker;
+  process client_run = client;
+  process server_run = server;
+  protocol ping = Ping;
+  role ping.Client = client;
+  role ping.Server = server;
+  entry payload : U8;
+  bind client.endpoint = ping.Client;
+  bind client.payload = payload;
+  bind server.endpoint = ping.Server;
+}
+program main = instantiate LocalPing;

@@ -197,6 +197,10 @@ Read:
 [CallableEffects Rocq model](../../proof/Phil/Core/CallableEffects.v),
 and [effect polymorphism Rocq model](../../proof/Phil/Core/EffectPolymorphism.v).
 
+For the first bounded, non-normative FSEM-02 head/endpoint progression
+source-and-Core witness, see [FSEM-02 exact local protocol progression](formal-semantics-protocol-progression-fsem02-v1.md).
+It is not a source-to-Rocq refinement theorem or a network scheduler model.
+
 ## 5. Session protocols and communication
 
 A protocol specifies the legal sequence of send, receive, choice, offer,

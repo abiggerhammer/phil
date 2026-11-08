@@ -42,6 +42,19 @@ An exported prerequisite produces no local assumption. If any prerequisite is ex
 
 The same checked judgment carries partial-operation prerequisites explicitly, so certificate acceptance cannot erase Nat-subtraction or similar definedness requirements. The correspondence from Haskell `RefTerm` normalization/sort checking and the concrete affine map representation to the proof-side rational denotation remains explicit rather than being smuggled into the theorem.
 
+## FSEM-02 local protocol progression slice (non-normative)
+
+`proof/Phil/Core/FSEM02ProtocolHeadProgression.v` composes accepted send,
+receive and offer head selection with existing `SessionStep.v` exact linear
+resource transition facts, rejects stale/wrong-head/label/outcome cases, and
+conditionally combines an accepted local step with
+`ConcurrencySemantics.v` restricted-owner transfer **provided** an admitted
+rendezvous. The Haskell `Phase1FSEM02ProtocolProgressionMain` tests
+whole-source Ping projection and actual protocol map transitions. Neither the
+abstract proof endpoint token nor these finite tests proves universal
+Haskell/source-to-Rocq refinement; see
+[the bounded slice note](../docs/phase-1/formal-semantics-protocol-progression-fsem02-v1.md).
+
 ## Session recursion slice
 
 ### PHIL-SESSION-REC-001 — finite head exposure
