@@ -248,6 +248,7 @@ grammarV1CheckedAffineFunctionTrace
                       , affineSourceCheckpoints = traceCheckpoints run
                       , affineSourceOutcome = traceOutcome run
                       })
+        Right _ -> Nothing
 
 semanticName :: GrammarV1ResolvedBinder -> Text
 semanticName = unName . grammarV1ResolvedBinderCoreName
