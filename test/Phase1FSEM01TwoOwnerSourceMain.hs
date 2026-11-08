@@ -16,25 +16,33 @@ import qualified Phil.Core.Context as Core
 import Phil.Core.Static
   ( DeclarationKey (..), emptyStaticContext )
 import Phil.Core.Syntax
-  ( Control (..), Name, RefTerm (..), Ty (..) )
+  ( Control (..), Mode (..), Name, ProductElementType (..)
+  , RefTerm (..), Ty (..) )
 import Phil.Surface.Check.Engine
-  ( BorrowTraceCheckpoint (..), BorrowTracePhase (..) )
+  ( BorrowTraceCheckpoint (..), BorrowTracePhase (..)
+  , checkSurfaceComponent )
 import Phil.Surface.Check.Types
-  ( RejectionClass (BorrowEscape), SurfaceCheckError (..)
-  , SurfaceCheckResult (..) )
+  ( InitialBinding (..), RejectionClass (BorrowEscape, TypeMismatch)
+  , SurfaceCheckError (..), SurfaceCheckResult (..), SurfaceEnvironment (..)
+  , emptySurfaceEnvironment )
+import Phil.Core.CheckedBindingMode (CheckedTypeMode (..))
+import Phil.Surface.Check.Support (emptySurfaceState, shapeForType, syntheticSpan)
+import Phil.Surface.GrammarV1.CheckedType (grammarV1CheckedTypeMode)
 import Phil.Surface.GrammarV1.BinderScope
   ( GrammarV1ResolvedBinder (..) )
 import Phil.Surface.GrammarV1.BorrowResourceSurface
   ( GrammarV1BorrowResourceError (..) )
 import Phil.Surface.GrammarV1.Parser
   ( GrammarV1Declaration (..), GrammarV1TopLevelDecl (..)
-  , GrammarV1FunctionDecl, GrammarV1SourceFile (..)
+  , GrammarV1FunctionDecl (..), GrammarV1SourceFile (..)
   , parseGrammarV1StructuralSource )
 import Phil.Surface.GrammarV1.TwoOwnerBorrowResourceSurface
   ( GrammarV1TwoOwnerBorrowTrace (..)
   , grammarV1CheckedTwoOwnerBorrowFunction
   , grammarV1CheckedTwoOwnerBorrowFunctionTrace )
-import Phil.Surface.Syntax (Located (..))
+import Phil.Surface.Syntax
+  ( Block (..), Component (..), Located (..), Statement (..)
+  , SurfaceExpression (..) )
 import System.Exit (exitFailure)
 
 sourceDir :: FilePath
@@ -45,6 +53,12 @@ root = DeclarationKey "decl.fsem01.source-two-owner.v1"
 
 bytes8 :: Ty
 bytes8 = TyBytes (RefNat 8)
+
+productType :: Ty
+productType = TyProduct
+  [ ProductElementType Linear bytes8
+  , ProductElementType Linear bytes8
+  ]
 
 assert :: Bool -> String -> Either String ()
 assert condition why =
@@ -126,16 +140,35 @@ checkIndependentSpectator primary spectator ctx = do
   assert (Core.sharedLoans afterSpectator == Set.singleton primary)
     "spectator use damaged primary active loan"
 
+-- Check the declared source tuple without importing the bridge's inferred
+-- result. This independently establishes exact element order, mode and Ty.
+checkDeclaredProduct :: Text -> Either String ()
+checkDeclaredProduct source = do
+  fn <- sourceFunction source
+  resultSource <- maybe (Left "missing source result type") Right
+    (grammarV1FunctionResultType fn)
+  case grammarV1CheckedTypeMode
+    emptyStaticContext emptySurfaceState (locatedValue resultSource) of
+    Just (Right (result, steps)) ->
+      assert (checkedBindingType result == productType &&
+              checkedBindingMode result == Linear &&
+              null steps)
+        "two-Bytes source tuple did not elaborate to the exact linear TyProduct"
+    other -> Left ("source product type was not accepted: " <> show other)
+
 checkAccepted :: Text -> Either String ()
 checkAccepted source = do
+  checkDeclaredProduct source
   traced <- checkSource source
   let primary = grammarV1ResolvedBinderCoreName (twoOwnerPrimaryBinder traced)
       spectator = grammarV1ResolvedBinderCoreName (twoOwnerSpectatorBinder traced)
       cuts = twoOwnerCheckpoints traced
       actualPhases = map tracePhase cuts
+  assert (twoOwnerExpectedProduct traced == productType)
+    "traced checker lost the exact source-derived TyProduct"
   assert (twoOwnerOutcome traced ==
-    Right (SurfaceCheckResult "loan" [Return (TyOpaque "Tuple[2]")]))
-    "accepted source did not complete via the two-owner tuple runtime"
+    Right (SurfaceCheckResult "loan" [Return productType]))
+    "production did not return the elementwise-checked TyProduct"
   assert
     (actualPhases ==
       [ TraceBeforeLoan, TraceLoanStarted, TraceBodyResult False
@@ -196,6 +229,58 @@ checkEscaping source = do
       checkIndependentSpectator primary spectator rejected
     _ -> Left "unexpected escaped source trace length"
 
+-- Check the production return boundary independently of the source adapter.
+-- A forged product contract cannot make an unrelated runtime tuple type-check,
+-- and the legacy (unconfigured) tuple carrier remains exactly opaque.
+checkProductionProductContract :: Either String ()
+checkProductionProductContract = do
+  let one = "raw-owner"
+      two = "other-owner"
+      named text = Located syntheticSpan (VariableExpression text)
+      tuple = Located syntheticSpan
+        (TupleExpression [named one, named two])
+      component = Located syntheticSpan (Component
+        { componentName = "direct-product-test"
+        , componentParameters = []
+        , componentProvides = Nothing
+        , componentBody = Located syntheticSpan (Block
+            [Located syntheticSpan (ReturnStatement tuple)])
+        })
+      base = (emptySurfaceEnvironment emptyStaticContext)
+        { surfaceInitialBindings = Map.fromList
+            [ (one, InitialBinding Linear bytes8 (shapeForType bytes8))
+            , (two, InitialBinding Linear bytes8 (shapeForType bytes8)) ]
+        }
+      withProduct elements =
+        base { surfaceExpectedProductReturn = Just elements }
+      exact = [ProductElementType Linear bytes8, ProductElementType Linear bytes8]
+      wrongWidth =
+        [ProductElementType Linear bytes8,
+         ProductElementType Linear (TyBytes (RefNat 9))]
+      wrongMode =
+        [ProductElementType Linear bytes8,
+         ProductElementType Unrestricted bytes8]
+      wrongArity = [ProductElementType Linear bytes8]
+      expectedNormal = SurfaceCheckResult "direct-product-test"
+        [Return productType]
+      expectedLegacy = SurfaceCheckResult "direct-product-test"
+        [Return (TyOpaque "Tuple[2]")]
+      rejects expected =
+        case checkSurfaceComponent (withProduct expected) component of
+          Left err -> assert (surfaceErrorClass err == TypeMismatch &&
+              surfaceErrorDetail err ==
+                "returned tuple elements do not match the checked product contract")
+              "forged product expected an exact product-type mismatch"
+          Right value -> Left ("forged product unexpectedly passed: " <> show value)
+  assert (checkSurfaceComponent (withProduct exact) component ==
+    Right expectedNormal)
+    "production returned the wrong actual TyProduct for a checked tuple"
+  assert (checkSurfaceComponent base component == Right expectedLegacy)
+    "product opt-in changed the legacy opaque tuple return"
+  rejects wrongWidth
+  rejects wrongMode
+  rejects wrongArity
+
 checkUnsupported :: Text -> String -> Either String ()
 checkUnsupported source label = do
   fn <- sourceFunction source
@@ -214,17 +299,22 @@ main = do
   escaping <- TextIO.readFile (sourceDir <> "escape.phil")
   reversed <- TextIO.readFile (sourceDir <> "reversed-return.phil")
   extra <- TextIO.readFile (sourceDir <> "third-owner.phil")
+  wrongWidth <- TextIO.readFile (sourceDir <> "wrong-product-width.phil")
+  unsupported <- TextIO.readFile (sourceDir <> "unsupported-product-element.phil")
   let result = do
         checkAccepted positive
         checkEscaping escaping
+        checkProductionProductContract
         checkUnsupported reversed "reversed return order"
         checkUnsupported extra "third linear parameter"
+        checkUnsupported wrongWidth "second product type has wrong Bytes width"
+        checkUnsupported unsupported "non-Bytes product element"
         -- The accepted/escaping source differs only in one final Unit
         -- expression within the borrow body, not in binder/type signatures.
         assert (Text.replace "view; unit;" "view;" positive == escaping)
           "negative is not the minimally modified escaping-view source"
   case result of
     Right () ->
-      putStrLn "PASS: single-source two-linear-owner borrow, tuple return, exact BorrowEscape"
+      putStrLn "PASS: single-source two-linear-owner exact TyProduct return and BorrowEscape"
     Left msg ->
       putStrLn ("FAIL: " <> msg) >> exitFailure

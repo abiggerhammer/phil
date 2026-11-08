@@ -53,10 +53,11 @@ and [unadmitted third parameter](../../test/fixtures/fsem01-two-owner-source-v1/
 
 ## Explicit type/assurance boundary
 
-Grammar-v1 parses tuple types, but the existing general
-`grammarV1BoundType` does **not** yet elaborate them into `TyProduct`.
-The Surface runtime uses an **opaque** `TyOpaque "Tuple[2]"` carrier for
-tuple returns. This slice checks both source tuple element types and the
+Historically, Grammar-v1 parsed tuple types while `grammarV1BoundType`
+kept product elaboration unsupported. At the time of #1655, Surface therefore
+used an **opaque** `TyOpaque "Tuple[2]"` return marker; this limitation is
+now addressed only for the bounded two-Bytes product-return fragment by the
+[successor FSEM slice](formal-semantics-product-return-fsem01-v1.md). This slice checks both source tuple element types and the
 corresponding exact returned binder occurrences independently, and tests
 the production tuple's two actual linear consumptions. It does **not** claim
 that an arbitrary source tuple is correctly typed, provide global product

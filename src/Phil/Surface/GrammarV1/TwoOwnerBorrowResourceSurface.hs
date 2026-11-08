@@ -3,10 +3,10 @@
 -- | FSEM-01: one deliberately narrow *single-source* two-linear-owner bridge.
 --
 -- The Grammar-v1 source contains two distinct Bytes[N] parameters and returns
--- both via a two-element tuple. We independently check each source tuple type
--- element; the general source tuple type elaborator is still unsupported.
--- Production Surface uses an opaque "Tuple[2]" runtime return carrier, so
--- this bridge must NOT be represented as a general TyProduct elaboration.
+-- an exact two-element TyProduct. Each element type/mode is checked by the
+-- existing source type checker, while the production Surface return transition
+-- validates the *actual* tuple element types and modes against that contract.
+-- More general product elaboration and satisfies C remain outside this route.
 module Phil.Surface.GrammarV1.TwoOwnerBorrowResourceSurface
   ( GrammarV1TwoOwnerBorrowTrace (..)
   , grammarV1CheckedTwoOwnerBorrowFunction
@@ -17,7 +17,8 @@ import qualified Data.Map.Strict as Map
 import Data.Text (Text)
 import Phil.Core.CheckedBindingMode (CheckedTypeMode (..))
 import Phil.Core.Static (DeclarationKey, StaticContext)
-import Phil.Core.Syntax (Control (..), Mode (..), Name (..), Ty (..))
+import Phil.Core.Syntax
+  ( Control (..), Mode (..), Name (..), ProductElementType (..), Ty (..) )
 import Phil.Surface.Check.Engine
   ( BorrowTraceCheckpoint
   , BorrowTraceRun (..)
@@ -53,6 +54,7 @@ data GrammarV1TwoOwnerBorrowTrace = GrammarV1TwoOwnerBorrowTrace
   { twoOwnerPrimaryBinder :: GrammarV1ResolvedBinder
   , twoOwnerSpectatorBinder :: GrammarV1ResolvedBinder
   , twoOwnerViewBinder :: GrammarV1ResolvedBinder
+  , twoOwnerExpectedProduct :: Ty
   , twoOwnerCheckpoints :: [BorrowTraceCheckpoint]
   , twoOwnerOutcome :: Either GrammarV1BorrowResourceError SurfaceCheckResult
   } deriving (Eq, Show)
@@ -64,8 +66,9 @@ grammarV1CheckedTwoOwnerBorrowFunction
 grammarV1CheckedTwoOwnerBorrowFunction =
   withTwoOwnerBorrowFunction observe
   where
-    observe _ _ _ environment component =
-      Just (finishResult (checkSurfaceComponent environment component))
+    observe productTy _ _ _ environment component =
+      Just (finishResult productTy
+        (checkSurfaceComponent environment component))
 
 grammarV1CheckedTwoOwnerBorrowFunctionTrace
   :: StaticContext -> DeclarationKey -> GrammarV1FunctionDecl
@@ -73,34 +76,33 @@ grammarV1CheckedTwoOwnerBorrowFunctionTrace
 grammarV1CheckedTwoOwnerBorrowFunctionTrace =
   withTwoOwnerBorrowFunction observe
   where
-    observe primary spectator view environment component = do
+    observe productTy primary spectator view environment component = do
       run <- traceSurfaceBorrowComponent environment component
       Just $ Right GrammarV1TwoOwnerBorrowTrace
         { twoOwnerPrimaryBinder = primary
         , twoOwnerSpectatorBinder = spectator
         , twoOwnerViewBinder = view
+        , twoOwnerExpectedProduct = productTy
         , twoOwnerCheckpoints = traceCheckpoints run
-        , twoOwnerOutcome = finishResult (traceOutcome run)
+        , twoOwnerOutcome = finishResult productTy (traceOutcome run)
         }
 
--- | The general Surface runtime does not yet carry elementwise TyProduct:
--- its tuple runtime type is intentionally an opaque arity marker. This exact
--- test checks both source element types and both resolved return occurrences
--- independently rather than inventing a general source-to-Core product rule.
+-- | The exact source-checked product must be returned by the real Surface
+-- checker. Neither an opaque Tuple[2] nor a permuted/wrong-mode product passes.
 finishResult
-  :: Either SurfaceCheckError SurfaceCheckResult
+  :: Ty -> Either SurfaceCheckError SurfaceCheckResult
   -> Either GrammarV1BorrowResourceError SurfaceCheckResult
-finishResult outcome = do
+finishResult productTy outcome = do
   checked <- either
     (Left . GrammarV1BorrowResourceProductionError)
     Right outcome
-  if checkedTerminalControls checked == [Return (TyOpaque "Tuple[2]")]
+  if checkedTerminalControls checked == [Return productTy]
     then Right checked
     else Left (GrammarV1BorrowResourceResultMismatch
-      (TyOpaque "Tuple[2]") (checkedTerminalControls checked))
+      productTy (checkedTerminalControls checked))
 
 withTwoOwnerBorrowFunction
-  :: (GrammarV1ResolvedBinder -> GrammarV1ResolvedBinder
+  :: (Ty -> GrammarV1ResolvedBinder -> GrammarV1ResolvedBinder
       -> GrammarV1ResolvedBinder -> SurfaceEnvironment
       -> Located Component
       -> Maybe (Either GrammarV1BorrowResourceError result))
@@ -120,31 +122,33 @@ withTwoOwnerBorrowFunction observe staticContext declarationKey source
         (locatedValue (grammarV1TermParamType primaryParam))
       spectatorCheck <- checkType
         (locatedValue (grammarV1TermParamType spectatorParam))
-      primaryResultCheck <- checkType (locatedValue primaryResult)
-      spectatorResultCheck <- checkType (locatedValue spectatorResult)
-      case (primaryCheck, spectatorCheck,
-            primaryResultCheck, spectatorResultCheck) of
-        (Left err, _, _, _) ->
+      resultCheck <- checkType
+        (GrammarV1TupleType [primaryResult, spectatorResult])
+      case (primaryCheck, spectatorCheck, resultCheck) of
+        (Left err, _, _) ->
           Just (Left (GrammarV1BorrowResourceFocusingError err))
-        (_, Left err, _, _) ->
+        (_, Left err, _) ->
           Just (Left (GrammarV1BorrowResourceFocusingError err))
-        (_, _, Left err, _) ->
-          Just (Left (GrammarV1BorrowResourceFocusingError err))
-        (_, _, _, Left err) ->
+        (_, _, Left err) ->
           Just (Left (GrammarV1BorrowResourceFocusingError err))
         (Right (primary, _), Right (spectator, _),
-         Right (resultPrimary, _), Right (resultSpectator, _)) -> do
+         Right (result, _)) -> do
           TyBytes _ <- Just (checkedBindingType primary)
           TyBytes _ <- Just (checkedBindingType spectator)
-          if all ((== Linear) . checkedBindingMode)
-               [primary, spectator, resultPrimary, resultSpectator]
-             && checkedBindingType primary == checkedBindingType resultPrimary
-             && checkedBindingType spectator == checkedBindingType resultSpectator
+          TyProduct resultElements <- Just (checkedBindingType result)
+          let expectedElements =
+                [ ProductElementType Linear (checkedBindingType primary)
+                , ProductElementType Linear (checkedBindingType spectator) ]
+          if checkedBindingMode primary == Linear
+             && checkedBindingMode spectator == Linear
+             && checkedBindingMode result == Linear
+             && resultElements == expectedElements
             then sourceBody (checkedBindingType primary)
               (checkedBindingType spectator)
+              (checkedBindingType result)
             else Nothing
   where
-    sourceBody primaryTy spectatorTy = do
+    sourceBody primaryTy spectatorTy productTy = do
       [Located borrowSpan (GrammarV1ExpressionStatement borrow),
        Located returnSpan (GrammarV1ReturnStatement returned)] <-
         pure (grammarV1BlockStatements
@@ -207,13 +211,16 @@ withTwoOwnerBorrowFunction observe staticContext declarationKey source
                           , componentProvides = Nothing
                           , componentBody = projected })
                       environment = (emptySurfaceEnvironment staticContext)
-                        { surfaceInitialBindings = Map.fromList
+                        { surfaceExpectedProductReturn =
+                            Just [ ProductElementType Linear primaryTy
+                                 , ProductElementType Linear spectatorTy ]
+                        , surfaceInitialBindings = Map.fromList
                             [ (primaryText, InitialBinding
                                 Linear primaryTy (shapeForType primaryTy))
                             , (spectatorText, InitialBinding
                                 Linear spectatorTy (shapeForType spectatorTy)) ]
                         }
-                  observe primary spectator view environment component
+                  observe productTy primary spectator view environment component
         Right _ -> Nothing
 
 semanticName :: GrammarV1ResolvedBinder -> Text
