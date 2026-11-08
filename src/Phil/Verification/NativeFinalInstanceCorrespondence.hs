@@ -45,6 +45,8 @@ module Phil.Verification.NativeFinalInstanceCorrespondence
   , decodeNativeGenericStaticParameterKeyWire
   , encodeNativeGenericActualsKeyDomainWires
   , decodeNativeGenericActualsKeyDomainWires
+  , encodeNativeSemanticAtomWire
+  , decodeNativeSemanticAtomWire
   , NativeVerifierProfileText (..)
   , encodeNativeVerifierProfileWire
   , decodeNativeVerifierProfileWire
@@ -90,6 +92,7 @@ import Phil.Core.Static
   , InstanceRevision (..)
   , InstanceKey (..)
   , RealizationRevision (..)
+  , SemanticForm (..)
   , deriveArchitectureInstanceIdentity
   )
 import Phil.Verification (ApplicationAssurancePolicy)
@@ -438,6 +441,22 @@ decodeNativeGenericActualsKeyDomainWires wires = do
   if keys == Map.keys (Map.fromList (map (\key -> (key, ())) keys))
     then Just keys
     else Nothing
+
+-- | M is a deliberately *partial* value representation: the native
+-- SemanticForm sum has Atom, Ordered, Unordered and Record constructors.
+-- Only an actual SemanticAtom carries a raw Text payload suitable for this
+-- reversible scalar wire. A structured value is NEVER silently serialized
+-- with show, coerced to an atom or treated as accepted generic actuals.
+-- Neither direction authenticates a SemanticForm, producer, map or release.
+encodeNativeSemanticAtomWire :: SemanticForm -> Maybe Text
+encodeNativeSemanticAtomWire (SemanticAtom payload) = Just (Text.cons 'M' payload)
+encodeNativeSemanticAtomWire _ = Nothing
+
+decodeNativeSemanticAtomWire :: Text -> Maybe SemanticForm
+decodeNativeSemanticAtomWire wire =
+  case Text.uncons wire of
+    Just ('M', payload) -> Just (SemanticAtom payload)
+    _ -> Nothing
 
 -- | The concrete verifier-profile revision is a plain Phase1Stage Text field,
 -- not a nominal Haskell revision type. This separate read-only role wrapper
