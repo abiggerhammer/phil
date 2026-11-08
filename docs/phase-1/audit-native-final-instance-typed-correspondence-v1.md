@@ -951,3 +951,39 @@ supplied Prop promoted to native authority, public-byte verification or
 independent pinned final-delta signoff. Preserve 244 normative conformance
 cases, historical audit, Phase 1 TCB, generated outputs, strict GHC/LLVM/Rocq,
 and independent audit freeze **NOT YET**.
+
+## 2026-11-08 — SemanticRecord atom-only field H/M projection (issue #1584)
+
+Actual native `SemanticRecord (Map Text SemanticForm)` has **plain Text**
+field names and recursive SemanticForm values. The bounded native encoder
+projects only maps with atom-valued fields into a typed vector of H-role
+field-name and M-role atom-value wires. H is a new *transport* role, not a
+nominal native field identity or accepted proof, and stays disjoint from the
+R raw Systems digest, L lowering root, S/C/F stage revisions, B/I/A/P
+stage identities/profile, K occurrence, and D/V/Q/M generic and values.
+The native Map.toAscList order is preserved and the decoder validates exact
+native Map canonical order and key uniqueness. Its result is only an
+UNACCEPTED SemanticRecord value.
+
+Executable Haskell Upload/Steve tests first require exact checked producer,
+independently accepted manifest/source, and CertifiedRelease/StageClosure
+consumer replay, then check empty/atom-only record roundtrips, stable key
+order, value swaps, duplicate and out-of-order keys, swapped/foreign roles,
+and nested/unsupported constructors. Five Rocq theorems with named
+Print Assumptions verify a candidate string-pair-list model's roundtrip,
+injectivity, wrong-role rejection, association sensitivity, and the
+impossibility of adjacent duplicate fields under an explicit NoDup premise.
+This *supplied candidate-list premise* is not derived native Map authority.
+
+Remaining premises: native Map Ord ↔ Rocq field list, Data.Text Unicode ↔
+Rocq string transport, recursive SemanticForm, full accepted generic
+actuals/instance/source/manifest/stage/release reflection, authenticated
+checked occurrence → concrete StageClosure/selected CertifiedRelease,
+predecessor authority, FixedFinalAuthorityAdapter and FinalArtifactCertified.
+Do not conflate R/L raw digest/root with S/C/F revisions, K/I checked
+occurrence with stage I revision, or subject/realization/profile identities.
+No invented native-to-Rocq nat encoding, supplied model Prop as native
+authority, public release-byte credit or independent pinned final-delta
+signoff. Original 244 normative cases, historical audit, Phase 1 TCB,
+generated artifacts, strict GHC/LLVM/Rocq and independent freeze NOT YET
+remain unchanged.

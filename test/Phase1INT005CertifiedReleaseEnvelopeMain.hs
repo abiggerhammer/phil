@@ -219,6 +219,10 @@ main = do
           , nativeSemanticUnorderedAtomSetReplayAccepts source upload)
         , ( "Steve checked SemanticUnordered atom-only canonical M-set rejects duplicates, order, and roles"
           , nativeSemanticUnorderedAtomSetReplayAccepts source steve)
+        , ( "Upload checked SemanticRecord atom-only H/M fields preserve key/value identity and fail closed"
+          , nativeSemanticRecordAtomFieldsReplayAccepts source upload)
+        , ( "Steve checked SemanticRecord atom-only H/M fields preserve key/value identity and fail closed"
+          , nativeSemanticRecordAtomFieldsReplayAccepts source steve)
         , ( "Upload changed raw Systems digest cannot pass exact manifest-stage replay"
           , nativeManifestStageReplayRejectsChangedDigests source upload)
         , ( "Steve changed raw Systems digest cannot pass exact manifest-stage replay"
@@ -1710,6 +1714,83 @@ nativeGenericAtomActualPairsReplayAccepts source fixture =
                                [(encodeNativeGenericDeclarationWire
                                    (DeclarationKey "audit.qm.alpha"), mA),
                                 (qB, mB)] == Nothing
+                        _ -> False
+    _ -> False
+
+-- | Synthetic SemanticRecord values are deliberately UNACCEPTED data.
+-- First replay the real checked producer, independent accepted source/manifest
+-- and exact CertifiedRelease/StageClosure consumers for Upload and Steve.
+nativeSemanticRecordAtomFieldsReplayAccepts
+  :: GenericApplicationAssurance -> ReleaseFixture -> Bool
+nativeSemanticRecordAtomFieldsReplayAccepts source fixture =
+  case (producerInputs source, produceFixture source fixture) of
+    (Right (bundle, policy), Right (_, produced)) ->
+      case nativeAdapterPair source produced of
+        Nothing -> False
+        Just (sourceArtifact, release) ->
+          case closeNativeFinalInstanceCorrespondence
+              source (sourceInstanceDescriptor source) bundle policy
+              (fixtureContext produced) (fixtureLedger produced)
+              emptyProducerSelection sourceArtifact release of
+            Left _ -> False
+            Right witness ->
+              case replayNativeExactAcceptedConsumers witness
+                (nativeCorrespondenceSourceManifestBinding witness)
+                (nativeCorrespondenceCertifiedSource witness)
+                (nativeCorrespondenceCertifiedRelease witness) of
+                Left _ -> False
+                Right _ ->
+                  let atomA = SemanticAtom "audit.record.alpha.value"
+                      atomB = SemanticAtom "audit.record.beta.value"
+                      fieldA = NativeSemanticRecordFieldText "audit.record.alpha"
+                      fieldB = NativeSemanticRecordFieldText "audit.record.beta"
+                      hA = encodeNativeSemanticRecordFieldWire fieldA
+                      hB = encodeNativeSemanticRecordFieldWire fieldB
+                      recordValue = SemanticRecord (Map.fromList
+                        [ ("audit.record.beta", atomB)
+                        , ("audit.record.alpha", atomA)
+                        ])
+                      swappedValue = SemanticRecord (Map.fromList
+                        [ ("audit.record.beta", atomA)
+                        , ("audit.record.alpha", atomB)
+                        ])
+                      emptyValue = SemanticRecord Map.empty
+                      nested = SemanticRecord (Map.singleton
+                        "audit.record.alpha" (SemanticOrdered [atomA]))
+                  in encodeNativeSemanticRecordAtomFieldWires emptyValue == Just []
+                    && decodeNativeSemanticRecordAtomFieldWires [] == Just emptyValue
+                    && decodeNativeSemanticRecordFieldWire hA == Just fieldA
+                    && decodeNativeSemanticRecordFieldWire
+                         (encodeNativeGenericStaticParameterKeyWire
+                           (GenericStaticParameterKey "audit.record.alpha")) == Nothing
+                    && encodeNativeSemanticRecordAtomFieldWires nested == Nothing
+                    && encodeNativeSemanticRecordAtomFieldWires atomA == Nothing
+                    && encodeNativeSemanticRecordAtomFieldWires
+                         (SemanticUnordered Set.empty) == Nothing
+                    && case (encodeNativeSemanticRecordAtomFieldWires recordValue,
+                             encodeNativeSemanticAtomWire atomA,
+                             encodeNativeSemanticAtomWire atomB) of
+                        (Just fields@[entryA, entryB], Just mA, Just mB) ->
+                          fields == [(hA, mA), (hB, mB)]
+                          && decodeNativeSemanticRecordAtomFieldWires fields
+                               == Just recordValue
+                          && decodeNativeSemanticRecordAtomFieldWires
+                               (reverse fields) == Nothing
+                          && decodeNativeSemanticRecordAtomFieldWires
+                               [entryA, entryA] == Nothing
+                          && decodeNativeSemanticRecordAtomFieldWires
+                               [entryA, entryB, entryA] == Nothing
+                          && decodeNativeSemanticRecordAtomFieldWires
+                               [(mA, mA), entryB] == Nothing
+                          && decodeNativeSemanticRecordAtomFieldWires
+                               [(encodeNativeGenericStaticParameterKeyWire
+                                   (GenericStaticParameterKey "audit.record.alpha"), mA),
+                                entryB] == Nothing
+                          && decodeNativeSemanticRecordAtomFieldWires
+                               [(hA, hA), entryB] == Nothing
+                          && decodeNativeSemanticRecordAtomFieldWires
+                               [(hA, mB), (hB, mA)] == Just swappedValue
+                          && swappedValue /= recordValue
                         _ -> False
     _ -> False
 

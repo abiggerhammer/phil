@@ -2180,3 +2180,111 @@ Proof.
   destruct H as [Hnot _].
   apply Hnot. left. reflexivity.
 Qed.
+
+
+(* #1584 bounded native SemanticRecord (Map Text SemanticForm) partial
+   ATOM-ONLY field projection. H is a distinct record FIELD NAME role,
+   not raw Systems R, architecture K/I or generic Q/M. Rocq lists here
+   are candidate strings; Map Ord and Data.Text Unicode remain external. *)
+Record NativeSemanticRecordFieldRole := mkNativeSemanticRecordFieldRole {
+  nativeSemanticRecordFieldPayload : string
+}.
+Definition nativeSemanticRecordFieldWire
+  (field : NativeSemanticRecordFieldRole) : string :=
+  "H" ++ nativeSemanticRecordFieldPayload field.
+Definition nativeDecodeSemanticRecordFieldWire
+  (wire : string) : option NativeSemanticRecordFieldRole :=
+  match wire with
+  | EmptyString => None
+  | String tag payload =>
+      if Ascii.eqb tag "H"%char
+      then Some (mkNativeSemanticRecordFieldRole payload) else None
+  end.
+Definition nativeEncodeRecordAtomPairModel
+  (entry : NativeSemanticRecordFieldRole * NativeSemanticAtomRole)
+  : string * string :=
+  (nativeSemanticRecordFieldWire (fst entry),
+   nativeSemanticAtomWire (snd entry)).
+Definition nativeDecodeRecordAtomPairModel
+  (entry : string * string)
+  : option (NativeSemanticRecordFieldRole * NativeSemanticAtomRole) :=
+  match nativeDecodeSemanticRecordFieldWire (fst entry),
+        nativeDecodeSemanticAtomWire (snd entry) with
+  | Some field, Some atom => Some (field, atom)
+  | _, _ => None
+  end.
+Fixpoint nativeEncodeRecordAtomEntriesModel
+  (entries : list (NativeSemanticRecordFieldRole * NativeSemanticAtomRole))
+  : list (string * string) :=
+  match entries with
+  | [] => []
+  | entry :: rest =>
+      nativeEncodeRecordAtomPairModel entry
+        :: nativeEncodeRecordAtomEntriesModel rest
+  end.
+Fixpoint nativeDecodeRecordAtomEntriesModel
+  (entries : list (string * string))
+  : option (list (NativeSemanticRecordFieldRole * NativeSemanticAtomRole)) :=
+  match entries with
+  | [] => Some []
+  | entry :: rest =>
+      match nativeDecodeRecordAtomPairModel entry,
+            nativeDecodeRecordAtomEntriesModel rest with
+      | Some decoded, Some decodedRest => Some (decoded :: decodedRest)
+      | _, _ => None
+      end
+  end.
+Definition nativeRecordAtomUniqueFieldsPremiseModel
+  (entries : list (NativeSemanticRecordFieldRole * NativeSemanticAtomRole))
+  : Prop := NoDup (map fst entries).
+Theorem native_record_atom_entries_model_roundtrip :
+  forall entries,
+    nativeDecodeRecordAtomEntriesModel
+      (nativeEncodeRecordAtomEntriesModel entries) = Some entries.
+Proof.
+  induction entries as [|[field atom] rest IH].
+  - reflexivity.
+  - destruct field as [fieldText], atom as [atomText].
+    simpl. rewrite IH. reflexivity.
+Qed.
+Theorem native_record_atom_entries_model_injective :
+  forall left right,
+    nativeEncodeRecordAtomEntriesModel left =
+    nativeEncodeRecordAtomEntriesModel right -> left = right.
+Proof.
+  intros left right H.
+  apply (f_equal nativeDecodeRecordAtomEntriesModel) in H.
+  rewrite !native_record_atom_entries_model_roundtrip in H.
+  now injection H.
+Qed.
+Theorem native_record_atom_pair_model_wrong_role_reject :
+  forall field atom key,
+    nativeDecodeRecordAtomPairModel
+      (nativeSemanticAtomWire atom, nativeSemanticRecordFieldWire field)
+        = None /\
+    nativeDecodeRecordAtomPairModel
+      (nativeGenericStaticKeyWire key, nativeSemanticAtomWire atom)
+        = None.
+Proof. intros [field] [atom] [key]; split; reflexivity. Qed.
+Theorem native_record_atom_pair_model_association_sensitive :
+  forall field first second, first <> second ->
+    nativeEncodeRecordAtomPairModel (field, first) <>
+    nativeEncodeRecordAtomPairModel (field, second).
+Proof.
+  intros field first second Hneq Heq.
+  apply Hneq.
+  apply native_semantic_atom_wire_injective.
+  exact (f_equal snd Heq).
+Qed.
+Theorem native_record_atom_duplicate_field_not_canonical_model :
+  forall field left right rest,
+    ~ nativeRecordAtomUniqueFieldsPremiseModel
+        ((field, left) :: (field, right) :: rest).
+Proof.
+  intros field left right rest H.
+  unfold nativeRecordAtomUniqueFieldsPremiseModel in H.
+  simpl in H.
+  apply NoDup_cons_iff in H.
+  destruct H as [Hnot _].
+  apply Hnot. left. reflexivity.
+Qed.
