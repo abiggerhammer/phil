@@ -26,12 +26,12 @@ Theorem two_source_continuing_predecessors_remain_two :
 Proof. intros; reflexivity. Qed.
 
 Theorem terminal_left_predecessor_is_excluded :
-  forall terminated continuing,
+  forall (terminated continuing : Context.ResourceContext),
     sourceContinuingInputs [None; Some continuing] = [continuing].
 Proof. intros; reflexivity. Qed.
 
 Theorem terminal_right_predecessor_is_excluded :
-  forall continuing terminated,
+  forall (continuing terminated : Context.ResourceContext),
     sourceContinuingInputs [Some continuing; None] = [continuing].
 Proof. intros; reflexivity. Qed.
 
@@ -72,12 +72,12 @@ Qed.
    a live continuing arm. This is a logical conditional about the modeled
    continuing relation, not a proof of the production path filter. *)
 Theorem terminal_predecessor_does_not_change_live_linear_owner :
-  forall terminal live joined owner,
+  forall (live joined : Context.ResourceContext) (owner : Syntax.Name),
     ContextJoin.ContextJoinSuccess
       (sourceContinuingInputs [None; Some live]) joined ->
     Context.linearBindings joined owner = Context.linearBindings live owner.
 Proof.
-  intros terminal live joined owner Hjoin.
+  intros live joined owner Hjoin.
   simpl in Hjoin.
   pose proof
     (ContextJoin.context_join_linear_converges
