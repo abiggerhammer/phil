@@ -21,6 +21,7 @@ import Phil.Core.Static
 import Phil.Core.Syntax
   ( Mode (..)
   , Name (..)
+  , ProductElementType (..)
   , Proposition (..)
   , RefSort (..)
   , RefTerm (..)
@@ -120,11 +121,23 @@ recordFieldCoreFailure = do
 
 unsupportedRecordField :: Either String ()
 unsupportedRecordField = do
-  record <- onlyRecord
+  flat <- onlyRecord
     "record TupleField { first : U8, pair : (U32, Bool) }"
+  nested <- onlyRecord
+    "record NestedField { first : U8, pair : (U32, (Bool, U8)) }"
   assert
-    (grammarV1CheckedRecordFields emptyStaticContext record == Nothing)
-    "unsupported tuple record field was partially accepted"
+    (grammarV1CheckedRecordFields emptyStaticContext flat ==
+      Just (Right
+        [ ("first", TyUInt 8, [])
+        , ("pair", TyProduct
+            [ ProductElementType Unrestricted (TyUInt 32)
+            , ProductElementType Unrestricted TyBool
+            ], [])
+        ]))
+    "flat record field lost exact checked product type, modes or source order"
+  assert
+    (grammarV1CheckedRecordFields emptyStaticContext nested == Nothing)
+    "unsupported nested tuple record field was partially accepted"
 
 freeRecordFieldDependency :: Either String ()
 freeRecordFieldDependency = do

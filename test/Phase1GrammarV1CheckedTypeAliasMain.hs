@@ -18,6 +18,7 @@ import Phil.Core.Static
 import Phil.Core.Syntax
   ( Mode (..)
   , Name (..)
+  , ProductElementType (..)
   , Proposition (..)
   , RefSort (..)
   , RefTerm (..)
@@ -55,6 +56,7 @@ checkedClosedAliases = do
   refinement <- onlyAlias "type PositiveByte = {v : U8 | Positive(v)};"
   unknownClaim <- onlyAlias "type Unknown = Proof[Missing(1)];"
   tupleType <- onlyAlias "type Pair = (U8, Bool);"
+  nestedTuple <- onlyAlias "type Nested = (U8, (Bool, U32));"
   freeTerm <- onlyAlias "type Packet = Bytes[n];"
   generic <- onlyAlias "type Generic[T : Type] = U8;"
 
@@ -90,8 +92,17 @@ checkedClosedAliases = do
     "alias Core UnknownClaim collapsed into source non-competence"
 
   assert
-    (grammarV1CheckedTypeAlias context tupleType == Nothing)
-    "tuple alias bypassed current checked type competence"
+    (grammarV1CheckedTypeAlias context tupleType ==
+      Just (Right
+        (("Pair", TyProduct
+          [ ProductElementType Unrestricted (TyUInt 8)
+          , ProductElementType Unrestricted TyBool
+          ]), [])))
+    "checked flat tuple alias lost exact ordered element types and modes"
+
+  assert
+    (grammarV1CheckedTypeAlias context nestedTuple == Nothing)
+    "nested tuple alias bypassed checked type competence"
 
   assert
     (grammarV1CheckedTypeAlias context freeTerm == Nothing)
