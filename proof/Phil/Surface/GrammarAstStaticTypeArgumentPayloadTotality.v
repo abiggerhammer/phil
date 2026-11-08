@@ -75,10 +75,9 @@ Proof.
       (phase1_surface_normalize_complete_nonreference_type_spine_total_from_derivation
         _ _ _ selected Hselected)
       as [type_value [Htype Htype_round_trip]].
-    let base := constr:(
-      {| phase1_static_argument_spine_tag := Phase1StaticTypeArgument;
-         phase1_static_argument_spine_selected_tree := selected |}) in
-    let refined := constr:(Phase1StaticRefinedTypeArgument type_value) in
+    pose (base := {| phase1_static_argument_spine_tag := Phase1StaticTypeArgument;
+         phase1_static_argument_spine_selected_tree := selected |}).
+    pose (refined := Phase1StaticRefinedTypeArgument type_value).
     assert (Hbase :
       phase1_surface_normalize_static_argument_spine tree = Some base).
     {
@@ -118,10 +117,9 @@ Proof.
         (phase1_surface_validate_named_node_total_from_derivation
           "nonreference_session_expression" _ _ _ selected Hselected)
         as Hvalidate.
-      let base := constr:(
-        {| phase1_static_argument_spine_tag := Phase1StaticSessionArgument;
-           phase1_static_argument_spine_selected_tree := selected |}) in
-      let refined := constr:(Phase1StaticOpaqueSessionArgument selected) in
+      pose (base := {| phase1_static_argument_spine_tag := Phase1StaticSessionArgument;
+           phase1_static_argument_spine_selected_tree := selected |}).
+      pose (refined := Phase1StaticOpaqueSessionArgument selected).
       assert (Hbase :
         phase1_surface_normalize_static_argument_spine tree = Some base).
       {
@@ -154,10 +152,9 @@ Proof.
           (phase1_surface_validate_named_node_total_from_derivation
             "static_value_expression" _ _ _ selected Hselected)
           as Hvalidate.
-        let base := constr:(
-          {| phase1_static_argument_spine_tag := Phase1StaticValueArgument;
-             phase1_static_argument_spine_selected_tree := selected |}) in
-        let refined := constr:(Phase1StaticOpaqueValueArgument selected) in
+        pose (base := {| phase1_static_argument_spine_tag := Phase1StaticValueArgument;
+             phase1_static_argument_spine_selected_tree := selected |}).
+        pose (refined := Phase1StaticOpaqueValueArgument selected).
         assert (Hbase :
           phase1_surface_normalize_static_argument_spine tree = Some base).
         {
@@ -190,10 +187,9 @@ Proof.
              (phase1_surface_validate_named_node_total_from_derivation
                "effect_set_literal" _ _ _ selected Hselected)
              as Hvalidate.
-           let base := constr:(
-             {| phase1_static_argument_spine_tag := Phase1StaticEffectSetArgument;
-                phase1_static_argument_spine_selected_tree := selected |}) in
-           let refined := constr:(Phase1StaticOpaqueEffectSetArgument selected) in
+           pose (base := {| phase1_static_argument_spine_tag := Phase1StaticEffectSetArgument;
+                phase1_static_argument_spine_selected_tree := selected |}).
+           pose (refined := Phase1StaticOpaqueEffectSetArgument selected).
            assert (Hbase :
              phase1_surface_normalize_static_argument_spine tree = Some base).
            {
