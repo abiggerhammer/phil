@@ -37,6 +37,7 @@ import Phil.Surface.GrammarV1.ParameterBodyScope
   , grammarV1CheckedLocalValueOccurrenceInScope )
 import Phil.Surface.GrammarV1.Parser
   ( GrammarV1Block (..), GrammarV1Expression (..)
+  , GrammarV1JoinClause (..)
   , GrammarV1FunctionDecl (..), GrammarV1Pattern (..)
   , GrammarV1Statement (..), GrammarV1TermParam (..) )
 import Phil.Surface.Syntax
