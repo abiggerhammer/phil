@@ -156,6 +156,10 @@ jobs:
           Print Assumptions native_verifier_profile_text_wire_roundtrip.
           Print Assumptions native_verifier_profile_text_wire_disjoint_from_eight_roles.
           Print Assumptions native_verifier_profile_text_wrong_role_decoders_fail.
+          Print Assumptions native_occurrence_key_wire_injective.
+          Print Assumptions native_occurrence_key_wire_roundtrip.
+          Print Assumptions native_occurrence_key_wire_disjoint_from_nine_roles.
+          Print Assumptions native_occurrence_key_wrong_role_decoders_fail.
           Print Assumptions fixed_adapter_full_certification_preserves_predecessors.
           EOF
           rocq c -Q proof/Phil Phil /tmp/NativeFinalInstanceAssumptions.v 2>&1 | tee typed-native-instance-assumptions.log
