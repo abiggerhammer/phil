@@ -2060,3 +2060,77 @@ Proof.
   injection Heq as Hfirst _.
   apply Hdifferent. exact Hfirst.
 Qed.
+
+(* #1584 successor: Q/M atom-only semantic-actuals association as a typed
+   Rocq string-list MODEL, not a native Data.Text/Map codec or authority. *)
+Definition nativeEncodeGenericAtomActualPairModel
+  (entry : NativeGenericStaticKeyRole * NativeSemanticAtomRole)
+  : string * string :=
+  (nativeGenericStaticKeyWire (fst entry),
+   nativeSemanticAtomWire (snd entry)).
+Definition nativeDecodeGenericAtomActualPairModel
+  (wires : string * string)
+  : option (NativeGenericStaticKeyRole * NativeSemanticAtomRole) :=
+  match nativeDecodeGenericStaticKeyWire (fst wires),
+        nativeDecodeSemanticAtomWire (snd wires) with
+  | Some key, Some atom => Some (key, atom)
+  | _, _ => None
+  end.
+Fixpoint nativeEncodeGenericAtomActualPairsModel
+  (entries : list (NativeGenericStaticKeyRole * NativeSemanticAtomRole))
+  : list (string * string) :=
+  match entries with
+  | [] => []
+  | entry :: rest =>
+      nativeEncodeGenericAtomActualPairModel entry ::
+      nativeEncodeGenericAtomActualPairsModel rest
+  end.
+Fixpoint nativeDecodeGenericAtomActualPairsModel
+  (wires : list (string * string))
+  : option (list (NativeGenericStaticKeyRole * NativeSemanticAtomRole)) :=
+  match wires with
+  | [] => Some []
+  | pair :: rest =>
+      match nativeDecodeGenericAtomActualPairModel pair,
+            nativeDecodeGenericAtomActualPairsModel rest with
+      | Some entry, Some entries => Some (entry :: entries)
+      | _, _ => None
+      end
+  end.
+Theorem native_generic_atom_actual_pairs_model_roundtrip :
+  forall entries,
+    nativeDecodeGenericAtomActualPairsModel
+      (nativeEncodeGenericAtomActualPairsModel entries) = Some entries.
+Proof.
+  induction entries as [|[key atom] rest IH].
+  - reflexivity.
+  - destruct key as [keyText], atom as [atomText].
+    simpl. rewrite IH. reflexivity.
+Qed.
+Theorem native_generic_atom_actual_pairs_model_injective :
+  forall left right,
+    nativeEncodeGenericAtomActualPairsModel left =
+    nativeEncodeGenericAtomActualPairsModel right -> left = right.
+Proof.
+  intros left right H.
+  apply (f_equal nativeDecodeGenericAtomActualPairsModel) in H.
+  rewrite !native_generic_atom_actual_pairs_model_roundtrip in H.
+  injection H as Heq. exact Heq.
+Qed.
+Theorem native_generic_atom_actual_pair_model_swapped_roles_reject :
+  forall key atom,
+    nativeDecodeGenericAtomActualPairModel
+      (nativeSemanticAtomWire atom, nativeGenericStaticKeyWire key) = None /\
+    nativeDecodeGenericAtomActualPairModel
+      (nativeGenericStaticKeyWire key, nativeGenericStaticKeyWire key) = None.
+Proof. intros [key] [atom]; split; reflexivity. Qed.
+Theorem native_generic_atom_actual_pair_model_association_sensitive :
+  forall key first second, first <> second ->
+    nativeEncodeGenericAtomActualPairModel (key, first) <>
+    nativeEncodeGenericAtomActualPairModel (key, second).
+Proof.
+  intros key first second Hneq Heq.
+  apply Hneq.
+  apply native_semantic_atom_wire_injective.
+  exact (f_equal snd Heq).
+Qed.

@@ -49,6 +49,8 @@ module Phil.Verification.NativeFinalInstanceCorrespondence
   , decodeNativeSemanticAtomWire
   , encodeNativeSemanticOrderedAtomWires
   , decodeNativeSemanticOrderedAtomWires
+  , encodeNativeGenericAtomActualPairWires
+  , decodeNativeGenericAtomActualPairWires
   , NativeVerifierProfileText (..)
   , encodeNativeVerifierProfileWire
   , decodeNativeVerifierProfileWire
@@ -475,6 +477,36 @@ encodeNativeSemanticOrderedAtomWires _ = Nothing
 decodeNativeSemanticOrderedAtomWires :: [Text] -> Maybe SemanticForm
 decodeNativeSemanticOrderedAtomWires wires =
   SemanticOrdered <$> traverse decodeNativeSemanticAtomWire wires
+
+-- | Read-only Q/M pairs for the atom-only subset of the *actual native*
+-- checked GenericApplicationIdentity semantic-actuals Map. Values of any
+-- other SemanticForm constructor fail closed. Map.toAscList is the native
+-- key ordering; this does not establish Rocq map/string transport.
+encodeNativeGenericAtomActualPairWires
+  :: GenericApplicationIdentity -> Maybe [(Text, Text)]
+encodeNativeGenericAtomActualPairWires application =
+  traverse encodeEntry
+    (Map.toAscList (genericApplicationSemanticArguments application))
+  where
+    encodeEntry (key, form) = do
+      valueWire <- encodeNativeSemanticAtomWire form
+      pure (encodeNativeGenericStaticParameterKeyWire key, valueWire)
+
+-- | Reconstruct only an UNACCEPTED Map. Strict native key order and uniqueness
+-- must hold; roles Q for keys and M for atom values are disjoint. Never return
+-- a checked application, assurance, manifest, StageClosure or CertifiedRelease.
+decodeNativeGenericAtomActualPairWires
+  :: [(Text, Text)] -> Maybe (Map.Map GenericStaticParameterKey SemanticForm)
+decodeNativeGenericAtomActualPairWires wires = do
+  entries <- traverse decodeEntry wires
+  let keys = map fst entries
+  if keys == Map.keys (Map.fromList (map (\key -> (key, ())) keys))
+    then Just (Map.fromList entries)
+    else Nothing
+  where
+    decodeEntry (keyWire, valueWire) =
+      (,) <$> decodeNativeGenericStaticParameterKeyWire keyWire
+          <*> decodeNativeSemanticAtomWire valueWire
 
 -- | The concrete verifier-profile revision is a plain Phase1Stage Text field,
 -- not a nominal Haskell revision type. This separate read-only role wrapper

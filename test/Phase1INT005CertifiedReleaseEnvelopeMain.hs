@@ -211,6 +211,10 @@ main = do
           , nativeGenericOrderedAtomVectorReplayAccepts source upload)
         , ( "Steve checked SemanticOrdered atom-only vector preserves order; nesting and foreign roles fail closed"
           , nativeGenericOrderedAtomVectorReplayAccepts source steve)
+        , ( "Upload checked Q/M atom-only generic actuals preserve association; duplicates and swapped roles reject"
+          , nativeGenericAtomActualPairsReplayAccepts source upload)
+        , ( "Steve checked Q/M atom-only generic actuals preserve association; duplicates and swapped roles reject"
+          , nativeGenericAtomActualPairsReplayAccepts source steve)
         , ( "Upload changed raw Systems digest cannot pass exact manifest-stage replay"
           , nativeManifestStageReplayRejectsChangedDigests source upload)
         , ( "Steve changed raw Systems digest cannot pass exact manifest-stage replay"
@@ -1629,6 +1633,81 @@ nativeGenericOrderedAtomVectorReplayAccepts source fixture =
       case encodeNativeSemanticAtomWire atom of
         Just wire -> wire
         Nothing -> ""
+
+-- | Synthetic Q/M maps are UNACCEPTED test data, not checked applications.
+-- Actual accepted producer, independent manifest/source and exact release
+-- consumers are rechecked before inspecting any generic semantic actuals.
+nativeGenericAtomActualPairsReplayAccepts
+  :: GenericApplicationAssurance -> ReleaseFixture -> Bool
+nativeGenericAtomActualPairsReplayAccepts source fixture =
+  case (producerInputs source, produceFixture source fixture) of
+    (Right (bundle, policy), Right (_, produced)) ->
+      case nativeAdapterPair source produced of
+        Nothing -> False
+        Just (sourceArtifact, release) ->
+          case closeNativeFinalInstanceCorrespondence
+              source (sourceInstanceDescriptor source) bundle policy
+              (fixtureContext produced) (fixtureLedger produced)
+              emptyProducerSelection sourceArtifact release of
+            Left _ -> False
+            Right witness ->
+              case replayNativeExactAcceptedConsumers witness
+                (nativeCorrespondenceSourceManifestBinding witness)
+                (nativeCorrespondenceCertifiedSource witness)
+                (nativeCorrespondenceCertifiedRelease witness) of
+                Left _ -> False
+                Right _ ->
+                  let application = genericDischargeApplicationIdentity
+                        (genericApplicationAssuranceLineage
+                          (nativeCorrespondenceSourceAssurance witness))
+                      actuals = genericApplicationSemanticArguments application
+                      keyA = GenericStaticParameterKey "audit.qm.alpha"
+                      keyB = GenericStaticParameterKey "audit.qm.beta"
+                      atomA = SemanticAtom "audit.qm.value.alpha"
+                      atomB = SemanticAtom "audit.qm.value.beta"
+                      atomMap = Map.fromList [(keyA, atomA), (keyB, atomB)]
+                      swappedMap = Map.fromList [(keyA, atomB), (keyB, atomA)]
+                      atomApp = application
+                        { genericApplicationSemanticArguments = atomMap }
+                      swappedApp = application
+                        { genericApplicationSemanticArguments = swappedMap }
+                      structuredApp = application
+                        { genericApplicationSemanticArguments =
+                            Map.singleton keyA (SemanticOrdered [atomA]) }
+                      isAtom (SemanticAtom _) = True
+                      isAtom _ = False
+                      actualProjection =
+                        case encodeNativeGenericAtomActualPairWires application of
+                          Nothing -> any (not . isAtom) (Map.elems actuals)
+                          Just pairs ->
+                            decodeNativeGenericAtomActualPairWires pairs == Just actuals
+                  in actualProjection
+                    && encodeNativeGenericAtomActualPairWires structuredApp == Nothing
+                    && encodeNativeGenericAtomActualPairWires
+                         (application { genericApplicationSemanticArguments = Map.empty })
+                         == Just []
+                    && decodeNativeGenericAtomActualPairWires [] == Just Map.empty
+                    && case (encodeNativeGenericAtomActualPairWires atomApp,
+                             encodeNativeGenericAtomActualPairWires swappedApp) of
+                        (Just pairs@[(qA, mA), (qB, mB)], Just swappedPairs) ->
+                          decodeNativeGenericAtomActualPairWires pairs == Just atomMap
+                          && decodeNativeGenericAtomActualPairWires swappedPairs
+                               == Just swappedMap
+                          && pairs /= swappedPairs
+                          && decodeNativeGenericAtomActualPairWires
+                               (reverse pairs) == Nothing
+                          && decodeNativeGenericAtomActualPairWires
+                               [(qA, mA), (qA, mA)] == Nothing
+                          && decodeNativeGenericAtomActualPairWires
+                               [(mA, qA), (qB, mB)] == Nothing
+                          && decodeNativeGenericAtomActualPairWires
+                               [(qA, qA), (qB, mB)] == Nothing
+                          && decodeNativeGenericAtomActualPairWires
+                               [(encodeNativeGenericDeclarationWire
+                                   (DeclarationKey "audit.qm.alpha"), mA),
+                                (qB, mB)] == Nothing
+                        _ -> False
+    _ -> False
 
 -- | Adversarial same-manifest-ID projections. Neither modified manifest is an
 -- accepted INT-002 artifact. Raw digest drift and lowering-root drift must

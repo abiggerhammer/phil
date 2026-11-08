@@ -883,3 +883,35 @@ TCB/policy weakening, public release-byte credit or independent pinned
 final-delta signoff. R/L/S/C/F/B/I/A/P/K/D/V/Q/M domains remain
 distinguished. Preserve original 244 normative cases, historic audit
 evidence and independent freeze **NOT YET**.
+
+## 2026-11-08 — Q/M atom-only actuals association (issue #1584)
+
+The real checked native GenericApplicationIdentity contains
+`Map GenericStaticParameterKey SemanticForm`. A new bounded partial
+projection pairs each native Map.toAscList Q-role key with its own M-role
+SemanticAtom Text value; other SemanticForm constructors fail closed.
+The decoder rejects wrong Q/M roles, duplicate keys and out-of-order
+entries, returning only an *unaccepted* native Map, not an accepted
+GenericApplicationIdentity or a source/manifest/stage/release object.
+
+Strict Haskell Upload/Steve tests first replay the actual checked producer,
+independently accepted manifest and VER-010 source and exact INT-005
+CertifiedRelease/StageClosure consumers. Synthetic *unaccepted* atom-only
+maps check empty/pair roundtrips, altered value associations, reversed
+key ordering, duplicated keys, foreign declaration keys, swapped Q/M roles
+and structured-value rejection. Four conditional Rocq string-list model
+theorems with named Print Assumptions cover paired roundtrip, injectivity,
+wrong-role rejection and association sensitivity.
+
+**Remaining premises:** total recursive SemanticForm codec, Unicode
+native Data.Text/string representation, native Map order versus Rocq list,
+full accepted generic application/manifest/source/stage/release reflection,
+authenticated architecture-occurrence-to-concrete-StageClosure production,
+predecessor authority, FixedFinalAuthorityAdapter and FinalArtifactCertified.
+R/L raw Systems digest/lowering root, S/C/F normalized/common/closed
+contracts, B/I/A subject/instance/realization, P profile, K/I occurrence,
+D/V/Q generic and M value roles remain disjoint. No unproved nat mapping,
+supplied model Prop as native authority, public release-byte or independently
+pinned final-delta signoff credit. Preserve original 244 normative cases,
+historical independent audit, Phase 1 TCB, generated artifacts, strict
+GHC/LLVM/Rocq policy and independent audit freeze **NOT YET**.
