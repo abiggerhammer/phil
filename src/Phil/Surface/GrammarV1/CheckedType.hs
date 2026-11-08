@@ -62,28 +62,26 @@ grammarV1CheckedType
   -> Maybe (Either FocusingError (Ty, [FocusStep]))
 grammarV1CheckedType staticContext state sourceType =
   case sourceType of
-    -- Bounded closed product type: exactly two independently checked Bytes[N]
-    -- elements. The mode and type of each element become Core TyProduct data.
-    -- Other/nested/unnamed source tuple forms remain unsupported.
-    GrammarV1TupleType
-      [Located _ first@(GrammarV1BytesType _),
-       Located _ second@(GrammarV1BytesType _)] -> do
-      left <- grammarV1CheckedTypeMode staticContext state first
-      right <- grammarV1CheckedTypeMode staticContext state second
-      pure $ do
-        (leftChecked, leftSteps) <- left
-        (rightChecked, rightSteps) <- right
-        Right
-          ( TyProduct
-              [ ProductElementType
-                  (checkedBindingMode leftChecked)
-                  (checkedBindingType leftChecked)
-              , ProductElementType
-                  (checkedBindingMode rightChecked)
-                  (checkedBindingType rightChecked)
-              ]
-          , leftSteps ++ rightSteps
-          )
+    -- A flat product of at least two source-checked primitive elements.
+    -- Preserve exact order, modes and types. Nested, nominal, proof-carrying
+    -- and affine-specific source forms remain outside this closed palette.
+    GrammarV1TupleType elements
+      | length elements >= 2
+      , all (closedFlatProductElement . locatedValue) elements -> do
+          checked <- mapM
+            (grammarV1CheckedTypeMode staticContext state . locatedValue)
+            elements
+          pure $ do
+            results <- sequence checked
+            Right
+              ( TyProduct
+                  [ ProductElementType
+                      (checkedBindingMode element)
+                      (checkedBindingType element)
+                  | (element, _) <- results
+                  ]
+              , concatMap snd results
+              )
     GrammarV1ProofType _ ->
       grammarV1CheckedProofType staticContext state sourceType
     GrammarV1RefinementType _ _ _ ->
@@ -91,6 +89,17 @@ grammarV1CheckedType staticContext state sourceType =
     _ -> do
       ty <- grammarV1BoundType state sourceType
       pure (Right (ty, []))
+
+-- | A source product is admitted only when every member independently
+-- checks through the established primitive type/mode path. Deliberately
+-- no recursive TyProduct construction or unsupported type fallback.
+closedFlatProductElement :: GrammarV1Type -> Bool
+closedFlatProductElement sourceType = case sourceType of
+  GrammarV1UnitType -> True
+  GrammarV1BoolType -> True
+  GrammarV1UnsignedType _ -> True
+  GrammarV1BytesType _ -> True
+  _ -> False
 
 grammarV1CheckedTypeMode
   :: StaticContext

@@ -12,6 +12,10 @@ on:
       - 'src/Phil/Surface/Check/Types.hs'
       - 'src/Phil/Surface/Check/Engine.hs'
       - 'src/Phil/Surface/GrammarV1/CheckedType.hs'
+      - 'test/Phase1FSEM01FlatProductMain.hs'
+      - 'test/Phase1GrammarV1IntrinsicTypeCompositionMain.hs'
+      - 'proof/Phil/Surface/SurfaceFlatProductCorrespondence.v'
+      - 'docs/phase-1/formal-semantics-flat-product-fsem01-v1.md'
       - 'docs/phase-1/formal-semantics-product-return-fsem01-v1.md'
       - 'test/Phase1FSEM01TwoOwnerSourceMain.hs'
       - 'test/fixtures/fsem01-two-owner-source-v1/**'
@@ -25,6 +29,10 @@ on:
       - 'src/Phil/Surface/Check/Types.hs'
       - 'src/Phil/Surface/Check/Engine.hs'
       - 'src/Phil/Surface/GrammarV1/CheckedType.hs'
+      - 'test/Phase1FSEM01FlatProductMain.hs'
+      - 'test/Phase1GrammarV1IntrinsicTypeCompositionMain.hs'
+      - 'proof/Phil/Surface/SurfaceFlatProductCorrespondence.v'
+      - 'docs/phase-1/formal-semantics-flat-product-fsem01-v1.md'
       - 'docs/phase-1/formal-semantics-product-return-fsem01-v1.md'
       - 'test/Phase1FSEM01TwoOwnerSourceMain.hs'
       - 'test/fixtures/fsem01-two-owner-source-v1/**'
@@ -57,6 +65,16 @@ jobs:
           set -euo pipefail
           cabal exec -- runghc -isrc -Wall -Werror \
             test/Phase1FSEM01TwoOwnerSourceMain.hs
+      - name: Strictly check flat source products, mixed runtime modes, and previous SURF-008 contracts
+        shell: bash
+        run: |
+          set -euo pipefail
+          cabal exec -- ghc -isrc -Wall -Werror -fno-code \
+            test/Phase1FSEM01FlatProductMain.hs
+          cabal exec -- runghc -isrc -Wall -Werror \
+            test/Phase1FSEM01FlatProductMain.hs
+          cabal exec -- runghc -isrc -Wall -Werror \
+            test/Phase1GrammarV1IntrinsicTypeCompositionMain.hs
       - name: Preserve single-owner and bounded Core two-owner regression contracts
         shell: bash
         run: |
@@ -74,6 +92,39 @@ jobs:
             test/Phase1FSEM01TwoOwnerSourceMain.hs \
             src/Phil/Surface/GrammarV1/TwoOwnerBorrowResourceSurface.hs \
             src/Phil/Surface/GrammarV1/CheckedType.hs \
+            test/Phase1FSEM01FlatProductMain.hs \
+            proof/Phil/Surface/SurfaceFlatProductCorrespondence.v \
             src/Phil/Surface/Check/Engine.hs \
             src/Phil/Surface/Check/Types.hs \
             proof/Phil/Surface/SurfaceTwoOwnerContext.v
+
+  rocq-flat-product-preservation:
+    needs: check-two-owner-source
+    runs-on: ubuntu-latest
+    container:
+      image: rocq/rocq-prover:9.2.0
+      options: --user root
+    steps:
+      - uses: actions/checkout@v4
+      - name: Compile finite product mode/contract preservation without new admissions
+        shell: bash
+        run: |
+          set -euo pipefail
+          export PATH="/home/rocq/.opam/${COMPILER}/bin:$PATH"
+          for file in \
+            proof/Phil/Core/Syntax.v \
+            proof/Phil/Core/Context.v \
+            proof/Phil/Core/DataMode.v \
+            proof/Phil/Core/DataProduct.v \
+            proof/Phil/Surface/SurfaceFlatProductCorrespondence.v
+          do
+            rocq c -Q proof/Phil Phil "$file"
+          done
+          if grep -nE '^[[:space:]]*(Admitted[.]|Axiom[[:space:]]|Parameter[[:space:]])' \
+            proof/Phil/Surface/SurfaceFlatProductCorrespondence.v; then
+            echo "Unproved new flat product assumption or admission"
+            exit 1
+          fi
+          sha256sum proof/Phil/Surface/SurfaceFlatProductCorrespondence.v \
+            proof/Phil/Surface/SurfaceFlatProductCorrespondence.vo \
+            proof/Phil/Core/DataProduct.v

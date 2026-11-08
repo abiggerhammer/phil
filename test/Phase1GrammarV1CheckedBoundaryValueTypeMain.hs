@@ -15,6 +15,7 @@ import Phil.Core.Static
 import Phil.Core.Syntax
   ( Mode (..)
   , Name (..)
+  , ProductElementType (..)
   , Proposition (..)
   , RefSort (..)
   , RefTerm (..)
@@ -84,6 +85,8 @@ checkedBoundaryValueTypes = do
     "boundary Unknown : Proof[Missing(u)] { canonical; }"
   tupleType <- parseBoundary "boundary-checked-tuple"
     "boundary Pair : (U8, Bool) { canonical; }"
+  nestedTuple <- parseBoundary "boundary-checked-nested-tuple"
+    "boundary Nested : (U8, (Bool, U32)) { canonical; }"
 
   let u = RefVar (Name "u")
   assert
@@ -120,8 +123,16 @@ checkedBoundaryValueTypes = do
     "checked boundary type collapsed Core UnknownClaim into source non-competence"
 
   assert
-    (grammarV1CheckedBoundaryValueType context state tupleType == Nothing)
-    "unsupported tuple boundary type bypassed the checked type competence wall"
+    (grammarV1CheckedBoundaryValueType context state tupleType ==
+      Just (Right (TyProduct
+        [ ProductElementType Unrestricted (TyUInt 8)
+        , ProductElementType Unrestricted TyBool
+        ], [])))
+    "flat checked boundary tuple lost exact element types, order, modes or trace"
+
+  assert
+    (grammarV1CheckedBoundaryValueType context state nestedTuple == Nothing)
+    "nested tuple boundary type bypassed the checked type competence wall"
 
 checkedBoundaryFailureTypes :: Either String ()
 checkedBoundaryFailureTypes = do
@@ -151,10 +162,16 @@ checkedBoundaryFailureTypes = do
     , "  failure Proof[Missing(u)];"
     , "}"
     ]
+  flat <- parseBoundary "boundary-checked-failures-flat" $ Text.unlines
+    [ "boundary FlatFailure : U8 {"
+    , "  failure U8;"
+    , "  failure (U32, Bool);"
+    , "}"
+    ]
   unsupported <- parseBoundary "boundary-checked-failures-unsupported" $ Text.unlines
     [ "boundary UnsupportedFailure : U8 {"
     , "  failure U8;"
-    , "  failure (U32, Bool);"
+    , "  failure (U32, (Bool, U8));"
     , "}"
     ]
 
@@ -195,8 +212,19 @@ checkedBoundaryFailureTypes = do
     "boundary failure Core error collapsed into source non-competence or partial success"
 
   assert
+    (grammarV1CheckedBoundaryFailureTypes context state flat ==
+      Just (Right
+        [ (TyUInt 8, [])
+        , (TyProduct
+            [ ProductElementType Unrestricted (TyUInt 32)
+            , ProductElementType Unrestricted TyBool
+            ], [])
+        ]))
+    "flat boundary failure types lost source order, element modes or exact Ty"
+
+  assert
     (grammarV1CheckedBoundaryFailureTypes context state unsupported == Nothing)
-    "unsupported tuple failure type was partially accepted by checked boundary routing"
+    "unsupported nested failure type was partially accepted by checked boundary routing"
 
 checkedBoundaryPropositions :: Either String ()
 checkedBoundaryPropositions = do
