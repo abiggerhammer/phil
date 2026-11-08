@@ -170,6 +170,7 @@ grammarV1CheckedSourceIfJoinTrace staticContext fnKey functionDecl
                             , sourceIfJoinCheckedOutcome = ordinary
                             })
               Right _ -> Nothing
+           Right _ -> Nothing
 
     semanticName = unName . grammarV1ResolvedBinderCoreName
 
