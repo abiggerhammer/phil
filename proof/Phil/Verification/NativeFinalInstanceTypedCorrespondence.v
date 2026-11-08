@@ -1637,3 +1637,73 @@ Proof.
   intros [raw] [root] [sys] [common] [closed] [subject] [inst] [real].
   repeat split; reflexivity.
 Qed.
+
+(* #1584: the checked architecture occurrence has a native InstanceKey
+   newtype separate from concrete StageClosure InstanceRevision. K is a
+   reversible data role, never a StageClosure-origin certificate. Nine
+   existing wire roles cannot decode as a checked occurrence key. Neither
+   a Unicode Text serializer nor native-to-Rocq nat translation is assumed. *)
+Record NativeOccurrenceKeyRole := mkNativeOccurrenceKeyRole {
+  nativeOccurrenceKeyPayload : string
+}.
+Definition nativeOccurrenceKeyWire (k : NativeOccurrenceKeyRole) : string :=
+  "K" ++ nativeOccurrenceKeyPayload k.
+Definition nativeDecodeOccurrenceKeyWire (wire : string)
+  : option NativeOccurrenceKeyRole :=
+  match wire with
+  | EmptyString => None
+  | String role payload =>
+      if Ascii.eqb role "K"%char
+      then Some (mkNativeOccurrenceKeyRole payload)
+      else None
+  end.
+
+Theorem native_occurrence_key_wire_injective :
+  forall a b, nativeOccurrenceKeyWire a = nativeOccurrenceKeyWire b -> a = b.
+Proof.
+  intros [a] [b] H.
+  unfold nativeOccurrenceKeyWire in H.
+  simpl in H. injection H as Heq. now subst.
+Qed.
+
+Theorem native_occurrence_key_wire_roundtrip :
+  forall k, nativeDecodeOccurrenceKeyWire (nativeOccurrenceKeyWire k) = Some k.
+Proof. intros [k]. reflexivity. Qed.
+
+Theorem native_occurrence_key_wire_disjoint_from_nine_roles :
+  forall raw root sys common closed subject inst real profile key,
+    nativeOccurrenceKeyWire key <> nativeRawSystemsDigestWire raw /\
+    nativeOccurrenceKeyWire key <> nativeLoweringRootWire root /\
+    nativeOccurrenceKeyWire key <> nativeSystemsRevisionWire sys /\
+    nativeOccurrenceKeyWire key <> nativeCommonRevisionWire common /\
+    nativeOccurrenceKeyWire key <> nativeClosedRevisionWire closed /\
+    nativeOccurrenceKeyWire key <> nativeSubjectRevisionWire subject /\
+    nativeOccurrenceKeyWire key <> nativeInstanceRevisionWire inst /\
+    nativeOccurrenceKeyWire key <> nativeRealizationRevisionWire real /\
+    nativeOccurrenceKeyWire key <> nativeVerifierProfileTextWire profile.
+Proof.
+  intros [raw] [root] [sys] [common] [closed] [subject] [inst] [real] [profile] [key].
+  repeat split; intro H;
+    unfold nativeOccurrenceKeyWire, nativeRawSystemsDigestWire,
+      nativeLoweringRootWire, nativeSystemsRevisionWire,
+      nativeCommonRevisionWire, nativeClosedRevisionWire,
+      nativeSubjectRevisionWire, nativeInstanceRevisionWire,
+      nativeRealizationRevisionWire, nativeVerifierProfileTextWire in H;
+    simpl in H; discriminate H.
+Qed.
+
+Theorem native_occurrence_key_wrong_role_decoders_fail :
+  forall raw root sys common closed subject inst real profile,
+    nativeDecodeOccurrenceKeyWire (nativeRawSystemsDigestWire raw) = None /\
+    nativeDecodeOccurrenceKeyWire (nativeLoweringRootWire root) = None /\
+    nativeDecodeOccurrenceKeyWire (nativeSystemsRevisionWire sys) = None /\
+    nativeDecodeOccurrenceKeyWire (nativeCommonRevisionWire common) = None /\
+    nativeDecodeOccurrenceKeyWire (nativeClosedRevisionWire closed) = None /\
+    nativeDecodeOccurrenceKeyWire (nativeSubjectRevisionWire subject) = None /\
+    nativeDecodeOccurrenceKeyWire (nativeInstanceRevisionWire inst) = None /\
+    nativeDecodeOccurrenceKeyWire (nativeRealizationRevisionWire real) = None /\
+    nativeDecodeOccurrenceKeyWire (nativeVerifierProfileTextWire profile) = None.
+Proof.
+  intros [raw] [root] [sys] [common] [closed] [subject] [inst] [real] [profile].
+  repeat split; reflexivity.
+Qed.
