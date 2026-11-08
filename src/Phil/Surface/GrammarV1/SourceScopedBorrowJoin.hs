@@ -24,7 +24,7 @@ import Phil.Surface.Check.Types
   ( InitialBinding (..), SurfaceCheckError, SurfaceCheckResult
   , SurfaceEnvironment (..), emptySurfaceEnvironment )
 import Phil.Surface.GrammarV1.BinderScope
-  ( GrammarV1BinderScopeError, GrammarV1LexicalScope
+  ( GrammarV1BinderScopeError
   , GrammarV1ResolvedBinder (..)
   , grammarV1EnterLexicalScope, grammarV1LeaveLexicalScope
   , grammarV1FunctionParameterScope )
