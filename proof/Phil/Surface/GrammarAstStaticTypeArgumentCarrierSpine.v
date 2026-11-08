@@ -238,7 +238,7 @@ Proof.
   cbn in Hnormalize.
   destruct (phase1_surface_normalize_optional_static_type_argument_list items)
     as [actual |] eqn:Hitems; try discriminate Hnormalize.
-  inversion Hnormalize; subst refined.
+  inversion Hnormalize; subst.
   cbn.
   rewrite
     (phase1_surface_normalize_optional_static_type_argument_list_round_trip
