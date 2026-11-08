@@ -115,7 +115,8 @@ Proof.
       eqTy Heq
       (nominalAffineLinearProduct permitTy bytesTy) actual Hmatch) as Hlen.
   simpl in Hlen.
-  now symmetry.
+  symmetry.
+  exact Hlen.
 Qed.
 
 (* A bounded, two-transition resource model: after an unloaned affine
