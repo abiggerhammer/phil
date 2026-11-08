@@ -500,3 +500,40 @@ realization, P profile, K/I occurrence, D/V/Q generic and M value roles.
 Original **244 normative cases** (236 Exit, 8 Profile), TCB, historical
 audit, generated outputs and strict GHC/LLVM/Rocq policy unchanged.
 **Independent Phase 1 audit-freeze verdict: NOT YET.**
+
+## Implementation evidence — 2026-11-08: checked generic actuals Q/M association
+
+[PR #1682](https://github.com/abiggerhammer/phil/pull/1682),
+[issue #1584](https://github.com/abiggerhammer/phil/issues/1584),
+exact tested head `b799cc80a69911f02319f8516b384000e85940b0`,
+merged as `b42aaa9a6a4ba0ebda4e5497ced444435e4c8655`
+at **2026-11-08 19:51:03 UTC**. Independently refetched exact-head
+**36/36 pull-request workflow runs SUCCESS and 78/78 check runs SUCCESS**,
+no failed, skipped or pending checks; protected
+[Hamster Merge Intent 42517071710](https://github.com/abiggerhammer/phil/actions/runs/42517071710)
+succeeded. Supplemental Conformance Matrix row **46** appended and
+read back (six cells).
+
+**Executed bounded result:** real native GenericApplicationIdentity semantic
+actuals Map projects to Q/M typed key/atom-value pairs when every value
+is SemanticAtom Text; strict key ordering, duplicates and foreign roles
+are checked; decoder reconstructs an UNACCEPTED Map only. Strict
+Upload/Steve replay of actual checked source-manifest producer and
+independently accepted manifest, VER-010 source and INT-005 exact
+CertifiedRelease/StageClosure consumer objects passed, plus negative
+key/value swap, duplicate and structural cases. Four Rocq conditional
+string-list model theorems and their Print Assumptions passed.
+
+**Nonclaims:** no total recursive SemanticForm, Unicode Text/string,
+cross-runtime Map canonical ordering, complete accepted generic-actuals/
+manifest/source/stage/release reflection, authenticated architecture
+occurrence to concrete StageClosure production, predecessor authority,
+FixedFinalAuthorityAdapter or FinalArtifactCertified. No ad hoc nat
+encoding or supplied model Prop promoted to native authority. Distinct
+R/L raw digest/root, S/C/F normalized/common/closed, B/I/A stage
+subject/instance/realization, P profile, K/I occurrence, D/V/Q/M generic
+and semantic value roles remain separate. Public release bytes and
+independent pinned final-delta signoff are still uncredited. Original
+**244 normative cases** (236 Exit, 8 Profile), historical independent
+audit, TCB, generated outputs and strict GHC/LLVM/Rocq policies unchanged.
+**Independent Phase 1 audit-freeze verdict: NOT YET.**

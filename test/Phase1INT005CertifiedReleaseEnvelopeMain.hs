@@ -215,6 +215,10 @@ main = do
           , nativeGenericAtomActualPairsReplayAccepts source upload)
         , ( "Steve checked Q/M atom-only generic actuals preserve association; duplicates and swapped roles reject"
           , nativeGenericAtomActualPairsReplayAccepts source steve)
+        , ( "Upload checked SemanticUnordered atom-only canonical M-set rejects duplicates, order, and roles"
+          , nativeSemanticUnorderedAtomSetReplayAccepts source upload)
+        , ( "Steve checked SemanticUnordered atom-only canonical M-set rejects duplicates, order, and roles"
+          , nativeSemanticUnorderedAtomSetReplayAccepts source steve)
         , ( "Upload changed raw Systems digest cannot pass exact manifest-stage replay"
           , nativeManifestStageReplayRejectsChangedDigests source upload)
         , ( "Steve changed raw Systems digest cannot pass exact manifest-stage replay"
@@ -1706,6 +1710,65 @@ nativeGenericAtomActualPairsReplayAccepts source fixture =
                                [(encodeNativeGenericDeclarationWire
                                    (DeclarationKey "audit.qm.alpha"), mA),
                                 (qB, mB)] == Nothing
+                        _ -> False
+    _ -> False
+
+-- | This native Set probe replays the real accepted producer/consumer path
+-- first. The set and alternate values below are deliberately UNACCEPTED test
+-- data. Set canonical order is native Ord evidence, NOT a Rocq comparator.
+nativeSemanticUnorderedAtomSetReplayAccepts
+  :: GenericApplicationAssurance -> ReleaseFixture -> Bool
+nativeSemanticUnorderedAtomSetReplayAccepts source fixture =
+  case (producerInputs source, produceFixture source fixture) of
+    (Right (bundle, policy), Right (_, produced)) ->
+      case nativeAdapterPair source produced of
+        Nothing -> False
+        Just (sourceArtifact, release) ->
+          case closeNativeFinalInstanceCorrespondence
+              source (sourceInstanceDescriptor source) bundle policy
+              (fixtureContext produced) (fixtureLedger produced)
+              emptyProducerSelection sourceArtifact release of
+            Left _ -> False
+            Right witness ->
+              case replayNativeExactAcceptedConsumers witness
+                (nativeCorrespondenceSourceManifestBinding witness)
+                (nativeCorrespondenceCertifiedSource witness)
+                (nativeCorrespondenceCertifiedRelease witness) of
+                Left _ -> False
+                Right _ ->
+                  let atomA = SemanticAtom "audit.unordered.alpha"
+                      atomB = SemanticAtom "audit.unordered.beta"
+                      atomSet = Set.fromList [atomB, atomA]
+                      form = SemanticUnordered atomSet
+                      nested = SemanticUnordered (Set.singleton
+                        (SemanticOrdered [atomA]))
+                      emptyForm = SemanticUnordered Set.empty
+                      mA = encodeNativeSemanticAtomWire atomA
+                      mB = encodeNativeSemanticAtomWire atomB
+                  in encodeNativeSemanticUnorderedAtomWires emptyForm == Just []
+                    && decodeNativeSemanticUnorderedAtomWires [] == Just emptyForm
+                    && encodeNativeSemanticUnorderedAtomWires nested == Nothing
+                    && encodeNativeSemanticUnorderedAtomWires atomA == Nothing
+                    && encodeNativeSemanticUnorderedAtomWires
+                         (SemanticOrdered [atomA, atomB]) == Nothing
+                    && case (encodeNativeSemanticUnorderedAtomWires form, mA, mB) of
+                        (Just wires@[wA, wB], Just expectedA, Just expectedB) ->
+                          wires == [expectedA, expectedB]
+                          && decodeNativeSemanticUnorderedAtomWires wires == Just form
+                          && decodeNativeSemanticUnorderedAtomWires
+                               (reverse wires) == Nothing
+                          && decodeNativeSemanticUnorderedAtomWires
+                               [wA, wA] == Nothing
+                          && decodeNativeSemanticUnorderedAtomWires
+                               [wA, wB, wA] == Nothing
+                          && decodeNativeSemanticUnorderedAtomWires
+                               [encodeNativeGenericStaticParameterKeyWire
+                                   (GenericStaticParameterKey "audit.unordered.alpha"), wB]
+                               == Nothing
+                          && decodeNativeSemanticUnorderedAtomWires
+                               [encodeNativeGenericDeclarationWire
+                                   (DeclarationKey "audit.unordered.alpha"), wB]
+                               == Nothing
                         _ -> False
     _ -> False
 
