@@ -57,6 +57,8 @@ data GrammarV1TwoBoolJoinTrace = GrammarV1TwoBoolJoinTrace
   , twoBoolJoinPayloadBinder :: GrammarV1ResolvedBinder
   , twoBoolJoinFirstSlotBinder :: GrammarV1ResolvedBinder
   , twoBoolJoinSecondSlotBinder :: GrammarV1ResolvedBinder
+  , twoBoolJoinThenBinders :: [GrammarV1ResolvedBinder]
+  , twoBoolJoinElseBinders :: [GrammarV1ResolvedBinder]
   , twoBoolJoinSlotCheckedModes :: [CheckedTypeMode]
   , twoBoolJoinInvariantProof :: SourceBoolJoinInvariant
   , twoBoolJoinBranchRun :: SourceTwoBoolJoinRun
@@ -133,8 +135,8 @@ grammarV1CheckedTwoBoolJoinTelescopeTrace staticContext fnKey functionDecl
                   let boundFirst = grammarV1CheckedJoinSlotBinder checkedFirst
                       boundSecond = grammarV1CheckedJoinSlotBinder checkedSecond
                       permitted = [flagBinder,alternativeBinder,payloadBinder]
-                  leftBlock <- bridgePair permitted thenSource
-                  rightBlock <- bridgePair permitted elseSource
+                  (leftBlock,leftBinders) <- bridgePair permitted thenSource
+                  (rightBlock,rightBinders) <- bridgePair permitted elseSource
                   useFirst <- grammarV1CheckedLocalValueOccurrenceInScope
                     successorScope sourceUseFirst
                   useSecond <- grammarV1CheckedLocalValueOccurrenceInScope
@@ -196,6 +198,8 @@ grammarV1CheckedTwoBoolJoinTelescopeTrace staticContext fnKey functionDecl
                       , twoBoolJoinPayloadBinder = payloadBinder
                       , twoBoolJoinFirstSlotBinder = boundFirst
                       , twoBoolJoinSecondSlotBinder = boundSecond
+                      , twoBoolJoinThenBinders = leftBinders
+                      , twoBoolJoinElseBinders = rightBinders
                       , twoBoolJoinSlotCheckedModes =
                           [CheckedTypeMode TyBool Unrestricted,
                            CheckedTypeMode TyBool Unrestricted]
@@ -230,14 +234,15 @@ grammarV1CheckedTwoBoolJoinTelescopeTrace staticContext fnKey functionDecl
         (grammarV1CheckedLocalValueBinder firstOccurrence)
       secondBinder <- findExact permitted
         (grammarV1CheckedLocalValueBinder secondOccurrence)
-      Just (Located (locatedSpan (grammarV1CheckedIfBranchSource branch))
-        (Block [Located statementSpan (ExpressionStatement
-          (Located (locatedSpan sourceTuple) (TupleExpression
-            [ Located (locatedSpan firstSource)
-                (VariableExpression (semanticName firstBinder))
-            , Located (locatedSpan secondSource)
-                (VariableExpression (semanticName secondBinder))
-            ])))]))
+      Just ( Located (locatedSpan (grammarV1CheckedIfBranchSource branch))
+          (Block [Located statementSpan (ExpressionStatement
+            (Located (locatedSpan sourceTuple) (TupleExpression
+              [ Located (locatedSpan firstSource)
+                  (VariableExpression (semanticName firstBinder))
+              , Located (locatedSpan secondSource)
+                  (VariableExpression (semanticName secondBinder))
+              ])))])
+        , [firstBinder,secondBinder] )
 
     classifyInvariant scope slots maybeInvariant = do
       source <- maybeInvariant
