@@ -129,7 +129,7 @@ missingOfferRejected :: Text.Text -> Either String ()
 missingOfferRejected input = do
   source <- sourceOffer input
   case grammarV1CheckedComponentOfferCoverage
-    (DeclarationKey "component.ServerWorker") (offerComponent source) (offerProjection source) of
+    (DeclarationKey "component.ServerWorker") (offerComponent source) (protocolProjectionSession (offerProjection source)) of
     Just (Left (GrammarV1ComponentOfferMissingArm label)) ->
       assert (label == "Cancel") "missing-arm class changed"
     other -> Left ("missing source branch was admitted: " <> show other)
@@ -138,7 +138,7 @@ duplicateOfferRejected :: Text.Text -> Either String ()
 duplicateOfferRejected input = do
   source <- sourceOffer input
   case grammarV1CheckedComponentOfferCoverage
-    (DeclarationKey "component.ServerWorker") (offerComponent source) (offerProjection source) of
+    (DeclarationKey "component.ServerWorker") (offerComponent source) (protocolProjectionSession (offerProjection source)) of
     Just (Left (GrammarV1ComponentOfferDuplicateArm label)) ->
       assert (label == "Go") "duplicate-arm class changed"
     other -> Left ("duplicate source branch was admitted: " <> show other)
@@ -147,7 +147,7 @@ unknownOperandRejected :: Text.Text -> Either String ()
 unknownOperandRejected input = do
   source <- sourceOffer input
   case grammarV1CheckedComponentOfferCoverage
-    (DeclarationKey "component.ServerWorker") (offerComponent source) (offerProjection source) of
+    (DeclarationKey "component.ServerWorker") (offerComponent source) (protocolProjectionSession (offerProjection source)) of
     Just (Left GrammarV1ComponentOfferOperandNotLocal) -> Right ()
     other -> Left ("unbound offer scrutinee was admitted: " <> show other)
 
