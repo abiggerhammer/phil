@@ -35,6 +35,12 @@ module Phil.Verification.NativeFinalInstanceCorrespondence
   , decodeNativeOccurrenceKeyWire
   , encodeNativeCheckedOccurrenceIdentityWires
   , decodeNativeCheckedOccurrenceIdentityWires
+  , encodeNativeGenericDeclarationWire
+  , decodeNativeGenericDeclarationWire
+  , encodeNativeGenericInterfaceWire
+  , decodeNativeGenericInterfaceWire
+  , encodeNativeGenericApplicationScalarWires
+  , decodeNativeGenericApplicationScalarWires
   , NativeVerifierProfileText (..)
   , encodeNativeVerifierProfileWire
   , decodeNativeVerifierProfileWire
@@ -68,10 +74,13 @@ module Phil.Verification.NativeFinalInstanceCorrespondence
 
 import Data.Text (Text)
 import qualified Data.Text as Text
+import Phil.Core.Generic (GenericApplicationIdentity (..))
 import Phil.Assurance.Types
   ( AssuranceLedger, AssuranceManifest (..), Digest (..), VerificationContext )
 import Phil.Core.Static
   ( ArchitectureInstanceDescriptor
+  , DeclarationKey (..)
+  , InterfaceRevision (..)
   , ArchitectureInstanceIdentity (..)
   , InstanceRevision (..)
   , InstanceKey (..)
@@ -352,6 +361,48 @@ decodeNativeCheckedOccurrenceIdentityWires (keyWire, revisionWire) =
   ArchitectureInstanceIdentity
     <$> decodeNativeOccurrenceKeyWire keyWire
     <*> decodeNativeInstanceRevisionWire revisionWire
+
+
+-- | D is the verified GenericApplicationIdentity declaration-key ROLE;
+-- V is the independent generic interface-revision ROLE. Both native
+-- components are Text newtypes, but neither is a stage or instance revision.
+-- This is ONLY a scalar projection of the checked identity: its essential
+-- Map GenericStaticParameterKey SemanticForm is deliberately NOT serialized.
+-- Equal D/V wires do not identify a GenericApplicationIdentity, let alone
+-- establish independently accepted manifest or StageClosure provenance.
+encodeNativeGenericDeclarationWire :: DeclarationKey -> Text
+encodeNativeGenericDeclarationWire (DeclarationKey value) = Text.cons 'D' value
+
+decodeNativeGenericDeclarationWire :: Text -> Maybe DeclarationKey
+decodeNativeGenericDeclarationWire wire =
+  case Text.uncons wire of
+    Just ('D', payload) -> Just (DeclarationKey payload)
+    _ -> Nothing
+
+encodeNativeGenericInterfaceWire :: InterfaceRevision -> Text
+encodeNativeGenericInterfaceWire (InterfaceRevision value) = Text.cons 'V' value
+
+decodeNativeGenericInterfaceWire :: Text -> Maybe InterfaceRevision
+decodeNativeGenericInterfaceWire wire =
+  case Text.uncons wire of
+    Just ('V', payload) -> Just (InterfaceRevision payload)
+    _ -> Nothing
+
+encodeNativeGenericApplicationScalarWires
+  :: GenericApplicationIdentity -> (Text, Text)
+encodeNativeGenericApplicationScalarWires application =
+  ( encodeNativeGenericDeclarationWire (genericApplicationDeclarationKey application)
+  , encodeNativeGenericInterfaceWire (genericApplicationInterfaceRevision application)
+  )
+
+-- | Returns a pair of role-checked scalar values, NEVER an accepted generic
+-- application identity. Exact semantic actuals and checked producer evidence
+-- must still come from the retained native source assurance and binding.
+decodeNativeGenericApplicationScalarWires
+  :: (Text, Text) -> Maybe (DeclarationKey, InterfaceRevision)
+decodeNativeGenericApplicationScalarWires (declarationWire, interfaceWire) =
+  (,) <$> decodeNativeGenericDeclarationWire declarationWire
+      <*> decodeNativeGenericInterfaceWire interfaceWire
 
 -- | The concrete verifier-profile revision is a plain Phase1Stage Text field,
 -- not a nominal Haskell revision type. This separate read-only role wrapper

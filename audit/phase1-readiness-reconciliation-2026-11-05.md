@@ -322,3 +322,40 @@ was appended and read back, preserving the original **244 normative cases
 (236 Exit, 8 Profile)**, historical audit evidence, Phase 1 TCB,
 generated artifacts and strict GHC/LLVM/Rocq policy.
 **Independent Phase 1 audit-freeze verdict: NOT YET.**
+
+
+## Implementation evidence — 2026-11-08: checked occurrence K/I identity pair
+
+[PR #1668](https://github.com/abiggerhammer/phil/pull/1668), controlling
+[issue #1584](https://github.com/abiggerhammer/phil/issues/1584), exact
+tested head `da3968efba79b91c4e9a7e4f0234246b5ebe2e14`, merged as
+`3efc84685cbe0f2241da190c4f2611b9e800188c` at
+**2026-11-08 08:55:39 UTC**. All **37/37 exact-head pull_request
+workflows** and **80/80 exact-head checks** completed SUCCESS, zero
+failed/pending/skipped; protected
+[Hamster Merge Intent workflow 42464788785](https://github.com/abiggerhammer/phil/actions/runs/42464788785)
+and its `merge-pr` job succeeded. No direct merge or policy bypass.
+
+**Bounded executed fragment:** A reversible role-separated (K InstanceKey,
+I InstanceRevision) wire pair faithfully preserves the checked
+ArchitectureInstanceIdentity's two components. Strict Upload/Steve replay
+requires the exact checked source-manifest producer, independently accepted
+manifest, VER-010 source and INT-005 CertifiedRelease/StageClosure consumers.
+Same-revision/different-key occurrence, swapped and foreign-role pair negatives
+reject, and four bounded Rocq string-model theorems with four named
+`Print Assumptions` checks passed. This is a DATA representation, not
+native-to-Rocq authority or a proof the occurrence produced StageClosure.
+
+**Remaining-premise ledger:** StageClosure has no InstanceKey. Matching
+occurrence/stage revisions or reversible K/I wires cannot authenticate
+concrete stage or selected-release provenance. Complete Haskell Unicode
+Data.Text ↔ Rocq string correspondence, exact semantic-actuals and
+source/manifest/release object translation, predecessor source/assumption/
+erasure/final authority, `FixedFinalAuthorityAdapter` and
+`FinalArtifactCertified` remain unproved. No arbitrary native-to-Rocq nat
+encoding or model Prop promoted to native acceptance. Public release-byte
+verification and independent pinned final-delta signoff are separately
+uncredited. [Supplemental Conformance Matrix Audit Reconciliation row 41](https://docs.google.com/spreadsheets/d/1hpzjw7O81vJgb9V5AMRyPd2tuRMHT92EZaqtpGl3DSo/edit)
+was appended and read back; original **244 normative cases (236 Exit,
+8 Profile)**, historical independent audit, TCB, generated artifacts and
+strict GHC/LLVM/Rocq controls remain unchanged. **Audit freeze: NOT YET.**
