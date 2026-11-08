@@ -125,6 +125,13 @@ library
       Phil.Core.ProviderAuthorityQualification
       Phil.Core.ProviderQualification
       Phil.Core.ProviderQualificationIdentity
+      Phil.Core.Protocol
+      Phil.Core.Protocol.Family
+      Phil.Core.Protocol.MessageAdmissibility
+      ProtocolIdentityKernel
+      ProtocolMessageAdmissibilityKernel
+      ProtocolProgressionGuardKernel
+      ProtocolProjectionKernel
       Phil.Systems.AssumptionDependency
       Phil.Systems.AuthorityEffectCorrespondence
       Phil.Systems.BoundaryCommitCorrespondence
