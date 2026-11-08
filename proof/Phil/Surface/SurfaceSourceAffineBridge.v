@@ -163,16 +163,20 @@ Proof.
   destruct (Context.affineBindings before owner) as [found |] eqn:Hfound;
     try discriminate.
   inversion Hdrop; subst after; clear Hdrop.
-  repeat split.
+  split.
   - simpl. unfold Context.deleteBinding.
     now rewrite String.eqb_refl.
-  - reflexivity.
-  - reflexivity.
-  - intros other Hother.
-    simpl.
-    repeat split; try reflexivity.
-    unfold Context.deleteBinding.
-    now rewrite Hother.
+  - split.
+    + reflexivity.
+    + split.
+      * reflexivity.
+      * intros other Hother.
+        simpl.
+        split; [reflexivity |].
+        split.
+        -- unfold Context.deleteBinding.
+           now rewrite Hother.
+        -- split; reflexivity.
 Qed.
 
 Theorem borrowed_affine_cannot_be_discarded :
