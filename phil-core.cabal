@@ -211,6 +211,9 @@ library
       Phil.Surface.GrammarV1.ParameterBodyScope
       Phil.Surface.GrammarV1.PatternBinderScope
       Phil.Surface.GrammarV1.LetPatternScope
+      Phil.Surface.GrammarV1.CaseArmScope
+      Phil.Surface.GrammarV1.JoinStateScope
+      Phil.Surface.GrammarV1.LexicalReferenceScope
       Phil.Surface.GrammarV1.BorrowViewScope
       Phil.Surface.GrammarV1.BorrowResourceSurface
       Phil.Surface.GrammarV1.DataVariants
