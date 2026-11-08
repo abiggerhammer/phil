@@ -22,6 +22,7 @@ import Phil.Core.Syntax
   , Proposition (..)
   , RefSort (..)
   , RefTerm (..)
+  , ProductElementType (..)
   , Ty (..)
   )
 import Phil.Surface.Check.Support
@@ -226,7 +227,9 @@ checkedTypesPreserveCompetence = do
         , Just (Left (UnknownClaim "Missing"))
         , Nothing
         , Nothing
-        , Nothing
+        , Just (Right (TyProduct
+            [ ProductElementType Unrestricted (TyUInt 8)
+            , ProductElementType Unrestricted TyBool ], []))
         ]
   assert (actual == expected) $
     "checked type composition changed type/trace meaning or collapsed source non-competence with Core rejection: "
@@ -296,7 +299,9 @@ checkedTypeModesPreserveCompetence = do
         , Just (Left (UnknownClaim "Missing"))
         , Nothing
         , Nothing
-        , Nothing
+        , Just (Right (checked (TyProduct
+            [ ProductElementType Unrestricted (TyUInt 8)
+            , ProductElementType Unrestricted TyBool ]) Unrestricted, []))
         ]
   assert (actual == expected) $
     "checked type mode routing invented a mode, lost a Core failure, or changed a focusing trace: "
