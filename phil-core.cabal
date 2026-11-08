@@ -125,6 +125,8 @@ library
       Phil.Core.ProviderAuthorityQualification
       Phil.Core.ProviderQualification
       Phil.Core.ProviderQualificationIdentity
+      Phil.Core.ProcessActivation
+      Phil.Core.ProcessRendezvous
       Phil.Core.Protocol
       Phil.Core.Protocol.Family
       Phil.Core.Protocol.MessageAdmissibility
@@ -235,6 +237,7 @@ library
       Phil.Surface.GrammarV1.ComponentSelectClose
       Phil.Surface.GrammarV1.ComponentOfferCoverage
       Phil.Surface.GrammarV1.ComponentOfferReplay
+      Phil.Surface.GrammarV1.ComponentChoiceRendezvous
       Phil.Surface.GrammarV1.TwoOwnerBorrowResourceSurface
       Phil.Surface.GrammarV1.ReferenceKernelBridge
       Phil.Surface.GrammarV1.ReferenceToken
