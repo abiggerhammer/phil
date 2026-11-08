@@ -2018,10 +2018,10 @@ Theorem native_ordered_atom_list_model_roundtrip :
     nativeDecodeOrderedAtomListModel
       (nativeEncodeOrderedAtomListModel atoms) = Some atoms.
 Proof.
-  induction atoms as [|atom rest IH]; simpl.
+  induction atoms as [|atom rest IH].
   - reflexivity.
-  - rewrite native_semantic_atom_wire_roundtrip.
-    now rewrite IH.
+  - destruct atom as [payload]. simpl.
+    rewrite IH. reflexivity.
 Qed.
 Theorem native_ordered_atom_list_model_injective :
   forall left right,
@@ -2044,10 +2044,10 @@ Theorem native_ordered_atom_list_model_foreign_key_rejected :
        nativeEncodeOrderedAtomListModel suffix) = None.
 Proof.
   intros prefix.
-  induction prefix as [|atom rest IH]; intros suffix key; simpl.
-  - destruct key as [value]. reflexivity.
-  - rewrite native_semantic_atom_wire_roundtrip.
-    apply IH.
+  induction prefix as [|atom rest IH]; intros suffix key.
+  - simpl. destruct key as [value]. reflexivity.
+  - destruct atom as [payload]. simpl.
+    rewrite IH. reflexivity.
 Qed.
 Theorem native_ordered_atom_list_model_order_sensitive :
   forall a b, a <> b ->
