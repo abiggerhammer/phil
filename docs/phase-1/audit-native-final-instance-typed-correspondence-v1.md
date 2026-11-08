@@ -674,3 +674,37 @@ pinned final-delta signoff remain separate uncredited gates. The original
 244 normative cases, independent-audit history, generated Phase-1 outputs,
 Phase 1 TCB and strict GHC/LLVM/Rocq policy are unchanged. Independent
 Phase 1 audit-freeze verdict: **NOT YET**.
+
+## 2026-11-08 — checked architecture occurrence InstanceKey role-wire boundary
+
+Controlling issue #1584; successor after merged #1663 readiness reconciliation.
+The exact checked `ArchitectureInstanceDescriptor` retained by the
+`closeSourceManifestBindingForInstance` producer carries an
+`ArchitectureInstanceIdentity` with a native `InstanceKey` **Text newtype**.
+The independently accepted concrete `StageClosure` carries
+`InstanceRevision` but **no InstanceKey**. The checked occurrence key now
+has a read-only reversible ASCII `K`-prefixed data wire, disjoint from the
+nine previously modeled manifest/stage roles `R/L/S/C/F/B/I/A/P`; it never
+converts or equates the stage revision with an occurrence key.
+
+The strict Upload/Steve Haskell replay first requires the checked source-
+manifest producer and exact independently accepted VER-010/INT-005 objects,
+then reads the checked descriptor's actual key, verifies roundtrip and
+rejects **nine unaccepted equal-payload foreign-role substitutions**.
+Another negative constructs distinct occurrence keys at the *same revision*;
+it is not promoted into checked producer acceptance. Four Rocq string-model
+theorems and four named `Print Assumptions` queries cover K injectivity,
+roundtrip, disjointness and wrong-role rejection, not native serialization.
+
+**Remaining-premise ledger:** The stage lacks an occurrence key; the wire
+does not authenticate that this checked occurrence produced the concrete
+StageClosure or selected release. Haskell Unicode `Text` ↔ Rocq `string`,
+complete generic semantic actuals, descriptor, independently accepted
+manifest and whole certified source/release representation, and predecessor
+source/assumption/erasure/final authority remain unproved. No invented
+native-to-Rocq `nat` encoding, no model proposition promoted to native
+authority, no complete `FixedFinalAuthorityAdapter` or
+`FinalArtifactCertified`. Public release-byte validation and independent
+pinned final-delta signoff remain separate, uncredited gates. No changes
+to original 244 normative cases, historical audit, TCB, generated artifacts
+or strict GHC/LLVM/Rocq policies. **Independent audit-freeze: NOT YET.**

@@ -187,6 +187,10 @@ main = do
           , nativeVerifierProfileSamePayloadRejects source upload)
         , ( "Steve same-payload forged profile versus eight other roles decodes fail closed"
           , nativeVerifierProfileSamePayloadRejects source steve)
+        , ( "Upload checked occurrence InstanceKey uses a disjoint K-role wire"
+          , nativeOccurrenceKeyWireReplayAccepts source upload)
+        , ( "Steve checked occurrence InstanceKey uses a disjoint K-role wire"
+          , nativeOccurrenceKeyWireReplayAccepts source steve)
         , ( "Upload changed raw Systems digest cannot pass exact manifest-stage replay"
           , nativeManifestStageReplayRejectsChangedDigests source upload)
         , ( "Steve changed raw Systems digest cannot pass exact manifest-stage replay"
@@ -1176,6 +1180,66 @@ nativeVerifierProfileSamePayloadRejects source fixture =
                     && decodeNativeVerifierProfileWire actual == Just profile
                     && decodeNativeVerifierProfileWire
                          (encodeNativeVerifierProfileWire altered) /= Just profile
+    _ -> False
+
+-- | Exact checked-instance source/manifest producer and full accepted
+-- VER-010/INT-005 objects are required before inspecting the occurrence key.
+-- The key is derived from the retained architecture descriptor, NOT from
+-- the independently accepted StageClosure, which does not contain one.
+-- Nine unaccepted equal-payload role substitutions and same-revision/different-
+-- key occurrence identities cannot impersonate the accepted K wire.
+nativeOccurrenceKeyWireReplayAccepts
+  :: GenericApplicationAssurance -> ReleaseFixture -> Bool
+nativeOccurrenceKeyWireReplayAccepts source fixture =
+  case (producerInputs source, produceFixture source fixture) of
+    (Right (bundle, policy), Right (_, produced)) ->
+      case nativeAdapterPair source produced of
+        Nothing -> False
+        Just (sourceArtifact, release) ->
+          case closeNativeFinalInstanceCorrespondence
+              source (sourceInstanceDescriptor source) bundle policy
+              (fixtureContext produced) (fixtureLedger produced)
+              emptyProducerSelection sourceArtifact release of
+            Left _ -> False
+            Right witness ->
+              case replayNativeExactAcceptedConsumers witness
+                (nativeCorrespondenceSourceManifestBinding witness)
+                (nativeCorrespondenceCertifiedSource witness)
+                (nativeCorrespondenceCertifiedRelease witness) of
+                Left _ -> False
+                Right accepted ->
+                  let occurrence = nativeCorrespondenceArchitectureInstance witness
+                      key = identityInstanceKey occurrence
+                      revision = identityInstanceRevision occurrence
+                      payload = unInstanceKey key
+                      wire = encodeNativeOccurrenceKeyWire key
+                      otherWires =
+                        [ encodeNativeRawSystemsDigestWire (NativeRawSystemsDigest (Digest payload))
+                        , encodeNativeLoweringRootWire (NativeLoweringRootDigest (Digest payload))
+                        , encodeNativeSystemsRevisionWire (SystemsArtifactRevision payload)
+                        , encodeNativeCommonContractRevisionWire (Phase1StageContractRevision payload)
+                        , encodeNativeClosedContractRevisionWire (ClosedStageContractRevision payload)
+                        , encodeNativeSubjectRevisionWire (SubjectStageRevision payload)
+                        , encodeNativeInstanceRevisionWire (InstanceRevision payload)
+                        , encodeNativeRealizationRevisionWire (RealizationRevision payload)
+                        , encodeNativeVerifierProfileWire (NativeVerifierProfileText payload)
+                        ]
+                      alteredKey = InstanceKey (payload <> ".unaccepted")
+                      otherOccurrence = ArchitectureInstanceIdentity alteredKey revision
+                      concreteStage = nativeExactReplayCoordinates accepted
+                  in decodeNativeOccurrenceKeyWire wire == Just key
+                    && key == identityInstanceKey
+                         (deriveArchitectureInstanceIdentity
+                           (nativeCorrespondenceArchitectureDescriptor witness))
+                    && Set.size (Set.fromList (wire : otherWires)) == 10
+                    && all (== Nothing) (map decodeNativeOccurrenceKeyWire otherWires)
+                    && decodeNativeOccurrenceKeyWire
+                         (encodeNativeOccurrenceKeyWire alteredKey) /= Just key
+                    && otherOccurrence /= occurrence
+                    && identityInstanceRevision otherOccurrence == revision
+                    && nativeReplayInstanceRevision concreteStage ==
+                         nativeFinalInstanceRevision
+                           (nativeCorrespondenceAuthority witness)
     _ -> False
 
 -- | Adversarial same-manifest-ID projections. Neither modified manifest is an
