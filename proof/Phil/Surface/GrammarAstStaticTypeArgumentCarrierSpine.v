@@ -135,7 +135,7 @@ Proof.
     as [actual_first |] eqn:Hfirst; try discriminate Hnormalize.
   destruct (phase1_surface_normalize_static_type_argument_values rest)
     as [actual_rest |] eqn:Hrest; try discriminate Hnormalize.
-  inversion Hnormalize; subst refined.
+  inversion Hnormalize; subst.
   cbn.
   rewrite
     (phase1_surface_normalize_static_type_argument_spine_round_trip
