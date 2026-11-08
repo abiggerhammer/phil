@@ -1,4 +1,4 @@
-# 47 original ordinary PR workflows + guard + 19 INT/FSEM + two-owner context and direct-source workflows (69 total).
+# Audited PR-only supersession workflows (70 total; includes early FSEM finite-context preflight).
 begin-policy-choice-proofs.yml
 ci.yml
 digest-validation-proofs.yml
@@ -7,6 +7,7 @@ exact-send-proofs.yml
 fsem01-binder-name-encoding.yml
 fsem01-declaration-identity-bridge.yml
 fsem01-exact-borrow-loan-state.yml
+fsem01-finite-context-preflight.yml
 fsem01-observation-wire.yml
 fsem01-represented-loan-trace.yml
 fsem01-resource-context-wire.yml
