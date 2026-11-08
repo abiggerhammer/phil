@@ -60,3 +60,5 @@ A historical slice document should therefore be read as:
 3. a timestamped record of what was deliberately outside that slice at the time.
 
 Do not infer from an old “not yet” list that the named later slice is still open. Do not infer from a historical implementation note that its implementation is the language specification. Phil’s accepted ADRs/contracts, current logic ledger, conformance matrix, and checked repository evidence retain those roles.
+
+Bounded FSEM-02 [source offer-catalog totality](formal-semantics-source-offer-fsem02-v1.md) is non-normative: exact parsed-arm coverage and conditional Rocq catalog facts, not complete offer execution or rendezvous.

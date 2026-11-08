@@ -222,6 +222,7 @@ library
       Phil.Surface.GrammarV1.SourceProductElimination
       Phil.Surface.GrammarV1.SourceIfJoinResource
       Phil.Surface.GrammarV1.ComponentSelectClose
+      Phil.Surface.GrammarV1.ComponentOfferCoverage
       Phil.Surface.GrammarV1.TwoOwnerBorrowResourceSurface
       Phil.Surface.GrammarV1.ReferenceKernelBridge
       Phil.Surface.GrammarV1.ReferenceToken
