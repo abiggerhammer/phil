@@ -335,3 +335,96 @@ Proof.
   intros sourceLabels branches [Hdistinct _].
   exact Hdistinct.
 Qed.
+
+(*
+  FSEM-02: an externally selected source label is checked AGAIN against the
+  source-covered finite catalog before invoking an exact local offer step.
+  The source catalog is a premise; this does not prove parsing, rendezvous,
+  body execution or general implementation refinement.
+*)
+Fixpoint fsem02SourceContainsLabel (label : string) (labels : list string) : bool :=
+  match labels with
+  | [] => false
+  | candidate :: rest =>
+      if String.eqb label candidate then true
+      else fsem02SourceContainsLabel label rest
+  end.
+
+Lemma fsem02SourceContainsLabelWhenListed :
+  forall labels label,
+    In label labels -> fsem02SourceContainsLabel label labels = true.
+Proof.
+  induction labels as [| candidate rest IH]; intros label Hmember.
+  - inversion Hmember.
+  - simpl in *. destruct Hmember as [Hequal | Hrest].
+    + subst. now rewrite String.eqb_refl.
+    + destruct (String.eqb label candidate) eqn:Hmatch.
+      * reflexivity.
+      * apply IH. exact Hrest.
+Qed.
+
+Lemma fsem02SourceContainsLabelWhenAbsent :
+  forall labels label,
+    ~ In label labels -> fsem02SourceContainsLabel label labels = false.
+Proof.
+  induction labels as [| candidate rest IH]; intros label Habsent.
+  - reflexivity.
+  - simpl. destruct (String.eqb label candidate) eqn:Hmatch.
+    + apply String.eqb_eq in Hmatch. subst candidate.
+      exfalso. apply Habsent. left. reflexivity.
+    + apply IH. intro Hmember. apply Habsent. right. exact Hmember.
+Qed.
+
+Definition fsem02SourceOfferReplay
+  (sourceLabels : list string) (branches : Branches) (label : string)
+  (endpoint successor : Name) (context : ResourceContext)
+  : ResourceStepResult :=
+  if fsem02SourceContainsLabel label sourceLabels
+  then fsem02Progression (FSEM02Offer label) (Offer branches)
+    endpoint successor context
+  else StepFailed.
+
+Theorem fsem02SourceOfferReplayCoveredArmHasExactLocalStep :
+  forall sourceLabels branches label endpoint successor context,
+    fsem02SourceOfferCoverage sourceLabels branches ->
+    In label sourceLabels ->
+    exists continuation,
+      fsem02SourceOfferReplay sourceLabels branches label
+        endpoint successor context =
+      continueEndpointResource endpoint successor continuation context.
+Proof.
+  intros sourceLabels branches label endpoint successor context Hcoverage Hin.
+  destruct (fsem02CoveredOfferProgressesByExactHead
+    sourceLabels branches label endpoint successor context
+    Hcoverage Hin) as [continuation Hstep].
+  exists continuation.
+  unfold fsem02SourceOfferReplay.
+  rewrite (fsem02SourceContainsLabelWhenListed sourceLabels label Hin).
+  exact Hstep.
+Qed.
+
+Theorem fsem02SourceOfferReplayRejectsUnlistedLabel :
+  forall sourceLabels branches label endpoint successor context,
+    ~ In label sourceLabels ->
+    fsem02SourceOfferReplay sourceLabels branches label
+      endpoint successor context = StepFailed.
+Proof.
+  intros sourceLabels branches label endpoint successor context Habsent.
+  unfold fsem02SourceOfferReplay.
+  rewrite (fsem02SourceContainsLabelWhenAbsent sourceLabels label Habsent).
+  reflexivity.
+Qed.
+
+Theorem fsem02SourceOfferReplayCannotReusePredecessor :
+  forall sourceLabels branches label endpoint context continuation,
+    In label sourceLabels ->
+    offeredContinuation label branches = Some continuation ->
+    fsem02SourceOfferReplay sourceLabels branches label
+      endpoint endpoint context = StepFailed.
+Proof.
+  intros sourceLabels branches label endpoint context continuation Hin Hhead.
+  unfold fsem02SourceOfferReplay.
+  rewrite (fsem02SourceContainsLabelWhenListed sourceLabels label Hin).
+  apply same_name_successor_rejects with (continuation := continuation).
+  unfold selectedContinuation. now rewrite Hhead.
+Qed.
