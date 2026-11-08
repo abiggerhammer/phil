@@ -6,6 +6,8 @@ module Phil.Surface.GrammarV1.CheckedType
   , grammarV1CheckedType
   , grammarV1CheckedTypeMode
   , grammarV1CheckedTypeModeWithNamedResolutions
+  , GrammarV1CheckedResolvedFlatProduct (..)
+  , grammarV1CheckedFlatProductWithNamedResolutions
   ) where
 
 import Phil.Core.CheckedBindingMode
@@ -191,6 +193,63 @@ grammarV1CheckedTypeModeWithNamedResolutions
           fmap
             (\resolved -> (resolved, steps))
             (resolveNamedTypeMode sourceReference ty resolutions)
+
+
+-- | A bounded, flat, source-ordered product whose element modes have each
+-- been independently checked. Named elements retain exact resolver provenance,
+-- rather than receiving a caller-selected mode from product syntax.
+data GrammarV1CheckedResolvedFlatProduct = GrammarV1CheckedResolvedFlatProduct
+  { checkedResolvedFlatProductMode :: CheckedTypeMode
+  , checkedResolvedFlatProductElements :: [GrammarV1CheckedResolvedTypeMode]
+  , checkedResolvedFlatProductFocusingSteps :: [FocusStep]
+  }
+  deriving (Eq, Show)
+
+-- | Unlike the existing primitive-only generic product route, this separate
+-- opt-in route also accepts bare named elements only if the existing exact
+-- declaration/interface/kind resolver admits them. No nested products, proof
+-- types, unresolved names or opaque fallback. A supplied resolver record is
+-- itself an external provenance premise, NOT inferred from source spelling.
+grammarV1CheckedFlatProductWithNamedResolutions
+  :: StaticContext
+  -> SurfaceState
+  -> [GrammarV1ResolvedNamedTypeMode]
+  -> GrammarV1Type
+  -> Maybe
+      (Either GrammarV1CheckedTypeModeResolutionError
+        GrammarV1CheckedResolvedFlatProduct)
+grammarV1CheckedFlatProductWithNamedResolutions
+    staticContext state resolutions sourceType =
+  case sourceType of
+    GrammarV1TupleType sources
+      | length sources >= 2
+      , all (flatWithNamed . locatedValue) sources -> do
+          checked <- mapM
+            (grammarV1CheckedTypeModeWithNamedResolutions
+              staticContext state resolutions . locatedValue)
+            sources
+          pure $ do
+            results <- sequence checked
+            let elements = map fst results
+                modeOf = checkedBindingMode . checkedResolvedTypeMode
+                tyOf = checkedBindingType . checkedResolvedTypeMode
+                members = [ ProductElementType (modeOf element) (tyOf element)
+                          | element <- elements ]
+                productTy = TyProduct members
+                aggregate = deriveRecordMode (map modeOf elements)
+            Right GrammarV1CheckedResolvedFlatProduct
+              { checkedResolvedFlatProductMode =
+                  CheckedTypeMode productTy aggregate
+              , checkedResolvedFlatProductElements = elements
+              , checkedResolvedFlatProductFocusingSteps =
+                  concatMap snd results
+              }
+    _ -> Nothing
+  where
+    flatWithNamed source =
+      closedFlatProductElement source || case source of
+        GrammarV1NamedType _ -> True
+        _ -> False
 
 namedTypeReference :: GrammarV1Type -> Maybe GenericStaticActual
 namedTypeReference sourceType = case sourceType of
