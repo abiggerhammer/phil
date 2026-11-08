@@ -191,6 +191,10 @@ main = do
           , nativeOccurrenceKeyWireReplayAccepts source upload)
         , ( "Steve checked occurrence InstanceKey uses a disjoint K-role wire"
           , nativeOccurrenceKeyWireReplayAccepts source steve)
+        , ( "Upload checked occurrence (InstanceKey, InstanceRevision) pair roundtrips without stage-origin authority"
+          , nativeCheckedOccurrenceIdentityPairReplayAccepts source upload)
+        , ( "Steve checked occurrence (InstanceKey, InstanceRevision) pair roundtrips without stage-origin authority"
+          , nativeCheckedOccurrenceIdentityPairReplayAccepts source steve)
         , ( "Upload changed raw Systems digest cannot pass exact manifest-stage replay"
           , nativeManifestStageReplayRejectsChangedDigests source upload)
         , ( "Steve changed raw Systems digest cannot pass exact manifest-stage replay"
@@ -1240,6 +1244,69 @@ nativeOccurrenceKeyWireReplayAccepts source fixture =
                     && nativeReplayInstanceRevision concreteStage ==
                          nativeFinalInstanceRevision
                            (nativeCorrespondenceAuthority witness)
+    _ -> False
+
+-- | The checked architecture occurrence identity is the pair of its actual
+-- InstanceKey and InstanceRevision. Read it only after the exact checked
+-- source-manifest producer and full independently accepted source/release
+-- replay. Equal I-stage revision does not identify the originating occurrence.
+-- The forged pairs below are data only and cannot acquire producer acceptance.
+nativeCheckedOccurrenceIdentityPairReplayAccepts
+  :: GenericApplicationAssurance -> ReleaseFixture -> Bool
+nativeCheckedOccurrenceIdentityPairReplayAccepts source fixture =
+  case (producerInputs source, produceFixture source fixture) of
+    (Right (bundle, policy), Right (_, produced)) ->
+      case nativeAdapterPair source produced of
+        Nothing -> False
+        Just (sourceArtifact, release) ->
+          case closeNativeFinalInstanceCorrespondence
+              source (sourceInstanceDescriptor source) bundle policy
+              (fixtureContext produced) (fixtureLedger produced)
+              emptyProducerSelection sourceArtifact release of
+            Left _ -> False
+            Right witness ->
+              case replayNativeExactAcceptedConsumers witness
+                (nativeCorrespondenceSourceManifestBinding witness)
+                (nativeCorrespondenceCertifiedSource witness)
+                (nativeCorrespondenceCertifiedRelease witness) of
+                Left _ -> False
+                Right accepted ->
+                  let occurrence = nativeCorrespondenceArchitectureInstance witness
+                      key = identityInstanceKey occurrence
+                      revision = identityInstanceRevision occurrence
+                      pairWires@(keyWire, revisionWire) =
+                        encodeNativeCheckedOccurrenceIdentityWires occurrence
+                      stageRevision = nativeReplayInstanceRevision
+                        (nativeExactReplayCoordinates accepted)
+                      otherKey = InstanceKey (unInstanceKey key <> ".unaccepted")
+                      otherOccurrence = ArchitectureInstanceIdentity otherKey revision
+                      wrongRolePairs =
+                        [ (encodeNativeInstanceRevisionWire (InstanceRevision (unInstanceKey key)), revisionWire)
+                        , (keyWire, encodeNativeOccurrenceKeyWire (InstanceKey (unInstanceRevision revision)))
+                        , (encodeNativeVerifierProfileWire (NativeVerifierProfileText (unInstanceKey key)), revisionWire)
+                        , (keyWire, encodeNativeRawSystemsDigestWire (NativeRawSystemsDigest (Digest (unInstanceRevision revision))))
+                        ]
+                      stageEqualityOnly =
+                        case checkNativeStageRevisionEquality witness of
+                          Left (NativeStageRevisionDifferent expected actual) ->
+                            expected == revision && actual == stageRevision
+                          Right receipt ->
+                            nativeStageRevisionEqualityOccurrence receipt == occurrence
+                              && nativeStageRevisionEqualityStageRevision receipt == stageRevision
+                  in decodeNativeCheckedOccurrenceIdentityWires pairWires == Just occurrence
+                    && keyWire == encodeNativeOccurrenceKeyWire key
+                    && revisionWire == encodeNativeInstanceRevisionWire revision
+                    && all (== Nothing)
+                         (map decodeNativeCheckedOccurrenceIdentityWires wrongRolePairs)
+                    && otherOccurrence /= occurrence
+                    && identityInstanceRevision otherOccurrence == revision
+                    && decodeNativeCheckedOccurrenceIdentityWires
+                         (encodeNativeCheckedOccurrenceIdentityWires otherOccurrence)
+                         == Just otherOccurrence
+                    && decodeNativeCheckedOccurrenceIdentityWires
+                         (encodeNativeCheckedOccurrenceIdentityWires otherOccurrence)
+                         /= Just occurrence
+                    && stageEqualityOnly
     _ -> False
 
 -- | Adversarial same-manifest-ID projections. Neither modified manifest is an

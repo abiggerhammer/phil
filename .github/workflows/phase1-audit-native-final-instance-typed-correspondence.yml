@@ -160,6 +160,10 @@ jobs:
           Print Assumptions native_occurrence_key_wire_roundtrip.
           Print Assumptions native_occurrence_key_wire_disjoint_from_nine_roles.
           Print Assumptions native_occurrence_key_wrong_role_decoders_fail.
+          Print Assumptions native_checked_occurrence_identity_pair_roundtrip.
+          Print Assumptions native_checked_occurrence_identity_pair_injective.
+          Print Assumptions native_checked_occurrence_identity_pair_wrong_roles_reject.
+          Print Assumptions native_checked_occurrence_same_revision_not_same_identity.
           Print Assumptions fixed_adapter_full_certification_preserves_predecessors.
           EOF
           rocq c -Q proof/Phil Phil /tmp/NativeFinalInstanceAssumptions.v 2>&1 | tee typed-native-instance-assumptions.log

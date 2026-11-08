@@ -33,6 +33,8 @@ module Phil.Verification.NativeFinalInstanceCorrespondence
   , decodeNativeRealizationRevisionWire
   , encodeNativeOccurrenceKeyWire
   , decodeNativeOccurrenceKeyWire
+  , encodeNativeCheckedOccurrenceIdentityWires
+  , decodeNativeCheckedOccurrenceIdentityWires
   , NativeVerifierProfileText (..)
   , encodeNativeVerifierProfileWire
   , decodeNativeVerifierProfileWire
@@ -330,6 +332,26 @@ decodeNativeOccurrenceKeyWire wire =
   case Text.uncons wire of
     Just ('K', payload) -> Just (InstanceKey payload)
     _ -> Nothing
+
+-- | The checked architecture occurrence is an exact pair (InstanceKey,
+-- InstanceRevision), not an InstanceRevision alone. Keep both role-tagged
+-- Text components separate. Neither pair equality nor matching the I-tagged
+-- stage revision proves that this occurrence produced the accepted stage.
+-- This is a reversible data codec; native acceptance still requires the
+-- existing checked producer and exact accepted consumer objects.
+encodeNativeCheckedOccurrenceIdentityWires
+  :: ArchitectureInstanceIdentity -> (Text, Text)
+encodeNativeCheckedOccurrenceIdentityWires occurrence =
+  ( encodeNativeOccurrenceKeyWire (identityInstanceKey occurrence)
+  , encodeNativeInstanceRevisionWire (identityInstanceRevision occurrence)
+  )
+
+decodeNativeCheckedOccurrenceIdentityWires
+  :: (Text, Text) -> Maybe ArchitectureInstanceIdentity
+decodeNativeCheckedOccurrenceIdentityWires (keyWire, revisionWire) =
+  ArchitectureInstanceIdentity
+    <$> decodeNativeOccurrenceKeyWire keyWire
+    <*> decodeNativeInstanceRevisionWire revisionWire
 
 -- | The concrete verifier-profile revision is a plain Phase1Stage Text field,
 -- not a nominal Haskell revision type. This separate read-only role wrapper
