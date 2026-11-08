@@ -81,7 +81,7 @@ checked :: SourceOffer
   -> Either String GrammarV1CheckedComponentOfferCoverage
 checked source = case grammarV1CheckedComponentOfferCoverage
     (DeclarationKey "component.ServerWorker")
-    (offerComponent source) (offerProjection source) of
+    (offerComponent source) (protocolProjectionSession (offerProjection source)) of
   Just (Right result) -> Right result
   other -> Left ("source offer not checked: " <> show other)
 
@@ -155,7 +155,7 @@ wrongHeadRejected :: Text.Text -> Either String ()
 wrongHeadRejected input = do
   source <- sourceOffer input
   case grammarV1CheckedComponentOfferCoverage
-    (DeclarationKey "component.ServerWorker") (offerComponent source) (selectProjection source) of
+    (DeclarationKey "component.ServerWorker") (offerComponent source) (protocolProjectionSession (selectProjection source)) of
     Just (Left (GrammarV1ComponentOfferWrongSessionHead (Select actual))) ->
       assert (actual == branches) "wrong-head rejection lost actual projected state"
     other -> Left ("source offer accepted select head: " <> show other)

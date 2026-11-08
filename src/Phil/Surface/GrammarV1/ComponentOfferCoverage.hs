@@ -1,7 +1,7 @@
 {-# LANGUAGE OverloadedStrings #-}
 
 -- FSEM-02: bounded source offer-arm coverage, not offer execution.
--- Role, instance, and local session are supplied by checked Core projection.
+-- Local session is an explicit input from caller's separately checked projection.
 module Phil.Surface.GrammarV1.ComponentOfferCoverage
   ( GrammarV1CheckedComponentOfferCoverage (..)
   , GrammarV1ComponentOfferCoverageError (..)
@@ -9,9 +9,6 @@ module Phil.Surface.GrammarV1.ComponentOfferCoverage
   ) where
 
 import Data.Text (Text)
-import Phil.Core.Protocol.Family
-  ( ProtocolProjectionEvidence (..)
-  )
 import Phil.Core.Static (DeclarationKey)
 import Phil.Core.Syntax (Branch (..), Session (..))
 import Phil.Surface.GrammarV1.BinderScope
@@ -61,14 +58,14 @@ data GrammarV1ComponentOfferCoverageError
 -- | None means the exact expression-statement fragment was not recognized,
 -- NEVER that an arbitrary offer was checked. Within this fragment, failures
 -- are explicit. Protocol authority comes ONLY from the caller's checked
--- projection; a display spelling cannot stand in for that evidence.
+-- projection; this function cannot attest the provenance of its Session input.
 grammarV1CheckedComponentOfferCoverage
   :: DeclarationKey
   -> GrammarV1ComponentDecl
-  -> ProtocolProjectionEvidence
+  -> Session
   -> Maybe (Either GrammarV1ComponentOfferCoverageError
                    GrammarV1CheckedComponentOfferCoverage)
-grammarV1CheckedComponentOfferCoverage root component projection =
+grammarV1CheckedComponentOfferCoverage root component checkedLocalSession =
   case grammarV1BlockStatements (locatedValue (grammarV1ComponentBody component)) of
     [Located _ (GrammarV1ExpressionStatement source)] ->
       case locatedValue source of
@@ -88,7 +85,7 @@ grammarV1CheckedComponentOfferCoverage root component projection =
               && any isParameter parameters
             then Right ()
             else Left (GrammarV1ComponentOfferEndpointNotParameter endpoint)
-          expected <- case protocolProjectionSession projection of
+          expected <- case checkedLocalSession of
             Offer branches -> Right (map branchLabel branches)
             other -> Left (GrammarV1ComponentOfferWrongSessionHead other)
           actual <- traverse sourceArmLabel arms
