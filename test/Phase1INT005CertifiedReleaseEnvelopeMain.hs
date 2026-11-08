@@ -1160,7 +1160,7 @@ nativeVerifierProfileSamePayloadRejects source fixture =
                   let payload = nativeReplayVerifierProfile (nativeExactReplayCoordinates accepted)
                       profile = NativeVerifierProfileText payload
                       actual = encodeNativeVerifierProfileWire profile
-                      foreign =
+                      foreignWires =
                         [ encodeNativeRawSystemsDigestWire (NativeRawSystemsDigest (Digest payload))
                         , encodeNativeLoweringRootWire (NativeLoweringRootDigest (Digest payload))
                         , encodeNativeSystemsRevisionWire (SystemsArtifactRevision payload)
@@ -1171,8 +1171,8 @@ nativeVerifierProfileSamePayloadRejects source fixture =
                         , encodeNativeRealizationRevisionWire (RealizationRevision payload)
                         ]
                       altered = NativeVerifierProfileText (payload <> ".unaccepted")
-                  in Set.size (Set.fromList (actual : foreign)) == 9
-                    && all (== Nothing) (map decodeNativeVerifierProfileWire foreign)
+                  in Set.size (Set.fromList (actual : foreignWires)) == 9
+                    && all (== Nothing) (map decodeNativeVerifierProfileWire foreignWires)
                     && decodeNativeVerifierProfileWire actual == Just profile
                     && decodeNativeVerifierProfileWire
                          (encodeNativeVerifierProfileWire altered) /= Just profile
