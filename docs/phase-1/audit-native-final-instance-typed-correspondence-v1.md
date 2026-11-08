@@ -849,3 +849,37 @@ No nat encoding, TCB/policy changes, generated output edits, release
 public-byte credit or independent pinned final-delta signoff. All prior
 R/L/S/C/F/B/I/A/P/K/D/V/Q typed domains remain distinct; preserve the
 244 normative cases and historical independent audit. Freeze **NOT YET**.
+
+## 2026-11-08 — partial ordered atomic-value vector (issue #1584)
+
+The actual Haskell `SemanticOrdered [SemanticForm]` constructor is an
+**ordered list**, not a canonical Set, a Map, or an accepted actuals map.
+This slice extends the M-only atom wire with a deliberately typed
+`Maybe [Text]` **vector**: only direct `SemanticAtom` children encode,
+in native list order; the empty list is valid. Each child retains its
+M-role tag. Nested ordered, unordered and record children fail closed,
+as do non-ordered outer values. The decoder reconstructs an *unaccepted*
+native `SemanticOrdered` value, not a generic application, accepted
+manifest, StageClosure or CertifiedRelease.
+
+Strict Haskell Upload/Steve replay first checks the actual source-manifest
+producer and exact independently accepted manifest, VER-010 source and
+INT-005 release/StageClosure consumers. Tests cover a real checked
+application's value constructors, order-reversal counterexamples,
+empty/singleton vectors, foreign-role injection at both ends and nested
+structural rejection. The four Rocq theorems and named assumption queries
+are restricted to a separately supplied **list of string-model atom
+roles**; they do not establish native `Data.Text` ↔ Rocq `string`
+or Haskell list ↔ Rocq list transport.
+
+**Remaining premise ledger:** no general recursive `SemanticForm` codec,
+canonical Set/Map refinement, complete semantic-actuals map with Q keys,
+complete accepted GenericApplicationIdentity, manifest/source/stage/release
+reflection, authenticated occurrence-to-concrete StageClosure producer,
+predecessor authority, FixedFinalAuthorityAdapter or
+FinalArtifactCertified. No flattened ambiguous wire, ad hoc nat encoding,
+native authority from a supplied model Prop, generated Phase 1 output edit,
+TCB/policy weakening, public release-byte credit or independent pinned
+final-delta signoff. R/L/S/C/F/B/I/A/P/K/D/V/Q/M domains remain
+distinguished. Preserve original 244 normative cases, historic audit
+evidence and independent freeze **NOT YET**.

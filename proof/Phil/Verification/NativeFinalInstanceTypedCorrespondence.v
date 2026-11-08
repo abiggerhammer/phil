@@ -1988,3 +1988,75 @@ Theorem native_semantic_atom_model_nonatoms_fail_closed :
   nativeModelEncodeSemanticAtom NativeModelSemanticUnordered = None /\
   nativeModelEncodeSemanticAtom NativeModelSemanticRecord = None.
 Proof. repeat split; reflexivity. Qed.
+
+(* #1584 successor: partial *ordered atom-only* native SemanticOrdered
+   projection. This uses a typed vector of M-role strings, not a flattened
+   Text wire, cross-runtime list codec, nat serializer or accepted authority. *)
+From Stdlib Require Import Lists.List.
+Import ListNotations.
+
+Fixpoint nativeEncodeOrderedAtomListModel
+  (atoms : list NativeSemanticAtomRole) : list string :=
+  match atoms with
+  | [] => []
+  | atom :: rest =>
+      nativeSemanticAtomWire atom :: nativeEncodeOrderedAtomListModel rest
+  end.
+Fixpoint nativeDecodeOrderedAtomListModel
+  (wires : list string) : option (list NativeSemanticAtomRole) :=
+  match wires with
+  | [] => Some []
+  | wire :: rest =>
+      match nativeDecodeSemanticAtomWire wire,
+            nativeDecodeOrderedAtomListModel rest with
+      | Some atom, Some atoms => Some (atom :: atoms)
+      | _, _ => None
+      end
+  end.
+Theorem native_ordered_atom_list_model_roundtrip :
+  forall atoms,
+    nativeDecodeOrderedAtomListModel
+      (nativeEncodeOrderedAtomListModel atoms) = Some atoms.
+Proof.
+  induction atoms as [|atom rest IH].
+  - reflexivity.
+  - destruct atom as [payload]. simpl.
+    rewrite IH. reflexivity.
+Qed.
+Theorem native_ordered_atom_list_model_injective :
+  forall left right,
+    nativeEncodeOrderedAtomListModel left =
+      nativeEncodeOrderedAtomListModel right -> left = right.
+Proof.
+  induction left as [|atom rest IH]; intros right H.
+  - destruct right; simpl in H; try discriminate. reflexivity.
+  - destruct right as [|other others]; simpl in H; try discriminate.
+    injection H as Hhead Htail.
+    f_equal.
+    + destruct atom as [leftPayload], other as [rightPayload].
+      simpl in Hhead. subst. reflexivity.
+    + apply IH. exact Htail.
+Qed.
+Theorem native_ordered_atom_list_model_foreign_key_rejected :
+  forall prefix suffix key,
+    nativeDecodeOrderedAtomListModel
+      (nativeEncodeOrderedAtomListModel prefix ++
+       nativeGenericStaticKeyWire key ::
+       nativeEncodeOrderedAtomListModel suffix) = None.
+Proof.
+  intros prefix.
+  induction prefix as [|atom rest IH]; intros suffix key.
+  - simpl. destruct key as [value]. reflexivity.
+  - destruct atom as [payload]. simpl.
+    rewrite IH. reflexivity.
+Qed.
+Theorem native_ordered_atom_list_model_order_sensitive :
+  forall a b, a <> b ->
+    nativeEncodeOrderedAtomListModel [a; b] <>
+      nativeEncodeOrderedAtomListModel [b; a].
+Proof.
+  intros a b Hdifferent Heq.
+  apply native_ordered_atom_list_model_injective in Heq.
+  injection Heq as Hfirst _.
+  apply Hdifferent. exact Hfirst.
+Qed.

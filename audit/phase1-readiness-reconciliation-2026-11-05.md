@@ -428,3 +428,40 @@ pinned final-delta signoff remain separate and uncredited. The original
 **244 normative cases** (236 Exit, 8 Profile), historical independent
 audit, Phase 1 TCB, generated outputs and strict GHC/LLVM/Rocq
 policies remain unchanged. **Audit-freeze verdict: NOT YET.**
+
+## Implementation evidence — 2026-11-08: checked SemanticAtom M-only value
+
+[PR #1677](https://github.com/abiggerhammer/phil/pull/1677), controlling
+[issue #1584](https://github.com/abiggerhammer/phil/issues/1584),
+exact tested head `a33984ee4a7f955c7b575ac2a2691209d53f950d`,
+merged as `ebbb5e8c6d6e2221b60338edfedb340d1843ec6c`
+at **2026-11-08 13:52:24 UTC**. Executed exact-head census:
+**38/38 workflows SUCCESS, 80/80 check runs SUCCESS**, none failed,
+skipped or pending. Protected [Hamster Merge Intent
+42486994292](https://github.com/abiggerhammer/phil/actions/runs/42486994292)
+succeeded; Audit Reconciliation spreadsheet supplemental row **44**
+was appended and read back.
+
+**Bounded result:** Actual native `SemanticForm` has four constructors.
+Only `SemanticAtom Text` is represented by a reversible M-prefixed
+native data wire. Exact checked Upload/Steve source-manifest producer and
+independently accepted manifest, VER-010 source and INT-005
+CertifiedRelease/StageClosure consumer replay preceded the scalar tests.
+Positive atom roundtrips, Q/D/V/K/P foreign-role substitution rejection
+and structural Ordered/Unordered/Record failures passed. Four Rocq
+string-model theorems and named assumption queries passed. Unaccepted
+altered actuals with equal Q-key domains were not promoted to authority.
+
+**Nonclaims:** no complete SemanticForm or generic-actuals value codec,
+Haskell Data.Text Unicode ↔ Rocq string or canonical Set/Map
+representation, authenticated checked architecture occurrence to
+concrete StageClosure production, complete accepted source/manifest/
+stage/release reflection, predecessor authority, FixedFinalAuthorityAdapter
+or FinalArtifactCertified. No ad hoc native-to-Rocq nat encoding, model
+Prop as native authority, public release-byte validation or independent
+pinned final-delta signoff credit. Preserve raw R digest/L root,
+S/C/F normalized/common/closed, B/I/A subject/instance/realization,
+P profile, K/I occurrence, D/V/Q generic key roles. Original **244
+normative cases** (236 Exit, 8 Profile), historic audit, TCB,
+generated artifacts and strict GHC/LLVM/Rocq policies unchanged.
+**Independent Phase 1 audit-freeze verdict: NOT YET.**
