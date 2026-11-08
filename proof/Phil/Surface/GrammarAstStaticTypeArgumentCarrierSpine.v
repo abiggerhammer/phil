@@ -130,12 +130,21 @@ Theorem phase1_surface_normalize_static_type_argument_list_spine_round_trip :
       phase1_surface_static_argument_list_spine_tree arguments.
 Proof.
   intros [first rest] refined Hnormalize.
-  cbn in Hnormalize.
+  unfold phase1_surface_normalize_static_type_argument_list_spine in Hnormalize.
+  cbn [phase1_static_argument_list_spine_first
+    phase1_static_argument_list_spine_rest] in Hnormalize.
   destruct (phase1_surface_normalize_static_type_argument_spine first)
     as [actual_first |] eqn:Hfirst; try discriminate Hnormalize.
   destruct (phase1_surface_normalize_static_type_argument_values rest)
     as [actual_rest |] eqn:Hrest; try discriminate Hnormalize.
-  inversion Hnormalize; subst.
+  cbn in Hnormalize.
+  inversion Hnormalize; subst refined.
+  unfold phase1_surface_static_type_argument_list_spine_tree,
+    phase1_surface_static_argument_list_spine_tree.
+  cbn [phase1_static_type_argument_list_spine_first
+    phase1_static_type_argument_list_spine_rest
+    phase1_static_argument_list_spine_first
+    phase1_static_argument_list_spine_rest].
   exact
     (f_equal2
       (fun first_tree suffix_trees =>
