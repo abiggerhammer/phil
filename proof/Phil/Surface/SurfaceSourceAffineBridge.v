@@ -72,13 +72,11 @@ Proof.
       [_ [_ [_ [Hselected _]]]].
   simpl in Hselected.
   destruct Hselected as [Hunrestricted [Haffine Hlinear]].
-  repeat split.
-  - eapply
-      SurfaceFiniteContextFrame.successful_insert_frames_any_finite_context.
-    exact Hinsert.
-  - exact Haffine.
-  - exact Hunrestricted.
-  - exact Hlinear.
+  split.
+  - exact
+      (SurfaceFiniteContextFrame.successful_insert_frames_any_finite_context
+        owner Syntax.Affine ty before after Hinsert).
+  - exact (conj Haffine (conj Hunrestricted Hlinear)).
 Qed.
 
 (* A checked source affine owner that enters the loaned state cannot be
