@@ -278,15 +278,17 @@ Theorem fsem02CoveredOfferLabelHasContinuation :
 Proof.
   intros sourceLabels branches label [_ Hcoverage] Hsource.
   apply (proj1 (Hcoverage label)) in Hsource.
+  clear Hcoverage sourceLabels.
+  revert label.
   induction branches as [| candidate payload continuation rest IH].
-  - simpl in Hsource. contradiction.
-  - simpl in Hsource.
+  - intros label Hsource. simpl in Hsource. contradiction.
+  - intros label Hsource. simpl in Hsource.
     destruct Hsource as [Hsame | Hrest].
     + subst candidate. simpl. rewrite String.eqb_refl.
       eexists. reflexivity.
     + simpl. destruct (String.eqb label candidate) eqn:Hmatch.
       * eexists. reflexivity.
-      * exact (IH Hrest).
+      * exact (IH label Hrest).
 Qed.
 
 Theorem fsem02CoveredOfferProgressesByExactHead :
