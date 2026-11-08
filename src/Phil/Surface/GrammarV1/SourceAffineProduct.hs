@@ -21,7 +21,7 @@ import Phil.Core.Generic.StaticActual
 import Phil.Core.NominalDataMode (NominalRestrictionJustification)
 import Phil.Core.Static (DeclarationKey, InterfaceRevision, StaticContext)
 import Phil.Core.Syntax
-  ( Mode (..), Name (..), ProductElementType (..), Ty (..) )
+  ( Mode (..), Name (..), Ty (..) )
 import Phil.Surface.Check.Engine
   ( BorrowTraceCheckpoint, BorrowTraceRun (..)
   , checkSurfaceComponent, traceSurfaceBorrowComponent )
