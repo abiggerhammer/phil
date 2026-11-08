@@ -179,6 +179,10 @@ jobs:
           Print Assumptions native_semantic_atom_wire_injective.
           Print Assumptions native_semantic_atom_wrong_role_reject.
           Print Assumptions native_semantic_atom_model_nonatoms_fail_closed.
+          Print Assumptions native_ordered_atom_list_model_roundtrip.
+          Print Assumptions native_ordered_atom_list_model_injective.
+          Print Assumptions native_ordered_atom_list_model_foreign_key_rejected.
+          Print Assumptions native_ordered_atom_list_model_order_sensitive.
           Print Assumptions fixed_adapter_full_certification_preserves_predecessors.
           EOF
           rocq c -Q proof/Phil Phil /tmp/NativeFinalInstanceAssumptions.v 2>&1 | tee typed-native-instance-assumptions.log

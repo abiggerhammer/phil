@@ -207,6 +207,10 @@ main = do
           , nativeGenericSemanticAtomReplayAccepts source upload)
         , ( "Steve checked generic SemanticAtom M-only value wire; structured forms and foreign roles fail closed"
           , nativeGenericSemanticAtomReplayAccepts source steve)
+        , ( "Upload checked SemanticOrdered atom-only vector preserves order; nesting and foreign roles fail closed"
+          , nativeGenericOrderedAtomVectorReplayAccepts source upload)
+        , ( "Steve checked SemanticOrdered atom-only vector preserves order; nesting and foreign roles fail closed"
+          , nativeGenericOrderedAtomVectorReplayAccepts source steve)
         , ( "Upload changed raw Systems digest cannot pass exact manifest-stage replay"
           , nativeManifestStageReplayRejectsChangedDigests source upload)
         , ( "Steve changed raw Systems digest cannot pass exact manifest-stage replay"
@@ -1540,6 +1544,91 @@ nativeGenericSemanticAtomReplayAccepts source fixture =
                     && Map.keys (genericApplicationSemanticArguments alteredA) ==
                        Map.keys (genericApplicationSemanticArguments alteredB)
     _ -> False
+
+-- | Actual checked generic actuals are read only after exact accepted
+-- producer, independent manifest, source and release/StageClosure replay.
+-- Test vectors below are deliberately UNACCEPTED semantic input data.
+nativeGenericOrderedAtomVectorReplayAccepts
+  :: GenericApplicationAssurance -> ReleaseFixture -> Bool
+nativeGenericOrderedAtomVectorReplayAccepts source fixture =
+  case (producerInputs source, produceFixture source fixture) of
+    (Right (bundle, policy), Right (_, produced)) ->
+      case nativeAdapterPair source produced of
+        Nothing -> False
+        Just (sourceArtifact, release) ->
+          case closeNativeFinalInstanceCorrespondence
+              source (sourceInstanceDescriptor source) bundle policy
+              (fixtureContext produced) (fixtureLedger produced)
+              emptyProducerSelection sourceArtifact release of
+            Left _ -> False
+            Right witness ->
+              case replayNativeExactAcceptedConsumers witness
+                (nativeCorrespondenceSourceManifestBinding witness)
+                (nativeCorrespondenceCertifiedSource witness)
+                (nativeCorrespondenceCertifiedRelease witness) of
+                Left _ -> False
+                Right _ ->
+                  let application = genericDischargeApplicationIdentity
+                        (genericApplicationAssuranceLineage
+                          (nativeCorrespondenceSourceAssurance witness))
+                      actuals = genericApplicationSemanticArguments application
+                      atomA = SemanticAtom "audit.ordered.alpha"
+                      atomB = SemanticAtom "audit.ordered.beta"
+                      ordered = SemanticOrdered [atomA, atomB]
+                      reversed = SemanticOrdered [atomB, atomA]
+                      emptyOrdered = SemanticOrdered []
+                      singleton = SemanticOrdered [atomA]
+                      nested = SemanticOrdered [SemanticOrdered [atomA]]
+                      mixed = SemanticOrdered
+                        [atomA, SemanticUnordered (Set.singleton atomB)]
+                      recordChild = SemanticOrdered
+                        [SemanticRecord (Map.singleton "field" atomA)]
+                      foreignWire = encodeNativeGenericStaticParameterKeyWire
+                        (GenericStaticParameterKey "audit.ordered.alpha")
+                      otherWire = encodeNativeGenericDeclarationWire
+                        (DeclarationKey "audit.ordered.beta")
+                      isAtom (SemanticAtom _) = True
+                      isAtom _ = False
+                      actualFormChecked form =
+                        case form of
+                          SemanticOrdered children
+                            | all isAtom children ->
+                                (encodeNativeSemanticOrderedAtomWires form >>=
+                                  decodeNativeSemanticOrderedAtomWires) == Just form
+                            | otherwise ->
+                                encodeNativeSemanticOrderedAtomWires form == Nothing
+                          _ -> encodeNativeSemanticOrderedAtomWires form == Nothing
+                  in all actualFormChecked (Map.elems actuals)
+                    && (encodeNativeSemanticOrderedAtomWires ordered >>=
+                          decodeNativeSemanticOrderedAtomWires) == Just ordered
+                    && (encodeNativeSemanticOrderedAtomWires reversed >>=
+                          decodeNativeSemanticOrderedAtomWires) == Just reversed
+                    && encodeNativeSemanticOrderedAtomWires ordered /=
+                       encodeNativeSemanticOrderedAtomWires reversed
+                    && encodeNativeSemanticOrderedAtomWires emptyOrdered == Just []
+                    && decodeNativeSemanticOrderedAtomWires [] == Just emptyOrdered
+                    && (encodeNativeSemanticOrderedAtomWires singleton >>=
+                          decodeNativeSemanticOrderedAtomWires) == Just singleton
+                    && all (== Nothing)
+                      (map encodeNativeSemanticOrderedAtomWires
+                        [nested, mixed, recordChild, atomA,
+                         SemanticUnordered (Set.singleton atomA)])
+                    && decodeNativeSemanticOrderedAtomWires [foreignWire] == Nothing
+                    && decodeNativeSemanticOrderedAtomWires
+                         [encodeNativeGenericStaticParameterKeyWire
+                           (GenericStaticParameterKey "audit.ordered.alpha"),
+                          encodeNativeSemanticAtomWireValue atomA] == Nothing
+                    && decodeNativeSemanticOrderedAtomWires
+                         [encodeNativeSemanticAtomWireValue atomA, otherWire] == Nothing
+    _ -> False
+  where
+    -- The M-wire test inputs use a known native SemanticAtom constructor.
+    -- This partial extractor has no fallback for non-atoms and cannot confer
+    -- accepted producer authority on test data.
+    encodeNativeSemanticAtomWireValue atom =
+      case encodeNativeSemanticAtomWire atom of
+        Just wire -> wire
+        Nothing -> ""
 
 -- | Adversarial same-manifest-ID projections. Neither modified manifest is an
 -- accepted INT-002 artifact. Raw digest drift and lowering-root drift must

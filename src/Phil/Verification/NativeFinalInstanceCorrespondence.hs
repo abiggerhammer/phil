@@ -47,6 +47,8 @@ module Phil.Verification.NativeFinalInstanceCorrespondence
   , decodeNativeGenericActualsKeyDomainWires
   , encodeNativeSemanticAtomWire
   , decodeNativeSemanticAtomWire
+  , encodeNativeSemanticOrderedAtomWires
+  , decodeNativeSemanticOrderedAtomWires
   , NativeVerifierProfileText (..)
   , encodeNativeVerifierProfileWire
   , decodeNativeVerifierProfileWire
@@ -457,6 +459,22 @@ decodeNativeSemanticAtomWire wire =
   case Text.uncons wire of
     Just ('M', payload) -> Just (SemanticAtom payload)
     _ -> Nothing
+
+-- | Partial typed VECTOR, not a serialized Text/nat framing: preserve the
+-- exact list order for a native SemanticOrdered whose immediate children are
+-- all SemanticAtom. Empty vectors are valid ordered values. Nested, unordered
+-- or record children fail closed; scalar/non-ordered inputs also fail.
+-- The list carries disjoint per-atom M wires, not acceptance or provenance.
+encodeNativeSemanticOrderedAtomWires :: SemanticForm -> Maybe [Text]
+encodeNativeSemanticOrderedAtomWires (SemanticOrdered children) =
+  traverse encodeNativeSemanticAtomWire children
+encodeNativeSemanticOrderedAtomWires _ = Nothing
+
+-- | Reconstructs an *unaccepted* SemanticOrdered native value, never a
+-- GenericApplicationIdentity, source, stage, or CertifiedRelease artifact.
+decodeNativeSemanticOrderedAtomWires :: [Text] -> Maybe SemanticForm
+decodeNativeSemanticOrderedAtomWires wires =
+  SemanticOrdered <$> traverse decodeNativeSemanticAtomWire wires
 
 -- | The concrete verifier-profile revision is a plain Phase1Stage Text field,
 -- not a nominal Haskell revision type. This separate read-only role wrapper
