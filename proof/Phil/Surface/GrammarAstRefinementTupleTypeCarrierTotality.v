@@ -7,6 +7,7 @@ From Phil.Surface Require Import
   GrammarAstPrimitiveTypePayloadSpine
   GrammarAstShallowCompoundTypePayloadSpine
   GrammarAstShallowCompoundTypePayloadTotality
+  GrammarAstRefinementTupleTypePayloadSpine
   GrammarAstRefinementTupleTypePayloadTotality
   GrammarAstTypeTotality.
 
