@@ -1,0 +1,111 @@
+name: FSEM-01 Source Affine Early Preflight
+
+concurrency:
+  # Same-PR supersession; branch preflight independent of main/release.
+  group: ${{ github.workflow_ref }}-${{ github.event.pull_request.number || github.run_id }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+on:
+  # Run while the branch is still un-PR'd, BEFORE the wide CI wave.
+  push:
+    branches:
+      - formal-semantics/fsem01-source-affine
+    paths:
+      - 'test/Phase1FSEM01SourceAffineMain.hs'
+      - 'src/Phil/Surface/GrammarV1/SourceAffineResource.hs'
+      - 'test/fixtures/fsem01-source-affine-v1/**'
+      - 'phil-core.cabal'
+      - 'proof/Phil/Surface/SurfaceSourceAffineBridge.v'
+      - 'docs/phase-1/formal-semantics-source-affine-fsem01-v1.md'
+      - '.github/workflows/fsem01-source-affine-preflight.yml'
+  pull_request:
+    paths:
+      - 'test/Phase1FSEM01SourceAffineMain.hs'
+      - 'src/Phil/Surface/GrammarV1/SourceAffineResource.hs'
+      - 'test/fixtures/fsem01-source-affine-v1/**'
+      - 'phil-core.cabal'
+      - 'proof/Phil/Surface/SurfaceSourceAffineBridge.v'
+      - 'docs/phase-1/formal-semantics-source-affine-fsem01-v1.md'
+      - '.github/workflows/fsem01-source-affine-preflight.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  strict-haskell-surf008:
+    name: Early SURF-008 corpus + source affine
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: haskell-actions/setup@v2
+        with:
+          ghc-version: '9.6.7'
+          cabal-version: 'latest'
+          cabal-update: false
+      - name: Update Hackage indices with bounded retry
+        shell: bash
+        run: bash scripts/ci/cabal-update-retry.sh
+      - name: Strict production Haskell build
+        shell: bash
+        run: |
+          set -euo pipefail
+          cabal build lib:phil-core --ghc-options=-Werror
+      - name: PRE-PR SURF-008 competence and legacy regression battery
+        shell: bash
+        run: |
+          set -euo pipefail
+          for test in \
+            Phase1GrammarV1IntrinsicTypeCompositionMain \
+            Phase1GrammarV1CallableContractMain \
+            Phase1GrammarV1CheckedBoundaryValueTypeMain \
+            Phase1GrammarV1CheckedTypeAliasMain \
+            Phase1GrammarV1CheckedRecordFieldsMain \
+            Phase1GrammarV1CheckedDataVariantsMain \
+            Phase1GrammarV1CheckedDataModeCompositionMain \
+            Phase1GrammarV1NamedTypeModeMain \
+            Phase1FSEM01TwoOwnerSourceMain \
+            Phase1FSEM01FlatProductMain \
+            Phase1FSEM01FiniteContextMain
+          do
+            printf '\n== PRE-PR SURF-008 / %s ==\n' "$test"
+            cabal exec -- runghc -isrc -Wall -Werror "test/$test.hs"
+          done
+      - name: Strictly typecheck and execute source affine runtime trace tests
+        shell: bash
+        run: |
+          set -euo pipefail
+          cabal exec -- ghc -isrc -Wall -Werror -fno-code \
+            test/Phase1FSEM01SourceAffineMain.hs
+          cabal exec -- runghc -isrc -Wall -Werror \
+            test/Phase1FSEM01SourceAffineMain.hs
+          sha256sum test/Phase1FSEM01SourceAffineMain.hs \
+            src/Phil/Surface/GrammarV1/SourceAffineResource.hs
+
+  rocq-all-modes-frame:
+    name: Source affine ownership/loan/consumption lemmas
+    runs-on: ubuntu-24.04
+    container:
+      image: rocq/rocq-prover:9.2.0
+      options: --user root
+    steps:
+      - uses: actions/checkout@v4
+      - name: Compile source affine mode, loan, and frame theorems
+        shell: bash
+        run: |
+          set -euo pipefail
+          export PATH="/home/rocq/.opam/${COMPILER}/bin:$PATH"
+          for file in \
+            proof/Phil/Core/Syntax.v \
+            proof/Phil/Core/Context.v \
+            proof/Phil/Surface/SurfaceFiniteContextFrame.v \
+            proof/Phil/Surface/SurfaceSourceAffineBridge.v
+          do
+            rocq c -Q proof/Phil Phil "$file"
+          done
+          if grep -nE '^[[:space:]]*(Admitted[.]|Axiom[[:space:]]|Parameter[[:space:]])' \
+            proof/Phil/Surface/SurfaceSourceAffineBridge.v; then
+            echo "New unproved source-affine assumption" >&2
+            exit 1
+          fi
+          sha256sum proof/Phil/Surface/SurfaceSourceAffineBridge.v \
+            proof/Phil/Surface/SurfaceSourceAffineBridge.vo
