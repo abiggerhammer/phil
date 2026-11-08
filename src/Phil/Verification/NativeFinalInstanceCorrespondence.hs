@@ -31,6 +31,8 @@ module Phil.Verification.NativeFinalInstanceCorrespondence
   , decodeNativeInstanceRevisionWire
   , encodeNativeRealizationRevisionWire
   , decodeNativeRealizationRevisionWire
+  , encodeNativeOccurrenceKeyWire
+  , decodeNativeOccurrenceKeyWire
   , NativeVerifierProfileText (..)
   , encodeNativeVerifierProfileWire
   , decodeNativeVerifierProfileWire
@@ -70,6 +72,7 @@ import Phil.Core.Static
   ( ArchitectureInstanceDescriptor
   , ArchitectureInstanceIdentity (..)
   , InstanceRevision (..)
+  , InstanceKey (..)
   , RealizationRevision (..)
   , deriveArchitectureInstanceIdentity
   )
@@ -312,6 +315,20 @@ decodeNativeRealizationRevisionWire :: Text -> Maybe RealizationRevision
 decodeNativeRealizationRevisionWire wire =
   case Text.uncons wire of
     Just ('A', payload) -> Just (RealizationRevision payload)
+    _ -> Nothing
+
+-- | The checked architecture occurrence's InstanceKey is an independent
+-- native Text newtype; K is reserved for the occurrence key, not the concrete
+-- StageClosure's I-tagged InstanceRevision. The StageClosure has no InstanceKey.
+-- This is a reversible data representation of the *checked descriptor's*
+-- identity projection, not a certificate that it produced any stage.
+encodeNativeOccurrenceKeyWire :: InstanceKey -> Text
+encodeNativeOccurrenceKeyWire (InstanceKey value) = Text.cons 'K' value
+
+decodeNativeOccurrenceKeyWire :: Text -> Maybe InstanceKey
+decodeNativeOccurrenceKeyWire wire =
+  case Text.uncons wire of
+    Just ('K', payload) -> Just (InstanceKey payload)
     _ -> Nothing
 
 -- | The concrete verifier-profile revision is a plain Phase1Stage Text field,
