@@ -2033,7 +2033,8 @@ Proof.
   - destruct right as [|other others]; simpl in H; try discriminate.
     injection H as Hhead Htail.
     f_equal.
-    + apply native_semantic_atom_wire_injective. exact Hhead.
+    + destruct atom as [leftPayload], other as [rightPayload].
+      simpl in Hhead. subst. reflexivity.
     + apply IH. exact Htail.
 Qed.
 Theorem native_ordered_atom_list_model_foreign_key_rejected :
