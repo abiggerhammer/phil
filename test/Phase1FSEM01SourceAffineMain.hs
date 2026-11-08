@@ -20,6 +20,8 @@ import Phil.Surface.Check.Engine
 import Phil.Surface.Check.Types
   ( RejectionClass (..), SurfaceCheckResult (..)
   , SurfaceCheckError (..) )
+import Phil.Surface.GrammarV1.BinderScope
+  ( GrammarV1ResolvedBinder (..) )
 import Phil.Surface.GrammarV1.CheckedType
   ( GrammarV1CheckedTypeModeOrigin (..) )
 import Phil.Surface.GrammarV1.DataVariants
