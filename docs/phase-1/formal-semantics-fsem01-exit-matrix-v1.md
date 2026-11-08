@@ -90,11 +90,15 @@ Those earlier source-checking and observation slices are **not superseded
 as evidence**, but historical slice notes must not be treated as today’s
 overall completion status.
 
-For the newest actual-source paired witnesses, see the
-[source affine fixture corpus](../../test/fixtures/fsem01-source-affine-v1/),
-[mixed affine/linear source corpus](../../test/fixtures/fsem01-mixed-affine-linear-v1/),
-[nominal-product corpus](../../test/fixtures/fsem01-nominal-affine-product-v1/)
-and [product-elimination corpus](../../test/fixtures/fsem01-source-product-elimination-v1/).
+For the newest actual-source paired witnesses, compare:
+[source affine consume](../../test/fixtures/fsem01-source-affine-v1/consume.phil)
+with [borrow escape](../../test/fixtures/fsem01-source-affine-v1/escape.phil);
+[mixed ownership accepted](../../test/fixtures/fsem01-mixed-affine-linear-v1/accepted.phil)
+with [unpaid linear debt](../../test/fixtures/fsem01-mixed-affine-linear-v1/leak-linear.phil);
+[nominal product accepted](../../test/fixtures/fsem01-nominal-affine-product-v1/accepted.phil)
+with [reversed return](../../test/fixtures/fsem01-nominal-affine-product-v1/reversed.phil);
+and [product elimination accepted](../../test/fixtures/fsem01-source-product-elimination-v1/accepted.phil)
+with [wrong-arity restoration](../../test/fixtures/fsem01-source-product-elimination-v1/wrong-arity.phil).
 The selected test files above assert expected exact classes, not just any
 parse rejection. FSEM-01 has no single independent executable full-source
 Rocq interpreter; that whole-language requirement belongs to FSEM-05.
