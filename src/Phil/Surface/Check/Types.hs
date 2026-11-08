@@ -261,6 +261,9 @@ data SurfaceEnvironment = SurfaceEnvironment
   , surfaceReceiveExactRequirement :: Maybe Proposition
   , surfaceTerminalAllowances :: Map Outcome (Set Text)
   , surfaceExpectedProvides :: Maybe Ty
+  -- Exact source-checked product owners eligible for bounded tuple-let elimination.
+  -- This is an opt-in authority from an already checked source type, not parser text.
+  , surfaceExpectedProductEliminations :: Map Text [ProductElementType]
   -- Optional checked source product-return contract; other tuple paths unchanged.
   , surfaceExpectedProductReturn :: Maybe [ProductElementType]
   , surfaceLegacyReceiveFrameRaw :: Bool
@@ -332,6 +335,7 @@ emptySurfaceEnvironment staticContext = SurfaceEnvironment
   , surfaceReceiveExactRequirement = Nothing
   , surfaceTerminalAllowances = Map.empty
   , surfaceExpectedProvides = Nothing
+  , surfaceExpectedProductEliminations = Map.empty
   , surfaceExpectedProductReturn = Nothing
   , surfaceLegacyReceiveFrameRaw = False
   , surfaceReleaseTransitions = []

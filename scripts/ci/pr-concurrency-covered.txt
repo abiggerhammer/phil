@@ -1,4 +1,4 @@
-# Audited PR-only supersession workflows (73 total; includes nominal affine-product preflight).
+# Audited PR-only supersession workflows (74 total; includes source product-elimination early preflight).
 begin-policy-choice-proofs.yml
 ci.yml
 digest-validation-proofs.yml
@@ -10,6 +10,7 @@ fsem01-exact-borrow-loan-state.yml
 fsem01-finite-context-preflight.yml
 fsem01-mixed-affine-linear-preflight.yml
 fsem01-nominal-affine-product-preflight.yml
+fsem01-product-elimination-preflight.yml
 fsem01-observation-wire.yml
 fsem01-represented-loan-trace.yml
 fsem01-resource-context-wire.yml

@@ -4,6 +4,8 @@
 module Phil.Surface.Check.Engine
   ( checkSurfaceComponent
   , traceSurfaceBorrowComponent
+  , ProductEliminationRun (..)
+  , traceSurfaceProductEliminationComponent
   , BorrowTracePhase (..)
   , BorrowTraceCheckpoint (..)
   , BorrowTraceResourceObservation (..)
@@ -28,6 +30,7 @@ import Phil.Core.Context
   , joinContinuing
   , startSharedLoan
   )
+import qualified Phil.Core.DataMode as ProductDataMode
 import Phil.Core.Decision
   ( checkDecisionCertificate
   , proposeDecisionCertificate
@@ -363,10 +366,15 @@ checkStatement
   -> Either SurfaceCheckError [SurfacePath]
 checkStatement environment locatedStatement path =
   case locatedValue locatedStatement of
-    LetStatement pattern' expression -> do
-      evaluated <- evalLetExpression environment (pathState path) pattern' expression
-      bound <- mapM (bindPath pattern') evaluated
-      joinExclusive (locatedSpan locatedStatement) bound
+    LetStatement pattern' expression
+      | Just owner <- sourceCheckedProductOwner environment pattern' expression -> do
+          after <- eliminateCheckedProduct environment pattern' expression
+            owner (pathState path)
+          Right [continuePath after]
+      | otherwise -> do
+          evaluated <- evalLetExpression environment (pathState path) pattern' expression
+          bound <- mapM (bindPath pattern') evaluated
+          joinExclusive (locatedSpan locatedStatement) bound
     ReturnStatement expression -> do
       evaluated <- evalExpression environment (pathState path) expression
       mapM (returnPath environment (locatedSpan locatedStatement)) evaluated
@@ -374,6 +382,119 @@ checkStatement environment locatedStatement path =
       evaluated <- evalExpression environment (pathState path) expression
       discarded <- mapM (discardValue (locatedSpan locatedStatement)) evaluated
       joinExclusive (locatedSpan locatedStatement) discarded
+
+
+-- | Only an explicitly source-checked product-owner contract may authorize
+-- elimination of an existing TyProduct scalar through a flat tuple let.
+-- Ordinary tuple expressions continue through the legacy binder path.
+sourceCheckedProductOwner
+  :: SurfaceEnvironment
+  -> Located Pattern
+  -> Located SurfaceExpression
+  -> Maybe Text
+sourceCheckedProductOwner environment pattern' expression =
+  case (locatedValue pattern', locatedValue expression) of
+    (TuplePattern _, VariableExpression name)
+      | Map.member name (surfaceExpectedProductEliminations environment) ->
+          Just name
+    _ -> Nothing
+
+-- | This is the ACTUAL production Core operation: consume the checked
+-- product owner and restore positional element modes to distinct successors.
+-- No synthetic RuntimeTuple, arbitrary caller-injected output modes or
+-- unchecked semantic fallbacks are used for this bounded opt-in path.
+eliminateCheckedProduct
+  :: SurfaceEnvironment
+  -> Located Pattern
+  -> Located SurfaceExpression
+  -> Text
+  -> SurfaceState
+  -> Either SurfaceCheckError SurfaceState
+eliminateCheckedProduct environment pattern' expression owner state = do
+  expected <- case Map.lookup owner (surfaceExpectedProductEliminations environment) of
+    Just elements -> Right elements
+    Nothing -> throw expression TypeMismatch
+      "product elimination requires an exact checked source contract"
+  meta <- lookupMeta expression owner state
+  unless (bindingType meta == TyProduct expected
+       && bindingMode meta == ProductDataMode.productMode expected) $
+    throw expression TypeMismatch
+      "product owner differs from checked source elimination contract"
+  successors <- case locatedValue pattern' of
+    TuplePattern names -> traverse flatSuccessor names
+    _ -> throw pattern' TypeMismatch
+      "product elimination requires a flat tuple binding pattern"
+  when (any (\name -> Map.member name (stateBindings state)) successors) $
+    throw pattern' StructuralUse
+      "product successor collides with an active binding"
+  restored <- case ProductDataMode.eliminateProductBinding
+      (Name owner) (map Name successors) (resourceContext (stateCore state)) of
+    Left err -> Left SurfaceCheckError
+      { surfaceErrorSpan = locatedSpan pattern'
+      , surfaceErrorClass = case err of
+          ProductDataMode.ProductArityMismatch _ _ -> TypeMismatch
+          ProductDataMode.ProductExpected _ _ -> TypeMismatch
+          ProductDataMode.ProductModeMismatch _ _ _ -> TypeMismatch
+          _ -> StructuralUse
+      , surfaceErrorDetail =
+          "product elimination: " <> Text.pack (show err)
+      }
+    Right context -> Right context
+  -- Every installed successor was independently checked by Core
+  -- eliminateProductBinding; metadata is re-associated with the same
+  -- type and structural mode, and bytes shapes are rebound to the new name.
+  let rebound = Map.fromList
+        [ (name, BindingMeta mode ty (shapeForBinding name (shapeForType ty)))
+        | (name, ProductElementType mode ty) <- zip successors expected ]
+  Right state
+    { stateCore = (stateCore state) { resourceContext = restored }
+    , stateBindings = Map.union rebound
+        (Map.delete owner (stateBindings state))
+    }
+  where
+    flatSuccessor entry = case locatedValue entry of
+      BindPattern name -> Right name
+      _ -> throw entry TypeMismatch
+        "product elimination cannot restore a nested binding pattern"
+
+-- | Finite observation of the EXACT production let transition. Before/after
+-- states come from initializeState and checkStatement, not a reconstructed
+-- Core model. The ordinary checker separately executes the entire source
+-- projection; after-elimination is absent if that step rejected.
+data ProductEliminationRun = ProductEliminationRun
+  { productEliminationBefore :: Maybe ResourceContext
+  , productEliminationAfter :: Maybe ResourceContext
+  , productEliminationOutcome :: Either SurfaceCheckError SurfaceCheckResult
+  } deriving (Eq, Show)
+
+traceSurfaceProductEliminationComponent
+  :: SurfaceEnvironment
+  -> Located Component
+  -> Maybe ProductEliminationRun
+traceSurfaceProductEliminationComponent environment locatedComponent =
+  case blockStatements (locatedValue (componentBody component)) of
+    [elimination@(Located _ (LetStatement pattern' expression)), Located _
+       (ReturnStatement _)]
+      | Just _ <- sourceCheckedProductOwner environment pattern' expression ->
+          let ordinary = checkSurfaceComponent environment locatedComponent
+              initialResult = do
+                initial <- initializeState environment component
+                checkProvides environment initial component
+                Right initial
+          in Just $ case initialResult of
+            Left _ -> ProductEliminationRun Nothing Nothing ordinary
+            Right initial ->
+              let before = resourceContext (stateCore initial)
+                  afterResult = checkStatement environment elimination
+                    (continuePath initial)
+                  after = case afterResult of
+                    Right [path] | pathControl path == PathContinue ->
+                      Just (resourceContext (stateCore (pathState path)))
+                    _ -> Nothing
+              in ProductEliminationRun (Just before) after ordinary
+    _ -> Nothing
+  where
+    component = locatedValue locatedComponent
 
 evalLetExpression
   :: SurfaceEnvironment

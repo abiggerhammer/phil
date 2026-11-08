@@ -1,0 +1,121 @@
+name: FSEM-01 Source Product Elimination Early Preflight
+
+concurrency:
+  # Same-PR supersession, isolated from main/release and unrelated lanes.
+  group: ${{ github.workflow_ref }}-${{ github.event.pull_request.number || github.run_id }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+on:
+  # Focused preflight on branch pushes, before broad PR CI.
+  push:
+    branches:
+      - formal-semantics/fsem01-source-product-elimination
+    paths:
+      - 'src/Phil/Surface/Check/Types.hs'
+      - 'src/Phil/Surface/Check/Engine.hs'
+      - 'src/Phil/Surface/GrammarV1/SourceProductElimination.hs'
+      - 'test/Phase1FSEM01SourceProductEliminationMain.hs'
+      - 'test/fixtures/fsem01-source-product-elimination-v1/**'
+      - 'proof/Phil/Surface/SurfaceSourceProductEliminationBridge.v'
+      - 'docs/phase-1/formal-semantics-source-product-elimination-fsem01-v1.md'
+      - 'phil-core.cabal'
+      - '.github/workflows/fsem01-product-elimination-preflight.yml'
+  pull_request:
+    paths:
+      - 'src/Phil/Surface/Check/Types.hs'
+      - 'src/Phil/Surface/Check/Engine.hs'
+      - 'src/Phil/Surface/GrammarV1/SourceProductElimination.hs'
+      - 'test/Phase1FSEM01SourceProductEliminationMain.hs'
+      - 'test/fixtures/fsem01-source-product-elimination-v1/**'
+      - 'proof/Phil/Surface/SurfaceSourceProductEliminationBridge.v'
+      - 'docs/phase-1/formal-semantics-source-product-elimination-fsem01-v1.md'
+      - 'phil-core.cabal'
+      - '.github/workflows/fsem01-product-elimination-preflight.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  strict-haskell-product-elimination:
+    name: Source product elimination with strict SURF-008/FSEM controls
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: haskell-actions/setup@v2
+        with:
+          ghc-version: '9.6.7'
+          cabal-version: 'latest'
+          cabal-update: false
+      - name: Update Hackage with bounded HTTP1 retry
+        shell: bash
+        run: bash scripts/ci/cabal-update-retry.sh
+      - name: Strict production Haskell library build
+        shell: bash
+        run: |
+          set -euo pipefail
+          cabal build lib:phil-core --ghc-options=-Werror
+      - name: Existing SURF-008 and FSEM-01 regression battery
+        shell: bash
+        run: |
+          set -euo pipefail
+          for test in \
+            Phase1GrammarV1IntrinsicTypeCompositionMain \
+            Phase1GrammarV1CallableContractMain \
+            Phase1GrammarV1CheckedBoundaryValueTypeMain \
+            Phase1GrammarV1CheckedTypeAliasMain \
+            Phase1GrammarV1CheckedRecordFieldsMain \
+            Phase1GrammarV1CheckedDataVariantsMain \
+            Phase1GrammarV1CheckedDataModeCompositionMain \
+            Phase1GrammarV1NamedTypeModeMain \
+            Phase1FSEM01TwoOwnerSourceMain \
+            Phase1FSEM01FlatProductMain \
+            Phase1FSEM01FiniteContextMain \
+            Phase1FSEM01SourceAffineMain \
+            Phase1FSEM01MixedAffineLinearMain \
+            Phase1FSEM01NominalAffineProductMain
+          do
+            echo "== Strict legacy source regression: $test =="
+            cabal exec -- runghc -isrc -Wall -Werror "test/$test.hs"
+          done
+      - name: Strict compile and execute source product elimination
+        shell: bash
+        run: |
+          set -euo pipefail
+          cabal exec -- ghc -isrc -Wall -Werror -fno-code \
+            test/Phase1FSEM01SourceProductEliminationMain.hs
+          cabal exec -- runghc -isrc -Wall -Werror \
+            test/Phase1FSEM01SourceProductEliminationMain.hs
+          sha256sum src/Phil/Surface/GrammarV1/SourceProductElimination.hs \
+            test/Phase1FSEM01SourceProductEliminationMain.hs
+
+  rocq-product-restoration:
+    name: Exact source affine/linear product restoration and linear debt proofs
+    runs-on: ubuntu-24.04
+    container:
+      image: rocq/rocq-prover:9.2.0
+      options: --user root
+    steps:
+      - uses: actions/checkout@v4
+      - name: Compile existing and new product restoration model theorems
+        shell: bash
+        run: |
+          set -euo pipefail
+          export PATH="/home/rocq/.opam/$COMPILER/bin:$PATH"
+          for file in \
+            proof/Phil/Core/Syntax.v \
+            proof/Phil/Core/Context.v \
+            proof/Phil/Core/DataMode.v \
+            proof/Phil/Core/DataProduct.v \
+            proof/Phil/Surface/SurfaceFiniteContextFrame.v \
+            proof/Phil/Surface/SurfaceSourceAffineBridge.v \
+            proof/Phil/Surface/SurfaceSourceProductEliminationBridge.v
+          do
+            rocq c -Q proof/Phil Phil "$file"
+          done
+          if grep -nE '^[[:space:]]*(Admitted[.]|Axiom[[:space:]]|Parameter[[:space:]])' \
+            proof/Phil/Surface/SurfaceSourceProductEliminationBridge.v; then
+            echo "New unproved source-product-elimination assertion" >&2
+            exit 1
+          fi
+          sha256sum proof/Phil/Surface/SurfaceSourceProductEliminationBridge.v \
+            proof/Phil/Surface/SurfaceSourceProductEliminationBridge.vo
