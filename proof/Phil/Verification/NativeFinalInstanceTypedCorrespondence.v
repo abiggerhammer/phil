@@ -1707,3 +1707,64 @@ Proof.
   intros [raw] [root] [sys] [common] [closed] [subject] [inst] [real] [profile].
   repeat split; reflexivity.
 Qed.
+
+(* #1584: complete, bounded PAIR data-model for the checked architecture
+   occurrence identity. The K component is the occurrence's InstanceKey,
+   while the I component is its own InstanceRevision, NOT a claim that an
+   independently accepted StageClosure was produced by this occurrence.
+   This does not supply a Haskell Text/Rocq string serializer or authority. *)
+Record NativeCheckedOccurrenceIdentityPair := mkNativeCheckedOccurrenceIdentityPair {
+  checkedOccurrencePairKey : NativeOccurrenceKeyRole;
+  checkedOccurrencePairRevision : NativeInstanceRevisionRole
+}.
+Definition nativeCheckedOccurrenceIdentityPairWires
+  (p : NativeCheckedOccurrenceIdentityPair) : string * string :=
+  (nativeOccurrenceKeyWire (checkedOccurrencePairKey p),
+   nativeInstanceRevisionWire (checkedOccurrencePairRevision p)).
+Definition nativeDecodeCheckedOccurrenceIdentityPairWires
+  (w : string * string) : option NativeCheckedOccurrenceIdentityPair :=
+  match nativeDecodeOccurrenceKeyWire (fst w),
+        nativeDecodeInstanceRevisionWire (snd w) with
+  | Some key, Some revision =>
+      Some (mkNativeCheckedOccurrenceIdentityPair key revision)
+  | _, _ => None
+  end.
+
+Theorem native_checked_occurrence_identity_pair_roundtrip :
+  forall p, nativeDecodeCheckedOccurrenceIdentityPairWires
+              (nativeCheckedOccurrenceIdentityPairWires p) = Some p.
+Proof.
+  intros [[key] [revision]]. reflexivity.
+Qed.
+
+Theorem native_checked_occurrence_identity_pair_injective :
+  forall a b, nativeCheckedOccurrenceIdentityPairWires a =
+              nativeCheckedOccurrenceIdentityPairWires b -> a = b.
+Proof.
+  intros [ka ra] [kb rb] H.
+  pose proof (f_equal fst H) as Hkey.
+  pose proof (f_equal snd H) as Hrevision.
+  simpl in Hkey, Hrevision.
+  apply native_occurrence_key_wire_injective in Hkey.
+  apply native_instance_revision_wire_injective in Hrevision.
+  now subst.
+Qed.
+
+Theorem native_checked_occurrence_identity_pair_wrong_roles_reject :
+  forall key revision,
+    nativeDecodeCheckedOccurrenceIdentityPairWires
+      (nativeInstanceRevisionWire revision, nativeOccurrenceKeyWire key) = None.
+Proof. intros [key] [revision]. reflexivity. Qed.
+
+Theorem native_checked_occurrence_same_revision_not_same_identity :
+  forall key1 key2 revision, key1 <> key2 ->
+    nativeCheckedOccurrenceIdentityPairWires
+      (mkNativeCheckedOccurrenceIdentityPair key1 revision) <>
+    nativeCheckedOccurrenceIdentityPairWires
+      (mkNativeCheckedOccurrenceIdentityPair key2 revision).
+Proof.
+  intros key1 key2 revision Hdiff Heq.
+  apply Hdiff.
+  apply native_occurrence_key_wire_injective.
+  exact (f_equal fst Heq).
+Qed.

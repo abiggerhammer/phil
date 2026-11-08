@@ -708,3 +708,36 @@ authority, no complete `FixedFinalAuthorityAdapter` or
 pinned final-delta signoff remain separate, uncredited gates. No changes
 to original 244 normative cases, historical audit, TCB, generated artifacts
 or strict GHC/LLVM/Rocq policies. **Independent audit-freeze: NOT YET.**
+
+
+## 2026-11-08 — checked occurrence identity as a K/I role-separated pair
+
+Issue #1584; following merged #1665. The checked
+`ArchitectureInstanceIdentity` is a two-component native identity:
+`InstanceKey` plus its own `InstanceRevision`. A new reversible
+`(Text, Text)` codec transports their **K** and **I** role wires as a pair
+without collapsing to a stage revision. Both components come from the
+retained checked architecture descriptor. The independently accepted
+`StageClosure` has a potentially equal instance revision but no
+occurrence key, so pair equality cannot certify stage origin.
+
+Strict Upload/Steve replay requires the checked source-manifest binding and
+exact accepted VER-010 / INT-005 whole-object consumers before reading
+the identity. It tests positive pair decoding, adversarial swapped and
+foreign-tag components, altered keys sharing the same revision, and
+the separate existing opt-in stage-revision equality gate. The four Rocq
+model theorems cover pair roundtrip, injectivity, swapped-role rejection
+and same-revision/different-key nonidentity; named `Print Assumptions`
+queries execute through the strict correspondence workflow.
+
+**Remaining premises:** No `Data.Text` Unicode ↔ Rocq `string`
+representation theorem, complete identity/semantic-actuals and accepted
+manifest/source/release object mapping, native-to-Rocq `nat` encoding,
+authenticated occurrence-to-concrete-StageClosure production, source/
+assumption/erasure/final predecessor authority, or `FinalArtifactCertified`.
+A model `Prop` is not native authority, and `FixedFinalAuthorityAdapter`
+is not completed by pair transport. Public release-byte verification and
+independent pinned final-delta signoff remain separate uncredited gates.
+Original 244 normative conformance cases, independent-audit history,
+Phase 1 TCB, strict GHC/LLVM/Rocq policies and generated Phase 1
+outputs remain unchanged. **Independent audit-freeze: NOT YET.**

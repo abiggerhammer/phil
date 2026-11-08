@@ -274,3 +274,51 @@ The bounded native addition is a constructor-private, **read-only full accepted-
 **Bounded implemented fragment:** The independently accepted Phase1Stage verifier profile is **plain native `Text`**, not a nominal `VerifierProfileRevision` type. Read-only `NativeVerifierProfileText` and reversible ASCII `P`-role wire preserve the complete profile payload separately from raw Systems digest `R`, lowering root `L`, normalized Systems revision `S`, common contract revision `C`, closed contract revision `F`, subject revision `B`, instance revision `I` and realization revision `A`. Strict Haskell Upload/Steve replay requires the exact checked GenericApplicationIdentity/verified actuals/architecture-instance source-manifest producer and independently accepted manifest, VER-010 source and INT-005 CertifiedRelease/StageClosure consumer objects; it verifies accepted profile equality to native final authority, P-wire roundtrip and wrong-role rejection. Adversarial equal-payload wrappers for all eight foreign roles remain *unaccepted* and cannot decode as P. Four bounded Rocq `string`-model theorems and their four named `Print Assumptions` queries establish injection, roundtrip, disjointness and negative decoding in that model, not native acceptance.
 
 **Remaining-premise ledger:** A P-tagged `Text` codec is **not** a proved Haskell `Data.Text` Unicode ↔ Rocq `string` serialization, complete total/injective cross-runtime representation of accepted GenericApplicationIdentity/actuals/InstanceKey/source/manifest/StageClosure/CertifiedRelease, or authenticated checked architecture occurrence producing the concrete independently accepted StageClosure and selected release. `StageClosure` lacks the occurrence's `InstanceKey`; equal typed coordinates and disjoint wire prefixes do not prove origin. Source/assumption/erasure/final predecessor authority, complete `FixedFinalAuthorityAdapter` and `FinalArtifactCertified` remain unproved. No native-to-Rocq `nat` encoding or model `Prop` promoted to native authority. **Public release-byte verification** and **independent pinned final-delta signoff** are separate, uncredited gates. Only [supplemental Phase 1 Conformance Matrix Audit Reconciliation row 39](https://docs.google.com/spreadsheets/d/1hpzjw7O81vJgb9V5AMRyPd2tuRMHT92EZaqtpGl3DSo/edit) was appended and read back against executed evidence; original **244 normative cases (236 Exit, 8 Profile)**, historical independent audit, Phase 1 TCB, strict GHC/LLVM/Rocq checks and generated Phase-1 outputs remain unchanged. **Independent Phase 1 audit-freeze verdict: NOT YET.**
+
+
+## Implementation evidence — 2026-11-08: checked occurrence InstanceKey role wire
+
+[PR #1665](https://github.com/abiggerhammer/phil/pull/1665), controlling
+[issue #1584](https://github.com/abiggerhammer/phil/issues/1584), exact
+tested head `0cd5518f8e8dee80f3e2917798b1407526902ec0`, merged as
+`9ca5d6151e488cc5922f78205afbfd64ecd7914b` at
+**2026-11-08 05:52:58 UTC**. All **37/37 exact-head pull_request
+workflows** and **80/80 exact-head checks** completed SUCCESS, with zero
+failed, pending or skipped checks. The
+[protected Hamster Merge Intent workflow 42452457056](https://github.com/abiggerhammer/phil/actions/runs/42452457056)
+and its `merge-pr` job completed SUCCESS, authorized by
+`hamster/merge/impl-audit/pr-1665/0cd5518f8e8dee80f3e2917798b1407526902ec0`
+from then-current main `635deccd0ba263131e9a9325d20445dee97cf2cf`.
+GitHub independently reports #1665 closed and merged. No direct merge,
+generated-artifact refresh, TCB change or policy relaxation occurred.
+
+**Bounded implemented fragment:** The checked architecture occurrence
+`InstanceKey` is a native `Text` newtype, and its reversible ASCII K
+role wire is disjoint from R raw Systems digest, L lowering root, S
+normalized Systems revision, C common contract, F closed contract, B
+subject, I stage/occurrence instance revision, A realization and P plain
+`Text` verifier profile. Strict Haskell Upload/Steve tests replay the
+exact checked source-manifest producer, independently accepted manifest,
+VER-010 source and INT-005 `CertifiedRelease`/`StageClosure` consumer
+objects. They test the accepted descriptor's K roundtrip, nine unaccepted
+same-payload foreign-role substitutions and distinct occurrence keys
+sharing a revision; four bounded Rocq string-model theorems and four
+`Print Assumptions` queries passed. No new acceptance producer was added.
+
+**Remaining-premise ledger:** `InstanceKey` is **not**
+`InstanceRevision`; `StageClosure` does not carry the occurrence key.
+Reversible tagged identity data and even equal stage revisions do not
+authenticate that the checked occurrence produced the independently
+accepted concrete stage or selected release. Complete Haskell Unicode
+`Data.Text` ↔ Rocq `string` serialization, generic semantic-actuals
+and accepted object representation, predecessor source/assumption/
+erasure/final authority, `FixedFinalAuthorityAdapter` and
+`FinalArtifactCertified` remain unproved. No invented native-to-Rocq
+`nat` encoding or supplied model `Prop` promoted to native authority.
+**Public release-byte verification** and **independent pinned final-delta
+signoff** remain separate uncredited gates. Only
+[supplemental Audit Reconciliation row 40](https://docs.google.com/spreadsheets/d/1hpzjw7O81vJgb9V5AMRyPd2tuRMHT92EZaqtpGl3DSo/edit)
+was appended and read back, preserving the original **244 normative cases
+(236 Exit, 8 Profile)**, historical audit evidence, Phase 1 TCB,
+generated artifacts and strict GHC/LLVM/Rocq policy.
+**Independent Phase 1 audit-freeze verdict: NOT YET.**
