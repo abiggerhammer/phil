@@ -41,6 +41,7 @@ The important exceptions are documents that explicitly declare themselves curren
 - [FSEM-01 direct two-linear-owner source conformance](formal-semantics-two-owner-source-fsem01-v1.md) — real two-parameter function with exact production map/loan observations; opaque tuple return and general elaboration still open.
 - [FSEM-01 exact two-Bytes TyProduct return](formal-semantics-product-return-fsem01-v1.md) — bounded source element type/mode elaboration and runtime return matching, with the general tuple algebra still open.
 - [FSEM-01 mixed flat products and finite contract preservation](formal-semantics-flat-product-fsem01-v1.md) — flat arity ≥2 and primitive mixed modes with conditional Rocq exact-contract lemmas; affine source typing/general refinement remain open.
+- [FSEM-01 finite resource contexts and early SURF-008 preflight](formal-semantics-finite-context-fsem01-v1.md) — arbitrary numbers of modeled owners, four-zone frames and exact Haskell Map/Set checks; implementation-to-Rocq refinement remains open.
 
 These review documents do not replace accepted semantic contracts, the normative grammar, the Logic Ledger, or exact-commit proof and conformance results.
 
