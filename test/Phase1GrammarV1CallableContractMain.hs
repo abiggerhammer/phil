@@ -18,7 +18,9 @@ import Phil.Core.Static
   , emptyStaticContext
   )
 import Phil.Core.Syntax
-  ( Name (..)
+  ( Mode (..)
+  , Name (..)
+  , ProductElementType (..)
   , Proposition (..)
   , RefSort (..)
   , RefTerm (..)
@@ -173,7 +175,17 @@ checkedCallableSignaturesPreserveScope = do
         , Nothing
         , Nothing
         , Nothing
-        , Nothing
+        , Just
+            (Right
+              ( ( "TupleResult"
+                , [(Name "x", TyUInt 8)]
+                , TyProduct
+                    [ ProductElementType Unrestricted (TyUInt 8)
+                    , ProductElementType Unrestricted TyBool
+                    ]
+                )
+              , []
+              ))
         ]
   assert (actual == expected) $
     "checked callable signature routing changed name/parameter/result meaning or collapsed competence boundaries: "
