@@ -47,18 +47,18 @@ Unrestricted Bool. The opt-in [production Engine entrypoint](../../src/Phil/Surf
 then runs:
 
 1. Both branch tuple expressions through real production
-   \`checkValueBlock\`/\`pruneScopedPath\`, independently requiring an actual
-   two-element \`RuntimeTuple\` of Unrestricted Bool scalar values.
-2. The validated predecessor contexts through \`joinExclusive\` and native
-   \`Core.Context.joinContinuing\`, preserving the exact four resource
+   `checkValueBlock`/`pruneScopedPath`, independently requiring an actual
+   two-element `RuntimeTuple` of Unrestricted Bool scalar values.
+2. The validated predecessor contexts through `joinExclusive` and native
+   `Core.Context.joinContinuing`, preserving the exact four resource
    collections (Gamma/Affine/Linear/loans).
-3. Two **separate** production \`insertBindingMeta\` /
-   \`Core.Context.insertBinding\` operations, in source declaration order,
+3. Two **separate** production `insertBindingMeta` /
+   `Core.Context.insertBinding` operations, in source declaration order,
    with a real first-bound and both-bound checkpoint. Neither is installed
    before the resource join succeeds.
-4. Explicitly justified \`true\` or an exact source-reflexive slot equality,
-   rejecting \`false\` or unproved cross-slot equality as
-   production \`MissingEvidence\` **after** both inserts and before successor
+4. Explicitly justified `true` or an exact source-reflexive slot equality,
+   rejecting `false` or unproved cross-slot equality as
+   production `MissingEvidence` **after** both inserts and before successor
    statements.
 5. Both original checked post-join slot reads, then one return of the Linear
    Bytes spectator.
@@ -74,11 +74,11 @@ loads [23 parsed-source fixtures](../../test/fixtures/fsem01-two-bool-join-teles
 Accepted examples exercise different, same and repeated unrestricted source
 operands, literal-true and reflexive first/second slot proofs. Negative source
 controls separately replace the first/second operand of each predecessor with
-Linear Bytes and require exact \`TypeMismatch\` before any Core join or
-post-join binder. Other controls test false/cross-slot \`MissingEvidence\`,
+Linear Bytes and require exact `TypeMismatch` before any Core join or
+post-join binder. Other controls test false/cross-slot `MissingEvidence`,
 source binder collisions, pre-join slot access, unsupported slot modes or
 arity, missing invariant/else, and incorrect successor use. Adapter refusal
-(\`Nothing\`) means **noncompetence**, not normative invalidity.
+(`Nothing`) means **noncompetence**, not normative invalidity.
 
 The conditional Rocq file
 [SurfaceSourceTwoBoolJoinTelescope.v](../../proof/Phil/Surface/SurfaceSourceTwoBoolJoinTelescope.v)
@@ -96,5 +96,5 @@ Dependent and greater-than-two-slot telescopes; affine/linear phi values,
 mixed-mode tuples, general invariant search, actual runtime phi evaluation,
 nested/match/capture/loop source behavior, arbitrary nonlocal source
 expressions, full Text/Map/Set-to-Rocq representation, error class preservation
-for every program, and \`satisfies C\` assurance discharge remain open.
+for every program, and `satisfies C` assurance discharge remain open.
 FSEM-02 owns session progression; FSEM-05/06/07 are separate obligations.
