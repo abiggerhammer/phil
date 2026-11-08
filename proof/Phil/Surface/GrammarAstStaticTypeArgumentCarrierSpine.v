@@ -56,7 +56,7 @@ Proof.
     + eapply phase1_surface_normalize_static_type_argument_spine_round_trip.
       exact Hargument.
     + eapply IH.
-      exact Hrest.
+      reflexivity.
 Qed.
 
 Theorem
@@ -86,7 +86,7 @@ Proof.
           argument actual Hargument).
       reflexivity.
     + eapply IH.
-      exact Hrest.
+      reflexivity.
 Qed.
 
 Record Phase1SurfaceStaticTypeArgumentListSpine : Type := {
