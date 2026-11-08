@@ -741,3 +741,43 @@ independent pinned final-delta signoff remain separate uncredited gates.
 Original 244 normative conformance cases, independent-audit history,
 Phase 1 TCB, strict GHC/LLVM/Rocq policies and generated Phase 1
 outputs remain unchanged. **Independent audit-freeze: NOT YET.**
+
+
+## 2026-11-08 — checked generic application scalar roles D/V (partial projection)
+
+Issue #1584; successor after merged #1668. The actual native
+`GenericApplicationIdentity` contains **three fields**: `DeclarationKey`,
+`InterfaceRevision`, and `Map GenericStaticParameterKey SemanticForm`.
+This bounded slice represents ONLY its two distinct native Text-newtype
+scalars through reversible D (declaration key) and V (generic interface
+revision) role-tagged wires; `decodeNativeGenericApplicationScalarWires`
+returns a **pair**, not a reconstructed or accepted application identity.
+
+Upload/Steve strict executable tests first obtain the real checked source-manifest
+producer and independently accepted manifest, VER-010 source and INT-005
+CertifiedRelease/StageClosure, then read the application identity from retained
+`GenericApplicationAssurance`. Exact whole-object replay precedes positive
+D/V roundtrips. A deliberately **unaccepted** application with changed semantic
+actuals preserves both D/V wires but is NOT equal to the accepted application;
+wrong-role K/I swaps, matching-payload foreign digest/revision wires and
+D/V reversal reject. No new acceptance producer is added.
+
+Rocq proves seven bounded string-model results with seven named
+`Print Assumptions` queries: scalar injection/roundtrips, pair roundtrip,
+wrong-role pressure, and a concrete countermodel showing that equal D/V
+projections do not identify semantic actuals. Rocq `bool` in that countermodel
+does NOT encode native `SemanticForm`. The remaining actuals map needs its own
+faithful typed representation and verified producer relation; no fake nat
+encoding, Unicode `Data.Text` ↔ Rocq `string` serializer, or supplied
+model `Prop` promoted to accepted native authority.
+
+Checked architecture K/I occurrence remains separate from concrete
+StageClosure instance revision; raw Systems digest R, lowering root L,
+normalized S, common C, closed F, subject B, realization A, profile P,
+and complete accepted source/manifest/StageClosure/release objects remain
+distinct. This does not authenticate occurrence-to-stage production, predecessor
+source/assumption/erasure/final authority, `FixedFinalAuthorityAdapter`,
+or `FinalArtifactCertified`. Public release bytes and independent pinned
+final-delta signoff are separately uncredited. Original 244 normative cases,
+historical independent audit, TCB, generated outputs and strict GHC/LLVM/Rocq
+policies unchanged; independent freeze **NOT YET**.
