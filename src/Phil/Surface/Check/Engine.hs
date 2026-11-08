@@ -12,6 +12,8 @@ module Phil.Surface.Check.Engine
   , SourceScopedIfJoinRun (..)
   , checkSurfaceScopedSourceIfJoinComponent
   , traceSurfaceScopedSourceIfJoinComponent
+  , SourceBranchBorrowObservation (..)
+  , traceSurfaceSourceBranchBorrow
   , BorrowTracePhase (..)
   , BorrowTraceCheckpoint (..)
   , BorrowTraceResourceObservation (..)
@@ -371,6 +373,43 @@ traceSurfaceScopedSourceIfJoinComponent env locatedComponent thenBlock elseBlock
       , scopedIfJoinElsePruned = []
       , scopedIfJoinJoined = Nothing
       , scopedIfJoinOutcome = result }
+
+-- | Observe one actual production borrow inside a source-projected branch.
+-- The ordinary checker uses evalBorrow through checkBlock. This observer calls
+-- that same evalBorrowTraced implementation independently from the identical
+-- initial state; exact source tests require its error classification to agree
+-- with the branch execution. An error retains only reached checkpoints, never
+-- an invented loan-close or post-join context.
+data SourceBranchBorrowObservation = SourceBranchBorrowObservation
+  { sourceBranchBorrowCuts :: [BorrowTraceCheckpoint]
+  , sourceBranchBorrowOutcome :: Either SurfaceCheckError ()
+  } deriving (Eq, Show)
+
+-- | Deliberately bounded to a one-statement borrow-expression branch. Other
+-- source statements have no loan trace: Nothing means not observed, not that
+-- they were accepted. State initialization and source-scoped branch checking
+-- are separate operations that must agree under the admitted fragment.
+traceSurfaceSourceBranchBorrow
+  :: SurfaceEnvironment
+  -> Located Component
+  -> Located Block
+  -> Maybe SourceBranchBorrowObservation
+traceSurfaceSourceBranchBorrow env component branch =
+  case blockStatements (locatedValue branch) of
+    [Located _ (ExpressionStatement locatedBorrow)] ->
+      case locatedValue locatedBorrow of
+        BorrowExpression owner view body ->
+          Just $ case initializeState env (locatedValue component) of
+            Left err -> SourceBranchBorrowObservation [] (Left err)
+            Right initial ->
+              case checkProvides env initial (locatedValue component) of
+                Left err -> SourceBranchBorrowObservation [] (Left err)
+                Right () ->
+                  let (outcome, cuts) =
+                        evalBorrowTraced env initial locatedBorrow owner view body
+                  in SourceBranchBorrowObservation cuts (fmap (const ()) outcome)
+        _ -> Nothing
+    _ -> Nothing
 
 -- | Concrete checkpoints from the *same* production borrow evaluator used by
 -- ordinary checking. These are not an abstract small-step semantics or a
