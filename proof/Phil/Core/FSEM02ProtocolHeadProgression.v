@@ -279,7 +279,7 @@ Proof.
   intros sourceLabels branches label [_ Hcoverage] Hsource.
   apply (proj1 (Hcoverage label)) in Hsource.
   clear Hcoverage sourceLabels.
-  revert label.
+  revert Hsource label.
   induction branches as [| candidate payload continuation rest IH].
   - intros label Hsource. simpl in Hsource. contradiction.
   - intros label Hsource. simpl in Hsource.
