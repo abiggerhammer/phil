@@ -247,7 +247,7 @@ grammarV1CheckedAffineProductFunctionTrace
                       , affineProductPermitOrigin =
                           checkedResolvedTypeModeOrigin permit
                       , affineProductCheckedReturn =
-                          checkedResolvedFlatProductMode product
+                          checkedResolvedFlatProductMode checkedProduct
                       , affineProductReturnElements =
                           checkedResolvedFlatProductElements checkedProduct
                       , affineProductCheckpoints = traceCheckpoints run
