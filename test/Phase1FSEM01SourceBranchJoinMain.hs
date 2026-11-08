@@ -49,15 +49,6 @@ parseOne source = do
         other -> Left ("not a function declaration: " ++ show other)
     other -> Left ("not one source declaration: " ++ show (length other))
 
-check :: Text -> Maybe (Either a GrammarV1SourceIfJoinTrace)
-check source = case parseOne source of
-  Left _ -> Nothing
-  Right fn -> case grammarV1CheckedSourceIfJoinTrace
-      emptyStaticContext root fn of
-    Nothing -> Nothing
-    Just (Left _) -> Nothing
-    Just (Right trace) -> Just (Right trace)
-
 checked :: Text -> Either String GrammarV1SourceIfJoinTrace
 checked source = case parseOne source of
   Left err -> Left ("source failed parsing: " ++ err)
@@ -239,7 +230,7 @@ checkBothTerminal source = do
 checkUnsupported :: Text -> String -> Either String ()
 checkUnsupported src label =
   case parseOne src of
-    Left _ -> Right ()
+    Left err -> Left ("out-of-fragment specimen failed to parse: " ++ err)
     Right fn -> assert
       (grammarV1CheckedSourceIfJoinTrace
          emptyStaticContext root fn == Nothing)
@@ -271,9 +262,9 @@ main = do
         checkUnsupported joinSlot "nonempty join state"
         checkUnsupported width "incompatible declared result width"
         checkUnsupported unusual "unelaborated nested branch expression"
-        assert (Text.replace "unit;" "let saved = payload;" accepted /=
-                changed)
-          "mutation fixture accounting unexpectedly changed"
+        assert (Text.replace "    unit;\n  } else" "    let saved = payload;\n  } else"
+                  accepted == changed)
+          "linear mismatch witness is not a one-statement mutation"
   case result of
     Right () -> putStrLn
       "PASS: two real checked source predecessors, native Core join, exact linear mismatch and terminal exclusion"
