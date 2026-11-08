@@ -183,6 +183,10 @@ jobs:
           Print Assumptions native_ordered_atom_list_model_injective.
           Print Assumptions native_ordered_atom_list_model_foreign_key_rejected.
           Print Assumptions native_ordered_atom_list_model_order_sensitive.
+          Print Assumptions native_generic_atom_actual_pairs_model_roundtrip.
+          Print Assumptions native_generic_atom_actual_pairs_model_injective.
+          Print Assumptions native_generic_atom_actual_pair_model_swapped_roles_reject.
+          Print Assumptions native_generic_atom_actual_pair_model_association_sensitive.
           Print Assumptions fixed_adapter_full_certification_preserves_predecessors.
           EOF
           rocq c -Q proof/Phil Phil /tmp/NativeFinalInstanceAssumptions.v 2>&1 | tee typed-native-instance-assumptions.log

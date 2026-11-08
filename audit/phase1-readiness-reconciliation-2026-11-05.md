@@ -465,3 +465,38 @@ P profile, K/I occurrence, D/V/Q generic key roles. Original **244
 normative cases** (236 Exit, 8 Profile), historic audit, TCB,
 generated artifacts and strict GHC/LLVM/Rocq policies unchanged.
 **Independent Phase 1 audit-freeze verdict: NOT YET.**
+
+## Implementation evidence — 2026-11-08: SemanticOrdered atom-only M-vector
+
+[PR #1679](https://github.com/abiggerhammer/phil/pull/1679),
+[issue #1584](https://github.com/abiggerhammer/phil/issues/1584),
+exact tested head `0dc4858e7854efdac8cdd7262bbdf305d985eab0`,
+merged as `51a82934358bc6e80cea85074a53862857f9f128`
+at **2026-11-08 17:08:20 UTC**. Independently fetched exact-head
+**36/36 pull-request workflows SUCCESS and 78/78 checks SUCCESS**,
+no pending, failed or skipped checks; protected
+[Hamster Merge Intent 42502435000](https://github.com/abiggerhammer/phil/actions/runs/42502435000)
+succeeded. Supplemental Conformance Matrix row **45** appended and
+read back (all six cells).
+
+**Executed bounded result:** actual native SemanticOrdered [SemanticForm]
+is represented by an ordered typed M-wire vector when and only when
+each immediate child is SemanticAtom Text; the empty list works.
+Strict Upload/Steve checked producer and independently accepted
+manifest, VER-010 source and INT-005 CertifiedRelease/StageClosure
+replay passed, with ordering, foreign-role and structural negatives.
+Four Rocq string-list model theorems with named assumptions passed,
+including corrected proof scripts in the tested exact head.
+
+**Nonclaims:** no total recursive SemanticForm, Unicode Text/string
+or native/Rocq list/Map correspondence; no complete accepted actuals,
+manifest/source/stage/release reflection, authenticated checked occurrence
+to concrete StageClosure production, predecessor authority,
+FixedFinalAuthorityAdapter or FinalArtifactCertified. No invented nat
+mapping/model Prop native authority; public release bytes and independent
+pinned final-delta signoff separately uncredited. Keep disjoint R/L
+raw digest/root, S/C/F normalized/common/closed, B/I/A subject/instance/
+realization, P profile, K/I occurrence, D/V/Q generic and M value roles.
+Original **244 normative cases** (236 Exit, 8 Profile), TCB, historical
+audit, generated outputs and strict GHC/LLVM/Rocq policy unchanged.
+**Independent Phase 1 audit-freeze verdict: NOT YET.**
