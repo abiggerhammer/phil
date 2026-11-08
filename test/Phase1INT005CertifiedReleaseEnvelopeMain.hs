@@ -203,6 +203,10 @@ main = do
           , nativeGenericActualsKeyDomainReplayAccepts source upload)
         , ( "Steve checked semantic-actuals Q-key domain replays; value changes and duplicate keys never become authority"
           , nativeGenericActualsKeyDomainReplayAccepts source steve)
+        , ( "Upload checked generic SemanticAtom M-only value wire; structured forms and foreign roles fail closed"
+          , nativeGenericSemanticAtomReplayAccepts source upload)
+        , ( "Steve checked generic SemanticAtom M-only value wire; structured forms and foreign roles fail closed"
+          , nativeGenericSemanticAtomReplayAccepts source steve)
         , ( "Upload changed raw Systems digest cannot pass exact manifest-stage replay"
           , nativeManifestStageReplayRejectsChangedDigests source upload)
         , ( "Steve changed raw Systems digest cannot pass exact manifest-stage replay"
@@ -1457,6 +1461,84 @@ nativeGenericActualsKeyDomainReplayAccepts source fixture =
                     && all (== Nothing)
                          (map decodeNativeGenericActualsKeyDomainWires
                            (map (: []) foreignWires))
+    _ -> False
+
+-- | The accepted object is replayed before inspecting *actual native*
+-- GenericApplicationIdentity SemanticForm entries. M is a partial codec for
+-- SemanticAtom only. Any probe map constructed below is intentionally
+-- UNACCEPTED; same Q-key domain and two M atoms are not source authority.
+nativeGenericSemanticAtomReplayAccepts
+  :: GenericApplicationAssurance -> ReleaseFixture -> Bool
+nativeGenericSemanticAtomReplayAccepts source fixture =
+  case (producerInputs source, produceFixture source fixture) of
+    (Right (bundle, policy), Right (_, produced)) ->
+      case nativeAdapterPair source produced of
+        Nothing -> False
+        Just (sourceArtifact, release) ->
+          case closeNativeFinalInstanceCorrespondence
+              source (sourceInstanceDescriptor source) bundle policy
+              (fixtureContext produced) (fixtureLedger produced)
+              emptyProducerSelection sourceArtifact release of
+            Left _ -> False
+            Right witness ->
+              case replayNativeExactAcceptedConsumers witness
+                (nativeCorrespondenceSourceManifestBinding witness)
+                (nativeCorrespondenceCertifiedSource witness)
+                (nativeCorrespondenceCertifiedRelease witness) of
+                Left _ -> False
+                Right _ ->
+                  let application = genericDischargeApplicationIdentity
+                        (genericApplicationAssuranceLineage
+                          (nativeCorrespondenceSourceAssurance witness))
+                      actuals = genericApplicationSemanticArguments application
+                      atomA = SemanticAtom "audit.atom.alpha"
+                      atomB = SemanticAtom "audit.atom.beta"
+                      probeKey = GenericStaticParameterKey "audit.impl.unaccepted.atom.probe"
+                      alteredA = application
+                        { genericApplicationSemanticArguments =
+                            Map.insert probeKey atomA actuals }
+                      alteredB = application
+                        { genericApplicationSemanticArguments =
+                            Map.insert probeKey atomB actuals }
+                      unsupportedForms =
+                        [ SemanticOrdered [atomA]
+                        , SemanticUnordered (Set.singleton atomA)
+                        , SemanticRecord (Map.singleton "v" atomA)
+                        ]
+                      foreignWires =
+                        [ encodeNativeGenericStaticParameterKeyWire
+                            (GenericStaticParameterKey "audit.atom.alpha")
+                        , encodeNativeGenericDeclarationWire
+                            (DeclarationKey "audit.atom.alpha")
+                        , encodeNativeGenericInterfaceWire
+                            (InterfaceRevision "audit.atom.alpha")
+                        , encodeNativeOccurrenceKeyWire
+                            (InstanceKey "audit.atom.alpha")
+                        , encodeNativeVerifierProfileWire
+                            (NativeVerifierProfileText "audit.atom.alpha")
+                        ]
+                      actualFormChecked form =
+                        case form of
+                          SemanticAtom _ ->
+                            (encodeNativeSemanticAtomWire form >>=
+                              decodeNativeSemanticAtomWire) == Just form
+                          _ -> encodeNativeSemanticAtomWire form == Nothing
+                  in Map.notMember probeKey actuals
+                    && all actualFormChecked (Map.elems actuals)
+                    && (encodeNativeSemanticAtomWire atomA >>=
+                          decodeNativeSemanticAtomWire) == Just atomA
+                    && (encodeNativeSemanticAtomWire atomB >>=
+                          decodeNativeSemanticAtomWire) == Just atomB
+                    && encodeNativeSemanticAtomWire atomA /= encodeNativeSemanticAtomWire atomB
+                    && all (== Nothing) (map encodeNativeSemanticAtomWire unsupportedForms)
+                    && all (== Nothing) (map decodeNativeSemanticAtomWire foreignWires)
+                    && alteredA /= alteredB
+                    && genericApplicationSemanticArguments alteredA /=
+                       genericApplicationSemanticArguments alteredB
+                    && encodeNativeGenericActualsKeyDomainWires alteredA ==
+                       encodeNativeGenericActualsKeyDomainWires alteredB
+                    && Map.keys (genericApplicationSemanticArguments alteredA) ==
+                       Map.keys (genericApplicationSemanticArguments alteredB)
     _ -> False
 
 -- | Adversarial same-manifest-ID projections. Neither modified manifest is an

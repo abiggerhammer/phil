@@ -392,3 +392,39 @@ final-delta signoff remain separate and uncredited. Original **244 normative
 cases** (236 Exit, 8 Profile), historical independent audit, Phase 1 TCB,
 generated outputs and strict GHC/LLVM/Rocq policies unchanged.
 **Independent Phase 1 audit-freeze verdict: NOT YET.**
+
+## Implementation evidence — 2026-11-08: checked generic semantic-actuals Q-key domain
+
+[PR #1674](https://github.com/abiggerhammer/phil/pull/1674),
+controlling [issue #1584](https://github.com/abiggerhammer/phil/issues/1584),
+exact tested head `5d6e58fa70a0c4645b4195b17faad20c5ab4e7e2`,
+merged as `30dbc144f107a069e2f726c4957a441978c1c7b6`
+at **2026-11-08 11:56:11 UTC**. The completed exact-head census
+recorded **38/38 successful workflows and 80/80 successful checks**;
+a fresh connector recount returned 37/37 successful pull-request
+workflows (publication push workflow excluded). Protected
+[Hamster Merge Intent 42477359626](https://github.com/abiggerhammer/phil/actions/runs/42477359626)
+and its `merge-pr` job succeeded. Supplemental Conformance Matrix
+Audit Reconciliation row 43 was appended and read back.
+
+**Executed bounded fragment:** The actual checked
+`GenericApplicationIdentity` carries
+`Map GenericStaticParameterKey SemanticForm`. Q-prefixed native
+`GenericStaticParameterKey` data wires and canonical ascending,
+unique map-key diagnostics replay against Upload/Steve checked producer
+and independently accepted manifest, VER-010 source and INT-005 release
+whole objects. Duplicate/out-of-order and foreign-role keys fail closed.
+Four bounded Rocq string-model theorems and named assumption queries
+passed; a supplied model `bool` value is not native `SemanticForm`.
+
+**Nonclaims:** Keys cannot identify semantic values; no complete
+`SemanticForm` codec, native Unicode Text ↔ Rocq string or Map-order
+refinement, total accepted source/manifest/stage/release representation
+or authenticated occurrence-to-StageClosure production. Predecessor
+authority, FixedFinalAuthorityAdapter and FinalArtifactCertified
+remain unproved. No ad hoc nat encoding or supplied model Prop promoted
+to native authority. Public release-byte validation and independent
+pinned final-delta signoff remain separate and uncredited. The original
+**244 normative cases** (236 Exit, 8 Profile), historical independent
+audit, Phase 1 TCB, generated outputs and strict GHC/LLVM/Rocq
+policies remain unchanged. **Audit-freeze verdict: NOT YET.**
