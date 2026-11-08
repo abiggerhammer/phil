@@ -214,8 +214,9 @@ wrongHeadAndInstanceRejected source = do
       (choiceClientHead plan) emptyProtocolContext
   case checkProtocolAction
       (ProtocolOfferRequest old next instanceRevision clientRole "Go") initial of
-    Left (ProtocolSessionError (UnexpectedSessionAction OfferAction actual)) ->
-      assert (actual == choiceClientHead plan) "wrong-session-head diagnostic drift"
+    Left (ProtocolSessionError (UnexpectedSessionAction (OfferAction label) actual)) ->
+      assert (label == "Go" && actual == choiceClientHead plan)
+        "wrong-session-head diagnostic drift"
     other -> Left ("source select unexpectedly admitted offer: " <> show other)
   case checkProtocolAction
       (ProtocolSelectRequest old next
