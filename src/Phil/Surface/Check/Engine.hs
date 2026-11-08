@@ -6,6 +6,9 @@ module Phil.Surface.Check.Engine
   , traceSurfaceBorrowComponent
   , ProductEliminationRun (..)
   , traceSurfaceProductEliminationComponent
+  , SourceIfJoinRun (..)
+  , checkSurfaceSourceIfJoinComponent
+  , traceSurfaceSourceIfJoinComponent
   , BorrowTracePhase (..)
   , BorrowTraceCheckpoint (..)
   , BorrowTraceResourceObservation (..)
@@ -138,6 +141,106 @@ checkSurfaceComponent environment locatedComponent = do
     { checkedComponentName = componentName (locatedValue locatedComponent)
     , checkedTerminalControls = map toCoreControl finalPaths
     }
+
+-- | A bounded, source-authorized two-predecessor if/join evaluation.
+-- Both successor paths are checked against the SAME exact production initial
+-- context; this is static branch checking, not a runtime choice or scheduler.
+-- One terminal predecessor never participates in the continuing Core join.
+-- All evaluation, join, return and terminal checks use the ordinary production
+-- checker functions; there is no synthesized/trusted post-state.
+data SourceIfJoinRun = SourceIfJoinRun
+  { sourceIfJoinBefore :: Maybe ResourceContext
+  , sourceIfJoinThenPaths :: [ResourceContext]
+  , sourceIfJoinElsePaths :: [ResourceContext]
+  , sourceIfJoinJoined :: Maybe ResourceContext
+  , sourceIfJoinContinuingCount :: Int
+  , sourceIfJoinTerminalCount :: Int
+  , sourceIfJoinOutcome :: Either SurfaceCheckError SurfaceCheckResult
+  } deriving (Eq, Show)
+
+-- | Ordinary projection: only the result of the actual production run.
+checkSurfaceSourceIfJoinComponent
+  :: SurfaceEnvironment -> Located Component
+  -> Located Block -> Located Block -> Located Statement
+  -> Either SurfaceCheckError SurfaceCheckResult
+checkSurfaceSourceIfJoinComponent env component left right result =
+  sourceIfJoinOutcome (traceSurfaceSourceIfJoinComponent env component left right result)
+
+-- | Exact recorded resource maps for the two source-derived predecessor
+-- blocks. A failed predecessor has no fabricated successor. A join failure
+-- retains the independently executed predecessor contexts but no joined
+-- resource context. Terminal predecessors are excluded by joinExclusive.
+traceSurfaceSourceIfJoinComponent
+  :: SurfaceEnvironment -> Located Component
+  -> Located Block -> Located Block -> Located Statement
+  -> SourceIfJoinRun
+traceSurfaceSourceIfJoinComponent env locatedComponent thenBlock elseBlock afterJoin =
+  case initializeState env component of
+    Left err -> emptyRun (Left err)
+    Right initial ->
+      case checkProvides env initial component of
+        Left err -> (emptyRun (Left err))
+          { sourceIfJoinBefore = Just (coreContext initial) }
+        Right () ->
+          let before = coreContext initial
+              leftRun = checkBlock env initial thenBlock
+          in case leftRun of
+            Left err -> (emptyRun (Left err))
+              { sourceIfJoinBefore = Just before }
+            Right left ->
+              let leftContexts = map (coreContext . pathState) left
+                  rightRun = checkBlock env initial elseBlock
+              in case rightRun of
+                Left err -> (emptyRun (Left err))
+                  { sourceIfJoinBefore = Just before
+                  , sourceIfJoinThenPaths = leftContexts }
+                Right right ->
+                  let rightContexts = map (coreContext . pathState) right
+                      allPaths = left ++ right
+                      continuing = filter ((== PathContinue) . pathControl) allPaths
+                      stopped = filter ((/= PathContinue) . pathControl) allPaths
+                      snapshot errorValue joined = SourceIfJoinRun
+                        { sourceIfJoinBefore = Just before
+                        , sourceIfJoinThenPaths = leftContexts
+                        , sourceIfJoinElsePaths = rightContexts
+                        , sourceIfJoinJoined = joined
+                        , sourceIfJoinContinuingCount = length continuing
+                        , sourceIfJoinTerminalCount = length stopped
+                        , sourceIfJoinOutcome = errorValue }
+                  in case joinExclusive (locatedSpan afterJoin) allPaths of
+                    Left err -> snapshot (Left err) Nothing
+                    Right joinedPaths ->
+                      let joinedContext = case filter ((== PathContinue) . pathControl) joinedPaths of
+                            [one] -> Just (coreContext (pathState one))
+                            _ -> Nothing
+                          continuingJoined = filter
+                            ((== PathContinue) . pathControl) joinedPaths
+                          stoppedJoined = filter
+                            ((/= PathContinue) . pathControl) joinedPaths
+                          finished = do
+                            when (null continuingJoined) $
+                              throw afterJoin ControlAfterTerminal
+                                "statement occurs after all incoming paths terminated"
+                            advanced <- concat <$> mapM
+                              (checkStatement env afterJoin) continuingJoined
+                            final <- mapM
+                              (finalizePath env (locatedSpan locatedComponent))
+                              (stoppedJoined ++ advanced)
+                            Right SurfaceCheckResult
+                              { checkedComponentName = componentName component
+                              , checkedTerminalControls = map toCoreControl final }
+                      in snapshot finished joinedContext
+  where
+    component = locatedValue locatedComponent
+    coreContext state = resourceContext (stateCore state)
+    emptyRun result = SourceIfJoinRun
+      { sourceIfJoinBefore = Nothing
+      , sourceIfJoinThenPaths = []
+      , sourceIfJoinElsePaths = []
+      , sourceIfJoinJoined = Nothing
+      , sourceIfJoinContinuingCount = 0
+      , sourceIfJoinTerminalCount = 0
+      , sourceIfJoinOutcome = result }
 
 -- | Concrete checkpoints from the *same* production borrow evaluator used by
 -- ordinary checking. These are not an abstract small-step semantics or a
