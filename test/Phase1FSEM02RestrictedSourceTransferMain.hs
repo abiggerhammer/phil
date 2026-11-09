@@ -13,6 +13,8 @@ import Phil.Core.Generic (GenericStaticParameterKey (..), strictGenericInstantia
 import Phil.Core.Process
 import Phil.Core.ProcessActivation
 import Phil.Core.ProcessRendezvous
+import Phil.Core.ProcessEndpointClosure (ProcessEndpointClosureError (..))
+import Phil.Core.Session (SessionError (..))
 import Phil.Core.Protocol
 import Phil.Core.Protocol.Family
 import Phil.Core.Static
@@ -20,6 +22,7 @@ import Phil.Core.Syntax
 import Phil.Surface.GrammarV1.BinderScope (GrammarV1ResolvedBinder (..))
 import Phil.Surface.GrammarV1.ComponentReceiveClose
 import Phil.Surface.GrammarV1.ComponentRestrictedRendezvous
+import Phil.Surface.GrammarV1.ComponentRestrictedSourceClose
 import Phil.Surface.GrammarV1.ComponentSendClose
 import Phil.Surface.GrammarV1.Parser
 import Phil.Surface.GrammarV1.ProtocolRoles (grammarV1CheckedBinaryProtocolFamily)
@@ -44,6 +47,12 @@ main = do
           , wrongWrittenReceiveTypeRejects fx accepted
           , wrongProtocolBinderRejects accepted
           , wrongSessionHeadRejects fx
+          , sourceCloseReplay fx
+          , sourceCloseRejectedSpelling fx rejected
+          , sourceCloseMissingServerOwner fx
+          , sourceCloseWrongOutcome fx
+          , sourceCloseWrongHead fx
+          , sourceCloseWrongRole fx
           ]
   case result of
     Right () -> putStrLn "PASS: FSEM-02 source restricted transfer and exact negative replay"
@@ -464,3 +473,146 @@ assert False err = Left err
 
 mapLeft :: (a -> b) -> Either a c -> Either b c
 mapLeft f = either (Left . f) Right
+
+-- Execute the two actual source close statements against the exact post-
+-- rendezvous state, not against a fresh or guessed endpoint context.
+closeFromSource
+  :: Fixture
+  -> GrammarV1ComponentDecl
+  -> GrammarV1ComponentDecl
+  -> GrammarV1RestrictedSourceTransition
+  -> ProtocolRoleKey
+  -> ProtocolRoleKey
+  -> Outcome
+  -> Outcome
+  -> Either GrammarV1RestrictedSourceCloseError GrammarV1RestrictedSourceCloseTransition
+closeFromSource fx sender receiver rendezvous senderRole receiverRole
+    senderOutcome receiverOutcome =
+  grammarV1CheckRestrictedSourceClose
+    senderRoot sender receiverRoot receiver
+    (fxNetwork fx) rendezvous
+    (fxClientProcess fx) (fxServerProcess fx)
+    (binaryProtocolInstanceRevision (fxInstance fx))
+    senderRole receiverRole senderOutcome receiverOutcome
+
+sourceCloseReplay :: Fixture -> Either String ()
+sourceCloseReplay fx = do
+  rendezvous <- mapLeft show $ checked fx (fxSender fx) (fxReceiver fx) (fxBefore fx)
+  first <- mapLeft show $ closeFromSource fx (fxSender fx) (fxReceiver fx)
+    rendezvous clientRole serverRole doneOutcome doneOutcome
+  second <- mapLeft show $ closeFromSource fx (fxSender fx) (fxReceiver fx)
+    rendezvous clientRole serverRole doneOutcome doneOutcome
+  assert (first == second) "two source close replays were nondeterministic"
+  let before = restrictedSourceNext rendezvous
+      next = restrictedSourceCloseNext first
+      beforeOwners = communicationRestrictedOwners before
+      owners = communicationRestrictedOwners next
+  assert (restrictedSourceClosedSender first == fxClientNext fx
+       && restrictedSourceClosedReceiver first == fxServerNext fx)
+    "source closes changed their resolved successor identities"
+  assert (owners == Map.delete clientEndpointOccurrence
+            (Map.delete serverEndpointOccurrence beforeOwners))
+    "source closes did not retire exactly the two endpoint occurrence keys"
+  assert (Map.lookup payloadOccurrence owners
+          == Just (fxServerProcess fx, fxPayloadReceiver fx)
+       && Map.lookup spectatorOccurrence owners
+          == Map.lookup spectatorOccurrence beforeOwners)
+    "source closes modified payload or spectator ownership"
+  sender <- requireProtocol (fxClientProcess fx) next
+  receiver <- requireProtocol (fxServerProcess fx) next
+  assert (Map.notMember (fxClientNext fx) (protocolEndpoints sender)
+       && Map.notMember (fxServerNext fx) (protocolEndpoints receiver)
+       && Map.notMember (fxClientNext fx)
+            (linearBindings (protocolResources sender))
+       && Map.notMember (fxServerNext fx)
+            (linearBindings (protocolResources receiver)))
+    "closed successors are still live in protocol or resource contexts"
+  assert (Map.lookup (fxPayloadReceiver fx)
+            (linearBindings (protocolResources receiver)) == Just payloadTy
+       && Map.lookup spectatorName
+            (affineBindings (protocolResources sender)) == Just TyBool)
+    "endpoint close improperly discharged payload or independent spectator"
+  case closeFromSource fx (fxSender fx) (fxReceiver fx)
+      (rendezvous { restrictedSourceNext = next })
+      clientRole serverRole doneOutcome doneOutcome of
+    Left (RestrictedSourceCloseSenderCoreError
+      (EndpointClosureOccurrenceUnknown process endpoint)) ->
+        assert (process == fxClientProcess fx && endpoint == fxClientNext fx)
+          "replayed source close did not identify the stale predecessor"
+    other -> Left ("second close was permitted: " <> show other)
+
+sourceCloseRejectedSpelling :: Fixture -> Text -> Either String ()
+sourceCloseRejectedSpelling fx rejected = do
+  rendezvous <- mapLeft show $ checked fx (fxSender fx) (fxReceiver fx) (fxBefore fx)
+  (_, wrongSender, _) <- parseParts rejected
+  case closeFromSource fx wrongSender (fxReceiver fx)
+      rendezvous clientRole serverRole doneOutcome doneOutcome of
+    Left (RestrictedSourceCloseSenderError
+      (GrammarV1ComponentSendCloseCloseMismatch _ _)) -> Right ()
+    other -> Left ("stale close source was admitted by close execution: " <> show other)
+
+sourceCloseMissingServerOwner :: Fixture -> Either String ()
+sourceCloseMissingServerOwner fx = do
+  rendezvous <- mapLeft show $ checked fx (fxSender fx) (fxReceiver fx) (fxBefore fx)
+  let before = restrictedSourceNext rendezvous
+      owners = communicationRestrictedOwners before
+      state = before { communicationRestrictedOwners =
+        Map.delete serverEndpointOccurrence owners }
+  case closeFromSource fx (fxSender fx) (fxReceiver fx)
+      (rendezvous { restrictedSourceNext = state })
+      clientRole serverRole doneOutcome doneOutcome of
+    Left (RestrictedSourceCloseReceiverCoreError
+      (EndpointClosureOccurrenceUnknown process endpoint)) ->
+        assert (process == fxServerProcess fx && endpoint == fxServerNext fx)
+          "missing receiver close owner was misclassified"
+    other -> Left ("receiver endpoint with missing owner was closed: " <> show other)
+
+sourceCloseWrongOutcome :: Fixture -> Either String ()
+sourceCloseWrongOutcome fx = do
+  rendezvous <- mapLeft show $ checked fx (fxSender fx) (fxReceiver fx) (fxBefore fx)
+  let incorrect = Outcome "NotDone"
+  case closeFromSource fx (fxSender fx) (fxReceiver fx)
+      rendezvous clientRole serverRole doneOutcome incorrect of
+    Left (RestrictedSourceCloseReceiverCoreError
+      (EndpointClosureProtocolError process
+        (ProtocolSessionError (CloseOutcomeMismatch expected actual)))) ->
+        assert (process == fxServerProcess fx
+             && expected == doneOutcome && actual == incorrect)
+          "wrong terminal outcome lost exact session error class"
+    other -> Left ("mismatched receiver close outcome was admitted: " <> show other)
+
+sourceCloseWrongHead :: Fixture -> Either String ()
+sourceCloseWrongHead fx = do
+  rendezvous <- mapLeft show $ checked fx (fxSender fx) (fxReceiver fx) (fxBefore fx)
+  receiver <- requireProtocol (fxServerProcess fx) (restrictedSourceNext rendezvous)
+  let old = fxServerNext fx
+      wrong = ProtocolEndpointBinding old
+        (binaryProtocolInstanceRevision (fxInstance fx)) serverRole
+        (End (Outcome "WrongHead"))
+      changed = receiver { protocolEndpoints = Map.insert old wrong
+        (protocolEndpoints receiver) }
+      before = restrictedSourceNext rendezvous
+      tampered = before { communicationProtocolContexts =
+        Map.insert (fxServerProcess fx) changed
+          (communicationProtocolContexts before) }
+  case closeFromSource fx (fxSender fx) (fxReceiver fx)
+      (rendezvous { restrictedSourceNext = tampered })
+      clientRole serverRole doneOutcome doneOutcome of
+    Left (RestrictedSourceCloseReceiverCoreError
+      (EndpointClosureProtocolError process
+        (ProtocolEndpointSessionMismatch name _ _))) ->
+        assert (process == fxServerProcess fx && name == old)
+          "wrong terminal session head lost exact error provenance"
+    other -> Left ("incorrect terminal session head was admitted: " <> show other)
+
+sourceCloseWrongRole :: Fixture -> Either String ()
+sourceCloseWrongRole fx = do
+  rendezvous <- mapLeft show $ checked fx (fxSender fx) (fxReceiver fx) (fxBefore fx)
+  case closeFromSource fx (fxSender fx) (fxReceiver fx)
+      rendezvous clientRole clientRole doneOutcome doneOutcome of
+    Left (RestrictedSourceCloseReceiverCoreError
+      (EndpointClosureProtocolError process
+        (ProtocolRoleMismatch name _ _))) ->
+        assert (process == fxServerProcess fx && name == fxServerNext fx)
+          "incorrect terminal role did not preserve endpoint identity"
+    other -> Left ("receiver source close accepted the wrong nominal role: " <> show other)
