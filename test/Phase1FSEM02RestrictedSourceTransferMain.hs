@@ -57,6 +57,9 @@ main = do
           , sourceCloseWrongRole fx
           , sourceTerminalReplay fx
           , sourceTerminalNegativeGates fx
+          , sourceTerminalRejectForgedClosedState fx
+          , sourceTerminalRejectStaleSenderReplay fx
+          , sourceTerminalRejectStaleReceiverReplay fx
           ]
   case result of
     Right () -> putStrLn "PASS: FSEM-02 source restricted transfer and exact negative replay"
@@ -775,3 +778,59 @@ sourceTerminalNegativeGates fx = do
       sender receiver Map.empty emptyRootResidue of
     Left RestrictedSourceTerminalCloseIdentityMismatch -> Right ()
     other -> Left ("tampered source-close successor was accepted: " <> show other)
+
+-- The terminal adapter must not accept a post-close state manufactured by a
+-- caller, even when it preserves both successor spellings and the exact
+-- payload occurrence. A forged affine resource is not an authorized disposal.
+sourceTerminalRejectForgedClosedState :: Fixture -> Either String ()
+sourceTerminalRejectForgedClosedState fx = do
+  (rendezvous, closed) <- terminalPrefix fx
+  let before = restrictedSourceCloseNext closed
+  sender <- requireProtocol (fxClientProcess fx) before
+  forgedResources <- mapLeft show $ insertBinding Affine
+    (Name "forged-unowned") TyBool (protocolResources sender)
+  let forgedSender = sender { protocolResources = forgedResources }
+      forged = before { communicationProtocolContexts =
+        Map.insert (fxClientProcess fx) forgedSender
+          (communicationProtocolContexts before) }
+      closedForgery = closed { restrictedSourceCloseNext = forged }
+  case terminalCheck fx rendezvous closedForgery
+      (senderTerminalPlan fx) (receiverTerminalPlan fx)
+      Map.empty emptyRootResidue of
+    Left RestrictedSourceTerminalCloseStateMismatch -> Right ()
+    other -> Left ("forged post-close resource state was accepted: " <> show other)
+
+-- Missing a predecessor owner in the rendezvous successor must be rejected
+-- by native close replay, not silently reconstructed from the supplied
+-- post-close carrier.
+sourceTerminalRejectStaleSenderReplay :: Fixture -> Either String ()
+sourceTerminalRejectStaleSenderReplay fx = do
+  (rendezvous, closed) <- terminalPrefix fx
+  let before = restrictedSourceNext rendezvous
+      stale = before { communicationRestrictedOwners =
+        Map.delete clientEndpointOccurrence (communicationRestrictedOwners before) }
+      altered = rendezvous { restrictedSourceNext = stale }
+  case terminalCheck fx altered closed
+      (senderTerminalPlan fx) (receiverTerminalPlan fx)
+      Map.empty emptyRootResidue of
+    Left (RestrictedSourceTerminalCloseReplaySenderError
+      (EndpointClosureOccurrenceUnknown process endpoint)) ->
+        assert (process == fxClientProcess fx && endpoint == fxClientNext fx)
+          "sender replay error lost exact process/endpoint provenance"
+    other -> Left ("stale sender replay was accepted: " <> show other)
+
+sourceTerminalRejectStaleReceiverReplay :: Fixture -> Either String ()
+sourceTerminalRejectStaleReceiverReplay fx = do
+  (rendezvous, closed) <- terminalPrefix fx
+  let before = restrictedSourceNext rendezvous
+      stale = before { communicationRestrictedOwners =
+        Map.delete serverEndpointOccurrence (communicationRestrictedOwners before) }
+      altered = rendezvous { restrictedSourceNext = stale }
+  case terminalCheck fx altered closed
+      (senderTerminalPlan fx) (receiverTerminalPlan fx)
+      Map.empty emptyRootResidue of
+    Left (RestrictedSourceTerminalCloseReplayReceiverError
+      (EndpointClosureOccurrenceUnknown process endpoint)) ->
+        assert (process == fxServerProcess fx && endpoint == fxServerNext fx)
+          "receiver replay error lost exact process/endpoint provenance"
+    other -> Left ("stale receiver replay was accepted: " <> show other)
