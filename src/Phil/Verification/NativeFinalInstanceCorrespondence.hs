@@ -93,6 +93,12 @@ module Phil.Verification.NativeFinalInstanceCorrespondence
   , nativeAtomManifestSubjectReplayRevision
   , NativeAtomManifestSubjectReplayError (..)
   , replayNativeAtomManifestSubjectCandidate
+  , NativeAtomManifestInstanceWireCandidate (..)
+  , NativeAtomManifestInstanceReplay
+  , nativeAtomManifestInstanceReplayBase
+  , nativeAtomManifestInstanceReplayRevision
+  , NativeAtomManifestInstanceReplayError (..)
+  , replayNativeAtomManifestInstanceCandidate
   , NativeVerifierProfileText (..)
   , encodeNativeVerifierProfileWire
   , decodeNativeVerifierProfileWire
@@ -1173,3 +1179,49 @@ replayNativeAtomManifestSubjectCandidate witness producer sourceObject releaseOb
              (nativeAtomManifestClosedReplayBase baseReceipt))))
     then Left NativeAtomManifestSubjectDifferent
     else pure (NativeAtomManifestSubjectReplay baseReceipt subject)
+ 
+-- | Concrete StageClosure InstanceRevision I is NOT the independently checked
+-- architecture occurrence identity (InstanceKey K, InstanceRevision I).
+-- Matching I is necessary but does not authenticate StageClosure production.
+data NativeAtomManifestInstanceWireCandidate = NativeAtomManifestInstanceWireCandidate
+  { nativeAtomManifestInstanceBaseCandidate :: NativeAtomManifestSubjectWireCandidate
+  , nativeAtomManifestInstanceRevisionWire :: Text
+  } deriving (Eq, Show)
+
+-- | Unaccepted diagnostic only; exact native accepted objects remain opaque.
+data NativeAtomManifestInstanceReplay = NativeAtomManifestInstanceReplay
+  { nativeAtomManifestInstanceReplayBase :: NativeAtomManifestSubjectReplay
+  , nativeAtomManifestInstanceReplayRevision :: InstanceRevision
+  } deriving (Eq, Show)
+
+data NativeAtomManifestInstanceReplayError
+  = NativeAtomManifestInstanceBaseDifferent NativeAtomManifestSubjectReplayError
+  | NativeAtomManifestInstanceRoleMalformed
+  | NativeAtomManifestInstanceDifferent
+  deriving (Eq, Show)
+
+-- | Recheck the actual checked producer, exact independent VER-010 source and
+-- INT-005 CertifiedRelease/StageClosure, and the preceding D/V/Q/M/R/L/S/C/F/B
+-- diagnostics before comparing I. Candidate data never creates authority.
+replayNativeAtomManifestInstanceCandidate
+  :: NativeFinalInstanceCorrespondence
+  -> CertifiedSourceManifestBinding
+  -> CertifiedApplicationArtifact
+  -> CertifiedReleaseArtifact
+  -> NativeAtomManifestInstanceWireCandidate
+  -> Either NativeAtomManifestInstanceReplayError NativeAtomManifestInstanceReplay
+replayNativeAtomManifestInstanceCandidate witness producer sourceObject releaseObject candidate = do
+  baseReceipt <- either (Left . NativeAtomManifestInstanceBaseDifferent) Right
+    (replayNativeAtomManifestSubjectCandidate witness producer sourceObject releaseObject
+       (nativeAtomManifestInstanceBaseCandidate candidate))
+  instanceRevision <- maybe (Left NativeAtomManifestInstanceRoleMalformed) Right
+    (decodeNativeInstanceRevisionWire (nativeAtomManifestInstanceRevisionWire candidate))
+  let acceptedInstance = nativeReplayInstanceRevision
+        (nativeAtomManifestReplayStageCoordinates
+          (nativeAtomManifestSystemsReplayBase
+            (nativeAtomManifestCommonReplayBase
+              (nativeAtomManifestClosedReplayBase
+                (nativeAtomManifestSubjectReplayBase baseReceipt)))))
+  if instanceRevision /= acceptedInstance
+    then Left NativeAtomManifestInstanceDifferent
+    else pure (NativeAtomManifestInstanceReplay baseReceipt instanceRevision)
