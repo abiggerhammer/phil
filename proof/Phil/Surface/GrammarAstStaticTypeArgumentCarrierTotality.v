@@ -6,6 +6,7 @@ From Phil.Surface Require Import
   GrammarAstSourceHeaderTotality
   GrammarDeterminacySimpleResolverSoundness
   GrammarAstStaticTypeArgumentCarrierSpine
+  GrammarAstStaticReferenceSpine
   GrammarAstStaticTypeArgumentPayloadSpine
   GrammarAstStaticArgumentsSpine
   GrammarAstStaticTypeArgumentPayloadTotality
