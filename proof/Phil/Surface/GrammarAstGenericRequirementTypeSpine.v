@@ -407,65 +407,71 @@ Proof.
       as [[name_tree type_value] |] eqn:Htyped;
       try discriminate Hnormalize.
     inversion Hnormalize; subst refined.
-    cbn.
-    rewrite
-      (phase1_surface_normalize_named_type_requirement_type_round_trip
-        "provider" selected name_tree type_value Htyped).
-    reflexivity.
+    exact
+      (f_equal
+        (fun child =>
+          PTNonterminal "generic_requirement" (PTAlternative 2 child))
+        (phase1_surface_normalize_named_type_requirement_type_round_trip
+          "provider" selected name_tree type_value Htyped)).
   - destruct
       (phase1_surface_normalize_named_type_requirement_type
         "callable" selected)
       as [[name_tree type_value] |] eqn:Htyped;
       try discriminate Hnormalize.
     inversion Hnormalize; subst refined.
-    cbn.
-    rewrite
-      (phase1_surface_normalize_named_type_requirement_type_round_trip
-        "callable" selected name_tree type_value Htyped).
-    reflexivity.
+    exact
+      (f_equal
+        (fun child =>
+          PTNonterminal "generic_requirement" (PTAlternative 3 child))
+        (phase1_surface_normalize_named_type_requirement_type_round_trip
+          "callable" selected name_tree type_value Htyped)).
   - destruct
       (phase1_surface_normalize_named_type_requirement_type
         "boundary" selected)
       as [[name_tree type_value] |] eqn:Htyped;
       try discriminate Hnormalize.
     inversion Hnormalize; subst refined.
-    cbn.
-    rewrite
-      (phase1_surface_normalize_named_type_requirement_type_round_trip
-        "boundary" selected name_tree type_value Htyped).
-    reflexivity.
+    exact
+      (f_equal
+        (fun child =>
+          PTNonterminal "generic_requirement" (PTAlternative 4 child))
+        (phase1_surface_normalize_named_type_requirement_type_round_trip
+          "boundary" selected name_tree type_value Htyped)).
   - destruct
       (phase1_surface_normalize_named_type_requirement_type
         "architecture" selected)
       as [[name_tree type_value] |] eqn:Htyped;
       try discriminate Hnormalize.
     inversion Hnormalize; subst refined.
-    cbn.
-    rewrite
-      (phase1_surface_normalize_named_type_requirement_type_round_trip
-        "architecture" selected name_tree type_value Htyped).
-    reflexivity.
+    exact
+      (f_equal
+        (fun child =>
+          PTNonterminal "generic_requirement" (PTAlternative 5 child))
+        (phase1_surface_normalize_named_type_requirement_type_round_trip
+          "architecture" selected name_tree type_value Htyped)).
   - inversion Hnormalize; subst refined. reflexivity.
   - destruct
       (phase1_surface_normalize_type_only_requirement_type
         "authority" selected)
       as [type_value |] eqn:Htyped; try discriminate Hnormalize.
     inversion Hnormalize; subst refined.
-    cbn.
-    rewrite
-      (phase1_surface_normalize_type_only_requirement_type_round_trip
-        "authority" selected type_value Htyped).
-    reflexivity.
+    exact
+      (f_equal
+        (fun child =>
+          PTNonterminal "generic_requirement" (PTAlternative 7 child))
+        (phase1_surface_normalize_type_only_requirement_type_round_trip
+          "authority" selected type_value Htyped)).
   - destruct
       (phase1_surface_normalize_boundary_representation_requirement_type
         selected)
       as [type_value |] eqn:Htyped; try discriminate Hnormalize.
     inversion Hnormalize; subst refined.
-    cbn.
-    rewrite
-      (phase1_surface_normalize_boundary_representation_requirement_type_round_trip
-        selected type_value Htyped).
-    reflexivity.
+    exact
+      (f_equal
+        (fun child =>
+          PTNonterminal "generic_requirement" (PTAlternative 8 child))
+        (phase1_surface_normalize_boundary_representation_requirement_type_round_trip
+          selected type_value Htyped)).
   - inversion Hnormalize; subst refined. reflexivity.
   - inversion Hnormalize; subst refined. reflexivity.
   - inversion Hnormalize; subst refined. reflexivity.
