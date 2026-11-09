@@ -38,8 +38,8 @@ Proof.
   - apply andb_true_iff in H as [Hp Hn].
     apply String.eqb_eq in Hp.
     apply String.eqb_eq in Hn.
-    subst. now rewrite He, Hc.
-  - now rewrite He, Hc.
+    subst. reflexivity.
+  - reflexivity.
 Qed.
 
 Theorem fsem02PredecessorRejectsInventedOwner :
