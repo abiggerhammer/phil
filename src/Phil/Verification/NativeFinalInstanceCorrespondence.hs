@@ -99,6 +99,12 @@ module Phil.Verification.NativeFinalInstanceCorrespondence
   , nativeAtomManifestInstanceReplayRevision
   , NativeAtomManifestInstanceReplayError (..)
   , replayNativeAtomManifestInstanceCandidate
+  , NativeAtomManifestRealizationWireCandidate (..)
+  , NativeAtomManifestRealizationReplay
+  , nativeAtomManifestRealizationReplayBase
+  , nativeAtomManifestRealizationReplayRevision
+  , NativeAtomManifestRealizationReplayError (..)
+  , replayNativeAtomManifestRealizationCandidate
   , NativeVerifierProfileText (..)
   , encodeNativeVerifierProfileWire
   , decodeNativeVerifierProfileWire
@@ -1225,3 +1231,48 @@ replayNativeAtomManifestInstanceCandidate witness producer sourceObject releaseO
   if instanceRevision /= acceptedInstance
     then Left NativeAtomManifestInstanceDifferent
     else pure (NativeAtomManifestInstanceReplay baseReceipt instanceRevision)
+
+-- | Concrete StageClosure realization A remains distinct from its I revision.
+-- Matching A is diagnostic, not proof of checked occurrence-to-stage production.
+data NativeAtomManifestRealizationWireCandidate = NativeAtomManifestRealizationWireCandidate
+  { nativeAtomManifestRealizationBaseCandidate :: NativeAtomManifestInstanceWireCandidate
+  , nativeAtomManifestRealizationRevisionWire :: Text
+  } deriving (Eq, Show)
+
+-- | Unaccepted diagnostic only; exact native accepted objects remain opaque.
+data NativeAtomManifestRealizationReplay = NativeAtomManifestRealizationReplay
+  { nativeAtomManifestRealizationReplayBase :: NativeAtomManifestInstanceReplay
+  , nativeAtomManifestRealizationReplayRevision :: RealizationRevision
+  } deriving (Eq, Show)
+
+data NativeAtomManifestRealizationReplayError
+  = NativeAtomManifestRealizationBaseDifferent NativeAtomManifestInstanceReplayError
+  | NativeAtomManifestRealizationRoleMalformed
+  | NativeAtomManifestRealizationDifferent
+  deriving (Eq, Show)
+
+-- | Recheck the checked producer and independently accepted VER-010 source,
+-- exact INT-005 CertifiedRelease/StageClosure and D/V/Q/M/R/L/S/C/F/B/I.
+-- Candidate A cannot construct authority or prove an occurrence producer.
+replayNativeAtomManifestRealizationCandidate
+  :: NativeFinalInstanceCorrespondence
+  -> CertifiedSourceManifestBinding
+  -> CertifiedApplicationArtifact
+  -> CertifiedReleaseArtifact
+  -> NativeAtomManifestRealizationWireCandidate
+  -> Either NativeAtomManifestRealizationReplayError NativeAtomManifestRealizationReplay
+replayNativeAtomManifestRealizationCandidate witness producer sourceObject releaseObject candidate = do
+  baseReceipt <- either (Left . NativeAtomManifestRealizationBaseDifferent) Right
+    (replayNativeAtomManifestInstanceCandidate witness producer sourceObject releaseObject
+       (nativeAtomManifestRealizationBaseCandidate candidate))
+  realization <- maybe (Left NativeAtomManifestRealizationRoleMalformed) Right
+    (decodeNativeRealizationRevisionWire (nativeAtomManifestRealizationRevisionWire candidate))
+  let acceptedRealization = nativeReplayRealizationRevision
+        (nativeAtomManifestReplayStageCoordinates
+          (nativeAtomManifestSystemsReplayBase
+            (nativeAtomManifestCommonReplayBase
+              (nativeAtomManifestClosedReplayBase
+                (nativeAtomManifestSubjectReplayBase (nativeAtomManifestInstanceReplayBase baseReceipt))))))
+  if realization /= acceptedRealization
+    then Left NativeAtomManifestRealizationDifferent
+    else pure (NativeAtomManifestRealizationReplay baseReceipt realization)
