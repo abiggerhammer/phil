@@ -1198,3 +1198,32 @@ encoding or externally supplied model Prop promoted to authority. Public
 release-byte verification and independent pinned final-delta signoff are
 separate, uncredited; original 244 normative cases, historic audit, Phase 1
 TCB, generated artifacts and strict GHC/LLVM/Rocq unchanged. **NOT YET.**
+
+## 2026-11-09 — exact concrete StageClosure realization A after I/B/F/C/S/R/L (#1584)
+
+A bounded, unaccepted, typed native diagnostic now compares the actual
+RealizationRevision A from the *same* independently accepted StageClosure,
+after checked atom-only generic application D/V/Q/M, independent raw
+Systems digest R, lowering root L, normalized Systems S, common stage C,
+closed stage F, concrete subject B and concrete instance I. Actual
+checked source-manifest producer, independently accepted VER-010 source
+and exact INT-005 CertifiedRelease/StageClosure consumer are replayed
+before A comparison. Upload/Steve positives and equal-payload wrong-role
+R/L/S/C/F/B/I/P/K, correctly tagged changed A, and A-as-I negative tests
+are added. Four conditional Rocq string-model theorems and their named
+Print Assumptions check roundtrip, injectivity, wrong-role rejection and
+realization sensitivity.
+
+**Remaining-premise ledger:** checked architecture occurrence (K,I)
+is NOT authenticated as producer of concrete StageClosure by comparing
+I or A. No total recursive SemanticForm, native Data.Text Unicode/Rocq
+string transport, Haskell Map/Set order↔Rocq canonicality, complete
+accepted generic application, manifest, source, StageClosure/CertifiedRelease
+reflection, predecessor authority, FixedFinalAuthorityAdapter or
+FinalArtifactCertified. Raw R and lowering L are not normalized S/common C/
+closed F. B/I/A/P and K/I remain distinct. Candidate transport never
+constructs authority. No unproved nat encoding or supplied model Prop
+treated as native proof. Public release bytes and independent pinned
+final-delta signoff remain separate uncredited gates; original 244
+normative cases, historic independent audit, TCB, generated artifacts,
+strict GHC/LLVM/Rocq unchanged. **Independent freeze NOT YET.**
