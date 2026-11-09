@@ -28,8 +28,8 @@ Proof.
   intros expectedRequest actualRequest expectedSent actualSent
     expectedReceived actualReceived Hmatch.
   unfold fsem02CloseCarrierMatches in Hmatch.
-  apply andb_true_iff in Hmatch as [Hboth Hreceived].
-  apply andb_true_iff in Hboth as [Hrequest Hsent].
+  apply andb_true_iff in Hmatch as [Hrequest Hrest].
+  apply andb_true_iff in Hrest as [Hsent Hreceived].
   apply String.eqb_eq in Hrequest.
   apply String.eqb_eq in Hsent.
   apply String.eqb_eq in Hreceived.
