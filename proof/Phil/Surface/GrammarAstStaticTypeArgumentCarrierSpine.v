@@ -243,10 +243,13 @@ Proof.
     phase1_surface_static_arguments_spine_tree.
   cbn [phase1_static_type_arguments_spine_items
     phase1_static_arguments_spine_items].
-  rewrite
-    (phase1_surface_normalize_optional_static_type_argument_list_round_trip
-      items actual Hitems).
-  reflexivity.
+  exact
+    (f_equal
+      (fun child =>
+        PTNonterminal "static_arguments"
+          (PTSequence [PTLiteral "["; child; PTLiteral "]"]))
+      (phase1_surface_normalize_optional_static_type_argument_list_round_trip
+        items actual Hitems)).
 Qed.
 
 Record Phase1SurfaceStaticTypeArgumentsReferenceSpine : Type := {
