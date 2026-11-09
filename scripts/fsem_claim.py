@@ -310,25 +310,50 @@ def abort_unopened(api: GitHub, slice_key: str, actor: str):
     print(f"Abandoned unopened {slice_key} claim")
 
 
-def release(api: GitHub, number: int):
+def release(api: GitHub, number: int, *, expected_sha: str | None = None,
+            require_merged: bool = False):
+    """Release a closed PR's exact claim; recovery additionally requires a merge.
+
+    Never trust only a close-event payload or a previously observed claim SHA.
+    The live record, tracking-issue audit, PR and competing PRs are all read
+    again immediately before deleting the uniquely named family ref.
+    """
     pr = api.request("GET", f"/pulls/{number}")
     if pr.get("state") != "closed":
         raise ClaimFailure("release requires a CLOSED PR (merged or abandoned)")
+    head = pr.get("head") or {}
+    if (not has_lane(pr) or
+            (head.get("repo") or {}).get("full_name") != api.repo or
+            not head.get("ref", "").startswith("formal-semantics/")):
+        raise ClaimFailure("closed claim PR needs exact lane and same-repo source branch")
+    if require_merged and not pr.get("merged_at"):
+        raise ClaimFailure("automatic recovery requires a MERGED PR")
     match = BODY_SLICE_RE.search(pr.get("body") or "")
     if not match:
         raise ClaimFailure("closed PR missing FSEM-Slice declaration")
     slice_key = match.group(1)
     record, sha = live_claim(api, slice_key)
-    if record["branch"] != (pr.get("head") or {}).get("ref"):
+    if expected_sha is not None and sha != expected_sha:
+        raise ClaimFailure("claim SHA changed since recovery was authorized")
+    if record["branch"] != head.get("ref"):
         raise ClaimFailure("claim belongs to another branch; refuse release")
     claimed = dt.datetime.fromisoformat(record["claimed_at"])
     opened = dt.datetime.fromisoformat(pr["created_at"].replace("Z", "+00:00"))
     if claimed > opened:
         raise ClaimFailure("claim postdates this PR; refuse stale close-event release")
     require_issue_record(api, record, sha)
-    # Same unique ref cannot be reacquired until deleted. API writes outside
-    # this protocol are not an allowed source of authority.
+    competitors = conflicts(list(api.pages("/pulls?state=open")), slice_key)
+    if competitors:
+        raise ClaimFailure(
+            f"open same-family/unclassified PR(s) {competitors}; refuse release")
+    # Re-read the exact ref before deletion. GitHub's delete-ref endpoint
+    # offers no conditional SHA argument, so this is fail-closed preflight
+    # under the protocol's rule against out-of-band ref writes.
     path = claim_ref(slice_key).removeprefix("refs/")
+    current = api.request("GET", "/git/ref/" + path)
+    if (not isinstance(current, dict) or
+            (current.get("object") or {}).get("sha") != sha):
+        raise ClaimFailure("claim ref changed during release preflight")
     api.request("DELETE", "/git/refs/" + path)
     api.request("POST", f"/issues/{TRACKING_ISSUE}/comments", {
         "body": (f"{RELEASE_MARKER}\nReleased `{slice_key}` claim `{sha}` "
@@ -338,13 +363,69 @@ def release(api: GitHub, number: int):
     print(f"Released {slice_key} after PR #{number} closed")
 
 
+def reconcile(api: GitHub):
+    """Recover merged-but-still-claimed slices after lost close-event jobs.
+
+    Only a unique merged PR on the declared branch, opened after the
+    immutable claim, can be considered. Open or abandoned claims are left
+    alone. Every candidate is rechecked by release() before deletion.
+    """
+    refs = list(api.pages("/git/matching-refs/heads/coord/fsem-claims/"))
+    seen = set()
+    released = []
+    for item in refs:
+        ref = item.get("ref") if isinstance(item, dict) else None
+        if not isinstance(ref, str) or not ref.startswith(CLAIM_PREFIX):
+            raise ClaimFailure("unexpected FSEM claim listing entry")
+        slice_key = validate_slice(ref[len(CLAIM_PREFIX):])
+        if slice_key in seen:
+            raise ClaimFailure("duplicate claim ref in recovery snapshot")
+        seen.add(slice_key)
+        record, sha = live_claim(api, slice_key)
+        if (item.get("object") or {}).get("sha") != sha:
+            raise ClaimFailure("claim moved during recovery snapshot")
+        head = api.repo.split("/", 1)[0] + ":" + record["branch"]
+        endpoint = "/pulls?state=closed&head=" + urllib.parse.quote(head, safe="")
+        merged = []
+        claimed_at = dt.datetime.fromisoformat(record["claimed_at"])
+        for pr in api.pages(endpoint):
+            pr_head = pr.get("head") or {}
+            if (pr.get("state") != "closed" or not pr.get("merged_at") or
+                    pr_head.get("ref") != record["branch"] or
+                    (pr_head.get("repo") or {}).get("full_name") != api.repo or
+                    not has_lane(pr)):
+                continue
+            match = BODY_SLICE_RE.search(pr.get("body") or "")
+            if not match or match.group(1) != slice_key:
+                continue
+            created = dt.datetime.fromisoformat(
+                pr["created_at"].replace("Z", "+00:00"))
+            if created < claimed_at:
+                continue
+            if type(pr.get("number")) is not int:
+                raise ClaimFailure("malformed candidate PR number")
+            merged.append(pr["number"])
+        if len(merged) > 1:
+            raise ClaimFailure(
+                f"ambiguous merged PRs for {slice_key} claim {sha}: {merged}")
+        if not merged:
+            print(f"Retaining {slice_key} @ {sha}: no unique matching merged PR")
+            continue
+        release(api, merged[0], expected_sha=sha, require_merged=True)
+        released.append((slice_key, merged[0], sha))
+    print(f"Recovery complete; released {len(released)} exact merged claims")
+    return released
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("command", choices=("acquire", "announce", "verify", "release", "abort"))
+    parser.add_argument("command", choices=("acquire", "announce", "verify", "release", "abort",
+                                        "recover", "reconcile"))
     parser.add_argument("--slice", dest="slice_key")
     parser.add_argument("--branch")
     parser.add_argument("--actor")
     parser.add_argument("--pr", type=int)
+    parser.add_argument("--expected-claim-sha")
     parser.add_argument("--repo", default=REPO)
     args = parser.parse_args(argv)
     try:
@@ -361,6 +442,16 @@ def main(argv: list[str] | None = None) -> int:
             if not args.slice_key or not args.actor:
                 raise ClaimFailure("abort needs --slice and --actor")
             abort_unopened(api, args.slice_key, args.actor)
+        elif args.command == "reconcile":
+            reconcile(api)
+        elif args.command == "recover":
+            if (not args.pr or args.pr < 1 or
+                    not args.expected_claim_sha or
+                    not re.fullmatch(r"[0-9a-f]{40}", args.expected_claim_sha)):
+                raise ClaimFailure(
+                    "recover needs --pr NUMBER and --expected-claim-sha SHA40")
+            release(api, args.pr, expected_sha=args.expected_claim_sha,
+                    require_merged=True)
         else:
             if not args.pr or args.pr < 1:
                 raise ClaimFailure(f"{args.command} needs --pr NUMBER")
