@@ -1,0 +1,5 @@
+fn cycle(flag : Bool, payload : Bytes[8]) -> Unit satisfies C {
+  loop state (owner : Bytes[8] = owner) invariant true {
+    continue(owner);
+  };
+}

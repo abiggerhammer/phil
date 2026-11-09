@@ -27,6 +27,9 @@ module Phil.Surface.Check.Engine
   , SourceBoolLoopBreakRun (..)
   , checkSurfaceSourceBoolLoopBreakComponent
   , traceSurfaceSourceBoolLoopBreakComponent
+  , SourceLinearLoopRun (..)
+  , checkSurfaceSourceLinearLoopComponent
+  , traceSurfaceSourceLinearLoopComponent
   , BorrowTracePhase (..)
   , BorrowTraceCheckpoint (..)
   , BorrowTraceResourceObservation (..)
@@ -932,6 +935,161 @@ traceSurfaceSourceBoolLoopComponent env locatedComponent entry backedge
       , sourceBoolLoopEntryType = Nothing
       , sourceBoolLoopBackedgeType = Nothing
       , sourceBoolLoopOutcome = result
+      }
+
+-- | FSEM-01 L-2: one source-bound Linear Bytes loop-state ownership move.
+-- The entry consumes the source owner before the header is installed.
+-- Continue consumes that exact header, then rebinds the SAME semantic
+-- header key before native resource reentry. No runtime loop execution.
+-- Every optional context is a reached production Core state, not a cast.
+data SourceLinearLoopRun = SourceLinearLoopRun
+  { sourceLinearLoopBefore :: Maybe ResourceContext
+  , sourceLinearLoopEntryConsumed :: Maybe ResourceContext
+  , sourceLinearLoopHeaderBound :: Maybe ResourceContext
+  , sourceLinearLoopBackedgeConsumed :: Maybe ResourceContext
+  , sourceLinearLoopBackedgeRebound :: Maybe ResourceContext
+  , sourceLinearLoopReentered :: Maybe ResourceContext
+  , sourceLinearLoopEntryType :: Maybe (Mode, Ty)
+  , sourceLinearLoopBackedgeType :: Maybe (Mode, Ty)
+  , sourceLinearLoopOutcome :: Either SurfaceCheckError ()
+  } deriving (Eq, Show)
+
+-- | Both actuals run through the ordinary production Surface value checker.
+-- Source declaration checking fixes expectedType. Merely spelling a name
+-- and claiming a Linear type is insufficient: a stale or borrowed owner
+-- fails in moveVariable / Core.useBinding before this edge can pass.
+checkSourceLinearLoopEdge
+  :: Text -> SurfaceEnvironment -> SurfaceState
+  -> Located Block -> Ty -> Either SurfaceCheckError SurfacePath
+checkSourceLinearLoopEdge diagnostic env current block expectedType = do
+  raw <- checkValueBlock env current block
+  pruned <- mapM
+    (pruneScopedPath (locatedSpan block) (Map.keysSet (stateBindings current)))
+    raw
+  case pruned of
+    [path@(SurfacePath PathContinue _
+      (Just (RuntimeScalar scalar)))]
+      | scalarType scalar == expectedType
+      , decisionCarrierMode (scalarMode scalar) (scalarShape scalar)
+          == Linear -> Right path
+    _ -> throw block TypeMismatch diagnostic
+
+-- | Source has already selected an exactly typed, one-state Linear Bytes
+-- telescope and one explicit continuing actual with lexical authority.
+-- This checks one static entry/reentry obligation, NOT unbounded execution.
+checkSurfaceSourceLinearLoopComponent
+  :: SurfaceEnvironment -> Located Component
+  -> Located Block -> Located Block -> SourceSpan
+  -> Text -> Ty -> SourceBoolJoinInvariant
+  -> Either SurfaceCheckError ()
+checkSurfaceSourceLinearLoopComponent env locatedComponent entry backedge
+    loopSpan headerName expectedType invariant = do
+  let component = locatedValue locatedComponent
+      meta = BindingMeta Linear expectedType (shapeForType expectedType)
+  initial <- initializeState env component
+  checkProvides env initial component
+  entryPath <- checkSourceLinearLoopEdge
+    "linear loop entry must move the exact Linear Bytes owner"
+    env initial entry expectedType
+  header <- insertBindingMeta loopSpan headerName meta (pathState entryPath)
+  checkSourceBoolLoopInvariant loopSpan invariant
+  backedgePath <- checkSourceLinearLoopEdge
+    "linear loop continue must move the exact Linear Bytes owner"
+    env header backedge expectedType
+  rebound <- insertBindingMeta loopSpan headerName meta
+    (pathState backedgePath)
+  reentered <- joinExclusive loopSpan [continuePath header, continuePath rebound]
+  case reentered of
+    [SurfacePath PathContinue _ _] -> Right ()
+    _ -> throw locatedComponent IncompatibleBranchResidue
+      "linear loop backedge has no checked continuing successor"
+
+-- | Trace reexecutes all ordinary production checks independently of the
+-- nontracing entrypoint. On failure no later resource cut is fabricated.
+traceSurfaceSourceLinearLoopComponent
+  :: SurfaceEnvironment -> Located Component
+  -> Located Block -> Located Block -> SourceSpan
+  -> Text -> Ty -> SourceBoolJoinInvariant -> SourceLinearLoopRun
+traceSurfaceSourceLinearLoopComponent env locatedComponent entry backedge
+    loopSpan headerName expectedType invariant =
+  case initializeState env component of
+    Left err -> emptyRun (Left err)
+    Right initial -> case checkProvides env initial component of
+      Left err -> (emptyRun (Left err))
+        { sourceLinearLoopBefore = Just (context initial) }
+      Right () ->
+        let start = context initial
+        in case checkSourceLinearLoopEdge
+          "linear loop entry must move the exact Linear Bytes owner"
+          env initial entry expectedType of
+          Left err -> (emptyRun (Left err))
+            { sourceLinearLoopBefore = Just start }
+          Right entryPath ->
+            let consumed = (emptyRun (throw locatedComponent
+                  IncompatibleBranchResidue "linear loop header not reached"))
+                  { sourceLinearLoopBefore = Just start
+                  , sourceLinearLoopEntryConsumed =
+                      Just (context (pathState entryPath))
+                  , sourceLinearLoopEntryType = operandType entryPath }
+                meta = BindingMeta Linear expectedType
+                  (shapeForType expectedType)
+            in case insertBindingMeta loopSpan headerName meta
+                (pathState entryPath) of
+              Left err -> consumed { sourceLinearLoopOutcome = Left err }
+              Right header ->
+                let bound = consumed
+                      { sourceLinearLoopHeaderBound = Just (context header) }
+                in case checkSourceBoolLoopInvariant loopSpan invariant of
+                  Left err -> bound { sourceLinearLoopOutcome = Left err }
+                  Right () ->
+                    case checkSourceLinearLoopEdge
+                      "linear loop continue must move the exact Linear Bytes owner"
+                      env header backedge expectedType of
+                      Left err -> bound { sourceLinearLoopOutcome = Left err }
+                      Right backedgePath ->
+                        let spent = bound
+                              { sourceLinearLoopBackedgeConsumed =
+                                  Just (context (pathState backedgePath))
+                              , sourceLinearLoopBackedgeType =
+                                  operandType backedgePath }
+                        in case insertBindingMeta loopSpan headerName meta
+                            (pathState backedgePath) of
+                          Left err -> spent { sourceLinearLoopOutcome = Left err }
+                          Right rebound ->
+                            let restored = spent
+                                  { sourceLinearLoopBackedgeRebound =
+                                      Just (context rebound) }
+                            in case joinExclusive loopSpan
+                              [continuePath header,continuePath rebound] of
+                              Left err -> restored
+                                { sourceLinearLoopOutcome = Left err }
+                              Right paths -> case paths of
+                                [SurfacePath PathContinue joined _] ->
+                                  restored
+                                    { sourceLinearLoopReentered =
+                                        Just (context joined)
+                                    , sourceLinearLoopOutcome = Right () }
+                                _ -> restored
+                                  { sourceLinearLoopOutcome =
+                                      throw locatedComponent IncompatibleBranchResidue
+                                        "linear loop backedge has no checked continuing successor" }
+  where
+    component = locatedValue locatedComponent
+    context state = resourceContext (stateCore state)
+    operandType path = case pathValue path of
+      Just (RuntimeScalar scalar) ->
+        Just (scalarMode scalar,scalarType scalar)
+      _ -> Nothing
+    emptyRun result = SourceLinearLoopRun
+      { sourceLinearLoopBefore = Nothing
+      , sourceLinearLoopEntryConsumed = Nothing
+      , sourceLinearLoopHeaderBound = Nothing
+      , sourceLinearLoopBackedgeConsumed = Nothing
+      , sourceLinearLoopBackedgeRebound = Nothing
+      , sourceLinearLoopReentered = Nothing
+      , sourceLinearLoopEntryType = Nothing
+      , sourceLinearLoopBackedgeType = Nothing
+      , sourceLinearLoopOutcome = result
       }
 
 -- | Bounded parsed-source break/exit route. A zero-actual source break
