@@ -745,3 +745,38 @@ Public release-byte verification and independent pinned final-delta
 signoff uncredited; original 244 normative cases (236 Exit, 8 Profile),
 historical audit, TCB, generated files and strict GHC/LLVM/Rocq preserved.
 **Independent audit freeze NOT YET.**
+
+## Implementation evidence — 2026-11-09: exact closed StageClosure F (#1696)
+
+[PR #1696](https://github.com/abiggerhammer/phil/pull/1696),
+[controlling issue #1584](https://github.com/abiggerhammer/phil/issues/1584).
+Exact tested head `9489ae408a1a617fb26fcb4135df409a1bfae9a3`,
+protected merge `45891a5cd8ceaae33b25a305c737727d40e538b4`
+at 2026-11-09 07:59:36 UTC. Independently refetched **37/37**
+exact-head pull_request workflows SUCCESS and **80/80** check runs
+SUCCESS, zero failed/pending/skipped. Protected
+[Hamster Merge Intent #42582228480](https://github.com/abiggerhammer/phil/actions/runs/42582228480)
+and merge-pr job SUCCESS. Existing Conformance Matrix supplemental row 53
+reconciled to full executed exact-head and merge evidence; original 244
+normative cases (236 Exit, 8 Profile) unchanged.
+
+**Bounded executed result:** checked native atom-only D/V/Q/M,
+independently accepted manifest raw Systems digest R and lowering root L,
+normalized SystemsArtifactRevision S, common Phase1StageContractRevision C
+and final ClosedStageContractRevision F from the same concrete accepted
+StageClosure. Exact checked source-manifest producer, independently accepted
+VER-010 source and INT-005 CertifiedRelease are replayed. Haskell
+Upload/Steve wrong-role R/L/S/C-to-F, changed F and F-for-C negatives;
+four conditional Rocq string-model roundtrip, injectivity, role rejection
+and revision-sensitivity theorems with named Print Assumptions passed.
+
+**Nonclaims:** private unaccepted diagnostic only; no full recursive
+SemanticForm, native Unicode/Map/Set reflection or accepted authority
+reconstruction, authenticated checked occurrence K/I-to-concrete StageClosure
+production, predecessor authority, FixedFinalAuthorityAdapter or
+FinalArtifactCertified. Distinguish R/L/S/C/F, subject B, stage instance I,
+realization A, profile P, checked occurrence K/I and generic D/V/Q/M/H.
+No invented nat encoding or model Prop promoted to native authority.
+Public release-byte verification and independently pinned final-delta signoff
+separately uncredited. Historic audit, TCB, generated outputs and strict
+GHC/LLVM/Rocq unchanged. **Independent audit freeze NOT YET.**

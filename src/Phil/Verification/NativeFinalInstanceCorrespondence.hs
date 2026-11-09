@@ -87,6 +87,12 @@ module Phil.Verification.NativeFinalInstanceCorrespondence
   , nativeAtomManifestClosedReplayRevision
   , NativeAtomManifestClosedReplayError (..)
   , replayNativeAtomManifestClosedCandidate
+  , NativeAtomManifestSubjectWireCandidate (..)
+  , NativeAtomManifestSubjectReplay
+  , nativeAtomManifestSubjectReplayBase
+  , nativeAtomManifestSubjectReplayRevision
+  , NativeAtomManifestSubjectReplayError (..)
+  , replayNativeAtomManifestSubjectCandidate
   , NativeVerifierProfileText (..)
   , encodeNativeVerifierProfileWire
   , decodeNativeVerifierProfileWire
@@ -1121,3 +1127,49 @@ replayNativeAtomManifestClosedCandidate witness producer sourceObject releaseObj
            (nativeAtomManifestCommonReplayBase baseReceipt)))
     then Left NativeAtomManifestClosedDifferent
     else pure (NativeAtomManifestClosedReplay baseReceipt closed)
+
+-- | Unaccepted B subject-stage candidate extends exact checked D/V/Q/M,
+-- independently accepted raw R/L, normalized S, common C and closed F.
+-- B is the concrete SubjectStageRevision, not a contract or an occurrence key.
+data NativeAtomManifestSubjectWireCandidate = NativeAtomManifestSubjectWireCandidate
+  { nativeAtomManifestSubjectBaseCandidate :: NativeAtomManifestClosedWireCandidate
+  , nativeAtomManifestSubjectRevisionWire :: Text
+  } deriving (Eq, Show)
+
+-- | Private read-only receipt, retaining the same accepted StageClosure.
+data NativeAtomManifestSubjectReplay = NativeAtomManifestSubjectReplay
+  { nativeAtomManifestSubjectReplayBase :: NativeAtomManifestClosedReplay
+  , nativeAtomManifestSubjectReplayRevision :: SubjectStageRevision
+  } deriving (Eq, Show)
+
+data NativeAtomManifestSubjectReplayError
+  = NativeAtomManifestSubjectBaseDifferent NativeAtomManifestClosedReplayError
+  | NativeAtomManifestSubjectRoleMalformed
+  | NativeAtomManifestSubjectDifferent
+  deriving (Eq, Show)
+
+-- | Replay the exact checked producer, independently accepted VER-010 source
+-- and INT-005 CertifiedRelease/StageClosure, and all D/V/Q/M/R/L/S/C/F
+-- comparisons BEFORE checking B against the same native StageClosure.
+-- Candidate wires do not reconstruct accepted authority or authenticate
+-- architecture occurrence -> StageClosure production.
+replayNativeAtomManifestSubjectCandidate
+  :: NativeFinalInstanceCorrespondence
+  -> CertifiedSourceManifestBinding
+  -> CertifiedApplicationArtifact
+  -> CertifiedReleaseArtifact
+  -> NativeAtomManifestSubjectWireCandidate
+  -> Either NativeAtomManifestSubjectReplayError NativeAtomManifestSubjectReplay
+replayNativeAtomManifestSubjectCandidate witness producer sourceObject releaseObject candidate = do
+  baseReceipt <- either (Left . NativeAtomManifestSubjectBaseDifferent) Right
+    (replayNativeAtomManifestClosedCandidate witness producer sourceObject releaseObject
+       (nativeAtomManifestSubjectBaseCandidate candidate))
+  subject <- maybe (Left NativeAtomManifestSubjectRoleMalformed) Right
+    (decodeNativeSubjectRevisionWire (nativeAtomManifestSubjectRevisionWire candidate))
+  if subject /= nativeReplaySubjectRevision
+       (nativeAtomManifestReplayStageCoordinates
+         (nativeAtomManifestSystemsReplayBase
+           (nativeAtomManifestCommonReplayBase
+             (nativeAtomManifestClosedReplayBase baseReceipt))))
+    then Left NativeAtomManifestSubjectDifferent
+    else pure (NativeAtomManifestSubjectReplay baseReceipt subject)

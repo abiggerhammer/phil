@@ -1141,3 +1141,31 @@ authority. Public release-byte verification and independent pinned final-delta
 signoff separately uncredited. Original 244 normative cases, historical
 independent audit, Phase 1 TCB, generated artifacts and strict GHC/LLVM/Rocq
 unchanged. Freeze NOT YET.
+
+## 2026-11-09 — concrete subject StageClosure B after F/C/S and accepted R/L (#1584)
+
+A bounded, data-only native diagnostic extends checked atom-only generic
+D/V/Q/M, independently accepted raw Systems digest R and lowering root L,
+normalized S, common C and closed F with native SubjectStageRevision B
+from the exact same independently accepted StageClosure. The function
+replays the actual checked source-manifest producer and exact independently
+accepted VER-010 source / INT-005 CertifiedRelease before all comparisons.
+Upload/Steve Haskell replay rejects same-payload R/L/S/C/F/I/A/P/K roles
+as B, changed correctly tagged B and substitution of B for F. Four
+conditional Rocq string-model theorems plus named Print Assumptions cover
+roundtrip, injectivity, role rejection and subject sensitivity.
+
+**Remaining-premise ledger:** no complete recursive SemanticForm,
+native Unicode Data.Text/Rocq string transport, native Map/Set Ord
+correspondence or accepted application/manifest/source/stage/release
+authority representation theorem. Actual checked occurrence K/I does not
+authenticate origin of the concrete StageClosure or release; predecessor
+authority, FixedFinalAuthorityAdapter, FinalArtifactCertified remain open.
+R raw, L lowering, S normalized, C common, F closed, B subject, I stage
+instance, A realization, P verifier profile, K/I checked occurrence,
+and D/V/Q/M/H generic/field roles remain disjoint. No invented nat
+encoder or supplied model Prop promoted to native authority. Public
+release-byte verification and independent pinned final-delta signoff
+separately uncredited; original 244 normative cases, historical audit,
+Phase 1 TCB, generated artifacts and strict GHC/LLVM/Rocq unchanged.
+Independent audit freeze **NOT YET**.

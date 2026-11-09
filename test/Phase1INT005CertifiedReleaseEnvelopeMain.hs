@@ -235,6 +235,10 @@ main = do
           , nativeAtomManifestClosedReplayAccepts source upload)
         , ( "Steve exact closed F after common C, normalized S and raw R/L"
           , nativeAtomManifestClosedReplayAccepts source steve)
+        , ( "Upload exact subject B after closed F, common C, normalized S and raw R/L"
+          , nativeAtomManifestSubjectReplayAccepts source upload)
+        , ( "Steve exact subject B after closed F, common C, normalized S and raw R/L"
+          , nativeAtomManifestSubjectReplayAccepts source steve)
         , ( "Upload checked SemanticUnordered atom-only canonical M-set rejects duplicates, order, and roles"
           , nativeSemanticUnorderedAtomSetReplayAccepts source upload)
         , ( "Steve checked SemanticUnordered atom-only canonical M-set rejects duplicates, order, and roles"
@@ -3286,5 +3290,99 @@ nativeAtomManifestClosedReplayAccepts source fixture =
                       && case check substitutedC of
                            Left (NativeAtomManifestClosedBaseDifferent
                              NativeAtomManifestCommonRoleMalformed) -> True
+                           _ -> False
+    _ -> False
+
+-- | Exact Upload/Steve accepted-producer/consumer replay plus native B subject
+-- stage revision. Same-payload R/L/S/C/F/I/A/P/K substitutions fail by ROLE,
+-- a correctly B-tagged but changed subject fails by VALUE, and B cannot serve
+-- as F. A checked occurrence is still not proof of StageClosure provenance.
+nativeAtomManifestSubjectReplayAccepts
+  :: GenericApplicationAssurance -> ReleaseFixture -> Bool
+nativeAtomManifestSubjectReplayAccepts source fixture =
+  case (producerInputs source, produceFixture source fixture) of
+    (Right (bundle, policy), Right (_, produced)) ->
+      case nativeAdapterPair source produced of
+        Nothing -> False
+        Just (sourceObject, releaseObject) ->
+          case closeNativeFinalInstanceCorrespondence
+              source (sourceInstanceDescriptor source) bundle policy
+              (fixtureContext produced) (fixtureLedger produced)
+              emptyProducerSelection sourceObject releaseObject of
+            Left _ -> False
+            Right witness ->
+              let producer = nativeCorrespondenceSourceManifestBinding witness
+                  acceptedSource = nativeCorrespondenceCertifiedSource witness
+                  acceptedRelease = nativeCorrespondenceCertifiedRelease witness
+                  manifest = nativeCorrespondenceManifest witness
+                  app = nativeAdapterSourceId
+                    (nativeCorrespondenceSourceAssurance witness)
+                  raw = encodeNativeRawSystemsDigestWire
+                    (NativeRawSystemsDigest (manifestImplementationDigest manifest))
+                  root = encodeNativeLoweringRootWire
+                    (NativeLoweringRootDigest (manifestLoweringLedgerRoot manifest))
+                  authority = nativeCorrespondenceAuthority witness
+                  revisionS = nativeFinalSystemsRevision authority
+                  common = nativeFinalCommonContractRevision authority
+                  closed = nativeFinalClosedContractRevision authority
+                  subject = nativeFinalSubjectRevision authority
+                  SubjectStageRevision payload = subject
+                  wireS = encodeNativeSystemsRevisionWire revisionS
+                  wireC = encodeNativeCommonContractRevisionWire common
+                  wireF = encodeNativeClosedContractRevisionWire closed
+                  wireB = encodeNativeSubjectRevisionWire subject
+                  foreignRoles =
+                    [ encodeNativeRawSystemsDigestWire
+                        (NativeRawSystemsDigest (Digest payload))
+                    , encodeNativeLoweringRootWire
+                        (NativeLoweringRootDigest (Digest payload))
+                    , encodeNativeSystemsRevisionWire
+                        (SystemsArtifactRevision payload)
+                    , encodeNativeCommonContractRevisionWire
+                        (Phase1StageContractRevision payload)
+                    , encodeNativeClosedContractRevisionWire
+                        (ClosedStageContractRevision payload)
+                    , encodeNativeInstanceRevisionWire (InstanceRevision payload)
+                    , encodeNativeRealizationRevisionWire (RealizationRevision payload)
+                    , encodeNativeVerifierProfileWire (NativeVerifierProfileText payload)
+                    , encodeNativeOccurrenceKeyWire (InstanceKey payload) ]
+              in case encodeNativeGenericAtomApplicationWires app of
+                Nothing -> False
+                Just applicationWires ->
+                  let base = NativeAtomManifestWireCandidate applicationWires raw root
+                      sCandidate = NativeAtomManifestSystemsWireCandidate base wireS
+                      cCandidate = NativeAtomManifestCommonWireCandidate sCandidate wireC
+                      fCandidate = NativeAtomManifestClosedWireCandidate cCandidate wireF
+                      candidate = NativeAtomManifestSubjectWireCandidate fCandidate wireB
+                      check = replayNativeAtomManifestSubjectCandidate
+                        witness producer acceptedSource acceptedRelease
+                      changed = candidate
+                        { nativeAtomManifestSubjectRevisionWire =
+                            encodeNativeSubjectRevisionWire
+                              (SubjectStageRevision (payload <> ".unaccepted")) }
+                      substitutedF = candidate
+                        { nativeAtomManifestSubjectBaseCandidate = fCandidate
+                            { nativeAtomManifestClosedRevisionWire = wireB } }
+                      withB wire = candidate { nativeAtomManifestSubjectRevisionWire = wire }
+                  in case check candidate of
+                    Left _ -> False
+                    Right receipt ->
+                      nativeAtomManifestSubjectReplayRevision receipt == subject
+                      && nativeReplaySubjectRevision
+                           (nativeAtomManifestReplayStageCoordinates
+                             (nativeAtomManifestSystemsReplayBase
+                               (nativeAtomManifestCommonReplayBase
+                                 (nativeAtomManifestClosedReplayBase
+                                   (nativeAtomManifestSubjectReplayBase receipt))))) == subject
+                      && decodeNativeSubjectRevisionWire wireB == Just subject
+                      && all (\wire -> case check (withB wire) of
+                            Left NativeAtomManifestSubjectRoleMalformed -> True
+                            _ -> False) foreignRoles
+                      && case check changed of
+                           Left NativeAtomManifestSubjectDifferent -> True
+                           _ -> False
+                      && case check substitutedF of
+                           Left (NativeAtomManifestSubjectBaseDifferent
+                             NativeAtomManifestClosedRoleMalformed) -> True
                            _ -> False
     _ -> False
