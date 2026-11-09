@@ -20,7 +20,8 @@ BRANCH = "formal-semantics/fsem01-next-proof"
 def pr(number=99, branch=BRANCH, slice_key="fsem-01", state="open",
        created="2099-01-01T00:00:00Z", title="FSEM-01: next proof",
        merged_at=None):
-    return {"number": number, "state": state, "merged_at": merged_at, "head": {
+    return {"number": number, "state": state, "merged_at": merged_at,
+        "base": {"ref": "main", "repo": {"full_name": f.REPO}}, "head": {
         "ref": branch, "repo": {"full_name": f.REPO}},
         "created_at": created, "title": title,
         "labels": [{"name": "lane: formal-semantics"}],
@@ -261,6 +262,18 @@ class CoordinationTests(unittest.TestCase):
         self.assertEqual(api.deleted, [])
         f.release(api, 99, expected_sha=sha, require_merged=True)
         self.assertEqual(api.deleted, [f.claim_ref("fsem-01")])
+
+    def test_reconcile_does_not_release_non_main_merge(self):
+        api = FakeGitHub()
+        f.acquire(api, "fsem-01", BRANCH, "chat:pair-programming")
+        p = pr(state="closed", merged_at="2099-01-01T00:01:00Z")
+        p["base"]["ref"] = "feature"
+        api.prs = [p]
+        self.assertEqual(f.reconcile(api), [])
+        sha = api.refs[f.claim_ref("fsem-01")]
+        with self.assertRaisesRegex(f.ClaimFailure, "merge into main"):
+            f.release(api, 99, expected_sha=sha, require_merged=True)
+        self.assertEqual(api.deleted, [])
 
     def test_reconcile_ignores_foreign_or_unlabeled_pr(self):
         api = FakeGitHub()
