@@ -97,7 +97,7 @@ Proof.
           [ exact Hrefined
           | unfold phase1_surface_static_type_argument_suffix_tree;
             rewrite Htree, Hcomma_tree, Hrefined_tree;
-            reflexivity ] ] ]
+            reflexivity ] ] ].
 Qed.
 
 Lemma phase1_surface_normalize_static_type_argument_suffixes_layers_total_from_repetition :
@@ -210,7 +210,7 @@ Proof.
                   phase1_surface_normalize_static_type_argument_list_spine_round_trip;
                 exact Hrefined
               | eapply phase1_surface_normalize_static_argument_list_spine_round_trip;
-                exact Hbase ] ] ] ] ]
+                exact Hbase ] ] ] ] ].
 Qed.
 
 Lemma phase1_surface_normalize_optional_static_type_argument_list_layers_total_from_derivation :
@@ -357,7 +357,7 @@ Proof.
                   phase1_surface_normalize_static_type_arguments_spine_round_trip;
                 exact Hrefined
               | eapply phase1_surface_normalize_static_arguments_spine_round_trip;
-                exact Hbase ] ] ] ] ]
+                exact Hbase ] ] ] ] ].
 Qed.
 
 Lemma phase1_surface_normalize_static_type_arguments_reference_layers_total_from_derivation :
