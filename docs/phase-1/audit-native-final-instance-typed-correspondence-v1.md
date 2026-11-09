@@ -1310,3 +1310,33 @@ promoted to native authority. Public release-byte verification and independent
 pinned final-delta signoff separate and uncredited; 244 original normative
 cases, historic audit, Phase 1 TCB, generated outputs and strict
 GHC/Rocq/LLVM unchanged. **Independent freeze NOT YET.**
+
+## 2026-11-09 — partial ASCII-7 manifest R/L transport admission (#1584)
+
+The next **new bounded sub-obligation** does not append an identity coordinate.
+It makes the native/Rocq Unicode representation gap operationally visible:
+a seven-bit-only admission guard checks the **actual independently accepted**
+raw Systems digest R and lowering-root L Text wires, before existing checked
+source-manifest and exact VER-010/INT-005 consumer replay. Both native Digest
+roles retain distinct R/L tags; neither is normalized Systems revision S.
+The partial guard rejects non-ASCII codepoints, including U+00E9 and U+1F642,
+rather than silently inventing a Text-to-Rocq string serializer. ASCII-7
+includes control characters and is not a printable-text or UTF-8 guarantee.
+The independently accepted native manifest continues to allow full Text;
+only this *optional diagnostic/model-admission subdomain* is restricted.
+
+Upload/Steve accepted-object positive replay and adversarial non-ASCII R/L,
+swapped R/L, and correctly tagged changed raw R tests are submitted. Rocq
+proves conditional ASCII-7 role-prefix preservation, admitted pair shape,
+soundness and high-bit rejection plus wrong-role decoding on its own string
+model; named Print Assumptions are submitted, not yet certified. This is not
+a native Haskell Text-to-Rocq String refinement theorem, does not promote a
+model Prop or a diagnostic receipt to native acceptance, and does not
+authenticate checked architecture (K,I_checked) as accepted StageClosure
+producer (I_stage). Complete recursive SemanticForm, Map/Set order, Unicode
+transport outside ASCII-7, accepted application/manifest/source/stage/release
+reflection, predecessor authority, FixedFinalAuthorityAdapter, and
+FinalArtifactCertified remain unproved. Public release-byte and independent
+pinned final-delta signoffs remain separate, uncredited gates. Original
+244 normative cases, historic audit, Phase 1 TCB, generated outputs and
+strict GHC/Rocq/LLVM unchanged. **Independent freeze NOT YET.**

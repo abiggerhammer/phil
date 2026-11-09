@@ -259,6 +259,10 @@ main = do
           , nativeAtomManifestCheckedRevisionReplayAccepts source upload)
         , ( "Steve checked occurrence I_checked after K and stage I_stage"
           , nativeAtomManifestCheckedRevisionReplayAccepts source steve)
+        , ( "Upload ASCII-7 raw manifest R/L admission after exact accepted consumers"
+          , nativeAtomManifestAsciiRawReplayAccepts source upload)
+        , ( "Steve ASCII-7 raw manifest R/L admission after exact accepted consumers"
+          , nativeAtomManifestAsciiRawReplayAccepts source steve)
         , ( "Upload checked SemanticUnordered atom-only canonical M-set rejects duplicates, order, and roles"
           , nativeSemanticUnorderedAtomSetReplayAccepts source upload)
         , ( "Steve checked SemanticUnordered atom-only canonical M-set rejects duplicates, order, and roles"
@@ -3916,4 +3920,68 @@ nativeAtomManifestCheckedRevisionReplayAccepts source fixture =
                            Left (NativeAtomManifestCheckedRevisionBaseDifferent
                              NativeAtomManifestOccurrenceKeyRoleMalformed) -> True
                            _ -> False
+    _ -> False
+
+-- | A deliberately partial ASCII-7 model-admission gate on the actual raw
+-- Systems digest and independent lowering root, after checked source and
+-- independently accepted VER-010 / INT-005. Non-ASCII is not re-encoded.
+nativeAtomManifestAsciiRawReplayAccepts
+  :: GenericApplicationAssurance -> ReleaseFixture -> Bool
+nativeAtomManifestAsciiRawReplayAccepts source fixture =
+  case (producerInputs source, produceFixture source fixture) of
+    (Right (bundle, policy), Right (_, produced)) ->
+      case nativeAdapterPair source produced of
+        Nothing -> False
+        Just (sourceObject, releaseObject) ->
+          case closeNativeFinalInstanceCorrespondence
+              source (sourceInstanceDescriptor source) bundle policy
+              (fixtureContext produced) (fixtureLedger produced)
+              emptyProducerSelection sourceObject releaseObject of
+            Left _ -> False
+            Right witness ->
+              let producer = nativeCorrespondenceSourceManifestBinding witness
+                  acceptedSource = nativeCorrespondenceCertifiedSource witness
+                  acceptedRelease = nativeCorrespondenceCertifiedRelease witness
+                  manifest = nativeCorrespondenceManifest witness
+                  rawDigest = NativeRawSystemsDigest (manifestImplementationDigest manifest)
+                  rootDigest = NativeLoweringRootDigest (manifestLoweringLedgerRoot manifest)
+                  raw = encodeNativeRawSystemsDigestWire rawDigest
+                  root = encodeNativeLoweringRootWire rootDigest
+                  app = nativeAdapterSourceId (nativeCorrespondenceSourceAssurance witness)
+                  check = replayNativeAtomManifestAsciiRawCandidate
+                    witness producer acceptedSource acceptedRelease
+              in case encodeNativeGenericAtomApplicationWires app of
+                Nothing -> False
+                Just applicationWires ->
+                  let candidate = NativeAtomManifestWireCandidate applicationWires raw root
+                      rawUnicode = candidate
+                        { nativeAtomManifestCandidateRawWire = raw <> "\x00e9" }
+                      rootUnicode = candidate
+                        { nativeAtomManifestCandidateLoweringWire = root <> "\x1f642" }
+                      swapped = candidate
+                        { nativeAtomManifestCandidateRawWire = root
+                        , nativeAtomManifestCandidateLoweringWire = raw }
+                      changed = candidate
+                        { nativeAtomManifestCandidateRawWire =
+                            encodeNativeRawSystemsDigestWire
+                              (NativeRawSystemsDigest (digestText "forged.ascii.raw")) }
+                      rejectsRaw = case check rawUnicode of
+                        Left NativeAtomManifestAsciiRawNonAsciiDigest -> True
+                        _ -> False
+                      rejectsRoot = case check rootUnicode of
+                        Left NativeAtomManifestAsciiRawNonAsciiLoweringRoot -> True
+                        _ -> False
+                      rejectsSwap = case check swapped of
+                        Left (NativeAtomManifestAsciiRawBaseDifferent _) -> True
+                        _ -> False
+                      rejectsChanged = case check changed of
+                        Left (NativeAtomManifestAsciiRawBaseDifferent _) -> True
+                        _ -> False
+                  in case check candidate of
+                    Left _ -> False
+                    Right receipt ->
+                      nativeAtomManifestReplayRawDigest receipt == rawDigest
+                      && nativeAtomManifestReplayLoweringRoot receipt == rootDigest
+                      && raw /= root
+                      && rejectsRaw && rejectsRoot && rejectsSwap && rejectsChanged
     _ -> False

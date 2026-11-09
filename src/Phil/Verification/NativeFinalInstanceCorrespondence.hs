@@ -123,6 +123,8 @@ module Phil.Verification.NativeFinalInstanceCorrespondence
   , nativeAtomManifestCheckedRevisionReplayRevision
   , NativeAtomManifestCheckedRevisionReplayError (..)
   , replayNativeAtomManifestCheckedRevisionCandidate
+  , NativeAtomManifestAsciiRawReplayError (..)
+  , replayNativeAtomManifestAsciiRawCandidate
   , NativeVerifierProfileText (..)
   , encodeNativeVerifierProfileWire
   , decodeNativeVerifierProfileWire
@@ -154,6 +156,7 @@ module Phil.Verification.NativeFinalInstanceCorrespondence
   , closeNativeFinalInstanceCorrespondence
   ) where
 
+import Data.Char (isAscii)
 import qualified Data.Map.Strict as Map
 import qualified Data.Set as Set
 import Data.Text (Text)
@@ -1443,3 +1446,34 @@ replayNativeAtomManifestCheckedRevisionCandidate witness producer sourceObject r
   if revision /= checkedRevision
     then Left NativeAtomManifestCheckedRevisionDifferent
     else pure (NativeAtomManifestCheckedRevisionReplay keyReceipt revision)
+
+-- | An intentionally narrow seven-bit admission check for the *raw* manifest
+-- R/L Text wires. This is NOT a Text-to-Rocq serializer and does not restrict
+-- native manifest acceptance: it only opts into a string-model subdomain.
+-- Even ASCII-only R/L and an exact accepted StageClosure do not prove origin.
+data NativeAtomManifestAsciiRawReplayError
+  = NativeAtomManifestAsciiRawNonAsciiDigest
+  | NativeAtomManifestAsciiRawNonAsciiLoweringRoot
+  | NativeAtomManifestAsciiRawBaseDifferent NativeAtomManifestReplayError
+  deriving (Eq, Show)
+
+-- | Check ASCII-7 before replaying the real checked source-manifest producer
+-- and independently accepted manifest / VER-010 / INT-005 consumers. Reject
+-- non-ASCII Text explicitly rather than silently claiming a Unicode codec.
+-- The result is only the existing constructor-private diagnostic receipt.
+replayNativeAtomManifestAsciiRawCandidate
+  :: NativeFinalInstanceCorrespondence
+  -> CertifiedSourceManifestBinding
+  -> CertifiedApplicationArtifact
+  -> CertifiedReleaseArtifact
+  -> NativeAtomManifestWireCandidate
+  -> Either NativeAtomManifestAsciiRawReplayError NativeAtomManifestReplay
+replayNativeAtomManifestAsciiRawCandidate witness producer sourceObject releaseObject candidate
+  | not (Text.all isAscii (nativeAtomManifestCandidateRawWire candidate)) =
+      Left NativeAtomManifestAsciiRawNonAsciiDigest
+  | not (Text.all isAscii (nativeAtomManifestCandidateLoweringWire candidate)) =
+      Left NativeAtomManifestAsciiRawNonAsciiLoweringRoot
+  | otherwise =
+      either (Left . NativeAtomManifestAsciiRawBaseDifferent) Right
+        (replayNativeAtomManifestCandidate
+          witness producer sourceObject releaseObject candidate)
