@@ -240,6 +240,8 @@ library
       Phil.Surface.GrammarV1.ComponentChoiceRendezvous
       Phil.Surface.GrammarV1.ComponentChoiceStatefulRendezvous
       Phil.Surface.GrammarV1.ComponentRestrictedRendezvous
+      Phil.Surface.GrammarV1.ComponentSendClose
+      Phil.Surface.GrammarV1.ComponentReceiveClose
       Phil.Surface.GrammarV1.TwoOwnerBorrowResourceSurface
       Phil.Surface.GrammarV1.ReferenceKernelBridge
       Phil.Surface.GrammarV1.ReferenceToken
