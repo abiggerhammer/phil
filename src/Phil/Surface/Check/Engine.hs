@@ -21,6 +21,9 @@ module Phil.Surface.Check.Engine
   , SourceTwoBoolJoinRun (..)
   , checkSurfaceSourceTwoBoolJoinComponent
   , traceSurfaceSourceTwoBoolJoinComponent
+  , SourceBoolLoopRun (..)
+  , checkSurfaceSourceBoolLoopComponent
+  , traceSurfaceSourceBoolLoopComponent
   , BorrowTracePhase (..)
   , BorrowTraceCheckpoint (..)
   , BorrowTraceResourceObservation (..)
@@ -768,6 +771,164 @@ traceSurfaceSourceTwoBoolJoinComponent env locatedComponent left right
       , sourceTwoBoolJoinThenTypes = Nothing
       , sourceTwoBoolJoinElseTypes = Nothing
       , sourceTwoBoolJoinOutcome = outcome
+      }
+
+-- | FSEM-01 L-1: a single checked source Bool loop header and one explicit
+-- continue backedge. These are exactly the production native resource cuts,
+-- not an evaluator of repeated runtime loop iterations. The optional cuts
+-- make it impossible to invent a joined state after an early error.
+data SourceBoolLoopRun = SourceBoolLoopRun
+  { sourceBoolLoopBefore :: Maybe ResourceContext
+  , sourceBoolLoopEntry :: Maybe ResourceContext
+  , sourceBoolLoopHeader :: Maybe ResourceContext
+  , sourceBoolLoopBackedge :: Maybe ResourceContext
+  , sourceBoolLoopReentered :: Maybe ResourceContext
+  , sourceBoolLoopEntryType :: Maybe (Mode, Ty)
+  , sourceBoolLoopBackedgeType :: Maybe (Mode, Ty)
+  , sourceBoolLoopOutcome :: Either SurfaceCheckError ()
+  } deriving (Eq, Show)
+
+-- | An edge's actual source expression runs through ordinary value checking
+-- and scope pruning. Only a genuine unrestricted Bool value is admitted;
+-- neither a syntactic variable name nor an injected caller mode suffices.
+checkSourceBoolLoopEdge
+  :: Text -> SurfaceEnvironment -> SurfaceState -> Located Block
+  -> Either SurfaceCheckError SurfacePath
+checkSourceBoolLoopEdge diagnostic env current block = do
+  raw <- checkValueBlock env current block
+  pruned <- mapM
+    (pruneScopedPath (locatedSpan block) (Map.keysSet (stateBindings current)))
+    raw
+  case pruned of
+    [path@(SurfacePath PathContinue _
+      (Just (RuntimeScalar scalar)))]
+      | scalarType scalar == TyBool
+      , decisionCarrierMode (scalarMode scalar) (scalarShape scalar)
+          == Unrestricted -> Right path
+    _ -> throw block TypeMismatch diagnostic
+
+checkSourceBoolLoopInvariant
+  :: SourceSpan -> SourceBoolJoinInvariant -> Either SurfaceCheckError ()
+checkSourceBoolLoopInvariant _ SourceBoolInvariantProvenTrue = Right ()
+checkSourceBoolLoopInvariant _ SourceBoolInvariantProvenReflexive = Right ()
+checkSourceBoolLoopInvariant span' SourceBoolInvariantUnproved =
+  Left SurfaceCheckError
+    { surfaceErrorSpan = span'
+    , surfaceErrorClass = MissingEvidence
+    , surfaceErrorDetail =
+        "loop invariant has no checked proof for this bounded source backedge"
+    }
+
+-- | Static entry/backedge resource typing, not a dynamic loop evaluator.
+-- The header is introduced only after a valid entry actual; the native join
+-- requires agreement between header-state and continue-state resources.
+-- There is no invented ordinary successor after an unconditional continue.
+checkSurfaceSourceBoolLoopComponent
+  :: SurfaceEnvironment -> Located Component
+  -> Located Block -> Located Block -> SourceSpan -> Text
+  -> SourceBoolJoinInvariant
+  -> Either SurfaceCheckError ()
+checkSurfaceSourceBoolLoopComponent env locatedComponent entry backedge
+    loopSpan headerName invariant = do
+  let component = locatedValue locatedComponent
+  initial <- initializeState env component
+  checkProvides env initial component
+  entryPath <- checkSourceBoolLoopEdge
+    "loop initial entry must produce one unrestricted Bool"
+    env initial entry
+  header <- insertBindingMeta loopSpan headerName
+    (BindingMeta Unrestricted TyBool (shapeForType TyBool))
+    (pathState entryPath)
+  checkSourceBoolLoopInvariant loopSpan invariant
+  backedgePath <- checkSourceBoolLoopEdge
+    "loop continue backedge must produce one unrestricted Bool"
+    env header backedge
+  reentry <- joinExclusive loopSpan [continuePath header, backedgePath]
+  case reentry of
+    [SurfacePath PathContinue _ _] -> Right ()
+    _ -> throw locatedComponent IncompatibleBranchResidue
+      "loop backedge has no continuing resource-state successor"
+
+-- | Independently reruns the same production transitions. The observed
+-- resource state after join is real: not a synthesized before/after pair.
+traceSurfaceSourceBoolLoopComponent
+  :: SurfaceEnvironment -> Located Component
+  -> Located Block -> Located Block -> SourceSpan -> Text
+  -> SourceBoolJoinInvariant -> SourceBoolLoopRun
+traceSurfaceSourceBoolLoopComponent env locatedComponent entry backedge
+    loopSpan headerName invariant =
+  case initializeState env component of
+    Left err -> emptyRun (Left err)
+    Right initial -> case checkProvides env initial component of
+      Left err -> (emptyRun (Left err))
+        { sourceBoolLoopBefore = Just (context initial) }
+      Right () ->
+        let start = context initial
+        in case checkSourceBoolLoopEdge
+          "loop initial entry must produce one unrestricted Bool"
+          env initial entry of
+          Left err -> (emptyRun (Left err))
+            { sourceBoolLoopBefore = Just start }
+          Right entryPath ->
+            let entryContext = context (pathState entryPath)
+                entryType = operandType entryPath
+                beforeHeader = (emptyRun (throw locatedComponent
+                    IncompatibleBranchResidue
+                    "loop entry has no checked header"))
+                  { sourceBoolLoopBefore = Just start
+                  , sourceBoolLoopEntry = Just entryContext
+                  , sourceBoolLoopEntryType = entryType }
+            in case insertBindingMeta loopSpan headerName
+              (BindingMeta Unrestricted TyBool (shapeForType TyBool))
+              (pathState entryPath) of
+              Left err -> beforeHeader { sourceBoolLoopOutcome = Left err }
+              Right header ->
+                let beforeInvariant = beforeHeader
+                      { sourceBoolLoopHeader = Just (context header) }
+                in case checkSourceBoolLoopInvariant loopSpan invariant of
+                  Left err -> beforeInvariant
+                    { sourceBoolLoopOutcome = Left err }
+                  Right () ->
+                    case checkSourceBoolLoopEdge
+                      "loop continue backedge must produce one unrestricted Bool"
+                      env header backedge of
+                      Left err -> beforeInvariant
+                        { sourceBoolLoopOutcome = Left err }
+                      Right backedgePath ->
+                        let beforeJoin = beforeInvariant
+                              { sourceBoolLoopBackedge =
+                                  Just (context (pathState backedgePath))
+                              , sourceBoolLoopBackedgeType =
+                                  operandType backedgePath }
+                        in case joinExclusive loopSpan
+                          [continuePath header, backedgePath] of
+                          Left err -> beforeJoin
+                            { sourceBoolLoopOutcome = Left err }
+                          Right paths -> case paths of
+                            [SurfacePath PathContinue next _] ->
+                              beforeJoin
+                                { sourceBoolLoopReentered = Just (context next)
+                                , sourceBoolLoopOutcome = Right () }
+                            _ -> beforeJoin
+                              { sourceBoolLoopOutcome =
+                                  throw locatedComponent IncompatibleBranchResidue
+                                    "loop backedge has no continuing resource-state successor" }
+  where
+    component = locatedValue locatedComponent
+    context state = resourceContext (stateCore state)
+    operandType path = case pathValue path of
+      Just (RuntimeScalar scalar) ->
+        Just (scalarMode scalar,scalarType scalar)
+      _ -> Nothing
+    emptyRun result = SourceBoolLoopRun
+      { sourceBoolLoopBefore = Nothing
+      , sourceBoolLoopEntry = Nothing
+      , sourceBoolLoopHeader = Nothing
+      , sourceBoolLoopBackedge = Nothing
+      , sourceBoolLoopReentered = Nothing
+      , sourceBoolLoopEntryType = Nothing
+      , sourceBoolLoopBackedgeType = Nothing
+      , sourceBoolLoopOutcome = result
       }
 
 -- | Concrete checkpoints from the *same* production borrow evaluator used by
