@@ -208,6 +208,10 @@ jobs:
           Print Assumptions native_atom_manifest_systems_data_model_injective.
           Print Assumptions native_atom_manifest_systems_data_model_wrong_role_reject.
           Print Assumptions native_atom_manifest_systems_data_model_revision_sensitive.
+          Print Assumptions native_atom_manifest_common_data_model_roundtrip.
+          Print Assumptions native_atom_manifest_common_data_model_injective.
+          Print Assumptions native_atom_manifest_common_data_model_wrong_role_reject.
+          Print Assumptions native_atom_manifest_common_data_model_revision_sensitive.
           Print Assumptions fixed_adapter_full_certification_preserves_predecessors.
           EOF
           rocq c -Q proof/Phil Phil /tmp/NativeFinalInstanceAssumptions.v 2>&1 | tee typed-native-instance-assumptions.log

@@ -2523,3 +2523,90 @@ Proof.
   apply native_systems_revision_wire_injective.
   exact (f_equal snd Heq).
 Qed.
+
+
+(* #1584: conditional STRING model of native common contract C after the
+   typed S/R/L diagnostic. This constructs NO Haskell Text/Rocq string
+   serializer, authenticated StageClosure origin or accepted authority. *)
+Record NativeAtomManifestCommonDataModel :=
+  mkNativeAtomManifestCommonDataModel {
+    nativeAtomManifestCommonBaseData : NativeAtomManifestSystemsDataModel;
+    nativeAtomManifestCommonRevisionData : NativeCommonRevisionRole
+  }.
+
+Definition nativeEncodeAtomManifestCommonDataModel
+  (data : NativeAtomManifestCommonDataModel)
+  : ((((string * string) * list (string * string)) * (string * string)) * string) * string :=
+  (nativeEncodeAtomManifestSystemsDataModel
+    (nativeAtomManifestCommonBaseData data),
+   nativeCommonRevisionWire (nativeAtomManifestCommonRevisionData data)).
+
+Definition nativeDecodeAtomManifestCommonDataModel
+  (wires : ((((string * string) * list (string * string)) * (string * string)) * string) * string)
+  : option NativeAtomManifestCommonDataModel :=
+  match nativeDecodeAtomManifestSystemsDataModel (fst wires),
+        nativeDecodeCommonRevisionWire (snd wires) with
+  | Some baseData, Some revision =>
+      Some (mkNativeAtomManifestCommonDataModel baseData revision)
+  | _, _ => None
+  end.
+
+Theorem native_atom_manifest_common_data_model_roundtrip :
+  forall data,
+    nativeDecodeAtomManifestCommonDataModel
+      (nativeEncodeAtomManifestCommonDataModel data) = Some data.
+Proof.
+  intros [previous [revision]].
+  unfold nativeDecodeAtomManifestCommonDataModel,
+    nativeEncodeAtomManifestCommonDataModel.
+  simpl (fst (_, _)). simpl (snd (_, _)).
+  rewrite native_atom_manifest_systems_data_model_roundtrip.
+  reflexivity.
+Qed.
+
+Theorem native_atom_manifest_common_data_model_injective :
+  forall first second,
+    nativeEncodeAtomManifestCommonDataModel first =
+      nativeEncodeAtomManifestCommonDataModel second -> first = second.
+Proof.
+  intros first second H.
+  apply (f_equal nativeDecodeAtomManifestCommonDataModel) in H.
+  rewrite !native_atom_manifest_common_data_model_roundtrip in H.
+  now injection H.
+Qed.
+
+Theorem native_atom_manifest_common_data_model_wrong_role_reject :
+  forall previous raw root systems closed,
+    nativeDecodeAtomManifestCommonDataModel
+      (nativeEncodeAtomManifestSystemsDataModel previous,
+       nativeRawSystemsDigestWire raw) = None /\
+    nativeDecodeAtomManifestCommonDataModel
+      (nativeEncodeAtomManifestSystemsDataModel previous,
+       nativeLoweringRootWire root) = None /\
+    nativeDecodeAtomManifestCommonDataModel
+      (nativeEncodeAtomManifestSystemsDataModel previous,
+       nativeSystemsRevisionWire systems) = None /\
+    nativeDecodeAtomManifestCommonDataModel
+      (nativeEncodeAtomManifestSystemsDataModel previous,
+       nativeClosedRevisionWire closed) = None.
+Proof.
+  intros previous [raw] [root] [systems] [closed].
+  repeat split;
+    unfold nativeDecodeAtomManifestCommonDataModel;
+    simpl;
+    destruct (nativeDecodeAtomManifestSystemsDataModel
+      (nativeEncodeAtomManifestSystemsDataModel previous)); reflexivity.
+Qed.
+
+Theorem native_atom_manifest_common_data_model_revision_sensitive :
+  forall previous first second, first <> second ->
+    nativeEncodeAtomManifestCommonDataModel
+      (mkNativeAtomManifestCommonDataModel previous first) <>
+    nativeEncodeAtomManifestCommonDataModel
+      (mkNativeAtomManifestCommonDataModel previous second).
+Proof.
+  intros previous first second Hneq Heq.
+  apply Hneq.
+  apply native_common_revision_wire_injective.
+  exact (f_equal snd Heq).
+Qed.
