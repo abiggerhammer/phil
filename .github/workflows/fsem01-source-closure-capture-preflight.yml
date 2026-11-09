@@ -1,0 +1,74 @@
+name: FSEM-01 Source Closure Capture Early Preflight
+concurrency:
+  group: fsem01-source-closure-preflight
+  cancel-in-progress: false
+on:
+  push:
+    branches:
+      - formal-semantics/fsem01-source-closure-capture-ownership
+  pull_request:
+    paths:
+      - 'src/Phil/Surface/GrammarV1/SourceClosureCapture.hs'
+      - 'test/Phase1FSEM01SourceClosureCaptureMain.hs'
+      - 'test/fixtures/fsem01-source-closure-capture-v1/**'
+      - 'proof/Phil/Surface/SurfaceSourceClosureCapture.v'
+      - 'phil-core.cabal'
+      - '.github/workflows/fsem01-source-closure-capture-preflight.yml'
+permissions:
+  contents: read
+jobs:
+  source-closure-haskell:
+    name: Strict source closure ownership and loan scope
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: haskell-actions/setup@v2
+        with:
+          ghc-version: '9.6.7'
+          cabal-version: 'latest'
+          cabal-update: false
+      - name: Update Hackage with bounded HTTP1 retry
+        shell: bash
+        run: bash scripts/ci/cabal-update-retry.sh
+      - name: Strict warning-free Haskell library
+        run: cabal build lib:phil-core --ghc-options=-Werror
+      - name: Source closure and prior callable regressions
+        shell: bash
+        run: |
+          set -euo pipefail
+          for test in \
+            Phase1GrammarV1ClosureMain \
+            Phase1CallableScopeMain \
+            Phase1ExplicitClosureModeMain \
+            Phase1FSEM01SourceClosureCaptureMain
+          do
+            cabal exec -- ghc -isrc -Wall -Werror -fno-code "test/$test.hs"
+            cabal exec -- runghc -isrc -Wall -Werror "test/$test.hs"
+          done
+  source-closure-rocq:
+    name: Conditional Rocq closure capture and scoped loan proofs
+    runs-on: ubuntu-24.04
+    container:
+      image: rocq/rocq-prover:9.2.0
+      options: --user root
+    steps:
+      - uses: actions/checkout@v4
+      - name: Compile conditional normalized model with no admissions
+        shell: bash
+        run: |
+          set -euo pipefail
+          export PATH="/home/rocq/.opam/$COMPILER/bin:$PATH"
+          for file in \
+            proof/Phil/Core/GenericStructural.v \
+            proof/Phil/Core/CallableMode.v \
+            proof/Phil/Core/CallableScope.v \
+            proof/Phil/Core/Syntax.v \
+            proof/Phil/Core/Context.v \
+            proof/Phil/Surface/SurfaceSourceClosureCapture.v
+          do
+            rocq c -Q proof/Phil Phil "$file"
+          done
+          if grep -nE '^[[:space:]]*(Admitted[.]|Axiom[[:space:]]|Parameter[[:space:]])' \
+              proof/Phil/Surface/SurfaceSourceClosureCapture.v; then
+            exit 1
+          fi
