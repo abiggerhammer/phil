@@ -1,0 +1,6 @@
+fn cycle(flag : Bool, payload : Bytes[8]) -> Unit satisfies C {
+  loop state (keeper : Bytes[8] = payload) invariant true {
+    borrow keeper as sight { sight; unit; };
+    continue(keeper);
+  };
+}
