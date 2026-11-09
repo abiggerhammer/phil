@@ -235,10 +235,12 @@ Theorem phase1_surface_normalize_static_type_arguments_spine_round_trip :
       phase1_surface_static_arguments_spine_tree arguments.
 Proof.
   intros [items] refined Hnormalize.
-  cbn in Hnormalize.
+  unfold phase1_surface_normalize_static_type_arguments_spine in Hnormalize.
+  cbn [phase1_static_arguments_spine_items] in Hnormalize.
   destruct (phase1_surface_normalize_optional_static_type_argument_list items)
     as [actual |] eqn:Hitems; try discriminate Hnormalize.
-  inversion Hnormalize; subst.
+  cbn in Hnormalize.
+  inversion Hnormalize; subst refined.
   unfold phase1_surface_static_type_arguments_spine_tree,
     phase1_surface_static_arguments_spine_tree.
   cbn [phase1_static_type_arguments_spine_items
