@@ -18,8 +18,9 @@ BRANCH = "formal-semantics/fsem01-next-proof"
 
 
 def pr(number=99, branch=BRANCH, slice_key="fsem-01", state="open",
-       created="2099-01-01T00:00:00Z", title="FSEM-01: next proof"):
-    return {"number": number, "state": state, "head": {
+       created="2099-01-01T00:00:00Z", title="FSEM-01: next proof",
+       merged_at=None):
+    return {"number": number, "state": state, "merged_at": merged_at, "head": {
         "ref": branch, "repo": {"full_name": f.REPO}},
         "created_at": created, "title": title,
         "labels": [{"name": "lane: formal-semantics"}],
@@ -39,6 +40,14 @@ class FakeGitHub:
         self.calls = []
 
     def pages(self, endpoint):
+        if endpoint.startswith("/git/matching-refs/heads/coord/fsem-claims/"):
+            return iter({"ref": key, "object": {"sha": sha}}
+                        for key, sha in sorted(self.refs.items()))
+        if endpoint.startswith("/pulls?state=closed&head="):
+            head = urllib.parse.unquote(endpoint.partition("&head=")[2])
+            _, branch = head.split(":", 1)
+            return iter(x for x in self.prs if
+                        x["state"] == "closed" and x["head"]["ref"] == branch)
         if endpoint.startswith("/pulls?"):
             return iter(self.prs)
         if endpoint == f"/issues/{ISSUE}/comments":
@@ -173,6 +182,97 @@ class CoordinationTests(unittest.TestCase):
         api.prs = [pr(), pr(number=100, branch="formal-semantics/rogue")]
         with self.assertRaisesRegex(f.ClaimFailure, "competing"):
             f.verify(api, 99)
+
+
+    def test_reconcile_releases_only_unique_merged_exact_claim(self):
+        api = FakeGitHub()
+        f.acquire(api, "fsem-01", BRANCH, "chat:pair-programming")
+        other_branch = "formal-semantics/fsem02-restricted-predecessor-replay"
+        f.acquire(api, "fsem-02", other_branch, "hamster:fsem")
+        api.prs = [
+            pr(number=99),  # Open FSEM-01 must remain claimed.
+            pr(number=1707, branch=other_branch, slice_key="fsem-02",
+               state="closed", title="FSEM-02: predecessor replay",
+               merged_at="2099-01-01T00:01:00Z"),
+        ]
+        old_sha = api.refs[f.claim_ref("fsem-02")]
+        result = f.reconcile(api)
+        self.assertEqual(result, [("fsem-02", 1707, old_sha)])
+        self.assertIn(f.claim_ref("fsem-01"), api.refs)
+        self.assertNotIn(f.claim_ref("fsem-02"), api.refs)
+        self.assertEqual(api.deleted, [f.claim_ref("fsem-02")])
+        self.assertIn("PR #1707", api.comments[-1]["body"])
+
+    def test_reconcile_keeps_unmerged_or_old_closed_prs_locked(self):
+        api = FakeGitHub()
+        f.acquire(api, "fsem-01", BRANCH, "chat:pair-programming")
+        api.prs = [pr(state="closed")]
+        self.assertEqual(f.reconcile(api), [])
+        self.assertTrue(api.refs)
+        api.prs[0]["merged_at"] = "2026-01-01T00:00:00Z"
+        api.prs[0]["created_at"] = "2026-01-01T00:00:00Z"
+        self.assertEqual(f.reconcile(api), [])
+        self.assertEqual(len(api.deleted), 0)
+
+    def test_reconcile_rejects_ambiguous_merged_prs(self):
+        api = FakeGitHub()
+        f.acquire(api, "fsem-01", BRANCH, "chat:pair-programming")
+        api.prs = [
+            pr(number=99, state="closed", merged_at="2099-01-01T00:01:00Z"),
+            pr(number=100, state="closed", merged_at="2099-01-01T00:02:00Z"),
+        ]
+        with self.assertRaisesRegex(f.ClaimFailure, "ambiguous merged"):
+            f.reconcile(api)
+        self.assertEqual(api.deleted, [])
+
+    def test_reconcile_refuses_missing_issue_audit(self):
+        api = FakeGitHub()
+        f.acquire(api, "fsem-01", BRANCH, "chat:pair-programming")
+        api.comments.clear()
+        api.prs = [
+            pr(state="closed", merged_at="2099-01-01T00:01:00Z"),
+        ]
+        with self.assertRaisesRegex(f.ClaimFailure, "not recorded"):
+            f.reconcile(api)
+        self.assertEqual(api.deleted, [])
+
+    def test_reconcile_refuses_open_competing_family_pr(self):
+        api = FakeGitHub()
+        f.acquire(api, "fsem-01", BRANCH, "chat:pair-programming")
+        api.prs = [
+            pr(state="closed", merged_at="2099-01-01T00:01:00Z"),
+            pr(number=100, branch="formal-semantics/unclassified",
+               title="Unclassified", slice_key="fsem-01"),
+        ]
+        with self.assertRaisesRegex(f.ClaimFailure, "open same-family"):
+            f.reconcile(api)
+        self.assertEqual(api.deleted, [])
+
+    def test_manual_recovery_requires_merged_exact_sha(self):
+        api = FakeGitHub()
+        f.acquire(api, "fsem-01", BRANCH, "chat:pair-programming")
+        api.prs = [pr(state="closed")]
+        sha = api.refs[f.claim_ref("fsem-01")]
+        with self.assertRaisesRegex(f.ClaimFailure, "MERGED"):
+            f.release(api, 99, expected_sha=sha, require_merged=True)
+        api.prs[0]["merged_at"] = "2099-01-01T00:01:00Z"
+        with self.assertRaisesRegex(f.ClaimFailure, "SHA changed"):
+            f.release(api, 99, expected_sha="f" * 40, require_merged=True)
+        self.assertEqual(api.deleted, [])
+        f.release(api, 99, expected_sha=sha, require_merged=True)
+        self.assertEqual(api.deleted, [f.claim_ref("fsem-01")])
+
+    def test_reconcile_ignores_foreign_or_unlabeled_pr(self):
+        api = FakeGitHub()
+        f.acquire(api, "fsem-01", BRANCH, "chat:pair-programming")
+        p = pr(state="closed", merged_at="2099-01-01T00:01:00Z")
+        p["head"]["repo"]["full_name"] = "other/repo"
+        api.prs = [p]
+        self.assertEqual(f.reconcile(api), [])
+        p["head"]["repo"]["full_name"] = f.REPO
+        p["labels"] = []
+        self.assertEqual(f.reconcile(api), [])
+        self.assertEqual(api.deleted, [])
 
 
 if __name__ == "__main__":
