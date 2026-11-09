@@ -194,7 +194,7 @@ checkForward source = case check source of
 checkShadow :: Text -> Either String ()
 checkShadow source = case check source of
   Just (Left (BoolLoopScopeError
-    (GrammarV1LoopStateBinderError (GrammarV1DuplicateBinder _ _)))) ->
+    (GrammarV1LoopStateBinderError (GrammarV1ActiveShadowing _ _)))) ->
       Right ()
   other -> Left ("active header collision was not rejected: " ++ show other)
 
