@@ -1,13 +1,13 @@
 From Stdlib Require Import Bool.Bool Lists.List Strings.String.
 Import ListNotations.
-From Phil.Core Require Import CallableMode CallableScope Context Syntax.
+From Phil.Core Require Import GenericStructural CallableMode CallableScope Context Syntax.
 
 (* Bounded conditional source capture model. Concrete Haskell parser and
    Map/Set fidelity are separately tested, not proved universally. *)
 Theorem source_linear_capture_must_move :
   forall occurrence transfer,
     CallableMode.captureTransferAllowed
-      (CallableMode.mkClosureCapture occurrence transfer Linear) = true ->
+      (CallableMode.mkClosureCapture occurrence transfer GenericStructural.Linear) = true ->
     transfer = CallableMode.MoveCapture.
 Proof. exact CallableMode.accepted_linear_capture_must_move. Qed.
 
@@ -15,14 +15,14 @@ Theorem source_unrestricted_capture_can_copy :
   forall occurrence,
     CallableMode.captureTransferAllowed
       (CallableMode.mkClosureCapture occurrence CallableMode.CopyCapture
-        Unrestricted) = true.
+        GenericStructural.Unrestricted) = true.
 Proof. exact CallableMode.unrestricted_capture_may_copy. Qed.
 
 Theorem source_duplicate_linear_capture_rejects :
   forall occurrence first second,
     CallableMode.duplicateCaptureAllowed
-      (CallableMode.mkClosureCapture occurrence first Linear)
-      (CallableMode.mkClosureCapture occurrence second Linear) = false.
+      (CallableMode.mkClosureCapture occurrence first GenericStructural.Linear)
+      (CallableMode.mkClosureCapture occurrence second GenericStructural.Linear) = false.
 Proof. exact CallableMode.duplicate_linear_occurrence_is_rejected. Qed.
 
 Theorem source_capture_consumes_exact_linear_owner :

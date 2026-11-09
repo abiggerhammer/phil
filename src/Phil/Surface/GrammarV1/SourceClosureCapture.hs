@@ -12,7 +12,6 @@ module Phil.Surface.GrammarV1.SourceClosureCapture
 
 import Control.Monad (foldM)
 import qualified Data.Map.Strict as Map
-import Data.Text (Text)
 import qualified Phil.Core.Context as Core
 import Phil.Core.Callable
   ( CallableCheckError, CallableOccurrenceKey (..)
@@ -27,7 +26,7 @@ import Phil.Core.Syntax (Mode (..), Name (..), Ty (..))
 import Phil.Surface.Check.Support (emptySurfaceState)
 import Phil.Surface.GrammarV1.BinderScope
   ( GrammarV1BinderKind (GrammarV1BorrowViewBinder)
-  , GrammarV1BinderScopeError, GrammarV1LexicalScope
+  , GrammarV1BinderScopeError
   , GrammarV1ResolvedBinder (..), grammarV1BindLocal
   , grammarV1ClosureParameterScope, grammarV1EnterLexicalScope
   , grammarV1FunctionParameterScope, grammarV1ResolveLocal )
