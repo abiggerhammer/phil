@@ -882,3 +882,34 @@ verification and independently pinned final-delta signoff are separate
 uncredited gates; no invented nat mapping or supplied model Prop as
 native authority. Historical audit, TCB, generated outputs and strict
 GHC/Rocq/LLVM unchanged. **Independent freeze NOT YET.**
+
+## Implementation evidence — 2026-11-09: concrete StageClosure profile P (#1702)
+
+[PR #1702](https://github.com/abiggerhammer/phil/pull/1702)
+merged at `a4bdd83147b81842f7b95cb938973898a07339e6`
+2026-11-09 15:52:04 UTC. Exact tested head
+`78e035a5dc46a11693610f5941cf65f01bb8f22b`:
+**36/36** pull_request workflows SUCCESS plus **1/1** push workflow
+(**37/37** total), **78/78** check runs SUCCESS, none failed/queued/skipped.
+Protected [Hamster Merge Intent #42648046971](https://github.com/abiggerhammer/phil/actions/runs/42648046971)
+and its merge-pr job SUCCESS. Conformance Matrix supplemental row 57
+written and all six cells independently read back. Original 244 normative
+cases (236 Exit, 8 Profile) preserved.
+
+**Executed bounded evidence:** Haskell Upload/Steve checked source-manifest
+producer, independently accepted raw manifest R/L, VER-010 source and exact
+INT-005 CertifiedRelease/StageClosure; atom-only D/V/Q/M, normalized S,
+common C, closed F, B/I/A and the actual native plain-Text verifier profile P.
+Equal-payload foreign R/L/S/C/F/B/I/A/K, changed tagged P and P-as-A
+negative tests passed; four conditional Rocq string-model theorems and
+named Print Assumptions succeeded.
+
+**Nonclaims:** diagnostic receipt remains unaccepted data. No stage-origin
+authentication of checked occurrence (K,I), recursive SemanticForm,
+native Unicode Text/Rocq string or Map/Set-order bridge, complete accepted
+authority reflection, predecessor authority, FixedFinalAuthorityAdapter
+or FinalArtifactCertified. Do not conflate distinct R/L/S/C/F/B/I/A/P/K
+roles or construct an unproved nat encoder/model Prop authority. Public
+release-byte verification and independently pinned final-delta signoff
+remain separate uncredited gates. TCB, strict GHC/Rocq/LLVM, historic
+independent audit and generated outputs unchanged. **Freeze NOT YET.**

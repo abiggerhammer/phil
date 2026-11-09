@@ -3113,3 +3113,108 @@ Proof.
   apply native_verifier_profile_text_wire_injective.
   exact (f_equal snd Heq).
 Qed.
+
+(* #1584: conditional K string model after accepted-stage P/A/I/B/F/C/S,
+   independent manifest R/L and checked atom-only D/V/Q/M. K comes from
+   checked architecture occurrence, not StageClosure; no origin proof. *)
+Definition NativeAtomManifestProfileWireType : Type :=
+  NativeAtomManifestRealizationWireType * string.
+
+Record NativeAtomManifestOccurrenceKeyDataModel :=
+  mkNativeAtomManifestOccurrenceKeyDataModel {
+    nativeAtomManifestOccurrenceKeyBaseData : NativeAtomManifestProfileDataModel;
+    nativeAtomManifestOccurrenceKeyData : NativeOccurrenceKeyRole
+  }.
+
+Definition nativeEncodeAtomManifestOccurrenceKeyDataModel
+  (data : NativeAtomManifestOccurrenceKeyDataModel)
+  : NativeAtomManifestProfileWireType * string :=
+  (nativeEncodeAtomManifestProfileDataModel
+     (nativeAtomManifestOccurrenceKeyBaseData data),
+   nativeOccurrenceKeyWire (nativeAtomManifestOccurrenceKeyData data)).
+
+Definition nativeDecodeAtomManifestOccurrenceKeyDataModel
+  (wires : NativeAtomManifestProfileWireType * string)
+  : option NativeAtomManifestOccurrenceKeyDataModel :=
+  match nativeDecodeAtomManifestProfileDataModel (fst wires),
+        nativeDecodeOccurrenceKeyWire (snd wires) with
+  | Some baseData, Some key =>
+      Some (mkNativeAtomManifestOccurrenceKeyDataModel baseData key)
+  | _, _ => None
+  end.
+
+Theorem native_atom_manifest_occurrence_key_data_model_roundtrip :
+  forall data,
+    nativeDecodeAtomManifestOccurrenceKeyDataModel
+      (nativeEncodeAtomManifestOccurrenceKeyDataModel data) = Some data.
+Proof.
+  intros [previous [key]].
+  unfold nativeDecodeAtomManifestOccurrenceKeyDataModel,
+    nativeEncodeAtomManifestOccurrenceKeyDataModel.
+  simpl (fst (_, _)). simpl (snd (_, _)).
+  rewrite native_atom_manifest_profile_data_model_roundtrip.
+  reflexivity.
+Qed.
+
+Theorem native_atom_manifest_occurrence_key_data_model_injective :
+  forall first second,
+    nativeEncodeAtomManifestOccurrenceKeyDataModel first =
+      nativeEncodeAtomManifestOccurrenceKeyDataModel second -> first = second.
+Proof.
+  intros first second H.
+  apply (f_equal nativeDecodeAtomManifestOccurrenceKeyDataModel) in H.
+  rewrite !native_atom_manifest_occurrence_key_data_model_roundtrip in H.
+  now injection H.
+Qed.
+
+Theorem native_atom_manifest_occurrence_key_data_model_wrong_role_reject :
+  forall previous raw root systems common closed subject instance realization profile,
+    nativeDecodeAtomManifestOccurrenceKeyDataModel
+      (nativeEncodeAtomManifestProfileDataModel previous,
+       nativeRawSystemsDigestWire raw) = None /\
+    nativeDecodeAtomManifestOccurrenceKeyDataModel
+      (nativeEncodeAtomManifestProfileDataModel previous,
+       nativeLoweringRootWire root) = None /\
+    nativeDecodeAtomManifestOccurrenceKeyDataModel
+      (nativeEncodeAtomManifestProfileDataModel previous,
+       nativeSystemsRevisionWire systems) = None /\
+    nativeDecodeAtomManifestOccurrenceKeyDataModel
+      (nativeEncodeAtomManifestProfileDataModel previous,
+       nativeCommonRevisionWire common) = None /\
+    nativeDecodeAtomManifestOccurrenceKeyDataModel
+      (nativeEncodeAtomManifestProfileDataModel previous,
+       nativeClosedRevisionWire closed) = None /\
+    nativeDecodeAtomManifestOccurrenceKeyDataModel
+      (nativeEncodeAtomManifestProfileDataModel previous,
+       nativeSubjectRevisionWire subject) = None /\
+    nativeDecodeAtomManifestOccurrenceKeyDataModel
+      (nativeEncodeAtomManifestProfileDataModel previous,
+       nativeInstanceRevisionWire instance) = None /\
+    nativeDecodeAtomManifestOccurrenceKeyDataModel
+      (nativeEncodeAtomManifestProfileDataModel previous,
+       nativeRealizationRevisionWire realization) = None /\
+    nativeDecodeAtomManifestOccurrenceKeyDataModel
+      (nativeEncodeAtomManifestProfileDataModel previous,
+       nativeVerifierProfileTextWire profile) = None.
+Proof.
+  intros previous [raw] [root] [systems] [common] [closed]
+    [subject] [instance] [realization] [profile].
+  repeat split;
+    unfold nativeDecodeAtomManifestOccurrenceKeyDataModel;
+    simpl;
+    destruct (nativeDecodeAtomManifestProfileDataModel
+      (nativeEncodeAtomManifestProfileDataModel previous)); reflexivity.
+Qed.
+
+Theorem native_atom_manifest_occurrence_key_data_model_key_sensitive :
+  forall previous first second, first <> second ->
+    nativeEncodeAtomManifestOccurrenceKeyDataModel
+      (mkNativeAtomManifestOccurrenceKeyDataModel previous first) <>
+    nativeEncodeAtomManifestOccurrenceKeyDataModel
+      (mkNativeAtomManifestOccurrenceKeyDataModel previous second).
+Proof.
+  intros previous first second Hneq Heq.
+  apply Hneq.
+  apply native_occurrence_key_wire_injective.
+  exact (f_equal snd Heq).
+Qed.
