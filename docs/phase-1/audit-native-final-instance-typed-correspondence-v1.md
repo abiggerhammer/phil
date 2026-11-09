@@ -1227,3 +1227,35 @@ treated as native proof. Public release bytes and independent pinned
 final-delta signoff remain separate uncredited gates; original 244
 normative cases, historic independent audit, TCB, generated artifacts,
 strict GHC/LLVM/Rocq unchanged. **Independent freeze NOT YET.**
+
+## 2026-11-09 — actual StageClosure verifier profile P after A/I/B/F/C/S/R/L (#1584)
+
+A bounded, unaccepted typed native diagnostic compares the actual
+`phase1StageVerifierProfileRevision` Text field P from the *same*
+independently accepted StageClosure after checked D/V/Q/M,
+independently accepted raw R/L, normalized S, common C, closed F,
+subject B, instance I and realization A. The checked source-manifest
+producer, independently accepted VER-010 source and exact INT-005
+CertifiedRelease/StageClosure consumers are replayed first.
+`NativeVerifierProfileText` is a data-only role wrapper, not an
+invented Haskell revision/accepted verifier profile.
+
+Upload/Steve positive and same-payload R/L/S/C/F/B/I/A/K wrong-role
+P, correctly tagged changed P, and P-for-A adversarial replay.
+Four conditional Rocq string-model roundtrip, injectivity,
+wrong-role rejection and profile-text sensitivity theorems with
+named assumption queries. These checks do NOT assert stage origin.
+
+**Remaining-premise ledger:** checking the K/I occurrence alongside
+accepted stage B/I/A/P does not authenticate K/I as its producer.
+Candidate wires and receipts are not accepted native authority.
+No total recursive SemanticForm, native Unicode Text ↔ Rocq string
+serializer, Haskell Map/Set order ↔ Rocq canonicality, complete
+accepted source/manifest/stage/release reflection, predecessor
+authority, FixedFinalAuthorityAdapter or FinalArtifactCertified.
+No invented nat encoding or supplied model Prop promoted to native
+authority. Release public-byte verification and independent pinned
+final-delta signoff remain separately uncredited; original 244
+normative cases, historical independent audit, Phase 1 TCB,
+generated artifacts and strict GHC/Rocq/LLVM policies unchanged.
+**Independent audit freeze NOT YET.**

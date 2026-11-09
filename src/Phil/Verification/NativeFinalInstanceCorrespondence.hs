@@ -105,6 +105,12 @@ module Phil.Verification.NativeFinalInstanceCorrespondence
   , nativeAtomManifestRealizationReplayRevision
   , NativeAtomManifestRealizationReplayError (..)
   , replayNativeAtomManifestRealizationCandidate
+  , NativeAtomManifestProfileWireCandidate (..)
+  , NativeAtomManifestProfileReplay
+  , nativeAtomManifestProfileReplayBase
+  , nativeAtomManifestProfileReplayText
+  , NativeAtomManifestProfileReplayError (..)
+  , replayNativeAtomManifestProfileCandidate
   , NativeVerifierProfileText (..)
   , encodeNativeVerifierProfileWire
   , decodeNativeVerifierProfileWire
@@ -1276,3 +1282,50 @@ replayNativeAtomManifestRealizationCandidate witness producer sourceObject relea
   if realization /= acceptedRealization
     then Left NativeAtomManifestRealizationDifferent
     else pure (NativeAtomManifestRealizationReplay baseReceipt realization)
+
+-- | StageClosure profile P is a plain native Text field, not an invented
+-- revision type. Matching it is diagnostic, not authenticated provenance.
+data NativeAtomManifestProfileWireCandidate = NativeAtomManifestProfileWireCandidate
+  { nativeAtomManifestProfileBaseCandidate :: NativeAtomManifestRealizationWireCandidate
+  , nativeAtomManifestProfileTextWire :: Text
+  } deriving (Eq, Show)
+
+-- | Private unaccepted receipt; does not construct accepted authority.
+data NativeAtomManifestProfileReplay = NativeAtomManifestProfileReplay
+  { nativeAtomManifestProfileReplayBase :: NativeAtomManifestRealizationReplay
+  , nativeAtomManifestProfileReplayText :: NativeVerifierProfileText
+  } deriving (Eq, Show)
+
+data NativeAtomManifestProfileReplayError
+  = NativeAtomManifestProfileBaseDifferent NativeAtomManifestRealizationReplayError
+  | NativeAtomManifestProfileRoleMalformed
+  | NativeAtomManifestProfileDifferent
+  deriving (Eq, Show)
+
+-- | Recheck actual checked producer, independently accepted raw manifest R/L,
+-- VER-010 source and INT-005 CertifiedRelease/StageClosure plus all preceding
+-- D/V/Q/M/S/C/F/B/I/A role checks. Never derive checked K/I stage origin.
+replayNativeAtomManifestProfileCandidate
+  :: NativeFinalInstanceCorrespondence
+  -> CertifiedSourceManifestBinding
+  -> CertifiedApplicationArtifact
+  -> CertifiedReleaseArtifact
+  -> NativeAtomManifestProfileWireCandidate
+  -> Either NativeAtomManifestProfileReplayError NativeAtomManifestProfileReplay
+replayNativeAtomManifestProfileCandidate witness producer sourceObject releaseObject candidate = do
+  baseReceipt <- either (Left . NativeAtomManifestProfileBaseDifferent) Right
+    (replayNativeAtomManifestRealizationCandidate witness producer sourceObject releaseObject
+       (nativeAtomManifestProfileBaseCandidate candidate))
+  profile <- maybe (Left NativeAtomManifestProfileRoleMalformed) Right
+    (decodeNativeVerifierProfileWire (nativeAtomManifestProfileTextWire candidate))
+  let instanceReceipt = nativeAtomManifestRealizationReplayBase baseReceipt
+      subjectReceipt = nativeAtomManifestInstanceReplayBase instanceReceipt
+      closedReceipt = nativeAtomManifestSubjectReplayBase subjectReceipt
+      commonReceipt = nativeAtomManifestClosedReplayBase closedReceipt
+      systemsReceipt = nativeAtomManifestCommonReplayBase commonReceipt
+      manifestReceipt = nativeAtomManifestSystemsReplayBase systemsReceipt
+      acceptedStage = nativeAtomManifestReplayStageCoordinates manifestReceipt
+      acceptedProfile = NativeVerifierProfileText (nativeReplayVerifierProfile acceptedStage)
+  if profile /= acceptedProfile
+    then Left NativeAtomManifestProfileDifferent
+    else pure (NativeAtomManifestProfileReplay baseReceipt profile)

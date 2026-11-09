@@ -848,3 +848,37 @@ No invented native-to-Rocq nat mapping or model Prop as native authority.
 Release public-byte verification and independent pinned final-delta signoff
 remain separate uncredited. Historical audit, Phase 1 TCB, generated outputs,
 strict GHC/LLVM/Rocq unchanged. **Independent freeze NOT YET.**
+
+## Implementation evidence — 2026-11-09: concrete StageClosure realization A (#1701)
+
+[PR #1701](https://github.com/abiggerhammer/phil/pull/1701),
+[controlling issue #1584](https://github.com/abiggerhammer/phil/issues/1584).
+Exact tested head `0ba7bd094048f2fe6d06209ede58039c93bcd36f`,
+merged as `16cd532714772a4b40426684d1d8bf36621221e4`
+at 2026-11-09 12:54:34 UTC. Verified **37/37** exact-head
+pull_request workflows SUCCESS and **78/78** check runs SUCCESS;
+zero failed, pending or skipped. Protected
+[Hamster Merge Intent #42620861307](https://github.com/abiggerhammer/phil/actions/runs/42620861307)
+and merge-pr job #129172325257 SUCCESS. Conformance Matrix
+supplemental row 56 written and all six cells independently read back;
+original 244 normative cases (236 Exit, 8 Profile) unchanged.
+
+**Executed bounded evidence:** Haskell Upload/Steve checked source-manifest
+producer, independently accepted R/L manifest, VER-010 source and exact
+INT-005 CertifiedRelease/StageClosure consumers; atom-only D/V/Q/M,
+normalized S, common C, closed F, subject B, instance I and actual
+concrete realization A. Same-payload foreign R/L/S/C/F/B/I/P/K roles,
+changed tagged A and A-as-I fail closed. Four conditional Rocq
+string-model theorems and their named Print Assumptions passed.
+
+**Nonclaims:** unaccepted diagnostic receipt, not acceptance or stage
+provenance. Checked architecture occurrence K/I is NOT authenticated
+as producer of concrete StageClosure by matching I/A. Recursive
+SemanticForm, Haskell Text Unicode ↔ Rocq strings, Map/Set ordering
+refinement, complete accepted object reflection, predecessor authority,
+FixedFinalAuthorityAdapter and FinalArtifactCertified remain unproved.
+Preserve R/L, S/C/F, B/I/A/P and K/I distinct. Public release-byte
+verification and independently pinned final-delta signoff are separate
+uncredited gates; no invented nat mapping or supplied model Prop as
+native authority. Historical audit, TCB, generated outputs and strict
+GHC/Rocq/LLVM unchanged. **Independent freeze NOT YET.**

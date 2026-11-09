@@ -3008,3 +3008,108 @@ Proof.
   apply native_realization_revision_wire_injective.
   exact (f_equal snd Heq).
 Qed.
+
+(* #1584: conditional string-model StageClosure verifier profile P after
+   D/V/Q/M, R/L, S/C/F, B/I/A. The native P is Text and no accepted
+   producer or native-to-Rocq Unicode transport is inferred. *)
+Definition NativeAtomManifestRealizationWireType : Type :=
+  NativeAtomManifestInstanceWireType * string.
+
+Record NativeAtomManifestProfileDataModel :=
+  mkNativeAtomManifestProfileDataModel {
+    nativeAtomManifestProfileBaseData : NativeAtomManifestRealizationDataModel;
+    nativeAtomManifestProfileTextData : NativeVerifierProfileTextRole
+  }.
+
+Definition nativeEncodeAtomManifestProfileDataModel
+  (data : NativeAtomManifestProfileDataModel)
+  : NativeAtomManifestRealizationWireType * string :=
+  (nativeEncodeAtomManifestRealizationDataModel
+     (nativeAtomManifestProfileBaseData data),
+   nativeVerifierProfileTextWire (nativeAtomManifestProfileTextData data)).
+
+Definition nativeDecodeAtomManifestProfileDataModel
+  (wires : NativeAtomManifestRealizationWireType * string)
+  : option NativeAtomManifestProfileDataModel :=
+  match nativeDecodeAtomManifestRealizationDataModel (fst wires),
+        nativeDecodeVerifierProfileTextWire (snd wires) with
+  | Some baseData, Some profile =>
+      Some (mkNativeAtomManifestProfileDataModel baseData profile)
+  | _, _ => None
+  end.
+
+Theorem native_atom_manifest_profile_data_model_roundtrip :
+  forall data,
+    nativeDecodeAtomManifestProfileDataModel
+      (nativeEncodeAtomManifestProfileDataModel data) = Some data.
+Proof.
+  intros [previous [profile]].
+  unfold nativeDecodeAtomManifestProfileDataModel,
+    nativeEncodeAtomManifestProfileDataModel.
+  simpl (fst (_, _)). simpl (snd (_, _)).
+  rewrite native_atom_manifest_realization_data_model_roundtrip.
+  reflexivity.
+Qed.
+
+Theorem native_atom_manifest_profile_data_model_injective :
+  forall first second,
+    nativeEncodeAtomManifestProfileDataModel first =
+      nativeEncodeAtomManifestProfileDataModel second -> first = second.
+Proof.
+  intros first second H.
+  apply (f_equal nativeDecodeAtomManifestProfileDataModel) in H.
+  rewrite !native_atom_manifest_profile_data_model_roundtrip in H.
+  now injection H.
+Qed.
+
+Theorem native_atom_manifest_profile_data_model_wrong_role_reject :
+  forall previous raw root systems common closed subject instance realization occurrence,
+    nativeDecodeAtomManifestProfileDataModel
+      (nativeEncodeAtomManifestRealizationDataModel previous,
+       nativeRawSystemsDigestWire raw) = None /\
+    nativeDecodeAtomManifestProfileDataModel
+      (nativeEncodeAtomManifestRealizationDataModel previous,
+       nativeLoweringRootWire root) = None /\
+    nativeDecodeAtomManifestProfileDataModel
+      (nativeEncodeAtomManifestRealizationDataModel previous,
+       nativeSystemsRevisionWire systems) = None /\
+    nativeDecodeAtomManifestProfileDataModel
+      (nativeEncodeAtomManifestRealizationDataModel previous,
+       nativeCommonRevisionWire common) = None /\
+    nativeDecodeAtomManifestProfileDataModel
+      (nativeEncodeAtomManifestRealizationDataModel previous,
+       nativeClosedRevisionWire closed) = None /\
+    nativeDecodeAtomManifestProfileDataModel
+      (nativeEncodeAtomManifestRealizationDataModel previous,
+       nativeSubjectRevisionWire subject) = None /\
+    nativeDecodeAtomManifestProfileDataModel
+      (nativeEncodeAtomManifestRealizationDataModel previous,
+       nativeInstanceRevisionWire instance) = None /\
+    nativeDecodeAtomManifestProfileDataModel
+      (nativeEncodeAtomManifestRealizationDataModel previous,
+       nativeRealizationRevisionWire realization) = None /\
+    nativeDecodeAtomManifestProfileDataModel
+      (nativeEncodeAtomManifestRealizationDataModel previous,
+       nativeOccurrenceKeyWire occurrence) = None.
+Proof.
+  intros previous [raw] [root] [systems] [common] [closed]
+    [subject] [instance] [realization] [occurrence].
+  repeat split;
+    unfold nativeDecodeAtomManifestProfileDataModel;
+    simpl;
+    destruct (nativeDecodeAtomManifestRealizationDataModel
+      (nativeEncodeAtomManifestRealizationDataModel previous)); reflexivity.
+Qed.
+
+Theorem native_atom_manifest_profile_data_model_text_sensitive :
+  forall previous first second, first <> second ->
+    nativeEncodeAtomManifestProfileDataModel
+      (mkNativeAtomManifestProfileDataModel previous first) <>
+    nativeEncodeAtomManifestProfileDataModel
+      (mkNativeAtomManifestProfileDataModel previous second).
+Proof.
+  intros previous first second Hneq Heq.
+  apply Hneq.
+  apply native_verifier_profile_text_wire_injective.
+  exact (f_equal snd Heq).
+Qed.
