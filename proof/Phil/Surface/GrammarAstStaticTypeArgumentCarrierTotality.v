@@ -64,20 +64,14 @@ Proof.
       input rest tree Hderive)
     as [trees [Htree Hitems]].
   revert Htree.
-  repeat match goal with
-  | Hseq : DerivesSequence phase1_surface_rules _ _ (_ :: _) _ _ _ |- _ =>
-      inversion Hseq; subst; clear Hseq
-  end.
-  match goal with
-  | Hnil : DerivesSequence phase1_surface_rules _ _ [] _ _ _ |- _ =>
-      inversion Hnil; subst; clear Hnil
-  end.
+  inversion Hitems as
+    [| path0 index0 item0 items0 input0 middle0 rest0
+       comma_tree tail1 Hcomma Htail1]; subst.
+  inversion Htail1 as
+    [| path1 index1 item1 items1 input1 middle1 rest1
+       argument_tree nil_trees Hargument Hnil]; subst.
+  inversion Hnil; subst.
   intros Htree.
-  match goal with
-  | Hcomma : Derives phase1_surface_rules _
-      (ELiteral ",") _ _ ?comma_tree,
-    Hargument : Derives phase1_surface_rules _
-      (ENonterminal "static_argument") _ _ ?argument_tree |- _ =>
       destruct
         (literal_derivation_is_exact
           phase1_surface_rules _ "," _ _ comma_tree Hcomma)
@@ -104,7 +98,6 @@ Proof.
           | unfold phase1_surface_static_type_argument_suffix_tree;
             rewrite Htree, Hcomma_tree, Hrefined_tree;
             reflexivity ] ] ]
-  end.
 Qed.
 
 Lemma phase1_surface_normalize_static_type_argument_suffixes_layers_total_from_repetition :
@@ -162,21 +155,14 @@ Proof.
       input rest tree Hderive)
     as [trees [Htree Hitems]].
   revert Htree.
-  repeat match goal with
-  | Hseq : DerivesSequence phase1_surface_rules _ _ (_ :: _) _ _ _ |- _ =>
-      inversion Hseq; subst; clear Hseq
-  end.
-  match goal with
-  | Hnil : DerivesSequence phase1_surface_rules _ _ [] _ _ _ |- _ =>
-      inversion Hnil; subst; clear Hnil
-  end.
+  inversion Hitems as
+    [| path0 index0 item0 items0 input0 middle0 rest0
+       first_tree tail1 Hfirst Htail1]; subst.
+  inversion Htail1 as
+    [| path1 index1 item1 items1 input1 middle1 rest1
+       rest_tree nil_trees Hrest Hnil]; subst.
+  inversion Hnil; subst.
   intros Htree.
-  match goal with
-  | Hfirst : Derives phase1_surface_rules _
-      (ENonterminal "static_argument") _ _ ?first_tree,
-    Hrest : Derives phase1_surface_rules _
-      (ERepetition phase1_surface_static_argument_suffix_expression_for_totality)
-      _ _ ?rest_tree |- _ =>
       destruct
         (phase1_surface_normalize_static_type_argument_layers_total_from_derivation
           _ _ _ first_tree Hfirst)
@@ -225,7 +211,6 @@ Proof.
                 exact Hrefined
               | eapply phase1_surface_normalize_static_argument_list_spine_round_trip;
                 exact Hbase ] ] ] ] ]
-  end.
 Qed.
 
 Lemma phase1_surface_normalize_optional_static_type_argument_list_layers_total_from_derivation :
@@ -317,23 +302,17 @@ Proof.
       input rest subtree Hbody)
     as [trees [Hsubtree Hitems]].
   revert Htree Hsubtree.
-  repeat match goal with
-  | Hseq : DerivesSequence phase1_surface_rules _ _ (_ :: _) _ _ _ |- _ =>
-      inversion Hseq; subst; clear Hseq
-  end.
-  match goal with
-  | Hnil : DerivesSequence phase1_surface_rules _ _ [] _ _ _ |- _ =>
-      inversion Hnil; subst; clear Hnil
-  end.
+  inversion Hitems as
+    [| path0 index0 item0 items0 input0 middle0 rest0
+       open_tree tail1 Hopen Htail1]; subst.
+  inversion Htail1 as
+    [| path1 index1 item1 items1 input1 middle1 rest1
+       arguments_tree tail2 Harguments Htail2]; subst.
+  inversion Htail2 as
+    [| path2 index2 item2 items2 input2 middle2 rest2
+       close_tree nil_trees Hclose Hnil]; subst.
+  inversion Hnil; subst.
   intros Htree Hsubtree.
-  match goal with
-  | Hopen : Derives phase1_surface_rules _
-      (ELiteral "[") _ _ ?open_tree,
-    Harguments : Derives phase1_surface_rules _
-      phase1_surface_optional_static_argument_list_expression_for_totality
-      _ _ ?arguments_tree,
-    Hclose : Derives phase1_surface_rules _
-      (ELiteral "]") _ _ ?close_tree |- _ =>
       destruct
         (literal_derivation_is_exact
           phase1_surface_rules _ "[" _ _ open_tree Hopen)
@@ -379,7 +358,6 @@ Proof.
                 exact Hrefined
               | eapply phase1_surface_normalize_static_arguments_spine_round_trip;
                 exact Hbase ] ] ] ] ]
-  end.
 Qed.
 
 Lemma phase1_surface_normalize_static_type_arguments_reference_layers_total_from_derivation :
