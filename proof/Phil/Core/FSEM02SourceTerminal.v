@@ -1,5 +1,5 @@
 From Stdlib Require Import Strings.String Bool.Bool.
-From Phil.Core Require Import Syntax FSEM02RestrictedSourceTransfer FSEM02SourceClose.
+From Phil.Core Require Import Syntax FSEM02StatefulSourceChoice FSEM02RestrictedSourceTransfer FSEM02SourceClose.
 
 (*
   Non-normative FSEM-02 terminal-obligation gate for the bounded, already
