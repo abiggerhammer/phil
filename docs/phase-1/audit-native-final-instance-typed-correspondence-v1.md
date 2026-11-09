@@ -1259,3 +1259,30 @@ final-delta signoff remain separately uncredited; original 244
 normative cases, historical independent audit, Phase 1 TCB,
 generated artifacts and strict GHC/Rocq/LLVM policies unchanged.
 **Independent audit freeze NOT YET.**
+
+## 2026-11-09 — checked architecture occurrence K following exact P/A/I/B/F/C/S/R/L (#1584)
+
+One bounded diagnostic compares actual checked architecture-descriptor
+InstanceKey K after replaying the accepted checked source-manifest producer,
+independently accepted R/L manifest, VER-010 source, exact INT-005 release and
+StageClosure S/C/F/B/I/A/P coordinates, plus atom-only D/V/Q/M. Unlike stage
+I, K exists only in the independently checked architecture occurrence (K,I):
+StageClosure has no K and K equality cannot authenticate stage origin.
+
+Submitted Haskell Upload/Steve replay checks the positive K, same-payload
+foreign R/L/S/C/F/B/I/A/P-as-K roles, altered correctly tagged K and K-as-P.
+Four conditional Rocq string-model roundtrip/injectivity/role-rejection/K
+sensitivity theorems and named Print Assumptions are submitted (not yet
+certified at this branch head). Decoder receipts never create authority.
+
+**Remaining-premise ledger:** no authenticated occurrence-to-StageClosure
+production, recursive SemanticForm, Unicode Data.Text-to-Rocq-string or
+Map/Set canonicality reflection, complete accepted generic application,
+manifest/source/stage/release representation, predecessor authority,
+FixedFinalAuthorityAdapter or FinalArtifactCertified. Keep raw R and L,
+normalized S, common C, closed F, subject B, stage instance I, realization A,
+profile P, checked K/I and generic D/V/Q/M/H disjoint; no invented nat encoding
+or supplied model Prop as derived native authority. Public release bytes and
+independent pinned final-delta signoff remain separate and uncredited.
+244 normative cases, historical audit, Phase 1 TCB, generated artifacts and
+strict GHC/LLVM/Rocq policies unchanged. **Independent freeze NOT YET.**

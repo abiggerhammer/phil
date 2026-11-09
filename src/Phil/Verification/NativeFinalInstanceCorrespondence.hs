@@ -111,6 +111,12 @@ module Phil.Verification.NativeFinalInstanceCorrespondence
   , nativeAtomManifestProfileReplayText
   , NativeAtomManifestProfileReplayError (..)
   , replayNativeAtomManifestProfileCandidate
+  , NativeAtomManifestOccurrenceKeyWireCandidate (..)
+  , NativeAtomManifestOccurrenceKeyReplay
+  , nativeAtomManifestOccurrenceKeyReplayBase
+  , nativeAtomManifestOccurrenceKeyReplayKey
+  , NativeAtomManifestOccurrenceKeyReplayError (..)
+  , replayNativeAtomManifestOccurrenceKeyCandidate
   , NativeVerifierProfileText (..)
   , encodeNativeVerifierProfileWire
   , decodeNativeVerifierProfileWire
@@ -1329,3 +1335,54 @@ replayNativeAtomManifestProfileCandidate witness producer sourceObject releaseOb
   if profile /= acceptedProfile
     then Left NativeAtomManifestProfileDifferent
     else pure (NativeAtomManifestProfileReplay baseReceipt profile)
+
+-- | K is the checked architecture occurrence key. StageClosure stores no K.
+-- This candidate is unaccepted data, not a stage-origin certificate.
+data NativeAtomManifestOccurrenceKeyWireCandidate = NativeAtomManifestOccurrenceKeyWireCandidate
+  { nativeAtomManifestOccurrenceKeyBaseCandidate :: NativeAtomManifestProfileWireCandidate
+  , nativeAtomManifestOccurrenceKeyWire :: Text
+  } deriving (Eq, Show)
+
+-- | A private diagnostic receipt, never an accepted manifest or release.
+data NativeAtomManifestOccurrenceKeyReplay = NativeAtomManifestOccurrenceKeyReplay
+  { nativeAtomManifestOccurrenceKeyReplayBase :: NativeAtomManifestProfileReplay
+  , nativeAtomManifestOccurrenceKeyReplayKey :: InstanceKey
+  } deriving (Eq, Show)
+
+data NativeAtomManifestOccurrenceKeyReplayError
+  = NativeAtomManifestOccurrenceKeyBaseDifferent NativeAtomManifestProfileReplayError
+  | NativeAtomManifestOccurrenceKeyRoleMalformed
+  | NativeAtomManifestOccurrenceKeyDifferent
+  deriving (Eq, Show)
+
+-- | Replay actual checked source-manifest producer, independently accepted
+-- VER-010 source and exact INT-005 CertifiedRelease/StageClosure consumers,
+-- comparing D/V/Q/M, raw R/L, normalized S, common C, closed F, B/I/A/P
+-- BEFORE matching K from the checked (InstanceKey, InstanceRevision)
+-- architecture descriptor. Does not equate concrete stage I with checked I
+-- or authenticate K/I as a StageClosure producer. Wire cannot grant authority.
+replayNativeAtomManifestOccurrenceKeyCandidate
+  :: NativeFinalInstanceCorrespondence
+  -> CertifiedSourceManifestBinding
+  -> CertifiedApplicationArtifact
+  -> CertifiedReleaseArtifact
+  -> NativeAtomManifestOccurrenceKeyWireCandidate
+  -> Either NativeAtomManifestOccurrenceKeyReplayError NativeAtomManifestOccurrenceKeyReplay
+replayNativeAtomManifestOccurrenceKeyCandidate witness producer sourceObject releaseObject candidate = do
+  profileReceipt <- either (Left . NativeAtomManifestOccurrenceKeyBaseDifferent) Right
+    (replayNativeAtomManifestProfileCandidate witness producer sourceObject releaseObject
+       (nativeAtomManifestOccurrenceKeyBaseCandidate candidate))
+  key <- maybe (Left NativeAtomManifestOccurrenceKeyRoleMalformed) Right
+    (decodeNativeOccurrenceKeyWire (nativeAtomManifestOccurrenceKeyWire candidate))
+  let realizationReceipt = nativeAtomManifestProfileReplayBase profileReceipt
+      instanceReceipt = nativeAtomManifestRealizationReplayBase realizationReceipt
+      subjectReceipt = nativeAtomManifestInstanceReplayBase instanceReceipt
+      closedReceipt = nativeAtomManifestSubjectReplayBase subjectReceipt
+      commonReceipt = nativeAtomManifestClosedReplayBase closedReceipt
+      systemsReceipt = nativeAtomManifestCommonReplayBase commonReceipt
+      checkedReceipt = nativeAtomManifestSystemsReplayBase systemsReceipt
+      checkedKey = identityInstanceKey
+        (nativeAtomManifestReplayCheckedOccurrence checkedReceipt)
+  if key /= checkedKey
+    then Left NativeAtomManifestOccurrenceKeyDifferent
+    else pure (NativeAtomManifestOccurrenceKeyReplay profileReceipt key)
