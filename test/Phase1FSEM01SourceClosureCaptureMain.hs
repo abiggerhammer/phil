@@ -67,8 +67,10 @@ before _ = Core.emptyContext
 accepted :: Text -> Bool -> Bool -> Either String ()
 accepted input moved copied = do
   run <- direct input
-  let [flag,payload] = directParameters run
-      start = before (directParameters run)
+  (flag,payload) <- case directParameters run of
+    [one,two] -> Right (one,two)
+    other -> Left ("wrong checked source parameter arity: " ++ show other)
+  let start = before (directParameters run)
       after = start {Core.linearBindings = if moved then Map.empty
         else Core.linearBindings start}
       captureNames = map nm (directCaptures run)
@@ -172,33 +174,34 @@ main = do
      "unknown-capture","closure-param-shadow","wrong-nominal","recursive-source",
      "local-borrow","escaped-borrow","derived-borrow",
      "wrong-borrow-mode","wrong-borrow-view"]
-  let [d1,d2,d3,d4,d5,d6,dup,weak,unknown,shadow,nominal,recursive,
-       local,escaped,derived,wrongMode,wrongView] = files
-      checked = do
-        accepted d1 True False
-        accepted d2 True True
-        accepted d3 False True
-        accepted d4 False True
-        accepted d5 True False
-        accepted d6 True True
-        directError dup (\err -> case err of
-          SourceClosureCaptureError (DuplicateRestrictedCapture _ Linear) -> True
-          _ -> False)
-        directError weak (== SourceClosureModeMismatch Linear Unrestricted)
-        directError unknown (\err -> case err of
-          SourceClosureBinderError (GrammarV1BinderNotInScope _) -> True
-          _ -> False)
-        directError shadow (\err -> case err of
-          SourceClosureBinderError (GrammarV1ActiveShadowing _ _) -> True
-          _ -> False)
-        unsupported nominal True
-        unsupported recursive True
-        borrowSuccess local
-        borrowSuccess derived
-        borrowError escaped True
-        borrowError wrongMode False
-        unsupported wrongView False
-        recursiveCoreControl d1
+  let checked = case files of
+        [d1,d2,d3,d4,d5,d6,dup,weak,unknown,shadow,nominal,recursive,
+         local,escaped,derived,wrongMode,wrongView] -> do
+          accepted d1 True False
+          accepted d2 True True
+          accepted d3 False True
+          accepted d4 False True
+          accepted d5 True False
+          accepted d6 True True
+          directError dup (\err -> case err of
+            SourceClosureCaptureError (DuplicateRestrictedCapture _ Linear) -> True
+            _ -> False)
+          directError weak (== SourceClosureModeMismatch Linear Unrestricted)
+          directError unknown (\err -> case err of
+            SourceClosureBinderError (GrammarV1BinderNotInScope _) -> True
+            _ -> False)
+          directError shadow (\err -> case err of
+            SourceClosureBinderError (GrammarV1ActiveShadowing _ _) -> True
+            _ -> False)
+          unsupported nominal True
+          unsupported recursive True
+          borrowSuccess local
+          borrowSuccess derived
+          borrowError escaped True
+          borrowError wrongMode False
+          unsupported wrongView False
+          recursiveCoreControl d1
+        _ -> Left "fixture arity changed"
   case checked of
     Right () -> putStrLn
       "PASS: 17 parsed source closures, exact Core owner moves/loan scope and bounded SCC control"
