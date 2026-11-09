@@ -223,6 +223,10 @@ main = do
           , nativeAtomManifestCandidateReplayAccepts source upload steve)
         , ( "Steve checked atom application binds exact independent manifest R/L and accepted consumers"
           , nativeAtomManifestCandidateReplayAccepts source steve upload)
+        , ( "Upload exact native R/L manifest beside normalized stage S"
+          , nativeAtomManifestSystemsReplayAccepts source upload)
+        , ( "Steve exact native R/L manifest beside normalized stage S"
+          , nativeAtomManifestSystemsReplayAccepts source steve)
         , ( "Upload checked SemanticUnordered atom-only canonical M-set rejects duplicates, order, and roles"
           , nativeSemanticUnorderedAtomSetReplayAccepts source upload)
         , ( "Steve checked SemanticUnordered atom-only canonical M-set rejects duplicates, order, and roles"
@@ -3042,3 +3046,76 @@ conventionalTrust =
 
 mapLeft :: (a -> b) -> Either a c -> Either b c
 mapLeft convert = either (Left . convert) Right
+
+-- | Exercise the actual checked producer and exact independently accepted
+-- source / release before any candidate R/L/S comparison. No wire is authority.
+nativeAtomManifestSystemsReplayAccepts
+  :: GenericApplicationAssurance -> ReleaseFixture -> Bool
+nativeAtomManifestSystemsReplayAccepts source fixture =
+  case (producerInputs source, produceFixture source fixture) of
+    (Right (bundle, policy), Right (_, produced)) ->
+      case nativeAdapterPair source produced of
+        Nothing -> False
+        Just (sourceObject, releaseObject) ->
+          case closeNativeFinalInstanceCorrespondence
+              source (sourceInstanceDescriptor source) bundle policy
+              (fixtureContext produced) (fixtureLedger produced)
+              emptyProducerSelection sourceObject releaseObject of
+            Left _ -> False
+            Right witness ->
+              let producer = nativeCorrespondenceSourceManifestBinding witness
+                  acceptedSource = nativeCorrespondenceCertifiedSource witness
+                  acceptedRelease = nativeCorrespondenceCertifiedRelease witness
+                  manifest = nativeCorrespondenceManifest witness
+                  app = nativeAdapterSourceId
+                    (nativeCorrespondenceSourceAssurance witness)
+                  r = encodeNativeRawSystemsDigestWire
+                    (NativeRawSystemsDigest (manifestImplementationDigest manifest))
+                  l = encodeNativeLoweringRootWire
+                    (NativeLoweringRootDigest (manifestLoweringLedgerRoot manifest))
+                  revision = nativeFinalSystemsRevision (nativeCorrespondenceAuthority witness)
+                  payload = unSystemsArtifactRevision revision
+                  s = encodeNativeSystemsRevisionWire revision
+                  foreignRoles =
+                    [ encodeNativeRawSystemsDigestWire
+                        (NativeRawSystemsDigest (Digest payload))
+                    , encodeNativeLoweringRootWire
+                        (NativeLoweringRootDigest (Digest payload))
+                    , encodeNativeCommonContractRevisionWire
+                        (Phase1StageContractRevision payload)
+                    , encodeNativeClosedContractRevisionWire
+                        (ClosedStageContractRevision payload) ]
+              in case encodeNativeGenericAtomApplicationWires app of
+                Nothing -> False
+                Just appWires ->
+                  let baseCandidate = NativeAtomManifestWireCandidate appWires r l
+                      candidate = NativeAtomManifestSystemsWireCandidate baseCandidate s
+                      check = replayNativeAtomManifestSystemsCandidate
+                        witness producer acceptedSource acceptedRelease
+                      altered = candidate
+                        { nativeAtomManifestSystemsRevisionWire =
+                            encodeNativeSystemsRevisionWire
+                              (SystemsArtifactRevision (payload <> ".unaccepted")) }
+                      forgedRaw = candidate
+                        { nativeAtomManifestSystemsBaseCandidate =
+                            baseCandidate { nativeAtomManifestCandidateRawWire = s } }
+                      withS w = candidate { nativeAtomManifestSystemsRevisionWire = w }
+                  in case check candidate of
+                    Left _ -> False
+                    Right receipt ->
+                      nativeAtomManifestSystemsReplayRevision receipt == revision
+                      && nativeReplaySystemsRevision
+                           (nativeAtomManifestReplayStageCoordinates
+                             (nativeAtomManifestSystemsReplayBase receipt)) == revision
+                      && decodeNativeSystemsRevisionWire s == Just revision
+                      && all (\w -> case check (withS w) of
+                                   Left NativeAtomManifestSystemsRoleMalformed -> True
+                                   _ -> False) foreignRoles
+                      && case check altered of
+                           Left NativeAtomManifestSystemsDifferent -> True
+                           _ -> False
+                      && case check forgedRaw of
+                           Left (NativeAtomManifestSystemsBaseDifferent
+                             NativeAtomManifestRawRoleMalformed) -> True
+                           _ -> False
+    _ -> False
