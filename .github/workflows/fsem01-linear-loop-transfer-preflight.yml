@@ -1,0 +1,85 @@
+name: FSEM-01 Linear Loop Owner Backedge Early Preflight
+
+concurrency:
+  group: ${{ github.workflow_ref }}-${{ github.event.pull_request.number || github.run_id }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+on:
+  push:
+    branches:
+      - formal-semantics/fsem01-linear-loop-backedge-owner-transfer
+  pull_request:
+    paths:
+      - 'src/Phil/Surface/Check/Engine.hs'
+      - 'src/Phil/Surface/GrammarV1/SourceLinearLoopTransfer.hs'
+      - 'test/Phase1FSEM01LinearLoopTransferMain.hs'
+      - 'test/fixtures/fsem01-linear-loop-transfer-v1/**'
+      - 'proof/Phil/Surface/SurfaceSourceLinearLoopTransfer.v'
+      - 'docs/phase-1/formal-semantics-source-linear-loop-transfer-fsem01-v1.md'
+      - 'phil-core.cabal'
+      - '.github/workflows/fsem01-linear-loop-transfer-preflight.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  source-linear-loop-haskell:
+    name: Strict source Linear owner move/header/rebind and native join
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: haskell-actions/setup@v2
+        with:
+          ghc-version: '9.6.7'
+          cabal-version: 'latest'
+          cabal-update: false
+      - name: Update Hackage with bounded HTTP1 retry
+        shell: bash
+        run: bash scripts/ci/cabal-update-retry.sh
+      - name: Strict warning-free production Haskell library
+        run: cabal build lib:phil-core --ghc-options=-Werror
+      - name: Old scoped-loop and new Linear ownership controls
+        shell: bash
+        run: |
+          set -euo pipefail
+          for test in \
+            Phase1GrammarV1JoinLoopMain \
+            Phase1FSEM01SourceBoolLoopMain \
+            Phase1FSEM01SourceBoolBreakMain \
+            Phase1FSEM01LinearLoopTransferMain
+          do
+            cabal exec -- ghc -isrc -Wall -Werror -fno-code "test/$test.hs"
+            cabal exec -- runghc -isrc -Wall -Werror "test/$test.hs"
+          done
+          sha256sum src/Phil/Surface/GrammarV1/SourceLinearLoopTransfer.hs \
+            src/Phil/Surface/Check/Engine.hs \
+            test/Phase1FSEM01LinearLoopTransferMain.hs
+
+  source-linear-loop-rocq:
+    name: Rocq Linear source owner consumption, rebind and reentry preservation
+    runs-on: ubuntu-24.04
+    container:
+      image: rocq/rocq-prover:9.2.0
+      options: --user root
+    steps:
+      - uses: actions/checkout@v4
+      - name: Compile conditional Linear reentry model without admissions
+        shell: bash
+        run: |
+          set -euo pipefail
+          export PATH="/home/rocq/.opam/$COMPILER/bin:$PATH"
+          for file in \
+            proof/Phil/Core/Syntax.v \
+            proof/Phil/Core/Context.v \
+            proof/Phil/Core/ContextJoin.v \
+            proof/Phil/Surface/SurfaceSourceLinearLoopTransfer.v
+          do
+            rocq c -Q proof/Phil Phil "$file"
+          done
+          if grep -nE '^[[:space:]]*(Admitted[.]|Axiom[[:space:]]|Parameter[[:space:]])' \
+            proof/Phil/Surface/SurfaceSourceLinearLoopTransfer.v; then
+            echo "Unproved FSEM-01 L-2 Linear owner theorem" >&2
+            exit 1
+          fi
+          sha256sum proof/Phil/Surface/SurfaceSourceLinearLoopTransfer.v \
+            proof/Phil/Surface/SurfaceSourceLinearLoopTransfer.vo
