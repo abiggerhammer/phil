@@ -243,6 +243,7 @@ library
       Phil.Surface.GrammarV1.ComponentRestrictedSourceClose
       Phil.Surface.GrammarV1.ComponentRestrictedSourceTerminal
       Phil.Core.ProcessEndpointClosure
+      Phil.Core.ProcessLifecycle
       Phil.Surface.GrammarV1.ComponentSendClose
       Phil.Surface.GrammarV1.ComponentReceiveClose
       Phil.Surface.GrammarV1.TwoOwnerBorrowResourceSurface
