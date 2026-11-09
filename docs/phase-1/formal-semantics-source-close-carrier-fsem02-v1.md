@@ -20,3 +20,5 @@ The production source-close adapter first rechecks exact declaration-rooted send
 ## Explicit nonclaims
 
 Parser/source-binder fidelity, external restricted-message `BoundaryMessageContract`, nominal roles/process/activation and root admission, original pre-rendezvous Core state, restricted occurrence/mode/type, source-authorized payload disposal and obligations remain external premises. Cached carrier integrity is not full provenance authentication; native state must still be independently replayed. FSEM-02, 05, 06 and 07 remain open. No general progress, fairness, compiler correctness or normative semantic claims.
+
+Reader navigation: [Phase 1 typing and semantics reader guide](typing-and-semantics-reader-guide-v1.md).
