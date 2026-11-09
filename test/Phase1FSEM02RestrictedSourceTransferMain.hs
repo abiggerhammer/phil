@@ -63,6 +63,9 @@ main = do
           , sourceTerminalRejectForgedClosedState fx
           , sourceTerminalRejectStaleSenderReplay fx
           , sourceTerminalRejectStaleReceiverReplay fx
+          , sourceTerminalRejectForgedRendezvousState fx
+          , sourceTerminalRejectMissingPredecessorOwner fx
+          , sourceTerminalRejectWrongPredecessorHead fx
           ]
   case result of
     Right () -> putStrLn "PASS: FSEM-02 source restricted transfer and exact negative replay"
@@ -728,7 +731,8 @@ terminalCheck
   -> Either GrammarV1RestrictedSourceTerminalError
        GrammarV1RestrictedSourceTerminalTransition
 terminalCheck fx rendezvous closed sender receiver obligations root =
-  grammarV1CheckRestrictedSourceTerminal (fxNetwork fx) rendezvous closed
+  grammarV1CheckRestrictedSourceTerminal (fxInstance fx)
+    (fxNetwork fx) (fxBefore fx) rendezvous closed
     sender receiver doneOutcome doneOutcome obligations root
 
 sourceTerminalReplay :: Fixture -> Either String ()
@@ -896,3 +900,67 @@ sourceTerminalRejectStaleReceiverReplay fx = do
         assert (process == fxServerProcess fx && endpoint == fxServerNext fx)
           "receiver replay error lost exact process/endpoint provenance"
     other -> Left ("stale receiver replay was accepted: " <> show other)
+
+-- Native endpoint closure may accept a forged affine spectator, but its
+-- post-rendezvous context must still be the exact predecessor's successor.
+sourceTerminalRejectForgedRendezvousState :: Fixture -> Either String ()
+sourceTerminalRejectForgedRendezvousState fx = do
+  (rendezvous, _) <- terminalPrefix fx
+  let next = restrictedSourceNext rendezvous
+  sender <- requireProtocol (fxClientProcess fx) next
+  forgedResources <- mapLeft show $ insertBinding Affine
+    (Name "forged-post-rendezvous") TyBool (protocolResources sender)
+  let altered = sender { protocolResources = forgedResources }
+      forgedNext = next { communicationProtocolContexts =
+        Map.insert (fxClientProcess fx) altered
+          (communicationProtocolContexts next) }
+      forgedRendezvous = rendezvous { restrictedSourceNext = forgedNext }
+  forgedClose <- mapLeft show $
+    closeFromSource fx (fxSender fx) (fxReceiver fx) forgedRendezvous
+      clientRole serverRole doneOutcome doneOutcome
+  case terminalCheck fx forgedRendezvous forgedClose
+      (senderTerminalPlan fx) (receiverTerminalPlan fx)
+      Map.empty emptyRootResidue of
+    Left RestrictedSourceTerminalRendezvousStateMismatch -> Right ()
+    other -> Left ("forged post-rendezvous context was accepted: " <> show other)
+
+-- Source success must not reconstruct a missing activation-owned occurrence.
+sourceTerminalRejectMissingPredecessorOwner :: Fixture -> Either String ()
+sourceTerminalRejectMissingPredecessorOwner fx = do
+  (rendezvous, closed) <- terminalPrefix fx
+  let original = fxBefore fx
+      missing = original { communicationRestrictedOwners =
+        Map.delete payloadOccurrence (communicationRestrictedOwners original) }
+  case grammarV1CheckRestrictedSourceTerminal (fxInstance fx)
+      (fxNetwork fx) missing rendezvous closed
+      (senderTerminalPlan fx) (receiverTerminalPlan fx)
+      doneOutcome doneOutcome Map.empty emptyRootResidue of
+    Left (RestrictedSourceTerminalRendezvousReplayError
+      (RestrictedMessageOwnerUnknown occurrence)) ->
+        assert (occurrence == payloadOccurrence)
+          "predecessor replay lost the exact missing occurrence key"
+    other -> Left ("missing predecessor payload owner admitted: " <> show other)
+
+-- A purported terminal cached state cannot excuse the original non-Send head.
+sourceTerminalRejectWrongPredecessorHead :: Fixture -> Either String ()
+sourceTerminalRejectWrongPredecessorHead fx = do
+  (rendezvous, closed) <- terminalPrefix fx
+  sender <- requireProtocol (fxClientProcess fx) (fxBefore fx)
+  let old = fxClientOld fx
+      wrong = ProtocolEndpointBinding old
+        (binaryProtocolInstanceRevision (fxInstance fx)) clientRole
+        (End doneOutcome)
+      invalidSender = sender { protocolEndpoints =
+        Map.insert old wrong (protocolEndpoints sender) }
+      invalidBefore = (fxBefore fx) { communicationProtocolContexts =
+        Map.insert (fxClientProcess fx) invalidSender
+          (communicationProtocolContexts (fxBefore fx)) }
+  case grammarV1CheckRestrictedSourceTerminal (fxInstance fx)
+      (fxNetwork fx) invalidBefore rendezvous closed
+      (senderTerminalPlan fx) (receiverTerminalPlan fx)
+      doneOutcome doneOutcome Map.empty emptyRootResidue of
+    Left (RestrictedSourceTerminalRendezvousReplayError
+      (RendezvousProtocolError process _)) ->
+        assert (process == fxClientProcess fx)
+          "predecessor protocol rejection changed sender identity"
+    other -> Left ("wrong original session head admitted: " <> show other)

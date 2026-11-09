@@ -120,3 +120,5 @@ The proof model has no successful path for an unknown projection sort, symbolic-
 The bounded **FSEM-02 source restricted-send/receive transfer** extension is indexed in [the Phase 1 reader](../docs/phase-1/formal-semantics-restricted-source-transfer-fsem02-v1.md), with conditional owner-map lemmas in `Phil/Core/FSEM02RestrictedSourceTransfer.v`. It composes source-binder checks with native atomic restricted transfer; it does **not** prove full Haskell-to-Rocq refinement or independent source architecture admission.
 
 The bounded [FSEM-02 source-close carrier integrity](../docs/phase-1/formal-semantics-source-close-carrier-fsem02-v1.md) validates the actual Haskell source-derived request and payload-binder identities against a cached rendezvous carrier and proves a conditional three-string Rocq guard. Original state authority and universal Haskell↔Rocq refinement remain open.
+
+FSEM-02's bounded [restricted predecessor owner observation proofs](Phil/Core/FSEM02PredecessorReplay.v) establish conditional owner equality, two-key projection and rejection, not full production Haskell state refinement.
