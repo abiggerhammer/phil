@@ -238,6 +238,7 @@ library
       Phil.Surface.GrammarV1.ComponentOfferCoverage
       Phil.Surface.GrammarV1.ComponentOfferReplay
       Phil.Surface.GrammarV1.ComponentChoiceRendezvous
+      Phil.Surface.GrammarV1.ComponentChoiceStatefulRendezvous
       Phil.Surface.GrammarV1.TwoOwnerBorrowResourceSurface
       Phil.Surface.GrammarV1.ReferenceKernelBridge
       Phil.Surface.GrammarV1.ReferenceToken

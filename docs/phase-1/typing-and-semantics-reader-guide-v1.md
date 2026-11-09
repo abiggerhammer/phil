@@ -203,6 +203,8 @@ It is not a source-to-Rocq refinement theorem or a network scheduler model.
 
 The further bounded [source-select/offer joint Core rendezvous](formal-semantics-source-joint-choice-fsem02-v1.md) combines independently parsed component programs with an externally supplied peer choice and a real atomic two-process Core transition. It deliberately does **not** certify combined source architecture/root authority, the restricted endpoint-owner ledger, payload transfer or universal Rocq correspondence.
 
+The [stateful source choice and endpoint-owner ledger bridge](formal-semantics-stateful-choice-fsem02-v1.md) further checks production activation-derived restricted owner occurrences through the atomic stateful Core joint transition. This models endpoint-owner renaming and affine spectator preservation, **not** message-payload ownership transfer or combined-source architecture/root admission.
+
 ## 5. Session protocols and communication
 
 A protocol specifies the legal sequence of send, receive, choice, offer,

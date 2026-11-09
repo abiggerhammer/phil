@@ -7,16 +7,19 @@ module Main (main) where
 import qualified Data.Map.Strict as Map
 import Data.Text (Text)
 import qualified Data.Text.IO as TextIO
-import Phil.Core.Context (ResourceContext (..))
+import Phil.Core.CheckedBindingMode (CheckedTypeMode (..))
+import Phil.Core.Context (ResourceContext (..), insertBinding)
 import Phil.Core.Generic (strictGenericInstantiationPolicy)
 import Phil.Core.Process
+import Phil.Core.ProcessActivation
 import Phil.Core.ProcessRendezvous
 import Phil.Core.Protocol
 import Phil.Core.Protocol.Family
 import Phil.Core.Static
-import Phil.Core.Syntax (Branch (..), Name (..), Outcome (..), Session (..), Ty (..))
+import Phil.Core.Syntax (Branch (..), Mode (..), Name (..), Outcome (..), Session (..), Ty (..))
 import Phil.Surface.GrammarV1.BinderScope (GrammarV1ResolvedBinder (..))
 import Phil.Surface.GrammarV1.ComponentChoiceRendezvous
+import Phil.Surface.GrammarV1.ComponentChoiceStatefulRendezvous
 import Phil.Surface.GrammarV1.ComponentOfferCoverage
 import Phil.Surface.GrammarV1.ComponentOfferReplay
 import Phil.Surface.GrammarV1.ComponentSelectClose
@@ -41,6 +44,14 @@ main = do
     , test "both predecessor names stale after successful joint step" (staleAfterSuccess go offer)
     , test "client wrong session head rejects joint step" (wrongClientHeadRejected go offer)
     , test "client wrong role cannot reuse valid offer authority" (wrongClientRoleRejected go offer)
+    , test "Go source stateful choice moves both endpoint occurrence names" (statefulAccepted go offer "Go" (Outcome "Done"))
+    , test "Cancel source stateful choice preserves terminal outcomes" (statefulAccepted cancel offer "Cancel" (Outcome "Cancel"))
+    , test "missing endpoint owner rejects exact occurrence class" (missingEndpointOwnerRejected go offer)
+    , test "stolen endpoint owner cannot confer authority" (stolenEndpointOwnerRejected go offer)
+    , test "duplicate owner alias is ambiguous, not silently chosen" (ambiguousEndpointOwnerRejected go offer)
+    , test "minimally wrong offer body rejects before owner transition" (statefulWrongBodyRejected go offer wrongBody)
+    , test "stateful consumed predecessor cannot replay" (statefulStaleRejected go offer)
+    , test "stateful wrong session head rejects" (statefulWrongHeadRejected go offer)
     ]
   if and outcomes then pure () else exitFailure
 
@@ -60,6 +71,7 @@ data Fixture = Fixture
   , fxServerOld :: Name
   , fxNetwork :: ProcessNetwork
   , fxContexts :: Map.Map ProcessKey ProtocolContext
+  , fxState :: ProcessCommunicationState
   }
 
 clientRoot, serverRoot, protocolRoot :: DeclarationKey
@@ -73,6 +85,15 @@ serverRole = ProtocolRoleKey "Server"
 
 serverNext :: Name
 serverNext = Name "fsem02.server.after"
+
+clientOccurrence, serverOccurrence, spectatorOccurrence, duplicateOccurrence :: ActivationOccurrenceKey
+clientOccurrence = ActivationOccurrenceKey "fsem02.client.endpoint"
+serverOccurrence = ActivationOccurrenceKey "fsem02.server.endpoint"
+spectatorOccurrence = ActivationOccurrenceKey "fsem02.client.spectator"
+duplicateOccurrence = ActivationOccurrenceKey "fsem02.client.duplicate"
+
+spectatorName :: Name
+spectatorName = Name "fsem02.client.spectator"
 
 parsePair :: Text -> Either String (GrammarV1ProtocolDecl, GrammarV1ComponentDecl)
 parsePair input = do
@@ -115,26 +136,58 @@ fixture clientInput serverInput = do
       oldServer = grammarV1ResolvedBinderCoreName
         (checkedComponentOfferEndpoint covered)
       revision = binaryProtocolInstanceRevision instanceValue
-  clientContext <- mapLeft show $
+  clientBase <- mapLeft show $
     insertProtocolEndpoint oldClient revision clientRole
       (protocolProjectionSession clientProjection) emptyProtocolContext
+  clientResources <- mapLeft show $
+    insertBinding Affine spectatorName (TyOpaque "Spectator")
+      (protocolResources clientBase)
+  let clientContext = clientBase { protocolResources = clientResources }
   serverContext <- mapLeft show $
     insertProtocolEndpoint oldServer revision serverRole
       (protocolProjectionSession serverProjection) emptyProtocolContext
   graph <- mapLeft show (instantiateArchitecture rootKey rootSpec)
   staged <- mapLeft show (elaborateProcessNetwork graph [clientSite, serverSite])
-  active <- mapLeft show (activateRootProcesses staged)
-  let revisionRoot = identityInstanceRevision (processNetworkRoot active)
+  let revisionRoot = identityInstanceRevision (processNetworkRoot staged)
       clientProcess = deriveProcessKey revisionRoot (processSiteKey clientSite)
       serverProcess = deriveProcessKey revisionRoot (processSiteKey serverSite)
+      contexts = Map.fromList
+        [(clientProcess, clientContext), (serverProcess, serverContext)]
+      clientContract = ProcessActivationContract clientProcess
+        [ endpointActivation clientOccurrence oldClient
+            (protocolProjectionSession clientProjection)
+        , ActivationBinding
+            { activationOccurrenceKey = spectatorOccurrence
+            , activationLocalName = spectatorName
+            , activationCheckedTypeMode = CheckedTypeMode (TyOpaque "Spectator") Affine
+            , activationBindingOrigin = ExplicitAuthorityOrigin "client.spectator"
+            , activationReachability = DirectStatefulReachability spectatorOccurrence
+            , activationStartsSharedLoan = False
+            }
+        ]
+      serverContract = ProcessActivationContract serverProcess
+        [endpointActivation serverOccurrence oldServer
+           (protocolProjectionSession serverProjection)]
+  (active, activationState) <- mapLeft show $
+    activateProcessState staged [clientContract, serverContract]
+  state <- mapLeft show $ communicationStateFromActivation activationState contexts
   Right Fixture
     { fxClient = client, fxServer = server, fxInstance = instanceValue
     , fxClientProcess = clientProcess, fxServerProcess = serverProcess
     , fxClientOld = oldClient, fxClientNext = nextClient, fxServerOld = oldServer
     , fxNetwork = active
-    , fxContexts = Map.fromList
-        [(clientProcess, clientContext), (serverProcess, serverContext)]
+    , fxContexts = contexts, fxState = state
     }
+
+endpointActivation :: ActivationOccurrenceKey -> Name -> Session -> ActivationBinding
+endpointActivation occurrence endpoint session = ActivationBinding
+  { activationOccurrenceKey = occurrence
+  , activationLocalName = endpoint
+  , activationCheckedTypeMode = CheckedTypeMode (TyEndpoint session) Linear
+  , activationBindingOrigin = ProtocolEndpointOrigin "checked source projection"
+  , activationReachability = ProtocolMediatedReachability occurrence
+  , activationStartsSharedLoan = False
+  }
 
 sourceFamily :: GrammarV1ProtocolDecl -> Either String BinaryProtocolFamily
 sourceFamily protocol =
@@ -250,6 +303,128 @@ wrongClientRoleRejected client server = do
              && observed == serverRole)
           "wrong role error did not preserve peer and request identity"
     other -> Left ("role mismatch admitted via shared session syntax: " <> show other)
+
+
+-- This second step consumes a genuine activation-created owner index. The
+-- endpoint-only source precheck is never itself an authority to move owners.
+stateful :: Fixture -> Text -> ProcessCommunicationState
+         -> Either GrammarV1StatefulChoiceError GrammarV1StatefulChoice
+stateful fx label state =
+  grammarV1CheckStatefulSourceChoice
+    clientRoot (fxClient fx) serverRoot (fxServer fx) (fxInstance fx)
+    clientRole serverRole (fxClientProcess fx) (fxServerProcess fx)
+    serverNext label (fxNetwork fx) state
+
+statefulAccepted :: Text -> Text -> Text -> Outcome -> Either String ()
+statefulAccepted client server label outcome = do
+  fx <- fixture client server
+  result <- mapLeft show (stateful fx label (fxState fx))
+  again <- mapLeft show (stateful fx label (fxState fx))
+  assert (result == again) "stateful exact-input replay is nondeterministic"
+  let after = statefulChoiceSuccessor result
+      owners = communicationRestrictedOwners after
+      beforeOwners = communicationRestrictedOwners (fxState fx)
+      contexts = communicationProtocolContexts after
+      revision = binaryProtocolInstanceRevision (fxInstance fx)
+  assert (contexts == jointChoiceContexts (statefulChoiceSourceReplay result))
+    "stateful and source-checked contexts diverged"
+  assert (Map.keysSet owners == Map.keysSet beforeOwners)
+    "stateful choice added or removed a restricted occurrence"
+  assert (Map.lookup clientOccurrence owners == Just (fxClientProcess fx, fxClientNext fx)
+       && Map.lookup serverOccurrence owners == Just (fxServerProcess fx, serverNext))
+    "exact endpoint occurrence was not renamed to its checked successor"
+  assert (Map.lookup spectatorOccurrence owners == Map.lookup spectatorOccurrence beforeOwners
+       && Map.lookup spectatorOccurrence owners == Just (fxClientProcess fx, spectatorName))
+    "independent affine spectator was moved or dropped"
+  checkSide contexts (fxClientProcess fx) (fxClientOld fx) (fxClientNext fx)
+    (TyEndpoint (End outcome)) revision clientRole
+  checkSide contexts (fxServerProcess fx) (fxServerOld fx) serverNext
+    (TyEndpoint (End outcome)) revision serverRole
+
+missingEndpointOwnerRejected :: Text -> Text -> Either String ()
+missingEndpointOwnerRejected client server = do
+  fx <- fixture client server
+  let bad = (fxState fx)
+        { communicationRestrictedOwners =
+            Map.delete clientOccurrence (communicationRestrictedOwners (fxState fx)) }
+  case stateful fx "Go" bad of
+    Left (GrammarV1StatefulChoiceOwnerError
+      (RendezvousEndpointOccurrenceUnknown process endpoint)) ->
+        assert (process == fxClientProcess fx && endpoint == fxClientOld fx)
+          "missing endpoint owner rejection lost process/name"
+    other -> Left ("missing occurrence advanced: " <> show other)
+
+stolenEndpointOwnerRejected :: Text -> Text -> Either String ()
+stolenEndpointOwnerRejected client server = do
+  fx <- fixture client server
+  let bad = (fxState fx)
+        { communicationRestrictedOwners =
+            Map.insert clientOccurrence (fxServerProcess fx, fxClientOld fx)
+              (communicationRestrictedOwners (fxState fx)) }
+  case stateful fx "Go" bad of
+    Left (GrammarV1StatefulChoiceOwnerError
+      (RendezvousEndpointOccurrenceUnknown process endpoint)) ->
+        assert (process == fxClientProcess fx && endpoint == fxClientOld fx)
+          "stolen owner rejection lost exact identity"
+    other -> Left ("wrong-process owner advanced: " <> show other)
+
+ambiguousEndpointOwnerRejected :: Text -> Text -> Either String ()
+ambiguousEndpointOwnerRejected client server = do
+  fx <- fixture client server
+  let bad = (fxState fx)
+        { communicationRestrictedOwners =
+            Map.insert duplicateOccurrence (fxClientProcess fx, fxClientOld fx)
+              (communicationRestrictedOwners (fxState fx)) }
+  case stateful fx "Go" bad of
+    Left (GrammarV1StatefulChoiceOwnerError
+      (RendezvousEndpointOccurrenceAmbiguous process endpoint occurrences)) ->
+        assert (process == fxClientProcess fx && endpoint == fxClientOld fx
+             && length occurrences == 2
+             && clientOccurrence `elem` occurrences
+             && duplicateOccurrence `elem` occurrences)
+          "ambiguous endpoint diagnostic lost the two exact occurrences"
+    other -> Left ("duplicate alias silently chosen: " <> show other)
+
+statefulWrongBodyRejected :: Text -> Text -> Text -> Either String ()
+statefulWrongBodyRejected client server bad = do
+  fx <- fixture client server
+  (_, badServer) <- parsePair bad
+  let changed = fx {fxServer = badServer}
+  case stateful changed "Go" (fxState fx) of
+    Left (GrammarV1StatefulChoiceSourceError
+      (GrammarV1JointChoiceOfferSourceError
+        (GrammarV1OfferReplayCoverageError GrammarV1ComponentOfferArmBodyUnsupported))) ->
+          Right ()
+    other -> Left ("stateful wrong source body failed exact rejection: " <> show other)
+
+statefulStaleRejected :: Text -> Text -> Either String ()
+statefulStaleRejected client server = do
+  fx <- fixture client server
+  first <- mapLeft show (stateful fx "Go" (fxState fx))
+  case stateful fx "Go" (statefulChoiceSuccessor first) of
+    Left (GrammarV1StatefulChoiceSourceError
+      (GrammarV1JointChoiceOfferSourceError
+        (GrammarV1OfferReplayProtocolError (ProtocolEndpointUnknown endpoint)))) ->
+          assert (endpoint == fxServerOld fx) "stale rejection named wrong source endpoint"
+    other -> Left ("consumed stateful source endpoint was reused: " <> show other)
+
+statefulWrongHeadRejected :: Text -> Text -> Either String ()
+statefulWrongHeadRejected client server = do
+  fx <- fixture client server
+  let revision = binaryProtocolInstanceRevision (fxInstance fx)
+  wrong <- mapLeft show $ insertProtocolEndpoint
+    (fxClientOld fx) revision clientRole (End (Outcome "Done")) emptyProtocolContext
+  let bad = (fxState fx)
+        { communicationProtocolContexts = Map.insert
+            (fxClientProcess fx) wrong (communicationProtocolContexts (fxState fx)) }
+  case stateful fx "Go" bad of
+    Left (GrammarV1StatefulChoiceSourceError
+      (GrammarV1JointChoiceCoreError
+        (RendezvousProjectionSessionMismatch process expected actual))) ->
+          assert (process == fxClientProcess fx
+               && expected == Select branches && actual == End (Outcome "Done"))
+            "stateful mismatch lost the exact original head and observed state"
+    other -> Left ("stateful wrong head advanced: " <> show other)
 
 branches :: [Branch]
 branches =
