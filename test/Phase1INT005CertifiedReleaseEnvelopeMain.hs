@@ -231,6 +231,10 @@ main = do
           , nativeAtomManifestCommonReplayAccepts source upload)
         , ( "Steve exact common C after normalized S and independent raw R/L"
           , nativeAtomManifestCommonReplayAccepts source steve)
+        , ( "Upload exact closed F after common C, normalized S and raw R/L"
+          , nativeAtomManifestClosedReplayAccepts source upload)
+        , ( "Steve exact closed F after common C, normalized S and raw R/L"
+          , nativeAtomManifestClosedReplayAccepts source steve)
         , ( "Upload checked SemanticUnordered atom-only canonical M-set rejects duplicates, order, and roles"
           , nativeSemanticUnorderedAtomSetReplayAccepts source upload)
         , ( "Steve checked SemanticUnordered atom-only canonical M-set rejects duplicates, order, and roles"
@@ -3201,5 +3205,86 @@ nativeAtomManifestCommonReplayAccepts source fixture =
                       && case check substitutedS of
                            Left (NativeAtomManifestCommonBaseDifferent
                              NativeAtomManifestSystemsRoleMalformed) -> True
+                           _ -> False
+    _ -> False
+
+-- | Exact Upload/Steve accepted-producer/consumer replay plus same-payload
+-- foreign R/L/S/C role, changed F and F-as-C negative pressure.
+nativeAtomManifestClosedReplayAccepts
+  :: GenericApplicationAssurance -> ReleaseFixture -> Bool
+nativeAtomManifestClosedReplayAccepts source fixture =
+  case (producerInputs source, produceFixture source fixture) of
+    (Right (bundle, policy), Right (_, produced)) ->
+      case nativeAdapterPair source produced of
+        Nothing -> False
+        Just (sourceObject, releaseObject) ->
+          case closeNativeFinalInstanceCorrespondence
+              source (sourceInstanceDescriptor source) bundle policy
+              (fixtureContext produced) (fixtureLedger produced)
+              emptyProducerSelection sourceObject releaseObject of
+            Left _ -> False
+            Right witness ->
+              let producer = nativeCorrespondenceSourceManifestBinding witness
+                  acceptedSource = nativeCorrespondenceCertifiedSource witness
+                  acceptedRelease = nativeCorrespondenceCertifiedRelease witness
+                  manifest = nativeCorrespondenceManifest witness
+                  app = nativeAdapterSourceId
+                    (nativeCorrespondenceSourceAssurance witness)
+                  raw = encodeNativeRawSystemsDigestWire
+                    (NativeRawSystemsDigest (manifestImplementationDigest manifest))
+                  root = encodeNativeLoweringRootWire
+                    (NativeLoweringRootDigest (manifestLoweringLedgerRoot manifest))
+                  revisionS = nativeFinalSystemsRevision (nativeCorrespondenceAuthority witness)
+                  common = nativeFinalCommonContractRevision (nativeCorrespondenceAuthority witness)
+                  closed = nativeFinalClosedContractRevision (nativeCorrespondenceAuthority witness)
+                  ClosedStageContractRevision payload = closed
+                  wireS = encodeNativeSystemsRevisionWire revisionS
+                  wireC = encodeNativeCommonContractRevisionWire common
+                  wireF = encodeNativeClosedContractRevisionWire closed
+                  foreignRoles =
+                    [ encodeNativeRawSystemsDigestWire
+                        (NativeRawSystemsDigest (Digest payload))
+                    , encodeNativeLoweringRootWire
+                        (NativeLoweringRootDigest (Digest payload))
+                    , encodeNativeSystemsRevisionWire
+                        (SystemsArtifactRevision payload)
+                    , encodeNativeCommonContractRevisionWire
+                        (Phase1StageContractRevision payload) ]
+              in case encodeNativeGenericAtomApplicationWires app of
+                Nothing -> False
+                Just applicationWires ->
+                  let base = NativeAtomManifestWireCandidate applicationWires raw root
+                      sCandidate = NativeAtomManifestSystemsWireCandidate base wireS
+                      cCandidate = NativeAtomManifestCommonWireCandidate sCandidate wireC
+                      candidate = NativeAtomManifestClosedWireCandidate cCandidate wireF
+                      check = replayNativeAtomManifestClosedCandidate
+                        witness producer acceptedSource acceptedRelease
+                      changed = candidate
+                        { nativeAtomManifestClosedRevisionWire =
+                            encodeNativeClosedContractRevisionWire
+                              (ClosedStageContractRevision (payload <> ".unaccepted")) }
+                      substitutedC = candidate
+                        { nativeAtomManifestClosedBaseCandidate = cCandidate
+                            { nativeAtomManifestCommonRevisionWire = wireF } }
+                      withF wire = candidate { nativeAtomManifestClosedRevisionWire = wire }
+                  in case check candidate of
+                    Left _ -> False
+                    Right receipt ->
+                      nativeAtomManifestClosedReplayRevision receipt == closed
+                      && nativeReplayClosedRevision
+                           (nativeAtomManifestReplayStageCoordinates
+                             (nativeAtomManifestSystemsReplayBase
+                               (nativeAtomManifestCommonReplayBase
+                                 (nativeAtomManifestClosedReplayBase receipt)))) == closed
+                      && decodeNativeClosedContractRevisionWire wireF == Just closed
+                      && all (\wire -> case check (withF wire) of
+                            Left NativeAtomManifestClosedRoleMalformed -> True
+                            _ -> False) foreignRoles
+                      && case check changed of
+                           Left NativeAtomManifestClosedDifferent -> True
+                           _ -> False
+                      && case check substitutedC of
+                           Left (NativeAtomManifestClosedBaseDifferent
+                             NativeAtomManifestCommonRoleMalformed) -> True
                            _ -> False
     _ -> False
