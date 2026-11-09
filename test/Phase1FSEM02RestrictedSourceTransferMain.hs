@@ -3,12 +3,13 @@
 module Main (main) where
 
 import qualified Data.Map.Strict as Map
+import qualified Data.Set as Set
 import Data.Text (Text)
 import qualified Data.Text as Text
 import qualified Data.Text.IO as TextIO
 import Phil.Core.CheckedBindingMode (CheckedTypeMode (..))
 import Phil.Core.Context (CheckError (..), ResourceContext (..), insertBinding)
-import Phil.Core.Generic (strictGenericInstantiationPolicy)
+import Phil.Core.Generic (GenericStaticParameterKey (..), strictGenericInstantiationPolicy)
 import Phil.Core.Process
 import Phil.Core.ProcessActivation
 import Phil.Core.ProcessRendezvous
@@ -79,13 +80,46 @@ parseParts source = do
 fixture :: Text -> Either String Fixture
 fixture source = do
   (protocol, senderSource, receiverSource) <- parseParts source
-  (family, _) <- case grammarV1CheckedBinaryProtocolFamily emptyStaticContext
+  (sourceFamily, _) <- case grammarV1CheckedBinaryProtocolFamily emptyStaticContext
       protocolRoot (InterfaceRevision "fsem02.restricted.source.v1") protocol of
     Nothing -> Left "Bytes[8] source protocol is outside checked family competence"
     Just (Left err) -> Left ("source protocol was rejected: " <> show err)
     Just (Right value) -> Right value
+  -- A concrete restricted Bytes message does NOT confer Message authority.
+  -- Confirm the source family is rejected without a boundary certificate.
+  case instantiateBinaryProtocol strictGenericInstantiationPolicy sourceFamily [] [] of
+    Left (ProtocolConcreteMessageRequiresBoundaryContract exactType)
+      | exactType == payloadTy -> Right ()
+    other -> Left ("bare concrete restricted source was admitted: " <> show other)
+  -- Protocol/message identity and the boundary contract are explicit external
+  -- trusted inputs; not synthesized from source spelling or Bytes syntax.
+  let messageKey = GenericStaticParameterKey "Payload"
+      payloadSemantics = SemanticAtom "fsem02.external.restricted-payload"
+      family = BinaryProtocolFamily
+        { protocolFamilyDeclarationKey = protocolRoot
+        , protocolFamilyInterfaceRevision =
+            InterfaceRevision "fsem02.external.authorized.v1"
+        , protocolFamilyRequirements = Set.empty
+        , protocolFamilyPrimaryRole = clientRole
+        , protocolFamilyPeerRole = serverRole
+        , protocolFamilyPrimarySession = ProtocolTemplateSend
+            (Name "value") (ProtocolParameterType messageKey)
+            (ProtocolTemplateEnd doneOutcome)
+        }
+      argument = ProtocolMessageArgument
+        { protocolMessageArgumentKey = messageKey
+        , protocolMessageArgumentType = payloadTy
+        , protocolMessageArgumentSemantics = payloadSemantics
+        , protocolMessageArgumentBoundaryContract = BoundaryMessageContract
+            { boundaryMessageContractRevision = "fsem02.external.owned.v1"
+            , boundaryMessageContractType = payloadTy
+            , boundaryMessageContractSemantics = payloadSemantics
+            , boundaryMessageContractShape =
+                BoundaryMessageAdmittedLeaf "external-restricted-message"
+            }
+        }
   instanceValue <- mapLeft show $
-    instantiateBinaryProtocol strictGenericInstantiationPolicy family [] []
+    instantiateBinaryProtocol strictGenericInstantiationPolicy family [argument] []
   sender <- case grammarV1CheckedComponentSendClose senderRoot senderSource of
     Just (Right value) -> Right value
     other -> Left ("parsed source sender body not checked: " <> show other)
