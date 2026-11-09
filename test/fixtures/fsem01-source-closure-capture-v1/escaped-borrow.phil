@@ -1,0 +1,6 @@
+fn scope(flag : Bool, payload : Bytes[8]) -> Unit satisfies C {
+  borrow payload as view {
+    return closure mode unrestricted () satisfies OneShot captures (view) { unit; };
+    
+  };
+}

@@ -1,0 +1,3 @@
+recursive fn build(flag : Bool, payload : Bytes[8]) -> OneShot satisfies C {
+  return closure mode linear () satisfies OneShot captures (payload) { unit; };
+}

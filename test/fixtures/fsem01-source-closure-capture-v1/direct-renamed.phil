@@ -1,0 +1,3 @@
+fn build(isReady : Bool, goods : Bytes[8]) -> OneShot satisfies C {
+  return closure mode linear () satisfies OneShot captures (isReady, goods) { unit; };
+}
