@@ -946,6 +946,8 @@ data SourceLinearLoopRun = SourceLinearLoopRun
   { sourceLinearLoopBefore :: Maybe ResourceContext
   , sourceLinearLoopEntryConsumed :: Maybe ResourceContext
   , sourceLinearLoopHeaderBound :: Maybe ResourceContext
+  , sourceLinearLoopLoanCuts :: [BorrowTraceCheckpoint]
+  , sourceLinearLoopAfterLoan :: Maybe ResourceContext
   , sourceLinearLoopBackedgeConsumed :: Maybe ResourceContext
   , sourceLinearLoopBackedgeRebound :: Maybe ResourceContext
   , sourceLinearLoopReentered :: Maybe ResourceContext
@@ -974,15 +976,31 @@ checkSourceLinearLoopEdge diagnostic env current block expectedType = do
           == Linear -> Right path
     _ -> throw block TypeMismatch diagnostic
 
+-- | Run the real scoped-borrow evaluator in the loop body. The loan must
+-- close before the continuing owner can move. No synthetic Core context is
+-- supplied by this adapter.
+checkSourceLinearLoopLoan
+  :: SurfaceEnvironment -> SurfaceState -> Located Block
+  -> Either SurfaceCheckError SurfaceState
+checkSourceLinearLoopLoan env header borrowed = do
+  raw <- checkBlock env header borrowed
+  pruned <- mapM
+    (pruneScopedPath (locatedSpan borrowed) (Map.keysSet (stateBindings header)))
+    raw
+  case pruned of
+    [SurfacePath PathContinue next _] -> Right next
+    _ -> throw borrowed BorrowEscape
+      "scoped loop loan must close on one continuing predecessor"
+
 -- | Source has already selected an exactly typed, one-state Linear Bytes
 -- telescope and one explicit continuing actual with lexical authority.
 -- This checks one static entry/reentry obligation, NOT unbounded execution.
 checkSurfaceSourceLinearLoopComponent
   :: SurfaceEnvironment -> Located Component
-  -> Located Block -> Located Block -> SourceSpan
+  -> Located Block -> Maybe (Located Block) -> Located Block -> SourceSpan
   -> Text -> Ty -> SourceBoolJoinInvariant
   -> Either SurfaceCheckError ()
-checkSurfaceSourceLinearLoopComponent env locatedComponent entry backedge
+checkSurfaceSourceLinearLoopComponent env locatedComponent entry maybeBorrow backedge
     loopSpan headerName expectedType invariant = do
   let component = locatedValue locatedComponent
       meta = BindingMeta Linear expectedType (shapeForType expectedType)
@@ -993,9 +1011,11 @@ checkSurfaceSourceLinearLoopComponent env locatedComponent entry backedge
     env initial entry expectedType
   header <- insertBindingMeta loopSpan headerName meta (pathState entryPath)
   checkSourceBoolLoopInvariant loopSpan invariant
+  loanClosed <- maybe (Right header) (checkSourceLinearLoopLoan env header)
+    maybeBorrow
   backedgePath <- checkSourceLinearLoopEdge
     "linear loop continue must move the exact Linear Bytes owner"
-    env header backedge expectedType
+    env loanClosed backedge expectedType
   rebound <- insertBindingMeta loopSpan headerName meta
     (pathState backedgePath)
   reentered <- joinExclusive loopSpan [continuePath header, continuePath rebound]
@@ -1004,14 +1024,15 @@ checkSurfaceSourceLinearLoopComponent env locatedComponent entry backedge
     _ -> throw locatedComponent IncompatibleBranchResidue
       "linear loop backedge has no checked continuing successor"
 
--- | Trace reexecutes all ordinary production checks independently of the
--- nontracing entrypoint. On failure no later resource cut is fabricated.
+-- | Re-execute actual entry, scoped loan, continue, rebinding and native
+-- reentry. Borrow checkpoints come from the SAME evalBorrowTraced operation
+-- used by the normal evaluator; only reached resource cuts are reported.
 traceSurfaceSourceLinearLoopComponent
   :: SurfaceEnvironment -> Located Component
-  -> Located Block -> Located Block -> SourceSpan
+  -> Located Block -> Maybe (Located Block) -> Located Block -> SourceSpan
   -> Text -> Ty -> SourceBoolJoinInvariant -> SourceLinearLoopRun
-traceSurfaceSourceLinearLoopComponent env locatedComponent entry backedge
-    loopSpan headerName expectedType invariant =
+traceSurfaceSourceLinearLoopComponent env locatedComponent entry maybeBorrow
+    backedge loopSpan headerName expectedType invariant =
   case initializeState env component of
     Left err -> emptyRun (Left err)
     Right initial -> case checkProvides env initial component of
@@ -1042,37 +1063,50 @@ traceSurfaceSourceLinearLoopComponent env locatedComponent entry backedge
                 in case checkSourceBoolLoopInvariant loopSpan invariant of
                   Left err -> bound { sourceLinearLoopOutcome = Left err }
                   Right () ->
-                    case checkSourceLinearLoopEdge
-                      "linear loop continue must move the exact Linear Bytes owner"
-                      env header backedge expectedType of
-                      Left err -> bound { sourceLinearLoopOutcome = Left err }
-                      Right backedgePath ->
-                        let spent = bound
-                              { sourceLinearLoopBackedgeConsumed =
-                                  Just (context (pathState backedgePath))
-                              , sourceLinearLoopBackedgeType =
-                                  operandType backedgePath }
-                        in case insertBindingMeta loopSpan headerName meta
-                            (pathState backedgePath) of
-                          Left err -> spent { sourceLinearLoopOutcome = Left err }
-                          Right rebound ->
-                            let restored = spent
-                                  { sourceLinearLoopBackedgeRebound =
-                                      Just (context rebound) }
-                            in case joinExclusive loopSpan
-                              [continuePath header,continuePath rebound] of
-                              Left err -> restored
+                    let cuts = maybe [] (loanCuts header) maybeBorrow
+                        observed = bound { sourceLinearLoopLoanCuts = cuts }
+                        borrowResult = maybe (Right header)
+                          (checkSourceLinearLoopLoan env header) maybeBorrow
+                    in case borrowResult of
+                      Left err -> observed { sourceLinearLoopOutcome = Left err }
+                      Right loanClosed ->
+                        let afterLoan = observed
+                              { sourceLinearLoopAfterLoan =
+                                  case maybeBorrow of
+                                    Nothing -> Nothing
+                                    Just _ -> Just (context loanClosed) }
+                        in case checkSourceLinearLoopEdge
+                          "linear loop continue must move the exact Linear Bytes owner"
+                          env loanClosed backedge expectedType of
+                          Left err -> afterLoan { sourceLinearLoopOutcome = Left err }
+                          Right backedgePath ->
+                            let spent = afterLoan
+                                  { sourceLinearLoopBackedgeConsumed =
+                                      Just (context (pathState backedgePath))
+                                  , sourceLinearLoopBackedgeType =
+                                      operandType backedgePath }
+                            in case insertBindingMeta loopSpan headerName meta
+                                (pathState backedgePath) of
+                              Left err -> spent
                                 { sourceLinearLoopOutcome = Left err }
-                              Right paths -> case paths of
-                                [SurfacePath PathContinue joined _] ->
-                                  restored
-                                    { sourceLinearLoopReentered =
-                                        Just (context joined)
-                                    , sourceLinearLoopOutcome = Right () }
-                                _ -> restored
-                                  { sourceLinearLoopOutcome =
-                                      throw locatedComponent IncompatibleBranchResidue
-                                        "linear loop backedge has no checked continuing successor" }
+                              Right rebound ->
+                                let restored = spent
+                                      { sourceLinearLoopBackedgeRebound =
+                                          Just (context rebound) }
+                                in case joinExclusive loopSpan
+                                  [continuePath header,continuePath rebound] of
+                                  Left err -> restored
+                                    { sourceLinearLoopOutcome = Left err }
+                                  Right paths -> case paths of
+                                    [SurfacePath PathContinue joined _] ->
+                                      restored
+                                        { sourceLinearLoopReentered =
+                                            Just (context joined)
+                                        , sourceLinearLoopOutcome = Right () }
+                                    _ -> restored
+                                      { sourceLinearLoopOutcome =
+                                          throw locatedComponent IncompatibleBranchResidue
+                                            "linear loop backedge has no checked continuing successor" }
   where
     component = locatedValue locatedComponent
     context state = resourceContext (stateCore state)
@@ -1080,10 +1114,19 @@ traceSurfaceSourceLinearLoopComponent env locatedComponent entry backedge
       Just (RuntimeScalar scalar) ->
         Just (scalarMode scalar,scalarType scalar)
       _ -> Nothing
+    loanCuts current source = case blockStatements (locatedValue source) of
+      [Located _ (ExpressionStatement expression)] ->
+        case locatedValue expression of
+          BorrowExpression owner view body ->
+            snd (evalBorrowTraced env current expression owner view body)
+          _ -> []
+      _ -> []
     emptyRun result = SourceLinearLoopRun
       { sourceLinearLoopBefore = Nothing
       , sourceLinearLoopEntryConsumed = Nothing
       , sourceLinearLoopHeaderBound = Nothing
+      , sourceLinearLoopLoanCuts = []
+      , sourceLinearLoopAfterLoan = Nothing
       , sourceLinearLoopBackedgeConsumed = Nothing
       , sourceLinearLoopBackedgeRebound = Nothing
       , sourceLinearLoopReentered = Nothing

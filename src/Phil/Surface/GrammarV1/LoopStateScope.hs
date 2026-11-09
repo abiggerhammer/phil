@@ -8,6 +8,10 @@ module Phil.Surface.GrammarV1.LoopStateScope
 
 import qualified Data.Set as Set
 import Data.Text (Text)
+import Phil.Surface.GrammarV1.BorrowViewScope
+  ( GrammarV1CheckedBorrowView
+  , GrammarV1BorrowViewScopeError
+  , grammarV1CheckedBorrowViewInScope )
 import Phil.Surface.GrammarV1.BinderScope
   ( GrammarV1BinderKind
       ( GrammarV1LetPatternBinder
@@ -61,6 +65,9 @@ data GrammarV1CheckedLoopBodyStep
   | GrammarV1CheckedLoopBodyOccurrenceStep
       (Located GrammarV1Statement)
       [GrammarV1CheckedLexicalReference]
+  | GrammarV1CheckedLoopBodyBorrowStep
+      (Located GrammarV1Statement)
+      GrammarV1CheckedBorrowView
   | GrammarV1CheckedLoopContinueStep
       (Located GrammarV1Statement)
       [Located GrammarV1Expression]
@@ -85,6 +92,7 @@ data GrammarV1CheckedLoopState = GrammarV1CheckedLoopState
 data GrammarV1LoopStateScopeError
   = GrammarV1LoopStateBinderError GrammarV1BinderScopeError
   | GrammarV1LoopStateReferenceError GrammarV1LexicalReferenceError
+  | GrammarV1LoopStateBorrowError GrammarV1BorrowViewScopeError
   deriving (Eq, Show)
 
 -- | Check lexical identity/visibility for one Grammar-v1 loop. Every state
@@ -271,6 +279,16 @@ checkedLoopStatements scope (source@(Located _ statement) : rest) =
           | null rest -> checkedTerminalControl
               GrammarV1CheckedLoopBreakStep source scope actuals
           | otherwise -> Nothing
+        GrammarV1BorrowExpression _ _ _ ->
+          case grammarV1CheckedBorrowViewInScope scope expressionSource of
+            Nothing -> Nothing
+            Just (Left err) -> Just (Left (GrammarV1LoopStateBorrowError err))
+            Just (Right (borrowed, nextScope)) -> do
+              remainder <- checkedLoopStatements nextScope rest
+              Just $ fmap
+                (\(steps, finalScope) ->
+                   ( GrammarV1CheckedLoopBodyBorrowStep source borrowed : steps
+                   , finalScope )) remainder
         _ -> do
           referencesResult <- loopReferences
             (grammarV1CheckedExpressionReferences

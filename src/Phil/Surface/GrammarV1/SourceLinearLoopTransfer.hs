@@ -25,6 +25,10 @@ import Phil.Surface.Check.Support (emptySurfaceState, shapeForType)
 import Phil.Surface.Check.Types
   ( InitialBinding (..), SurfaceCheckError
   , SurfaceEnvironment (..), emptySurfaceEnvironment )
+import Phil.Surface.GrammarV1.BorrowViewScope
+  ( GrammarV1CheckedBorrowView (..) )
+import Phil.Surface.GrammarV1.LetPatternScope
+  ( GrammarV1CheckedLetScopeStep (..) )
 import Phil.Surface.GrammarV1.BinderScope
   ( GrammarV1BinderScopeError, GrammarV1ResolvedBinder (..)
   , grammarV1FunctionParameterScope )
@@ -61,6 +65,7 @@ data GrammarV1LinearLoopTrace = GrammarV1LinearLoopTrace
   , linearLoopHeaderBinder :: GrammarV1ResolvedBinder
   , linearLoopEntryBinder :: GrammarV1ResolvedBinder
   , linearLoopBackedgeBinder :: GrammarV1ResolvedBinder
+  , linearLoopBorrowViewBinder :: Maybe GrammarV1ResolvedBinder
   , linearLoopHeaderCheckedMode :: CheckedTypeMode
   , linearLoopInvariantProof :: SourceBoolJoinInvariant
   , linearLoopNativeRun :: SourceLinearLoopRun
@@ -75,6 +80,8 @@ data GrammarV1LinearLoopTrace = GrammarV1LinearLoopTrace
 --   };
 -- }
 --
+-- An optional one-statement scoped borrow before the explicit continue is
+-- checked with the production loan path; no active loan may cross reentry.
 -- Optional third source-declared Bytes[M] owner is admitted to test a
 -- wrong-width predecessor and a second same-width owner that attempts to
 -- rebind a STILL-LIVE header. No invented owner or arbitrary payload type.
@@ -148,8 +155,14 @@ grammarV1CheckedLinearLoopTransferTrace staticContext fnKey fn
                       (grammarV1CheckedLoopSlotInitializerReferences slot)
                     entryBinder <- exactEntry preLoopScope initializer
                       known entryReference
-                    [GrammarV1CheckedLoopContinueStep _ actuals refs] <-
-                      pure (grammarV1CheckedLoopBodySteps checkedLoop)
+                    (maybeBorrow, actuals, refs) <-
+                      case grammarV1CheckedLoopBodySteps checkedLoop of
+                        [GrammarV1CheckedLoopContinueStep _ values references] ->
+                          Just (Nothing,values,references)
+                        [GrammarV1CheckedLoopBodyBorrowStep _ loan,
+                         GrammarV1CheckedLoopContinueStep _ values references] ->
+                          Just (Just loan,values,references)
+                        _ -> Nothing
                     selectedActuals <- Just (elaborateLoopControl
                       ContinueControl
                       (LoopControlContract [semanticName header] [])
@@ -160,6 +173,8 @@ grammarV1CheckedLinearLoopTransferTrace staticContext fnKey fn
                         [actualReference] <- pure refs
                         backedgeBinder <- exactBackedge backedgeSource
                           (known ++ [header]) actualReference
+                        (borrowBlock,maybeView) <-
+                          projectBorrow (known ++ [header]) maybeBorrow
                         invariant <- checkInvariant checkedLoop sourceInvariant
                         let span' = locatedSpan (grammarV1FunctionBody fn)
                             component = Located span' (Component
@@ -185,10 +200,10 @@ grammarV1CheckedLinearLoopTransferTrace staticContext fnKey fn
                               backedgeSource backedgeBinder
                             loopSpan = locatedSpan loopSource
                             production = checkSurfaceSourceLinearLoopComponent
-                              env component entryBlock backedgeBlock loopSpan
+                              env component entryBlock borrowBlock backedgeBlock loopSpan
                               (semanticName header) payloadTy invariant
                             replay = traceSurfaceSourceLinearLoopComponent
-                              env component entryBlock backedgeBlock loopSpan
+                              env component entryBlock borrowBlock backedgeBlock loopSpan
                               (semanticName header) payloadTy invariant
                         if sourceLinearLoopOutcome replay /= production
                           then Nothing
@@ -200,12 +215,58 @@ grammarV1CheckedLinearLoopTransferTrace staticContext fnKey fn
                             , linearLoopHeaderBinder = header
                             , linearLoopEntryBinder = entryBinder
                             , linearLoopBackedgeBinder = backedgeBinder
+                            , linearLoopBorrowViewBinder = maybeView
                             , linearLoopHeaderCheckedMode =
                                 CheckedTypeMode payloadTy Linear
                             , linearLoopInvariantProof = invariant
                             , linearLoopNativeRun = replay
                             , linearLoopCheckedOutcome = production })
                       Right _ -> Nothing
+        _ -> Nothing
+
+    -- Borrow owner/view identities come from the Grammar-v1 scoped source.
+    -- The restricted body projection accepts Unit and exact resolved value
+    -- occurrences only. It never synthesizes a loan or an unscoped alias.
+    projectBorrow _ Nothing = Just (Nothing,Nothing)
+    projectBorrow known (Just checked) = do
+      let source = grammarV1CheckedBorrowViewSource checked
+          ownerOccurrence = grammarV1CheckedBorrowOwner checked
+          view = grammarV1CheckedBorrowViewBinder checked
+      originalOwner <- findExact known
+        (grammarV1CheckedLocalValueBinder ownerOccurrence)
+      Located _ (GrammarV1BorrowExpression ownerSource _ sourceBody) <-
+        pure source
+      body <- projectBorrowBody (view : known)
+        (grammarV1CheckedBorrowBodySteps checked)
+      let borrow = Located (locatedSpan source)
+            (BorrowExpression
+              (Located (locatedSpan ownerSource)
+                (VariableExpression (semanticName originalOwner)))
+              (semanticName view)
+              (Located (locatedSpan sourceBody) (Block body)))
+          block = Located (locatedSpan source)
+            (Block [Located (locatedSpan source)
+              (ExpressionStatement borrow)])
+      Just (Just block,Just view)
+
+    projectBorrowBody _ [] = Just []
+    projectBorrowBody known (step : rest) =
+      case step of
+        GrammarV1CheckedLetUnitStep
+          (Located span' (GrammarV1ExpressionStatement expression))
+          | GrammarV1UnitExpression <- locatedValue expression -> do
+              later <- projectBorrowBody known rest
+              Just (Located span'
+                (ExpressionStatement (Located
+                  (locatedSpan expression) UnitExpression)) : later)
+        GrammarV1CheckedLetOccurrenceStep
+          (Located span' (GrammarV1ExpressionStatement _)) occurrence -> do
+            resolved <- findExact known
+              (grammarV1CheckedLocalValueBinder occurrence)
+            later <- projectBorrowBody known rest
+            Just (Located span' (ExpressionStatement (Located
+              (locatedSpan (grammarV1CheckedLocalValueSource occurrence))
+              (VariableExpression (semanticName resolved)))) : later)
         _ -> Nothing
 
     sourceBlock source binder = Located (locatedSpan source)

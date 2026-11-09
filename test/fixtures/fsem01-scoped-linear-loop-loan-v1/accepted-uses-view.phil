@@ -1,0 +1,6 @@
+fn cycle(flag : Bool, payload : Bytes[8]) -> Unit satisfies C {
+  loop state (owner : Bytes[8] = payload) invariant true {
+    borrow owner as view { view; unit; };
+    continue(owner);
+  };
+}
