@@ -13,7 +13,12 @@ import Phil.Core.ProcessEndpointClosure
   ( ProcessEndpointClosureError
   , closeProcessEndpointState
   )
-import Phil.Core.ProcessRendezvous (ProcessCommunicationState)
+import Phil.Core.ProcessRendezvous
+  ( ProcessCommunicationState
+  , ProcessRendezvousRequest (..)
+  , ProcessRendezvousSide (..)
+  , RestrictedMessageTransfer (..)
+  )
 import Phil.Core.Protocol (ProtocolInstanceRevision, ProtocolRoleKey)
 import Phil.Core.Static (DeclarationKey)
 import Phil.Core.Syntax (Name, Outcome)
@@ -40,6 +45,9 @@ data GrammarV1RestrictedSourceCloseError
   | RestrictedSourceCloseReceiverError GrammarV1ComponentReceiveCloseError
   | RestrictedSourceCloseSenderPlanChanged
   | RestrictedSourceCloseReceiverPlanChanged
+  | RestrictedSourceCloseRequestMismatch
+      ProcessRendezvousRequest ProcessRendezvousRequest
+  | RestrictedSourceCloseTransferBinderMismatch Name Name Name Name
   | RestrictedSourceCloseSenderCoreError ProcessEndpointClosureError
   | RestrictedSourceCloseReceiverCoreError ProcessEndpointClosureError
   deriving (Eq, Show)
@@ -109,6 +117,32 @@ grammarV1CheckRestrictedSourceClose
   afterReceiver <- mapLeft RestrictedSourceCloseReceiverCoreError $
     closeProcessEndpointState network afterSender
       receiverProcess receiverEndpoint revision receiverRole receiverOutcome
+  -- A cached rendezvous carrier is not source authority. A successful Core
+  -- close must also match the checked source endpoint/request identities
+  -- and restricted payload binders. Roles, processes and revision are still
+  -- explicit external inputs; no display-spelling authority is inferred.
+  let expectedRequest = SendReceiveRendezvous
+        (ProcessRendezvousSide senderProcess
+          (grammarV1ResolvedBinderCoreName (checkedComponentSendEndpoint sender))
+          senderEndpoint revision senderRole)
+        (ProcessRendezvousSide receiverProcess
+          (grammarV1ResolvedBinderCoreName (checkedComponentReceiveEndpoint receiver))
+          receiverEndpoint revision receiverRole)
+      actualRequest = restrictedSourceRequest rendezvous
+  if actualRequest == expectedRequest
+    then Right ()
+    else Left (RestrictedSourceCloseRequestMismatch expectedRequest actualRequest)
+  let transfer = restrictedSourceTransfer rendezvous
+      sourcePayload = grammarV1ResolvedBinderCoreName
+        (checkedComponentSendPayload sender)
+      sourceReceived = grammarV1ResolvedBinderCoreName
+        (checkedComponentReceivePayload receiver)
+      actualPayload = restrictedMessageSenderName transfer
+      actualReceived = restrictedMessageReceiverName transfer
+  if actualPayload == sourcePayload && actualReceived == sourceReceived
+    then Right ()
+    else Left (RestrictedSourceCloseTransferBinderMismatch
+      sourcePayload sourceReceived actualPayload actualReceived)
   pure GrammarV1RestrictedSourceCloseTransition
     { restrictedSourceClosedSender = senderEndpoint
     , restrictedSourceClosedReceiver = receiverEndpoint
