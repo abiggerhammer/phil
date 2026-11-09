@@ -38,7 +38,8 @@ and runs offline controller tests before any reconciliation.
 
 In automatic `reconcile`, the controller reads each *live exact* FSEM
 claim ref and immutable `.fsem-claim.json` record, then requires **one and
-only one** closed **merged** same-repository formal-semantics PR on the
+only one** closed PR **merged into main**, from the same repository
+and formal-semantics lane, on the
 claimed source branch, opened after that claim, with the exact
 `FSEM-Slice: fsem-XX` marker and lane label. The normal release
 checker **re-fetches** the closed PR, confirms the original claim SHA,
