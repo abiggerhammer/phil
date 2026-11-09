@@ -58,6 +58,8 @@ module Phil.Verification.NativeFinalInstanceCorrespondence
   , decodeNativeSemanticRecordAtomFieldWires
   , encodeNativeGenericAtomActualPairWires
   , decodeNativeGenericAtomActualPairWires
+  , encodeNativeGenericAtomApplicationWires
+  , decodeNativeGenericAtomApplicationWires
   , NativeVerifierProfileText (..)
   , encodeNativeVerifierProfileWire
   , decodeNativeVerifierProfileWire
@@ -584,6 +586,36 @@ decodeNativeGenericAtomActualPairWires wires = do
     decodeEntry (keyWire, valueWire) =
       (,) <$> decodeNativeGenericStaticParameterKeyWire keyWire
           <*> decodeNativeSemanticAtomWire valueWire
+
+-- | Bounded whole DATA projection of a checked native GenericApplicationIdentity:
+-- D (DeclarationKey), V (InterfaceRevision), and the complete Q/M semantic-
+-- actuals association when EVERY SemanticForm value is a SemanticAtom Text.
+-- This composition preserves the actual native three-field shape; unlike a
+-- scalar-only D/V projection, a change to an atom actual changes the wire.
+-- Structured actuals fail closed. No acceptance or provenance is encoded.
+encodeNativeGenericAtomApplicationWires
+  :: GenericApplicationIdentity -> Maybe (Text, Text, [(Text, Text)])
+encodeNativeGenericAtomApplicationWires application = do
+  actualWires <- encodeNativeGenericAtomActualPairWires application
+  let (declarationWire, interfaceWire) =
+        encodeNativeGenericApplicationScalarWires application
+  pure (declarationWire, interfaceWire, actualWires)
+
+-- | Decode only a TYPED, UNACCEPTED triple, never GenericApplicationIdentity
+-- acceptance, verified generic instantiation or architecture occurrence.
+-- The Q/M decoder enforces the native Map ordering and uniqueness. Neither
+-- this triple nor a supplied Rocq Prop authenticates manifest or StageClosure.
+decodeNativeGenericAtomApplicationWires
+  :: (Text, Text, [(Text, Text)])
+  -> Maybe (DeclarationKey, InterfaceRevision,
+            Map.Map GenericStaticParameterKey SemanticForm)
+decodeNativeGenericAtomApplicationWires
+  (declarationWire, interfaceWire, actualWires) = do
+    (declaration, interfaceRevision) <-
+      decodeNativeGenericApplicationScalarWires
+        (declarationWire, interfaceWire)
+    actuals <- decodeNativeGenericAtomActualPairWires actualWires
+    pure (declaration, interfaceRevision, actuals)
 
 -- | The concrete verifier-profile revision is a plain Phase1Stage Text field,
 -- not a nominal Haskell revision type. This separate read-only role wrapper

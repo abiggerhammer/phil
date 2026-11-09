@@ -573,3 +573,40 @@ promoted into native authority; public bytes and independent pinned
 final-delta signoff remain uncredited. Original **244 normative cases**,
 historical independent audit, TCB, generated outputs, strict GHC/LLVM/Rocq
 unchanged; independent Phase 1 audit freeze **NOT YET**.
+
+## Implementation evidence — 2026-11-08: native SemanticRecord atom-only H/M data
+
+[PR #1687](https://github.com/abiggerhammer/phil/pull/1687),
+[issue #1584](https://github.com/abiggerhammer/phil/issues/1584),
+exact tested head `0a5fcb1feb87ff815d26ebde35cd238c9ed8edf5`,
+merged as `94661934f0db3a7d55b140e52eb75a814ec2047c`
+at **2026-11-08 22:51:11 UTC**. Independently refetched **37/37 exact-head
+pull-request workflows SUCCESS and 80/80 exact-head check runs SUCCESS**
+(no failed, pending or skipped); protected
+[Hamster Merge Intent 42531964111](https://github.com/abiggerhammer/phil/actions/runs/42531964111)
+and its merge-pr job succeeded. Supplemental Conformance Matrix row **48**
+appended and six cells independently read back.
+
+**Executed bounded result:** native SemanticRecord (Map Text SemanticForm)
+atom-only H field-name / M atom-value pair projection with Map.toAscList,
+canonical order and uniqueness checked against actual native Map Ord. Strict
+Haskell Upload/Steve checked producer, independently accepted manifest/VER-010
+source and exact INT-005 CertifiedRelease/StageClosure consumers replayed;
+duplicate, out-of-order, foreign-role, association-swap, and structured-value
+negatives passed. Five conditional Rocq candidate H/M string-list model
+theorems and named Print Assumptions passed. Its externally supplied NoDup
+premise is NOT a native Map comparator or acceptance proof.
+
+**Nonclaims:** decoder returns only unaccepted SemanticRecord data; no
+complete recursive SemanticForm, native Map/Set ↔ Rocq ordering, Unicode
+Data.Text ↔ Rocq string transport, accepted generic application/source/
+manifest/stage/release proof, authenticated occurrence-to-concrete StageClosure
+or selected CertifiedRelease producer, predecessor authority,
+FixedFinalAuthorityAdapter or FinalArtifactCertified. R/L raw Systems digest
+and lowering root, S/C/F normalized/common/closed stage revisions, B/I/A/P
+subject/instance/realization/profile, K/I checked occurrence, D/V/Q/M generic
+and H field-name roles stay disjoint. No nat encoding or supplied model Prop
+promoted into native authority. Public release bytes and independent pinned
+final-delta signoff separately uncredited. Original **244 normative cases**
+(236 Exit, 8 Profile), historical independent audit, Phase 1 TCB, generated
+outputs, strict GHC/LLVM/Rocq unchanged; independent freeze **NOT YET**.
