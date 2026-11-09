@@ -987,3 +987,38 @@ authority, public release-byte credit or independent pinned final-delta
 signoff. Original 244 normative cases, historical audit, Phase 1 TCB,
 generated artifacts, strict GHC/LLVM/Rocq and independent freeze NOT YET
 remain unchanged.
+
+## 2026-11-09 — bounded checked native generic application D/V/Q/M atom-only data (issue #1584)
+
+The source-checked native `GenericApplicationIdentity` actually contains
+`DeclarationKey`, `InterfaceRevision`, and
+`Map GenericStaticParameterKey SemanticForm`. This successor composes the
+previously separate D/V scalar and Q/M atom-only partial codecs into one
+**typed three-component data projection**. Non-atom semantic actuals cause
+`Nothing`; the decoder checks all role tags and exact native map order/
+uniqueness and returns only `(DeclarationKey, InterfaceRevision, Map ...)`.
+It NEVER constructs or accepts a `GenericApplicationIdentity` or claims a
+verified architecture occurrence, manifest, stage or release.
+
+Executable Upload/Steve cases replay checked producer, independently accepted
+manifest and VER-010 source, and exact INT-005 CertifiedRelease/StageClosure
+consumers before testing empty/two-atom actuals, same D/V with swapped actual
+associations, duplicate/out-of-order Q keys, reversed D/V, R raw-digest and
+I stage-revision substitutions, M-for-Q, Q-for-M, and structured-value refusal.
+Four Rocq string-model theorems with named assumption queries address a
+composed D/V/Q/M candidate projection's roundtrip, injectivity, scalar-role
+rejection and actuals sensitivity. They do not prove Haskell Text ↔ Rocq
+string transport or Haskell Map Ord ↔ Rocq candidate-list canonicalization.
+
+Remaining-premise ledger: no total recursive SemanticForm, full native
+Unicode/Map/Set representation, complete accepted generic/manifest/source/
+StageClosure/CertifiedRelease reflection or authenticated checked architecture
+occurrence → concrete StageClosure/selected CertifiedRelease production.
+Predecessor authority, FixedFinalAuthorityAdapter and FinalArtifactCertified
+remain open. Keep raw Systems R and lowering root L separate from normalized S,
+common C and final F revisions; B subject, I stage instance, A realization,
+P profile, K/I checked occurrence, D/V/Q/M generic/value and H record field
+roles distinct. No nat mapping or model Prop elevated to native authority.
+Public-byte verification and independent final-delta signoff uncredited;
+original 244 normative cases, historical audit, Phase 1 TCB, generated outputs,
+strict GHC/LLVM/Rocq and independent freeze NOT YET unchanged.

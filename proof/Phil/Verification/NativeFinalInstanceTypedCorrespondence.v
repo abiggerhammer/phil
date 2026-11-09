@@ -2288,3 +2288,68 @@ Proof.
   destruct H as [Hnot _].
   apply Hnot. left. reflexivity.
 Qed.
+
+(* #1584 composed bounded D/V/Q/M DATA model: the actual native checked
+   GenericApplicationIdentity has D declaration, V interface and a Q/M
+   Map GenericStaticParameterKey SemanticForm. The model is valid only for
+   atom-valued actuals and externally supplied canonical candidate pairs;
+   there is NO Data.Text to Rocq string or Map Ord transport theorem. *)
+Record NativeGenericAtomApplicationModel := mkNativeGenericAtomApplicationModel {
+  nativeGenericAtomApplicationScalars : NativeGenericScalarProjection;
+  nativeGenericAtomApplicationPairs :
+    list (NativeGenericStaticKeyRole * NativeSemanticAtomRole)
+}.
+Definition nativeEncodeGenericAtomApplicationModel
+  (application : NativeGenericAtomApplicationModel)
+  : (string * string) * list (string * string) :=
+  ( nativeGenericScalarWires (nativeGenericAtomApplicationScalars application),
+    nativeEncodeGenericAtomActualPairsModel
+      (nativeGenericAtomApplicationPairs application) ).
+Definition nativeDecodeGenericAtomApplicationModel
+  (wires : (string * string) * list (string * string))
+  : option NativeGenericAtomApplicationModel :=
+  match nativeDecodeGenericScalarWires (fst wires),
+        nativeDecodeGenericAtomActualPairsModel (snd wires) with
+  | Some scalars, Some pairs =>
+      Some (mkNativeGenericAtomApplicationModel scalars pairs)
+  | _, _ => None
+  end.
+Theorem native_generic_atom_application_model_roundtrip :
+  forall application,
+    nativeDecodeGenericAtomApplicationModel
+      (nativeEncodeGenericAtomApplicationModel application) = Some application.
+Proof.
+  intros [scalars entries]. destruct scalars as [[d] [v]].
+  unfold nativeEncodeGenericAtomApplicationModel,
+    nativeDecodeGenericAtomApplicationModel. simpl.
+  rewrite native_generic_atom_actual_pairs_model_roundtrip. reflexivity.
+Qed.
+Theorem native_generic_atom_application_model_injective :
+  forall first second,
+    nativeEncodeGenericAtomApplicationModel first =
+      nativeEncodeGenericAtomApplicationModel second -> first = second.
+Proof.
+  intros first second H.
+  apply (f_equal nativeDecodeGenericAtomApplicationModel) in H.
+  rewrite !native_generic_atom_application_model_roundtrip in H.
+  now injection H.
+Qed.
+Theorem native_generic_atom_application_model_swapped_scalar_roles_reject :
+  forall scalars entries,
+    nativeDecodeGenericAtomApplicationModel
+      ((nativeGenericInterfaceWire (nativeGenericScalarInterface scalars),
+        nativeGenericDeclarationWire (nativeGenericScalarDeclaration scalars)),
+       nativeEncodeGenericAtomActualPairsModel entries) = None.
+Proof. intros [[d] [v]] entries. reflexivity. Qed.
+Theorem native_generic_atom_application_model_actuals_sensitive :
+  forall scalars first second, first <> second ->
+    nativeEncodeGenericAtomApplicationModel
+      (mkNativeGenericAtomApplicationModel scalars first) <>
+    nativeEncodeGenericAtomApplicationModel
+      (mkNativeGenericAtomApplicationModel scalars second).
+Proof.
+  intros scalars first second Hneq Heq.
+  apply Hneq.
+  apply native_generic_atom_actual_pairs_model_injective.
+  exact (f_equal snd Heq).
+Qed.

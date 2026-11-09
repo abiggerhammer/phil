@@ -215,6 +215,10 @@ main = do
           , nativeGenericAtomActualPairsReplayAccepts source upload)
         , ( "Steve checked Q/M atom-only generic actuals preserve association; duplicates and swapped roles reject"
           , nativeGenericAtomActualPairsReplayAccepts source steve)
+        , ( "Upload checked atom-only generic application D/V/Q/M data keeps exact semantic actual associations"
+          , nativeGenericAtomApplicationReplayAccepts source upload)
+        , ( "Steve checked atom-only generic application D/V/Q/M data keeps exact semantic actual associations"
+          , nativeGenericAtomApplicationReplayAccepts source steve)
         , ( "Upload checked SemanticUnordered atom-only canonical M-set rejects duplicates, order, and roles"
           , nativeSemanticUnorderedAtomSetReplayAccepts source upload)
         , ( "Steve checked SemanticUnordered atom-only canonical M-set rejects duplicates, order, and roles"
@@ -1714,6 +1718,98 @@ nativeGenericAtomActualPairsReplayAccepts source fixture =
                                [(encodeNativeGenericDeclarationWire
                                    (DeclarationKey "audit.qm.alpha"), mA),
                                 (qB, mB)] == Nothing
+                        _ -> False
+    _ -> False
+
+-- | Compose the native checked GenericApplicationIdentity's actual D/V
+-- declaration/interface roles with its full Q/M atom-only actuals, after
+-- exact checked producer and independently accepted consumers have replayed.
+-- Synthetic updates are UNACCEPTED and cannot forge their provenance.
+nativeGenericAtomApplicationReplayAccepts
+  :: GenericApplicationAssurance -> ReleaseFixture -> Bool
+nativeGenericAtomApplicationReplayAccepts source fixture =
+  case (producerInputs source, produceFixture source fixture) of
+    (Right (bundle, policy), Right (_, produced)) ->
+      case nativeAdapterPair source produced of
+        Nothing -> False
+        Just (sourceArtifact, release) ->
+          case closeNativeFinalInstanceCorrespondence
+              source (sourceInstanceDescriptor source) bundle policy
+              (fixtureContext produced) (fixtureLedger produced)
+              emptyProducerSelection sourceArtifact release of
+            Left _ -> False
+            Right witness ->
+              case replayNativeExactAcceptedConsumers witness
+                (nativeCorrespondenceSourceManifestBinding witness)
+                (nativeCorrespondenceCertifiedSource witness)
+                (nativeCorrespondenceCertifiedRelease witness) of
+                Left _ -> False
+                Right _ ->
+                  let application = genericDischargeApplicationIdentity
+                        (genericApplicationAssuranceLineage
+                          (nativeCorrespondenceSourceAssurance witness))
+                      declaration = genericApplicationDeclarationKey application
+                      interfaceRevision = genericApplicationInterfaceRevision application
+                      actuals = genericApplicationSemanticArguments application
+                      keyA = GenericStaticParameterKey "audit.d-v-q-m.alpha"
+                      keyB = GenericStaticParameterKey "audit.d-v-q-m.beta"
+                      atomA = SemanticAtom "audit.d-v-q-m.atom.alpha"
+                      atomB = SemanticAtom "audit.d-v-q-m.atom.beta"
+                      atomMap = Map.fromList [(keyA, atomA), (keyB, atomB)]
+                      swappedMap = Map.fromList [(keyA, atomB), (keyB, atomA)]
+                      atomApplication = application
+                        { genericApplicationSemanticArguments = atomMap }
+                      swappedApplication = application
+                        { genericApplicationSemanticArguments = swappedMap }
+                      structuredApplication = application
+                        { genericApplicationSemanticArguments =
+                            Map.singleton keyA (SemanticOrdered [atomA]) }
+                      emptyApplication = application
+                        { genericApplicationSemanticArguments = Map.empty }
+                      isAtom (SemanticAtom _) = True
+                      isAtom _ = False
+                      checkedProjection =
+                        case encodeNativeGenericAtomApplicationWires application of
+                          Nothing -> any (not . isAtom) (Map.elems actuals)
+                          Just triple ->
+                            decodeNativeGenericAtomApplicationWires triple ==
+                              Just (declaration, interfaceRevision, actuals)
+                      foreignDeclaration = encodeNativeRawSystemsDigestWire
+                        (NativeRawSystemsDigest (Digest (unDeclarationKey declaration)))
+                      foreignInterface = encodeNativeInstanceRevisionWire
+                        (InstanceRevision (unInterfaceRevision interfaceRevision))
+                  in checkedProjection
+                    && encodeNativeGenericAtomApplicationWires structuredApplication == Nothing
+                    && case encodeNativeGenericAtomApplicationWires emptyApplication of
+                         Just triple ->
+                           decodeNativeGenericAtomApplicationWires triple ==
+                             Just (declaration, interfaceRevision, Map.empty)
+                         Nothing -> False
+                    && encodeNativeGenericApplicationScalarWires atomApplication ==
+                       encodeNativeGenericApplicationScalarWires swappedApplication
+                    && case (encodeNativeGenericAtomApplicationWires atomApplication,
+                             encodeNativeGenericAtomApplicationWires swappedApplication) of
+                        (Just triple@(dWire, vWire, pairs@[(qA,mA),(qB,mB)]),
+                         Just swappedTriple) ->
+                          triple /= swappedTriple
+                          && decodeNativeGenericAtomApplicationWires triple ==
+                               Just (declaration, interfaceRevision, atomMap)
+                          && decodeNativeGenericAtomApplicationWires swappedTriple ==
+                               Just (declaration, interfaceRevision, swappedMap)
+                          && decodeNativeGenericAtomApplicationWires
+                               (vWire, dWire, pairs) == Nothing
+                          && decodeNativeGenericAtomApplicationWires
+                               (foreignDeclaration, vWire, pairs) == Nothing
+                          && decodeNativeGenericAtomApplicationWires
+                               (dWire, foreignInterface, pairs) == Nothing
+                          && decodeNativeGenericAtomApplicationWires
+                               (dWire, vWire, reverse pairs) == Nothing
+                          && decodeNativeGenericAtomApplicationWires
+                               (dWire, vWire, [(qA,mA),(qA,mA)]) == Nothing
+                          && decodeNativeGenericAtomApplicationWires
+                               (dWire, vWire, [(mA,qA),(qB,mB)]) == Nothing
+                          && decodeNativeGenericAtomApplicationWires
+                               (dWire, vWire, [(qA,qA),(qB,mB)]) == Nothing
                         _ -> False
     _ -> False
 

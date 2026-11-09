@@ -196,6 +196,10 @@ jobs:
           Print Assumptions native_record_atom_pair_model_wrong_role_reject.
           Print Assumptions native_record_atom_pair_model_association_sensitive.
           Print Assumptions native_record_atom_duplicate_field_not_canonical_model.
+          Print Assumptions native_generic_atom_application_model_roundtrip.
+          Print Assumptions native_generic_atom_application_model_injective.
+          Print Assumptions native_generic_atom_application_model_swapped_scalar_roles_reject.
+          Print Assumptions native_generic_atom_application_model_actuals_sensitive.
           Print Assumptions fixed_adapter_full_certification_preserves_predecessors.
           EOF
           rocq c -Q proof/Phil Phil /tmp/NativeFinalInstanceAssumptions.v 2>&1 | tee typed-native-instance-assumptions.log
