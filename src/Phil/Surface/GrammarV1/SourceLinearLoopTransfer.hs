@@ -206,7 +206,6 @@ grammarV1CheckedLinearLoopTransferTrace staticContext fnKey fn
                             , linearLoopNativeRun = replay
                             , linearLoopCheckedOutcome = production })
                       Right _ -> Nothing
-              Right _ -> Nothing
         _ -> Nothing
 
     sourceBlock source binder = Located (locatedSpan source)
