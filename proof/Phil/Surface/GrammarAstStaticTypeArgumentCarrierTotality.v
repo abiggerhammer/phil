@@ -434,7 +434,7 @@ Proof.
         phase1_surface_normalize_optional_static_arguments,
         phase1_surface_expect_optional.
       cbn.
-      rewrite String.eqb_refl.
+      repeat rewrite String.eqb_refl.
       rewrite Hname_normalize.
       reflexivity.
     }
@@ -489,7 +489,7 @@ Proof.
         phase1_surface_normalize_optional_static_arguments,
         phase1_surface_expect_optional.
       cbn.
-      rewrite String.eqb_refl.
+      repeat rewrite String.eqb_refl.
       rewrite Hname_normalize.
       unfold phase1_surface_validate_named_node in Hvalidate |- *.
       rewrite Hvalidate.
