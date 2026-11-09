@@ -1,6 +1,6 @@
 From Stdlib Require Import Strings.String Bool.Bool.
 From Phil.Core Require Import Syntax Context SessionStep
-  FSEM02RestrictedSourceTransfer.
+  FSEM02StatefulSourceChoice FSEM02RestrictedSourceTransfer.
 
 (*
   Non-normative FSEM-02 paired source terminal-close owner model. Source shape,
