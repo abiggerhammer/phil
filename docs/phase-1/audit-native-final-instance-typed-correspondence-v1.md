@@ -1169,3 +1169,32 @@ release-byte verification and independent pinned final-delta signoff
 separately uncredited; original 244 normative cases, historical audit,
 Phase 1 TCB, generated artifacts and strict GHC/LLVM/Rocq unchanged.
 Independent audit freeze **NOT YET**.
+ 
+## 2026-11-09 — concrete StageClosure I after subject B and exact F/C/S/R/L (#1584)
+
+The next bounded, read-only native diagnostic adds the concrete
+InstanceRevision I from the same exact independently accepted StageClosure,
+following checked atom-only generic D/V/Q/M, independently accepted raw
+manifest Systems digest R and lowering root L, normalized revision S, common
+contract C, closed contract F and subject B. Each comparison replays the
+actual checked source-manifest producer, exact accepted VER-010 source and
+INT-005 CertifiedRelease/StageClosure. Haskell Upload/Steve positive and
+adversarial replay rejects same-payload R/L/S/C/F/B/A/P/K wrong roles,
+changed tagged I and I substituted for B. Four conditional Rocq string-model
+theorems and named Print Assumptions check roundtrip, injectivity, role
+rejection and stage-instance sensitivity.
+
+**Remaining-premise ledger:** checked architecture occurrence is a DISTINCT
+(InstanceKey K, InstanceRevision I) pair; equal instance revision does not
+prove that occurrence produced the concrete StageClosure or release. Decoder
+yields an unaccepted diagnostic, not authority. No full recursive SemanticForm,
+native Unicode Data.Text/Rocq string transport, native Map/Set ordering ↔
+Rocq canonicality, accepted application/manifest/source/stage/release
+reflection, predecessor authority, FixedFinalAuthorityAdapter or
+FinalArtifactCertified. Keep R raw, L lowering, S normalized, C common, F
+closed, B subject, I stage instance, A realization, P profile, checked K/I
+occurrence and generic D/V/Q/M/H distinct. No invented native-to-Rocq nat
+encoding or externally supplied model Prop promoted to authority. Public
+release-byte verification and independent pinned final-delta signoff are
+separate, uncredited; original 244 normative cases, historic audit, Phase 1
+TCB, generated artifacts and strict GHC/LLVM/Rocq unchanged. **NOT YET.**

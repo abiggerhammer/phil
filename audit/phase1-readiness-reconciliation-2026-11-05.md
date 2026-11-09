@@ -780,3 +780,35 @@ No invented nat encoding or model Prop promoted to native authority.
 Public release-byte verification and independently pinned final-delta signoff
 separately uncredited. Historic audit, TCB, generated outputs and strict
 GHC/LLVM/Rocq unchanged. **Independent audit freeze NOT YET.**
+ 
+## Implementation evidence — 2026-11-09: exact subject StageClosure B (#1698)
+
+[PR #1698](https://github.com/abiggerhammer/phil/pull/1698),
+[controlling issue #1584](https://github.com/abiggerhammer/phil/issues/1584).
+Exact tested head `1be5034d30e6ab308d57f7a3419d03b7f4b76647`,
+protected merge `cd547fc133f064f393324aa3df3ab67e91584445` at
+2026-11-09 09:58:36 UTC. Independently rechecked **37/37** exact-head
+pull_request workflows SUCCESS and **80/80** check runs SUCCESS, zero
+failed/pending/skipped. Protected
+[Hamster Merge Intent #42597281134](https://github.com/abiggerhammer/phil/actions/runs/42597281134)
+and merge-pr job SUCCESS; Conformance Matrix supplemental row 54 already
+recorded and independently read back, so no duplicate was created. Original
+244 normative conformance cases (236 Exit, 8 Profile) preserved.
+
+**Bounded executed evidence:** accepted Upload/Steve checked source-manifest
+producer, independently accepted manifest raw R/L and VER-010 source, exact
+INT-005 CertifiedRelease/StageClosure; unaccepted native atom-only D/V/Q/M
+data with normalized S, common C, closed F and subject B. Equal-payload
+R/L/S/C/F/I/A/P/K foreign-role B, changed B and B-as-F negative tests passed.
+Four conditional Rocq string-model roundtrip/injectivity/wrong-role/
+subject-sensitivity theorems with named Print Assumptions passed at exact head.
+
+**Nonclaims:** no total recursive SemanticForm, native Unicode/Map/Set
+reflection, accepted source/manifest/stage/release authority reconstruction,
+authenticated checked K/I occurrence-to-concrete StageClosure producer,
+predecessor authority, FixedFinalAuthorityAdapter or FinalArtifactCertified.
+R/L/S/C/F/B/I/A/P and checked occurrence K/I remain distinct. No invented
+native-to-Rocq nat encoding or model Prop promoted to native authority.
+Public release bytes and independent pinned final-delta signoff separately
+uncredited. Historical audit, TCB, generated outputs and strict GHC/LLVM/Rocq
+unchanged. **Independent audit freeze NOT YET.**
