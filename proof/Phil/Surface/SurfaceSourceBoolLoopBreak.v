@@ -1,4 +1,5 @@
-From Stdlib Require Import Strings.String Bool.Bool.
+From Stdlib Require Import Strings.String Bool.Bool Lists.List.
+Import ListNotations.
 
 From Phil.Core Require Import Syntax Context.
 From Phil.Surface Require Import SurfaceSourceBoolJoinTelescope.
@@ -152,6 +153,7 @@ Proof.
     as [_ [_ Hothers]].
   specialize (Hothers debt Hdistinct).
   unfold NoLinearOwner in Hcomplete.
+  specialize (Hcomplete debt).
   rewrite Hcomplete in Hothers.
   rewrite Hdebt in Hothers.
   discriminate.
