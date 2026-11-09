@@ -147,9 +147,9 @@ Proof.
       clientOld clientNext serverOld serverNext endpointOwners Howners)
     as [Hclient [Hserver Hframe]].
   repeat (apply conj).
-  - exact Hsource.
-  - exact Hmessage.
-  - exact Hheads.
+  - reflexivity.
+  - reflexivity.
+  - reflexivity.
   - eapply fsem02SourceOwnerMatchesTrue. exact Hpayload.
   - simpl. now rewrite String.eqb_refl.
   - simpl.
