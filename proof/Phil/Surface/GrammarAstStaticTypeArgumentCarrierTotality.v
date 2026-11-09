@@ -3,7 +3,8 @@ From Stdlib Require Import Lists.List Strings.String.
 From Phil.Surface Require Import
   GrammarDerivation
   GrammarAstStaticTypeArgumentCarrierSpine
-  GrammarAstStaticTypeArgumentPayloadTotality.
+  GrammarAstStaticTypeArgumentPayloadTotality
+  GrammarAstStaticArgumentsTotality.
 
 Import ListNotations.
 Open Scope string_scope.
