@@ -2579,13 +2579,13 @@ Theorem native_atom_manifest_common_data_model_wrong_role_reject :
   forall previous raw root systems closed,
     nativeDecodeAtomManifestCommonDataModel
       (nativeEncodeAtomManifestSystemsDataModel previous,
-       nativeRawSystemsDigestWire raw) = None /\\
+       nativeRawSystemsDigestWire raw) = None /\
     nativeDecodeAtomManifestCommonDataModel
       (nativeEncodeAtomManifestSystemsDataModel previous,
-       nativeLoweringRootWire root) = None /\\
+       nativeLoweringRootWire root) = None /\
     nativeDecodeAtomManifestCommonDataModel
       (nativeEncodeAtomManifestSystemsDataModel previous,
-       nativeSystemsRevisionWire systems) = None /\\
+       nativeSystemsRevisionWire systems) = None /\
     nativeDecodeAtomManifestCommonDataModel
       (nativeEncodeAtomManifestSystemsDataModel previous,
        nativeClosedRevisionWire closed) = None.
