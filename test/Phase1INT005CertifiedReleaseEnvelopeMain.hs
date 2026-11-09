@@ -3690,7 +3690,7 @@ nativeAtomManifestProfileReplayAccepts source fixture =
                                    (nativeAtomManifestSubjectReplayBase
                                      (nativeAtomManifestInstanceReplayBase
                                        (nativeAtomManifestRealizationReplayBase
-                                         (nativeAtomManifestProfileReplayBase receipt))))))) == payload
+                                         (nativeAtomManifestProfileReplayBase receipt)))))))) == payload
                       && decodeNativeVerifierProfileWire wireP == Just profile
                       && all (\wire -> case check (withP wire) of
                             Left NativeAtomManifestProfileRoleMalformed -> True
