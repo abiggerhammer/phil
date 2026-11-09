@@ -414,15 +414,15 @@ Proof.
       (ENonterminal "static_arguments")
       _ _ arguments_tree Harguments)
     as [[_ Hnone] | [arguments_body [Hsome Harguments_body]]].
-  - let base := constr:(
+  - pose (base :=
       {| phase1_static_reference_spine_name := name;
-         phase1_static_reference_spine_arguments := None |}) in
-    let middle := constr:(
+         phase1_static_reference_spine_arguments := None |}).
+    pose (middle :=
       {| phase1_static_arguments_reference_spine_name := name;
-         phase1_static_arguments_reference_spine_arguments := None |}) in
-    let refined := constr:(
+         phase1_static_arguments_reference_spine_arguments := None |}).
+    pose (refined :=
       {| phase1_static_type_arguments_reference_spine_name := name;
-         phase1_static_type_arguments_reference_spine_arguments := None |}) in
+         phase1_static_type_arguments_reference_spine_arguments := None |}).
     assert (Hbase :
       phase1_surface_normalize_static_reference_spine tree = Some base).
     {
@@ -467,17 +467,17 @@ Proof.
         _ _ _ arguments_body Harguments_body)
       as [base_arguments [refined_arguments
           [Hbase_arguments [Hrefined_arguments Harguments_round_trip]]]].
-    let base := constr:(
+    pose (base :=
       {| phase1_static_reference_spine_name := name;
-         phase1_static_reference_spine_arguments := Some arguments_body |}) in
-    let middle := constr:(
+         phase1_static_reference_spine_arguments := Some arguments_body |}).
+    pose (middle :=
       {| phase1_static_arguments_reference_spine_name := name;
          phase1_static_arguments_reference_spine_arguments :=
-           Some base_arguments |}) in
-    let refined := constr:(
+           Some base_arguments |}).
+    pose (refined :=
       {| phase1_static_type_arguments_reference_spine_name := name;
          phase1_static_type_arguments_reference_spine_arguments :=
-           Some refined_arguments |}) in
+           Some refined_arguments |}).
     assert (Hbase :
       phase1_surface_normalize_static_reference_spine tree = Some base).
     {
