@@ -68,3 +68,5 @@ Do not infer from an old “not yet” list that the named later slice is still 
 Bounded FSEM-02 [source offer-catalog totality](formal-semantics-source-offer-fsem02-v1.md) is non-normative: exact parsed-arm coverage and conditional Rocq catalog facts, not complete offer execution or rendezvous.
 
 Bounded FSEM-02 [source offer-arm branch replay](formal-semantics-source-offer-replay-fsem02-v1.md) connects a source-checked return-unit arm catalog, an externally selected label and exact checked protocol projection to a production Core local offer step. It does not execute general arm bodies, close the successor implicitly, or establish rendezvous.
+
+The bounded [FSEM-02 source-checked restricted payload rendezvous](formal-semantics-restricted-source-transfer-fsem02-v1.md) composes independently parsed typed send/receive source with the existing production Core atomic payload owner transition, exact accepted/rejected source replay, and conditional Rocq owner/endpoint frame lemmas. Non-normative: external nominal/activation authority remains a premise; full architecture admission, source-close execution, and universal Haskell-to-Rocq refinement remain open.

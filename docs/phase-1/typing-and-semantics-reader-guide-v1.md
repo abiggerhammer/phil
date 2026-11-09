@@ -371,3 +371,5 @@ formal specification, the next passes should:
 This guide should become shorter and more exact as the consolidated
 judgments and rules are written—not grow into a second, competing
 specification.
+
+The bounded [FSEM-02 source-checked restricted payload rendezvous](formal-semantics-restricted-source-transfer-fsem02-v1.md) composes independently parsed typed send/receive source with the existing production Core atomic payload owner transition, exact accepted/rejected source replay, and conditional Rocq owner/endpoint frame lemmas. Non-normative: external nominal/activation authority remains a premise; full architecture admission, source-close execution, and universal Haskell-to-Rocq refinement remain open.

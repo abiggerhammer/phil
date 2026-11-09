@@ -1,0 +1,26 @@
+protocol OwnedPing {
+  role Client = send (value : Bytes[8]) then end Done;
+  role Server = receive (value : Bytes[8]) then end Done;
+}
+component ClientWorker(endpoint : Client[OwnedPing], payload : Bytes[8]) {
+  let done = send payload on endpoint;
+  close done;
+}
+component ServerWorker(endpoint : Server[OwnedPing]) {
+  let (done, received) = receive Bytes[8] on endpoint;
+  close done;
+}
+architecture LocalOwnedPing {
+  instance client = ClientWorker;
+  instance server = ServerWorker;
+  process client_run = client;
+  process server_run = server;
+  protocol ping = OwnedPing;
+  role ping.Client = client;
+  role ping.Server = server;
+  entry payload : Bytes[8];
+  bind client.endpoint = ping.Client;
+  bind client.payload = payload;
+  bind server.endpoint = ping.Server;
+}
+program main = instantiate LocalOwnedPing;
