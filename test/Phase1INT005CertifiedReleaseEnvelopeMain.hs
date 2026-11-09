@@ -255,6 +255,10 @@ main = do
           , nativeAtomManifestOccurrenceKeyReplayAccepts source upload)
         , ( "Steve checked occurrence key K after exact P/A/I/B/F/C/S/R/L"
           , nativeAtomManifestOccurrenceKeyReplayAccepts source steve)
+        , ( "Upload checked occurrence I_checked after K and stage I_stage"
+          , nativeAtomManifestCheckedRevisionReplayAccepts source upload)
+        , ( "Steve checked occurrence I_checked after K and stage I_stage"
+          , nativeAtomManifestCheckedRevisionReplayAccepts source steve)
         , ( "Upload checked SemanticUnordered atom-only canonical M-set rejects duplicates, order, and roles"
           , nativeSemanticUnorderedAtomSetReplayAccepts source upload)
         , ( "Steve checked SemanticUnordered atom-only canonical M-set rejects duplicates, order, and roles"
@@ -3804,5 +3808,112 @@ nativeAtomManifestOccurrenceKeyReplayAccepts source fixture =
                       && case check substitutedP of
                            Left (NativeAtomManifestOccurrenceKeyBaseDifferent
                              NativeAtomManifestProfileRoleMalformed) -> True
+                           _ -> False
+    _ -> False
+
+-- | Exact checked (K,I_checked) after separately accepted I_stage; no origin.
+nativeAtomManifestCheckedRevisionReplayAccepts
+  :: GenericApplicationAssurance -> ReleaseFixture -> Bool
+nativeAtomManifestOccurrenceKeyReplayAccepts source fixture =
+  case (producerInputs source, produceFixture source fixture) of
+    (Right (bundle, policy), Right (_, produced)) ->
+      case nativeAdapterPair source produced of
+        Nothing -> False
+        Just (sourceObject, releaseObject) ->
+          case closeNativeFinalInstanceCorrespondence
+              source (sourceInstanceDescriptor source) bundle policy
+              (fixtureContext produced) (fixtureLedger produced)
+              emptyProducerSelection sourceObject releaseObject of
+            Left _ -> False
+            Right witness ->
+              let producer = nativeCorrespondenceSourceManifestBinding witness
+                  acceptedSource = nativeCorrespondenceCertifiedSource witness
+                  acceptedRelease = nativeCorrespondenceCertifiedRelease witness
+                  manifest = nativeCorrespondenceManifest witness
+                  app = nativeAdapterSourceId
+                    (nativeCorrespondenceSourceAssurance witness)
+                  raw = encodeNativeRawSystemsDigestWire
+                    (NativeRawSystemsDigest (manifestImplementationDigest manifest))
+                  root = encodeNativeLoweringRootWire
+                    (NativeLoweringRootDigest (manifestLoweringLedgerRoot manifest))
+                  authority = nativeCorrespondenceAuthority witness
+                  revisionS = nativeFinalSystemsRevision authority
+                  common = nativeFinalCommonContractRevision authority
+                  closed = nativeFinalClosedContractRevision authority
+                  subject = nativeFinalSubjectRevision authority
+                  instanceRevision = nativeFinalInstanceRevision authority
+                  realization = nativeFinalRealizationRevision authority
+                  profile = NativeVerifierProfileText (nativeFinalVerifierProfile authority)
+                  InstanceKey payload = identityInstanceKey (nativeCorrespondenceArchitectureInstance witness)
+                  key = InstanceKey payload
+                  checkedRevision = identityInstanceRevision
+                    (nativeCorrespondenceArchitectureInstance witness)
+                  InstanceRevision checkedPayload = checkedRevision
+                  wireS = encodeNativeSystemsRevisionWire revisionS
+                  wireC = encodeNativeCommonContractRevisionWire common
+                  wireF = encodeNativeClosedContractRevisionWire closed
+                  wireB = encodeNativeSubjectRevisionWire subject
+                  wireI = encodeNativeInstanceRevisionWire instanceRevision
+                  wireA = encodeNativeRealizationRevisionWire realization
+                  wireP = encodeNativeVerifierProfileWire profile
+                  wireK = encodeNativeOccurrenceKeyWire key
+                  wireJ = encodeNativeInstanceRevisionWire checkedRevision
+                  foreignRoles =
+                    [ encodeNativeRawSystemsDigestWire
+                        (NativeRawSystemsDigest (Digest payload))
+                    , encodeNativeLoweringRootWire
+                        (NativeLoweringRootDigest (Digest payload))
+                    , encodeNativeSystemsRevisionWire
+                        (SystemsArtifactRevision payload)
+                    , encodeNativeCommonContractRevisionWire
+                        (Phase1StageContractRevision payload)
+                    , encodeNativeClosedContractRevisionWire
+                        (ClosedStageContractRevision payload)
+                    , encodeNativeSubjectRevisionWire (SubjectStageRevision payload)
+                    , encodeNativeRealizationRevisionWire (RealizationRevision payload)
+                    , encodeNativeVerifierProfileWire (NativeVerifierProfileText payload)
+                    , encodeNativeOccurrenceKeyWire (InstanceKey payload) ]
+
+              in case encodeNativeGenericAtomApplicationWires app of
+                Nothing -> False
+                Just applicationWires ->
+                  let base = NativeAtomManifestWireCandidate applicationWires raw root
+                      sCandidate = NativeAtomManifestSystemsWireCandidate base wireS
+                      cCandidate = NativeAtomManifestCommonWireCandidate sCandidate wireC
+                      fCandidate = NativeAtomManifestClosedWireCandidate cCandidate wireF
+                      bCandidate = NativeAtomManifestSubjectWireCandidate fCandidate wireB
+                      iCandidate = NativeAtomManifestInstanceWireCandidate bCandidate wireI
+                      aCandidate = NativeAtomManifestRealizationWireCandidate iCandidate wireA
+                      pCandidate = NativeAtomManifestProfileWireCandidate aCandidate wireP
+                      kCandidate = NativeAtomManifestOccurrenceKeyWireCandidate pCandidate wireK
+                      candidate = NativeAtomManifestCheckedRevisionWireCandidate kCandidate wireJ
+                      check = replayNativeAtomManifestCheckedRevisionCandidate
+                        witness producer acceptedSource acceptedRelease
+                      changed = candidate
+                        { nativeAtomManifestCheckedRevisionWire =
+                            encodeNativeInstanceRevisionWire
+                              (InstanceRevision (checkedPayload <> ".unaccepted")) }
+                      substitutedK = candidate
+                        { nativeAtomManifestCheckedRevisionBaseCandidate = kCandidate
+                            { nativeAtomManifestOccurrenceKeyWire = wireJ } }
+                      withJ wire = candidate { nativeAtomManifestCheckedRevisionWire = wire }
+                  in case check candidate of
+                    Left _ -> False
+                    Right receipt ->
+                      nativeAtomManifestCheckedRevisionReplayRevision receipt == checkedRevision
+                      && nativeAtomManifestOccurrenceKeyReplayKey
+                           (nativeAtomManifestCheckedRevisionReplayBase receipt) == key
+                      && identityInstanceRevision
+                           (nativeCorrespondenceArchitectureInstance witness) == checkedRevision
+                      && decodeNativeInstanceRevisionWire wireJ == Just checkedRevision
+                      && all (\wire -> case check (withJ wire) of
+                            Left NativeAtomManifestCheckedRevisionRoleMalformed -> True
+                            _ -> False) foreignRoles
+                      && case check changed of
+                           Left NativeAtomManifestCheckedRevisionDifferent -> True
+                           _ -> False
+                      && case check substitutedK of
+                           Left (NativeAtomManifestCheckedRevisionBaseDifferent
+                             NativeAtomManifestOccurrenceKeyRoleMalformed) -> True
                            _ -> False
     _ -> False

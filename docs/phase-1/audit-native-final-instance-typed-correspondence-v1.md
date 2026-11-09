@@ -1286,3 +1286,27 @@ or supplied model Prop as derived native authority. Public release bytes and
 independent pinned final-delta signoff remain separate and uncredited.
 244 normative cases, historical audit, Phase 1 TCB, generated artifacts and
 strict GHC/LLVM/Rocq policies unchanged. **Independent freeze NOT YET.**
+
+## 2026-11-09 — checked occurrence I_checked after K (#1584)
+
+The next bounded unaccepted diagnostic compares actual `InstanceRevision`
+I_checked from the checked architecture (K,I_checked), after independent
+manifest raw R/L, atom-only D/V/Q/M, normalized S, common C, closed F,
+concrete B/I_stage/A/P/K and exact VER-010 / INT-005 accepted consumers.
+I_checked and accepted StageClosure I_stage share the SAME native
+InstanceRevision type and I-tagged wire; this slice distinguishes their
+evidence origins, not fabricated nominal/wire domains. Positive Upload/Steve,
+changed tagged I_checked, R/L/S/C/F/B/A/P/K foreign-role and checked-I-for-K
+negative replay, plus four conditional Rocq string-model theorems with named
+assumption checks are submitted, not yet certified.
+
+**Remaining premise ledger:** same revisions or even the same (K,I) cannot
+authenticate this occurrence as the concrete StageClosure producer. Decoder
+receipts remain unaccepted data. Recursive SemanticForm, native Unicode
+Data.Text/Rocq string, Map/Set ordering, accepted application/manifest/source/
+stage/release reflection, predecessor authority, FixedFinalAuthorityAdapter
+and FinalArtifactCertified remain unproved. No nat mapping or model Prop
+promoted to native authority. Public release-byte verification and independent
+pinned final-delta signoff separate and uncredited; 244 original normative
+cases, historic audit, Phase 1 TCB, generated outputs and strict
+GHC/Rocq/LLVM unchanged. **Independent freeze NOT YET.**
