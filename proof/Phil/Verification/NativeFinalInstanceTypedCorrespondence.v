@@ -2353,3 +2353,86 @@ Proof.
   apply native_generic_atom_actual_pairs_model_injective.
   exact (f_equal snd Heq).
 Qed.
+
+(* Issue #1584: data-only composition of the actual atom-only generic
+   D/V/Q/M shape with the INDEPENDENT manifest R raw Systems digest and
+   L lowering-ledger root domains. This model does not project accepted
+   Haskell objects or prove a Text -> Rocq string serializer; native accepted
+   producer/consumer replay is a separate executable Haskell gate. *)
+Record NativeAtomApplicationManifestDataModel :=
+  mkNativeAtomApplicationManifestDataModel {
+    nativeAtomManifestApplicationData : NativeGenericAtomApplicationModel;
+    nativeAtomManifestRawData : NativeRawSystemsDigestRole;
+    nativeAtomManifestLoweringData : NativeLoweringRootDigestRole
+  }.
+
+Definition nativeEncodeAtomApplicationManifestDataModel
+  (data : NativeAtomApplicationManifestDataModel)
+  : ((string * string) * list (string * string)) * (string * string) :=
+  (nativeEncodeGenericAtomApplicationModel
+     (nativeAtomManifestApplicationData data),
+   (nativeRawSystemsDigestWire (nativeAtomManifestRawData data),
+    nativeLoweringRootWire (nativeAtomManifestLoweringData data))).
+
+Definition nativeDecodeAtomApplicationManifestDataModel
+  (wires : ((string * string) * list (string * string)) * (string * string))
+  : option NativeAtomApplicationManifestDataModel :=
+  match nativeDecodeGenericAtomApplicationModel (fst wires),
+        nativeDecodeRawSystemsDigestWire (fst (snd wires)),
+        nativeDecodeLoweringRootWire (snd (snd wires)) with
+  | Some app, Some raw, Some root =>
+      Some (mkNativeAtomApplicationManifestDataModel app raw root)
+  | _, _, _ => None
+  end.
+
+Theorem native_atom_manifest_data_model_roundtrip :
+  forall data,
+    nativeDecodeAtomApplicationManifestDataModel
+      (nativeEncodeAtomApplicationManifestDataModel data) = Some data.
+Proof.
+  intros [app raw root].
+  unfold nativeDecodeAtomApplicationManifestDataModel,
+    nativeEncodeAtomApplicationManifestDataModel.
+  simpl (fst (_, _)). simpl (snd (_, _)).
+  rewrite native_generic_atom_application_model_roundtrip.
+  rewrite native_raw_digest_wire_roundtrip.
+  rewrite native_lowering_root_wire_roundtrip.
+  reflexivity.
+Qed.
+
+Theorem native_atom_manifest_data_model_injective :
+  forall first second,
+    nativeEncodeAtomApplicationManifestDataModel first =
+      nativeEncodeAtomApplicationManifestDataModel second -> first = second.
+Proof.
+  intros first second H.
+  apply (f_equal nativeDecodeAtomApplicationManifestDataModel) in H.
+  rewrite !native_atom_manifest_data_model_roundtrip in H.
+  now injection H.
+Qed.
+
+Theorem native_atom_manifest_data_model_swapped_digest_roles_reject :
+  forall app raw root,
+    nativeDecodeAtomApplicationManifestDataModel
+      (nativeEncodeGenericAtomApplicationModel app,
+       (nativeLoweringRootWire root, nativeRawSystemsDigestWire raw)) = None.
+Proof.
+  intros app [raw] [root].
+  unfold nativeDecodeAtomApplicationManifestDataModel.
+  simpl.
+  destruct (nativeDecodeGenericAtomApplicationModel
+    (nativeEncodeGenericAtomApplicationModel app)); reflexivity.
+Qed.
+
+Theorem native_atom_manifest_data_model_application_sensitive :
+  forall first second raw root, first <> second ->
+    nativeEncodeAtomApplicationManifestDataModel
+      (mkNativeAtomApplicationManifestDataModel first raw root) <>
+    nativeEncodeAtomApplicationManifestDataModel
+      (mkNativeAtomApplicationManifestDataModel second raw root).
+Proof.
+  intros first second raw root Hneq Heq.
+  apply Hneq.
+  apply native_generic_atom_application_model_injective.
+  exact (f_equal fst Heq).
+Qed.

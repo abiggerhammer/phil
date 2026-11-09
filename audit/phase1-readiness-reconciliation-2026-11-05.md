@@ -610,3 +610,41 @@ promoted into native authority. Public release bytes and independent pinned
 final-delta signoff separately uncredited. Original **244 normative cases**
 (236 Exit, 8 Profile), historical independent audit, Phase 1 TCB, generated
 outputs, strict GHC/LLVM/Rocq unchanged; independent freeze **NOT YET**.
+
+## Implementation evidence — 2026-11-09: atom-only checked generic D/V/Q/M data
+
+[PR #1689](https://github.com/abiggerhammer/phil/pull/1689),
+[controlling issue #1584](https://github.com/abiggerhammer/phil/issues/1584),
+exact tested head `4e8bdf401c2e304897c602e28d60795ce15d0e4e`,
+merged as `4702a334490843476bc89a96e68a1b3e35b572aa` at
+**2026-11-09 00:59:45 UTC**. Independently refetched exact-head
+**37/37 successful pull_request workflows and 80/80 successful check runs**,
+no failed, pending or skipped checks. Protected
+[Hamster Merge Intent 42542951473](https://github.com/abiggerhammer/phil/actions/runs/42542951473)
+and its merge-pr job completed SUCCESS. Supplemental Conformance Matrix
+row **49** appended, with all six cells read back.
+
+**Executed bounded result:** exact checked native GenericApplicationIdentity
+has DeclarationKey, InterfaceRevision and Map GenericStaticParameterKey
+SemanticForm. For atom-only actuals, its D/V/Q/M typed data representation
+preserves actual native Map.toAscList order and each Q/M association; duplicate,
+wrong-role, reordered and structured-value inputs fail closed. Upload/Steve
+Haskell replay first checked the real source-manifest producer, independently
+accepted manifest and VER-010 source and INT-005 exact CertifiedRelease/
+StageClosure consumers. Four Rocq conditional candidate string-model theorems
+and named assumption queries passed. Decoder returns only an **UNACCEPTED
+typed triple**, never an accepted application or verified architecture instance.
+
+**Nonclaims:** complete recursive SemanticForm, Data.Text Unicode ↔ Rocq string,
+native Map/Set ordering ↔ Rocq candidate lists, accepted manifest/source/stage/
+release reflection, authenticated checked occurrence → concrete StageClosure
+or selected CertifiedRelease, predecessor authority, FixedFinalAuthorityAdapter
+or FinalArtifactCertified remain open. Keep R raw Systems digest and L lowering
+root separate from S/C/F normalized/common/closed revisions and B/I/A/P
+subject/instance/realization/profile, K/I checked occurrence, D/V/Q/M generic
+and H field roles. No invented nat encoding or model Prop promoted to native
+authority. Public release-byte verification and independent pinned final-delta
+signoff remain separately uncredited. Original **244 normative cases**
+(236 Exit, 8 Profile), historical independent audit, Phase 1 TCB,
+generated outputs and strict GHC/LLVM/Rocq policy unchanged.
+**Independent Phase 1 audit-freeze verdict: NOT YET.**

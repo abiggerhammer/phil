@@ -219,6 +219,10 @@ main = do
           , nativeGenericAtomApplicationReplayAccepts source upload)
         , ( "Steve checked atom-only generic application D/V/Q/M data keeps exact semantic actual associations"
           , nativeGenericAtomApplicationReplayAccepts source steve)
+        , ( "Upload checked atom application binds exact independent manifest R/L and accepted consumers"
+          , nativeAtomManifestCandidateReplayAccepts source upload steve)
+        , ( "Steve checked atom application binds exact independent manifest R/L and accepted consumers"
+          , nativeAtomManifestCandidateReplayAccepts source steve upload)
         , ( "Upload checked SemanticUnordered atom-only canonical M-set rejects duplicates, order, and roles"
           , nativeSemanticUnorderedAtomSetReplayAccepts source upload)
         , ( "Steve checked SemanticUnordered atom-only canonical M-set rejects duplicates, order, and roles"
@@ -1811,6 +1815,119 @@ nativeGenericAtomApplicationReplayAccepts source fixture =
                           && decodeNativeGenericAtomApplicationWires
                                (dWire, vWire, [(qA,qA),(qB,mB)]) == Nothing
                         _ -> False
+    _ -> False
+
+
+-- | A new exact accepted-object replay of the atom-only D/V/Q/M data next
+-- to the independently accepted manifest's raw R/L digests. Neither the
+-- candidate nor a decoded triple can replace checked source/instance authority.
+nativeAtomManifestCandidateReplayAccepts
+  :: GenericApplicationAssurance -> ReleaseFixture -> ReleaseFixture -> Bool
+nativeAtomManifestCandidateReplayAccepts source fixture other =
+  case (producerInputs source, produceFixture source fixture) of
+    (Right (bundle, policy), Right (_, produced)) ->
+      case nativeAdapterPair source produced of
+        Nothing -> False
+        Just (sourceObject, releaseObject) ->
+          case closeNativeFinalInstanceCorrespondence
+              source (sourceInstanceDescriptor source) bundle policy
+              (fixtureContext produced) (fixtureLedger produced)
+              emptyProducerSelection sourceObject releaseObject of
+            Left _ -> False
+            Right witness ->
+              let producer = nativeCorrespondenceSourceManifestBinding witness
+                  acceptedSource = nativeCorrespondenceCertifiedSource witness
+                  acceptedRelease = nativeCorrespondenceCertifiedRelease witness
+                  manifest = nativeCorrespondenceManifest witness
+                  checkedApplication = nativeAdapterSourceId
+                    (nativeCorrespondenceSourceAssurance witness)
+                  raw = NativeRawSystemsDigest (manifestImplementationDigest manifest)
+                  root = NativeLoweringRootDigest (manifestLoweringLedgerRoot manifest)
+                  rawWire = encodeNativeRawSystemsDigestWire raw
+                  rootWire = encodeNativeLoweringRootWire root
+              in case encodeNativeGenericAtomApplicationWires checkedApplication of
+                Nothing -> False
+                Just applicationWires@(dWire, vWire, qmWires) ->
+                  let candidate = NativeAtomManifestWireCandidate
+                        applicationWires rawWire rootWire
+                      check x = replayNativeAtomManifestCandidate
+                        witness producer acceptedSource acceptedRelease x
+                      sameScalarsAlteredActuals = case qmWires of
+                        (qWire, _) : rest ->
+                          candidate { nativeAtomManifestCandidateApplication =
+                            (dWire, vWire, (qWire, "Mforged.atom") : rest) }
+                        _ -> candidate { nativeAtomManifestCandidateApplication =
+                          (dWire, vWire, [("Qforged", "Mforged.atom")]) }
+                      wrongScalarRoles = candidate
+                        { nativeAtomManifestCandidateApplication =
+                            (vWire, dWire, qmWires) }
+                      duplicateKeys = candidate
+                        { nativeAtomManifestCandidateApplication =
+                            (dWire, vWire, qmWires ++ qmWires) }
+                      wrongRawRole = candidate
+                        { nativeAtomManifestCandidateRawWire = rootWire }
+                      wrongLoweringRole = candidate
+                        { nativeAtomManifestCandidateLoweringWire = rawWire }
+                      wrongRawPayload = candidate
+                        { nativeAtomManifestCandidateRawWire =
+                            encodeNativeRawSystemsDigestWire
+                              (NativeRawSystemsDigest (digestText "forged.raw")) }
+                      wrongRootPayload = candidate
+                        { nativeAtomManifestCandidateLoweringWire =
+                            encodeNativeLoweringRootWire
+                              (NativeLoweringRootDigest (digestText "forged.lowering")) }
+                      wrongStageRevisionRole = candidate
+                        { nativeAtomManifestCandidateRawWire =
+                            encodeNativeSystemsRevisionWire
+                              (SystemsArtifactRevision (unDigest (unNativeRawSystemsDigest raw))) }
+                      switchedRelease = case runRelease other of
+                        Left _ -> False
+                        Right foreignRelease ->
+                          case replayNativeAtomManifestCandidate
+                              witness producer acceptedSource foreignRelease candidate of
+                            Left (NativeAtomManifestExactConsumersDifferent
+                              NativeExactReplayReleaseDifferent) -> True
+                            _ -> False
+                  in case check candidate of
+                    Left _ -> False
+                    Right receipt ->
+                      nativeAtomManifestReplayApplication receipt ==
+                        (genericApplicationDeclarationKey checkedApplication,
+                         genericApplicationInterfaceRevision checkedApplication,
+                         genericApplicationSemanticArguments checkedApplication)
+                      && nativeAtomManifestReplayRawDigest receipt == raw
+                      && nativeAtomManifestReplayLoweringRoot receipt == root
+                      && nativeReplayRawDigest
+                           (nativeAtomManifestReplayStageCoordinates receipt) == raw
+                      && nativeReplayLoweringRoot
+                           (nativeAtomManifestReplayStageCoordinates receipt) == root
+                      && nativeAtomManifestReplayCheckedOccurrence receipt ==
+                           nativeCorrespondenceArchitectureInstance witness
+                      && case check sameScalarsAlteredActuals of
+                           Left NativeAtomManifestApplicationDifferent -> True
+                           _ -> False
+                      && case check wrongScalarRoles of
+                           Left NativeAtomManifestApplicationWireMalformed -> True
+                           _ -> False
+                      && case check duplicateKeys of
+                           Left NativeAtomManifestApplicationWireMalformed -> True
+                           _ -> False
+                      && case check wrongRawRole of
+                           Left NativeAtomManifestRawRoleMalformed -> True
+                           _ -> False
+                      && case check wrongLoweringRole of
+                           Left NativeAtomManifestLoweringRoleMalformed -> True
+                           _ -> False
+                      && case check wrongRawPayload of
+                           Left NativeAtomManifestRawDifferent -> True
+                           _ -> False
+                      && case check wrongRootPayload of
+                           Left NativeAtomManifestLoweringDifferent -> True
+                           _ -> False
+                      && case check wrongStageRevisionRole of
+                           Left NativeAtomManifestRawRoleMalformed -> True
+                           _ -> False
+                      && switchedRelease
     _ -> False
 
 -- | Synthetic SemanticRecord values are deliberately UNACCEPTED data.
