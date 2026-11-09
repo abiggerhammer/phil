@@ -90,6 +90,7 @@ library
       Phil.Surface.Check.Preflight
       Phil.Surface.Check.DigestSubjectCertification
       Phil.Surface.Check.Engine
+      Phil.Surface.Check.LoopControl
       Phil.Surface.Lineage
       Phil.Compiler.SourceBundle
       Phil.Compiler.SourceArchitecture
@@ -234,6 +235,7 @@ library
       Phil.Surface.GrammarV1.SourceScopedBorrowJoin
       Phil.Surface.GrammarV1.SourceBoolJoinTelescope
       Phil.Surface.GrammarV1.SourceTwoBoolJoinTelescope
+      Phil.Surface.GrammarV1.LoopStateScope
       Phil.Surface.GrammarV1.SourceBoolLoopResource
       Phil.Surface.GrammarV1.ComponentSelectClose
       Phil.Surface.GrammarV1.ComponentOfferCoverage
