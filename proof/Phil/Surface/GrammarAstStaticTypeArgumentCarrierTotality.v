@@ -199,7 +199,9 @@ Proof.
       | assert (Hrefined :
           phase1_surface_normalize_static_type_argument_list_spine base =
             Some refined);
-        [ cbn;
+        [ unfold phase1_surface_normalize_static_type_argument_list_spine;
+          cbn [phase1_static_argument_list_spine_first
+            phase1_static_argument_list_spine_rest];
           rewrite Hrefined_first, Hrefined_rest;
           reflexivity
         | exists base, refined;
@@ -346,7 +348,8 @@ Proof.
         reflexivity
       | assert (Hrefined :
           phase1_surface_normalize_static_type_arguments_spine base = Some refined);
-        [ cbn;
+        [ unfold phase1_surface_normalize_static_type_arguments_spine;
+          cbn [phase1_static_arguments_spine_items];
           rewrite Hrefined_items;
           reflexivity
         | exists base, refined;
