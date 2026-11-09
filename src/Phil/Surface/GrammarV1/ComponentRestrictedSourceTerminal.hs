@@ -30,7 +30,10 @@ import Phil.Core.ProcessRendezvous
   , ProcessRendezvousRequest (..)
   , ProcessRendezvousSide (..)
   , RestrictedMessageTransfer (..)
+  , ProcessRendezvousError
+  , checkRestrictedProcessRendezvous
   )
+import Phil.Core.Protocol.Family (BinaryProtocolInstance)
 import Phil.Core.Syntax (Control (..), Name, ObligationId, Outcome)
 import Phil.Surface.GrammarV1.ComponentRestrictedRendezvous
   ( GrammarV1RestrictedSourceTransition (..))
@@ -45,6 +48,8 @@ data GrammarV1RestrictedSourceTerminalError
   | RestrictedSourceTerminalCloseReplaySenderError ProcessEndpointClosureError
   | RestrictedSourceTerminalCloseReplayReceiverError ProcessEndpointClosureError
   | RestrictedSourceTerminalCloseStateMismatch
+  | RestrictedSourceTerminalRendezvousReplayError ProcessRendezvousError
+  | RestrictedSourceTerminalRendezvousStateMismatch
   | RestrictedSourceTerminalWrongControl ProcessKey Control Outcome
   | RestrictedSourceTerminalPayloadOwnerMismatch
       ActivationOccurrenceKey (Maybe (ProcessKey, Name))
@@ -84,9 +89,14 @@ data GrammarV1RestrictedSourceTerminalTransition =
 -- and every remaining restricted owner must be explicitly disposed. The
 -- claimed post-close communication state must match independently replayed
 -- native Core close transitions, not merely the two source binder names. No
+-- Source-protocol authority and the full activation-derived predecessor
+-- are external inputs. Both Core rendezvous and close replays must agree
+-- exactly with the cached carriers before terminal admission.
 -- network/root terminal fact is returned on any failure.
 grammarV1CheckRestrictedSourceTerminal
-  :: ProcessNetwork
+  :: BinaryProtocolInstance
+  -> ProcessNetwork
+  -> ProcessCommunicationState
   -> GrammarV1RestrictedSourceTransition
   -> GrammarV1RestrictedSourceCloseTransition
   -> DeclaredTerminalTransition
@@ -98,7 +108,7 @@ grammarV1CheckRestrictedSourceTerminal
   -> Either GrammarV1RestrictedSourceTerminalError
        GrammarV1RestrictedSourceTerminalTransition
 grammarV1CheckRestrictedSourceTerminal
-    network rendezvous closed senderTerminal receiverTerminal
+    instanceValue network predecessor rendezvous closed senderTerminal receiverTerminal
     senderOutcome receiverOutcome obligations root = do
   (senderSide, receiverSide) <- case restrictedSourceRequest rendezvous of
     SendReceiveRendezvous sender receiver -> Right (sender, receiver)
@@ -149,6 +159,17 @@ grammarV1CheckRestrictedSourceTerminal
   if closedState == replayedClosed
     then Right ()
     else Left RestrictedSourceTerminalCloseStateMismatch
+  -- Re-execute the actual restricted rendezvous from its independently
+  -- supplied activation-derived predecessor and protocol authority.
+  -- A cached successor is not itself provenance evidence: require full
+  -- protocol/resource-context and owner-occurrence equality.
+  replayedRendezvous <- mapLeft RestrictedSourceTerminalRendezvousReplayError $
+    checkRestrictedProcessRendezvous instanceValue network predecessor
+      (restrictedSourceRequest rendezvous)
+      (restrictedSourceTransfer rendezvous)
+  if restrictedSourceNext rendezvous == replayedRendezvous
+    then Right ()
+    else Left RestrictedSourceTerminalRendezvousStateMismatch
   -- Next the real lifecycle/resource/obligation transitions. Reconciliation
   -- does not turn a Core rejection into success or mutate rejected states.
   initialized <- mapLeft RestrictedSourceTerminalInitializeError $

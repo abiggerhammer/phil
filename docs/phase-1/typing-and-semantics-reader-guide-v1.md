@@ -375,3 +375,5 @@ specification.
 The bounded [FSEM-02 source-checked restricted payload rendezvous](formal-semantics-restricted-source-transfer-fsem02-v1.md) composes independently parsed typed send/receive source with the existing production Core atomic payload owner transition, exact accepted/rejected source replay, and conditional Rocq owner/endpoint frame lemmas. Non-normative: external nominal/activation authority remains a premise; full architecture admission, source-close execution, and universal Haskell-to-Rocq refinement remain open.
 
 The bounded non-normative FSEM-02 [checked source-close carrier correspondence](formal-semantics-source-close-carrier-fsem02-v1.md) compares the full native request and exact source payload binders while preserving explicit external authority; it is neither a general source-to-Core refinement nor normative.
+
+The bounded [FSEM-02 exact original restricted rendezvous predecessor replay](formal-semantics-restricted-predecessor-replay-fsem02-v1.md) re-executes native send/receive against explicit original Core authority/state and compares the whole successor, not just cached identities; this is non-normative and not universal refinement.
