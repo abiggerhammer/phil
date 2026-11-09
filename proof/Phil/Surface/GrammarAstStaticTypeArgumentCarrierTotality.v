@@ -395,6 +395,7 @@ Proof.
       ]
       input rest subtree Hbody)
     as [trees [Hsubtree Hitems]].
+  revert Htree Hsubtree.
   inversion Hitems as
     [| path0 index0 item0 items0 input0 middle0 rest0
        name_tree tail1 Hname Htail1]; subst.
@@ -402,6 +403,7 @@ Proof.
     [| path1 index1 item1 items1 input1 middle1 rest1
        arguments_tree nil_trees Harguments Hnil]; subst.
   inversion Hnil; subst.
+  intros Htree Hsubtree.
   destruct
     (phase1_surface_normalize_qualified_name_total_from_derivation
       _ _ _ name_tree Hname)
