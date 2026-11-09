@@ -14,6 +14,7 @@ import Phil.Core.Process
 import Phil.Core.ProcessActivation
 import Phil.Core.ProcessRendezvous
 import Phil.Core.ProcessEndpointClosure (ProcessEndpointClosureError (..))
+import Phil.Core.ProcessLifecycle
 import Phil.Core.Session (SessionError (..))
 import Phil.Core.Protocol
 import Phil.Core.Protocol.Family
@@ -22,6 +23,7 @@ import Phil.Core.Syntax
 import Phil.Surface.GrammarV1.BinderScope (GrammarV1ResolvedBinder (..))
 import Phil.Surface.GrammarV1.ComponentReceiveClose
 import Phil.Surface.GrammarV1.ComponentRestrictedRendezvous
+import Phil.Surface.GrammarV1.ComponentRestrictedSourceTerminal
 import Phil.Surface.GrammarV1.ComponentRestrictedSourceClose
 import Phil.Surface.GrammarV1.ComponentSendClose
 import Phil.Surface.GrammarV1.Parser
@@ -53,6 +55,8 @@ main = do
           , sourceCloseWrongOutcome fx
           , sourceCloseWrongHead fx
           , sourceCloseWrongRole fx
+          , sourceTerminalReplay fx
+          , sourceTerminalNegativeGates fx
           ]
   case result of
     Right () -> putStrLn "PASS: FSEM-02 source restricted transfer and exact negative replay"
@@ -616,3 +620,158 @@ sourceCloseWrongRole fx = do
         assert (process == fxServerProcess fx && name == fxServerNext fx)
           "incorrect terminal role did not preserve endpoint identity"
     other -> Left ("receiver source close accepted the wrong nominal role: " <> show other)
+
+
+-- The actual source is first parsed/checked, then sent/received and closed.
+-- The residual payload and independent activation spectator are NOT silently
+-- consumed by source 'close'. This separate boundary requires explicit
+-- terminal declarations, dispositions, obligation and root inputs.
+terminalPrefix
+  :: Fixture
+  -> Either String
+       (GrammarV1RestrictedSourceTransition,
+        GrammarV1RestrictedSourceCloseTransition)
+terminalPrefix fx = do
+  rendezvous <- mapLeft show $
+    checked fx (fxSender fx) (fxReceiver fx) (fxBefore fx)
+  closed <- mapLeft show $
+    closeFromSource fx (fxSender fx) (fxReceiver fx) rendezvous
+      clientRole serverRole doneOutcome doneOutcome
+  pure (rendezvous, closed)
+
+senderTerminalPlan :: Fixture -> DeclaredTerminalTransition
+senderTerminalPlan fx =
+  DeclaredTerminalTransition (fxClientProcess fx)
+    (Closed doneOutcome) [spectatorName]
+
+receiverTerminalPlan :: Fixture -> DeclaredTerminalTransition
+receiverTerminalPlan fx =
+  DeclaredTerminalTransition (fxServerProcess fx)
+    (Closed doneOutcome) [fxPayloadReceiver fx]
+
+emptyRootResidue :: RootClosureState
+emptyRootResidue = RootClosureState Set.empty Set.empty Set.empty
+
+terminalCheck
+  :: Fixture
+  -> GrammarV1RestrictedSourceTransition
+  -> GrammarV1RestrictedSourceCloseTransition
+  -> DeclaredTerminalTransition
+  -> DeclaredTerminalTransition
+  -> Map.Map ProcessKey (Set.Set ObligationId)
+  -> RootClosureState
+  -> Either GrammarV1RestrictedSourceTerminalError
+       GrammarV1RestrictedSourceTerminalTransition
+terminalCheck fx rendezvous closed sender receiver obligations root =
+  grammarV1CheckRestrictedSourceTerminal (fxNetwork fx) rendezvous closed
+    sender receiver doneOutcome doneOutcome obligations root
+
+sourceTerminalReplay :: Fixture -> Either String ()
+sourceTerminalReplay fx = do
+  (rendezvous, closed) <- terminalPrefix fx
+  let sender = senderTerminalPlan fx
+      receiver = receiverTerminalPlan fx
+      replay = terminalCheck fx rendezvous closed sender receiver
+        Map.empty emptyRootResidue
+  first <- mapLeft show replay
+  second <- mapLeft show replay
+  assert (first == second) "terminal source-prefix replay was nondeterministic"
+  let runtime = restrictedSourceTerminalRuntime first
+      fact = restrictedSourceTerminalFact first
+  assert (Map.null (restrictedSourceTerminalRemainingOwners first))
+    "terminal success left activation-owned resource occurrences"
+  assert (Map.keysSet (rootTerminalProcesses fact) ==
+            Set.fromList [fxClientProcess fx, fxServerProcess fx])
+    "root terminal fact does not cover exactly the activated processes"
+  assert (Map.lookup (fxClientProcess fx) (runtimeStatuses runtime) ==
+            Just (ProcessTerminal (ProcessTerminalFact
+              (fxClientProcess fx) (Closed doneOutcome)))
+       && Map.lookup (fxServerProcess fx) (runtimeStatuses runtime) ==
+            Just (ProcessTerminal (ProcessTerminalFact
+              (fxServerProcess fx) (Closed doneOutcome))))
+    "declared terminal facts did not retain the exact external outcomes"
+  contexts <- maybe (Left "sender terminal context missing") Right
+    (Map.lookup (fxClientProcess fx) (runtimeProtocolContexts runtime))
+  peer <- maybe (Left "receiver terminal context missing") Right
+    (Map.lookup (fxServerProcess fx) (runtimeProtocolContexts runtime))
+  assert (Map.null (linearBindings (protocolResources contexts))
+       && Map.null (affineBindings (protocolResources contexts))
+       && Map.null (linearBindings (protocolResources peer))
+       && Map.null (protocolEndpoints contexts)
+       && Map.null (protocolEndpoints peer))
+    "terminal resource contexts retain explicitly disposed owners"
+
+sourceTerminalNegativeGates :: Fixture -> Either String ()
+sourceTerminalNegativeGates fx = do
+  (rendezvous, closed) <- terminalPrefix fx
+  let sender = senderTerminalPlan fx
+      receiver = receiverTerminalPlan fx
+      run s r obligations root =
+        terminalCheck fx rendezvous closed s r obligations root
+  case run sender (receiver { declaredTerminalDisposals = [] })
+      Map.empty emptyRootResidue of
+    Left (RestrictedSourceTerminalReceiverError
+      (TerminalResourceError process (UnconsumedLinearResources remaining))) ->
+        assert (process == fxServerProcess fx
+             && Map.lookup (fxPayloadReceiver fx) remaining == Just payloadTy)
+          "missing payload disposition lost exact linear debt"
+    other -> Left ("live restricted payload was silently dropped: " <> show other)
+  case run (sender { declaredTerminalDisposals = [] }) receiver
+      Map.empty emptyRootResidue of
+    Left (RestrictedSourceTerminalUnaccountedOwner occurrence process name) ->
+      assert (occurrence == spectatorOccurrence
+           && process == fxClientProcess fx && name == spectatorName)
+        "unaccounted affine spectator did not block root closure"
+    other -> Left ("undisposed affine spectator was ignored: " <> show other)
+  case run sender (receiver { declaredTerminalDisposals =
+      [fxPayloadReceiver fx, fxPayloadReceiver fx] })
+      Map.empty emptyRootResidue of
+    Left (RestrictedSourceTerminalReceiverError
+      (DuplicateTerminalDisposal name)) ->
+      assert (name == fxPayloadReceiver fx)
+        "duplicate declared disposal lost exact identity"
+    other -> Left ("duplicate terminal payload disposal admitted: " <> show other)
+  case run sender (receiver { declaredTerminalDisposals = [Name "absent"] })
+      Map.empty emptyRootResidue of
+    Left (RestrictedSourceTerminalReceiverError
+      (TerminalDisposalUnknown process name (UnknownBinding missing))) ->
+      assert (process == fxServerProcess fx && name == Name "absent"
+           && missing == Name "absent")
+        "unknown terminal disposal changed diagnostic"
+    other -> Left ("invented resource was disposed: " <> show other)
+  case run sender receiver
+      (Map.singleton (fxServerProcess fx)
+        (Set.singleton (ObligationId "undischarged"))) emptyRootResidue of
+    Left (RestrictedSourceTerminalReceiverError
+      (TerminalOpenObligations process open)) ->
+      assert (process == fxServerProcess fx
+           && open == Set.singleton (ObligationId "undischarged"))
+        "external assurance obligation was silently discharged"
+    other -> Left ("open assurance obligation permitted terminal fact: " <> show other)
+  case run sender receiver Map.empty
+      (emptyRootResidue { rootOpenResources = Set.singleton (Name "root-live") }) of
+    Left (RestrictedSourceTerminalRootError (RootTerminalOpenResources open)) ->
+      assert (open == Set.singleton (Name "root-live"))
+        "root residue disappeared from rejection"
+    other -> Left ("nonempty root residue permitted terminal fact: " <> show other)
+  case run (sender { declaredTerminalControl = Continue }) receiver
+      Map.empty emptyRootResidue of
+    Left (RestrictedSourceTerminalWrongControl process Continue expected) ->
+      assert (process == fxClientProcess fx && expected == doneOutcome)
+        "undeclared terminal control was accepted"
+    other -> Left ("Continue was treated as source terminal: " <> show other)
+  let before = restrictedSourceCloseNext closed
+      tampered = before { communicationRestrictedOwners =
+        Map.delete payloadOccurrence (communicationRestrictedOwners before) }
+  case terminalCheck fx rendezvous
+      (closed { restrictedSourceCloseNext = tampered })
+      sender receiver Map.empty emptyRootResidue of
+    Left (RestrictedSourceTerminalPayloadOwnerMismatch occurrence Nothing) ->
+      assert (occurrence == payloadOccurrence)
+        "lost payload occurrence was silently reconstructed"
+    other -> Left ("missing post-close payload was accepted: " <> show other)
+  case terminalCheck fx rendezvous
+      (closed { restrictedSourceClosedSender = Name "not-the-successor" })
+      sender receiver Map.empty emptyRootResidue of
+    Left RestrictedSourceTerminalCloseIdentityMismatch -> Right ()
+    other -> Left ("tampered source-close successor was accepted: " <> show other)
