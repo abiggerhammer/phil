@@ -3814,7 +3814,7 @@ nativeAtomManifestOccurrenceKeyReplayAccepts source fixture =
 -- | Exact checked (K,I_checked) after separately accepted I_stage; no origin.
 nativeAtomManifestCheckedRevisionReplayAccepts
   :: GenericApplicationAssurance -> ReleaseFixture -> Bool
-nativeAtomManifestOccurrenceKeyReplayAccepts source fixture =
+nativeAtomManifestCheckedRevisionReplayAccepts source fixture =
   case (producerInputs source, produceFixture source fixture) of
     (Right (bundle, policy), Right (_, produced)) ->
       case nativeAdapterPair source produced of
