@@ -2395,8 +2395,10 @@ Proof.
     nativeEncodeAtomApplicationManifestDataModel.
   simpl (fst (_, _)). simpl (snd (_, _)).
   rewrite native_generic_atom_application_model_roundtrip.
-  rewrite native_raw_digest_wire_roundtrip.
-  rewrite native_lowering_root_wire_roundtrip.
+  (* The R/L wire decoders have already reduced under simpl. Expose the
+     remaining record projections; the distinct roles then compute exactly. *)
+  destruct raw as [rawPayload].
+  destruct root as [rootPayload].
   reflexivity.
 Qed.
 
