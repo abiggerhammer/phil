@@ -42,6 +42,7 @@ main = do
           , wrongSourceCloseRejects fx rejected
           , wrongSourcePayloadModeRejects fx accepted
           , wrongWrittenReceiveTypeRejects fx accepted
+          , wrongProtocolBinderRejects accepted
           , wrongSessionHeadRejects fx
           ]
   case result of
@@ -78,7 +79,13 @@ parseParts source = do
     other -> Left ("restricted source fixture shape was not parsed: " <> show other)
 
 fixture :: Text -> Either String Fixture
-fixture source = do
+fixture = fixtureWithMessageBinder Nothing
+
+-- The independently authorized protocol's message binder must correspond to
+-- the receiver's *resolved source* binder, not its display spelling. The
+-- optional deliberately wrong binder is used only for a negative witness.
+fixtureWithMessageBinder :: Maybe Name -> Text -> Either String Fixture
+fixtureWithMessageBinder alternateMessageBinder source = do
   (protocol, senderSource, receiverSource) <- parseParts source
   (sourceFamily, _) <- case grammarV1CheckedBinaryProtocolFamily emptyStaticContext
       protocolRoot (InterfaceRevision "fsem02.restricted.source.v1") protocol of
@@ -91,19 +98,30 @@ fixture source = do
     Left (ProtocolConcreteMessageRequiresBoundaryContract exactType)
       | exactType == payloadTy -> Right ()
     other -> Left ("bare concrete restricted source was admitted: " <> show other)
+  receiver <- case grammarV1CheckedComponentReceiveClose receiverRoot receiverSource of
+    Just (Right value) -> Right value
+    other -> Left ("parsed source receiver body not checked: " <> show other)
+  let receiveBinder = grammarV1ResolvedBinderCoreName
+        (checkedComponentReceivePayload receiver)
   -- Protocol/message identity and the boundary contract are explicit external
   -- trusted inputs; not synthesized from source spelling or Bytes syntax.
+  -- This test's separately authorized protocol chooses the exact checked
+  -- receiver binder; the Core checker rejects any other binder. This is a
+  -- *premise*, not proof of general source/protocol alpha-renaming.
   let messageKey = GenericStaticParameterKey "Payload"
       payloadSemantics = SemanticAtom "fsem02.external.restricted-payload"
       family = BinaryProtocolFamily
         { protocolFamilyDeclarationKey = protocolRoot
         , protocolFamilyInterfaceRevision =
-            InterfaceRevision "fsem02.external.authorized.v1"
+            InterfaceRevision (case alternateMessageBinder of
+              Nothing -> "fsem02.external.authorized.v1"
+              Just _ -> "fsem02.external.mismatched-binder.v1")
         , protocolFamilyRequirements = Set.empty
         , protocolFamilyPrimaryRole = clientRole
         , protocolFamilyPeerRole = serverRole
         , protocolFamilyPrimarySession = ProtocolTemplateSend
-            (Name "value") (ProtocolParameterType messageKey)
+            (maybe receiveBinder id alternateMessageBinder)
+            (ProtocolParameterType messageKey)
             (ProtocolTemplateEnd doneOutcome)
         }
       argument = ProtocolMessageArgument
@@ -123,9 +141,6 @@ fixture source = do
   sender <- case grammarV1CheckedComponentSendClose senderRoot senderSource of
     Just (Right value) -> Right value
     other -> Left ("parsed source sender body not checked: " <> show other)
-  receiver <- case grammarV1CheckedComponentReceiveClose receiverRoot receiverSource of
-    Just (Right value) -> Right value
-    other -> Left ("parsed source receiver body not checked: " <> show other)
   let clientEndpoint = grammarV1ResolvedBinderCoreName
         (checkedComponentSendEndpoint sender)
       serverEndpoint = grammarV1ResolvedBinderCoreName
@@ -325,6 +340,16 @@ wrongWrittenReceiveTypeRejects fx source = do
       assert (expected == payloadTy && actual == TyUInt 8)
         "written receiver type mismatch lost exact Types"
     other -> Left ("wrong source receive type admitted: " <> show other)
+
+wrongProtocolBinderRejects :: Text -> Either String ()
+wrongProtocolBinderRejects source = do
+  fx <- fixtureWithMessageBinder (Just (Name "value")) source
+  case checked fx (fxSender fx) (fxReceiver fx) (fxBefore fx) of
+    Left (RestrictedSourceCoreError
+      (RestrictedMessageReceiverBinderMismatch expected actual)) ->
+        assert (expected == Name "value" && actual == fxPayloadReceiver fx)
+          "protocol receiver-binder mismatch lost exact checked source identity"
+    other -> Left ("unmatched external protocol binder was admitted: " <> show other)
 
 wrongSessionHeadRejects :: Fixture -> Either String ()
 wrongSessionHeadRejects fx = do
