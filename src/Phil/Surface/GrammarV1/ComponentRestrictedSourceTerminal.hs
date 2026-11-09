@@ -12,6 +12,8 @@ import qualified Data.Map.Strict as Map
 import qualified Data.Set as Set
 import Phil.Core.Process (ProcessKey, ProcessNetwork (..))
 import Phil.Core.ProcessActivation (ActivationOccurrenceKey)
+import Phil.Core.ProcessEndpointClosure
+  ( ProcessEndpointClosureError, closeProcessEndpointState )
 import Phil.Core.ProcessLifecycle
   ( DeclaredTerminalTransition (..)
   , ProcessLifecycleError
@@ -40,6 +42,9 @@ data GrammarV1RestrictedSourceTerminalError
   | RestrictedSourceTerminalProcessMismatch ProcessKey ProcessKey
   | RestrictedSourceTerminalUnexpectedPopulation
   | RestrictedSourceTerminalCloseIdentityMismatch
+  | RestrictedSourceTerminalCloseReplaySenderError ProcessEndpointClosureError
+  | RestrictedSourceTerminalCloseReplayReceiverError ProcessEndpointClosureError
+  | RestrictedSourceTerminalCloseStateMismatch
   | RestrictedSourceTerminalWrongControl ProcessKey Control Outcome
   | RestrictedSourceTerminalPayloadOwnerMismatch
       ActivationOccurrenceKey (Maybe (ProcessKey, Name))
@@ -76,7 +81,9 @@ data GrammarV1RestrictedSourceTerminalTransition =
 -- all disposal names, process obligations and root closure. The native Core
 -- lifecycle checker checks the actual *post-close* resource/protocol contexts.
 -- The activation owner index is reconciled by exact (process, name) lookup
--- and every remaining restricted owner must be explicitly disposed. No
+-- and every remaining restricted owner must be explicitly disposed. The
+-- claimed post-close communication state must match independently replayed
+-- native Core close transitions, not merely the two source binder names. No
 -- network/root terminal fact is returned on any failure.
 grammarV1CheckRestrictedSourceTerminal
   :: ProcessNetwork
@@ -126,7 +133,23 @@ grammarV1CheckRestrictedSourceTerminal
     then Right ()
     else Left (RestrictedSourceTerminalPayloadOwnerMismatch payloadOccurrence
                 (Map.lookup payloadOccurrence owners))
-  -- First the real lifecycle/resource/obligation transitions. Reconciliation
+  -- A successful source-close carrier must agree with independently
+  -- re-executing both native End transitions on the exact pre-close Core
+  -- state. Checking only binder names and a payload owner would otherwise
+  -- let a forged carrier smuggle a different resource or endpoint context
+  -- into the lifecycle/root terminal checker.
+  afterSenderClose <- mapLeft RestrictedSourceTerminalCloseReplaySenderError $
+    closeProcessEndpointState network (restrictedSourceNext rendezvous)
+      senderProcess (rendezvousSuccessor senderSide)
+      (rendezvousInstance senderSide) (rendezvousRole senderSide) senderOutcome
+  replayedClosed <- mapLeft RestrictedSourceTerminalCloseReplayReceiverError $
+    closeProcessEndpointState network afterSenderClose
+      receiverProcess (rendezvousSuccessor receiverSide)
+      (rendezvousInstance receiverSide) (rendezvousRole receiverSide) receiverOutcome
+  if closedState == replayedClosed
+    then Right ()
+    else Left RestrictedSourceTerminalCloseStateMismatch
+  -- Next the real lifecycle/resource/obligation transitions. Reconciliation
   -- does not turn a Core rejection into success or mutate rejected states.
   initialized <- mapLeft RestrictedSourceTerminalInitializeError $
     initializeProcessRuntimeWithObligations network
