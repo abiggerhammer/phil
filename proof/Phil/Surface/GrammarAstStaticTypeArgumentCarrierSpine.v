@@ -309,11 +309,21 @@ Proof.
     destruct (phase1_surface_normalize_static_type_arguments_spine arguments)
       as [actual |] eqn:Harguments; try discriminate Hnormalize.
     inversion Hnormalize; subst refined.
-    cbn.
-    rewrite
-      (phase1_surface_normalize_static_type_arguments_spine_round_trip
-        arguments actual Harguments).
-    reflexivity.
+    unfold phase1_surface_static_type_arguments_reference_spine_tree,
+      phase1_surface_static_arguments_reference_spine_tree.
+    cbn [phase1_static_type_arguments_reference_spine_name
+      phase1_static_type_arguments_reference_spine_arguments
+      phase1_static_arguments_reference_spine_name
+      phase1_static_arguments_reference_spine_arguments].
+    exact
+      (f_equal
+        (fun child =>
+          PTNonterminal "static_reference"
+            (PTSequence
+              [ phase1_surface_qualified_name_tree name;
+                PTOptionalSome child ]))
+        (phase1_surface_normalize_static_type_arguments_spine_round_trip
+          arguments actual Harguments)).
   - inversion Hnormalize; subst refined.
     reflexivity.
 Qed.
