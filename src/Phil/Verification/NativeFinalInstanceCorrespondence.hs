@@ -81,6 +81,12 @@ module Phil.Verification.NativeFinalInstanceCorrespondence
   , nativeAtomManifestCommonReplayRevision
   , NativeAtomManifestCommonReplayError (..)
   , replayNativeAtomManifestCommonCandidate
+  , NativeAtomManifestClosedWireCandidate (..)
+  , NativeAtomManifestClosedReplay
+  , nativeAtomManifestClosedReplayBase
+  , nativeAtomManifestClosedReplayRevision
+  , NativeAtomManifestClosedReplayError (..)
+  , replayNativeAtomManifestClosedCandidate
   , NativeVerifierProfileText (..)
   , encodeNativeVerifierProfileWire
   , decodeNativeVerifierProfileWire
@@ -1073,3 +1079,45 @@ replayNativeAtomManifestCommonCandidate witness producer sourceObject releaseObj
          (nativeAtomManifestSystemsReplayBase baseReceipt))
     then Left NativeAtomManifestCommonDifferent
     else pure (NativeAtomManifestCommonReplay baseReceipt common)
+
+-- | Unaccepted final F extends exact checked D/V/Q/M, independently accepted
+-- R/L, normalized S and common C. F is the closed StageClosure contract.
+data NativeAtomManifestClosedWireCandidate = NativeAtomManifestClosedWireCandidate
+  { nativeAtomManifestClosedBaseCandidate :: NativeAtomManifestCommonWireCandidate
+  , nativeAtomManifestClosedRevisionWire :: Text
+  } deriving (Eq, Show)
+
+-- | Constructor private; this is diagnostic data, never release authority.
+data NativeAtomManifestClosedReplay = NativeAtomManifestClosedReplay
+  { nativeAtomManifestClosedReplayBase :: NativeAtomManifestCommonReplay
+  , nativeAtomManifestClosedReplayRevision :: ClosedStageContractRevision
+  } deriving (Eq, Show)
+
+data NativeAtomManifestClosedReplayError
+  = NativeAtomManifestClosedBaseDifferent NativeAtomManifestCommonReplayError
+  | NativeAtomManifestClosedRoleMalformed
+  | NativeAtomManifestClosedDifferent
+  deriving (Eq, Show)
+
+-- | Revalidate the checked producer, exact independent source/release consumer
+-- and all prior typed domains before comparing final F from the same concrete
+-- accepted StageClosure. No checked occurrence-to-stage origin is inferred.
+replayNativeAtomManifestClosedCandidate
+  :: NativeFinalInstanceCorrespondence
+  -> CertifiedSourceManifestBinding
+  -> CertifiedApplicationArtifact
+  -> CertifiedReleaseArtifact
+  -> NativeAtomManifestClosedWireCandidate
+  -> Either NativeAtomManifestClosedReplayError NativeAtomManifestClosedReplay
+replayNativeAtomManifestClosedCandidate witness producer sourceObject releaseObject candidate = do
+  baseReceipt <- either (Left . NativeAtomManifestClosedBaseDifferent) Right
+    (replayNativeAtomManifestCommonCandidate witness producer sourceObject releaseObject
+       (nativeAtomManifestClosedBaseCandidate candidate))
+  closed <- maybe (Left NativeAtomManifestClosedRoleMalformed) Right
+    (decodeNativeClosedContractRevisionWire (nativeAtomManifestClosedRevisionWire candidate))
+  if closed /= nativeReplayClosedRevision
+       (nativeAtomManifestReplayStageCoordinates
+         (nativeAtomManifestSystemsReplayBase
+           (nativeAtomManifestCommonReplayBase baseReceipt)))
+    then Left NativeAtomManifestClosedDifferent
+    else pure (NativeAtomManifestClosedReplay baseReceipt closed)
