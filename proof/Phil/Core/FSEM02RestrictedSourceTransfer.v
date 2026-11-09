@@ -90,7 +90,7 @@ Proof.
   apply andb_true_iff in Hmatch as [Hp Hn].
   apply String.eqb_eq in Hp.
   apply String.eqb_eq in Hn.
-  subst. exact Howner.
+  subst. reflexivity.
 Qed.
 
 Theorem fsem02RestrictedSourceSuccessExactAndFrame :
