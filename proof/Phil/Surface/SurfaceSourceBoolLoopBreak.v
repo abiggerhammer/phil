@@ -55,7 +55,7 @@ Proof.
       as [Hfresh _].
     rewrite (source_break_closes_fresh_bool_header
       initial header slot ty Hinsert).
-    exact Hfresh.
+    symmetry. exact Hfresh.
   - pose proof (Context.insertBinding_success_preserves_other_names
       Syntax.Unrestricted slot other ty initial header Hinsert Heq)
       as [Hlookup _].
