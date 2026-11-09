@@ -50,6 +50,9 @@ main = do
           , wrongProtocolBinderRejects accepted
           , wrongSessionHeadRejects fx
           , sourceCloseReplay fx
+          , sourceCloseRejectsForgedRequest fx
+          , sourceCloseRejectsForgedPayloadBinder fx
+          , sourceCloseRejectsForgedReceiveBinder fx
           , sourceCloseRejectedSpelling fx rejected
           , sourceCloseMissingServerOwner fx
           , sourceCloseWrongOutcome fx
@@ -547,6 +550,65 @@ sourceCloseReplay fx = do
         assert (process == fxClientProcess fx && endpoint == fxClientNext fx)
           "replayed source close did not identify the stale predecessor"
     other -> Left ("second close was permitted: " <> show other)
+
+
+-- Core closure alone must not authenticate a forged cached request.
+sourceCloseRejectsForgedRequest :: Fixture -> Either String ()
+sourceCloseRejectsForgedRequest fx = do
+  rendezvous <- mapLeft show $
+    checked fx (fxSender fx) (fxReceiver fx) (fxBefore fx)
+  let expected = restrictedSourceRequest rendezvous
+      altered = case expected of
+        SendReceiveRendezvous sender receiver ->
+          SendReceiveRendezvous
+            (sender { rendezvousProcess = fxServerProcess fx }) receiver
+        other -> other
+  assert (expected /= altered) "forged request did not differ from source"
+  let forged = rendezvous { restrictedSourceRequest = altered }
+  case closeFromSource fx (fxSender fx) (fxReceiver fx)
+      forged clientRole serverRole doneOutcome doneOutcome of
+    Left (RestrictedSourceCloseRequestMismatch checkedRequest actualRequest) ->
+      assert (checkedRequest == expected && actualRequest == altered)
+        "forged rendezvous request lost exact expected/actual identities"
+    other -> Left ("forged source rendezvous request was admitted: " <> show other)
+
+sourceCloseRejectsForgedPayloadBinder :: Fixture -> Either String ()
+sourceCloseRejectsForgedPayloadBinder fx = do
+  rendezvous <- mapLeft show $
+    checked fx (fxSender fx) (fxReceiver fx) (fxBefore fx)
+  let transfer = restrictedSourceTransfer rendezvous
+      forgedName = Name "fsem02.forged.payload-owner"
+      forgedTransfer = transfer { restrictedMessageSenderName = forgedName }
+      forged = rendezvous { restrictedSourceTransfer = forgedTransfer }
+  case closeFromSource fx (fxSender fx) (fxReceiver fx)
+      forged clientRole serverRole doneOutcome doneOutcome of
+    Left (RestrictedSourceCloseTransferBinderMismatch
+      sourceSender sourceReceiver actualSender actualReceiver) ->
+      assert (sourceSender == fxPayloadOwner fx
+           && sourceReceiver == fxPayloadReceiver fx
+           && actualSender == forgedName
+           && actualReceiver == fxPayloadReceiver fx)
+        "forged sender payload projection lost source binder provenance"
+    other -> Left ("forged source payload binder was admitted: " <> show other)
+
+sourceCloseRejectsForgedReceiveBinder :: Fixture -> Either String ()
+sourceCloseRejectsForgedReceiveBinder fx = do
+  rendezvous <- mapLeft show $
+    checked fx (fxSender fx) (fxReceiver fx) (fxBefore fx)
+  let transfer = restrictedSourceTransfer rendezvous
+      forgedName = Name "fsem02.forged.received-owner"
+      forgedTransfer = transfer { restrictedMessageReceiverName = forgedName }
+      forged = rendezvous { restrictedSourceTransfer = forgedTransfer }
+  case closeFromSource fx (fxSender fx) (fxReceiver fx)
+      forged clientRole serverRole doneOutcome doneOutcome of
+    Left (RestrictedSourceCloseTransferBinderMismatch
+      sourceSender sourceReceiver actualSender actualReceiver) ->
+      assert (sourceSender == fxPayloadOwner fx
+           && sourceReceiver == fxPayloadReceiver fx
+           && actualSender == fxPayloadOwner fx
+           && actualReceiver == forgedName)
+        "forged receiver payload projection lost source binder provenance"
+    other -> Left ("forged source receiver binder was admitted: " <> show other)
 
 sourceCloseRejectedSpelling :: Fixture -> Text -> Either String ()
 sourceCloseRejectedSpelling fx rejected = do
