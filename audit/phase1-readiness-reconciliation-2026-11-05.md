@@ -913,3 +913,33 @@ roles or construct an unproved nat encoder/model Prop authority. Public
 release-byte verification and independently pinned final-delta signoff
 remain separate uncredited gates. TCB, strict GHC/Rocq/LLVM, historic
 independent audit and generated outputs unchanged. **Freeze NOT YET.**
+
+## Implementation evidence — 2026-11-09: checked occurrence K (#1706)
+
+[PR #1706](https://github.com/abiggerhammer/phil/pull/1706)
+merged at `2dea09b106fe25c615dc6246a2127c322217c289`,
+2026-11-09 18:56:03 UTC. Exact head
+`54c4e5f37ddb9d4e3a549997bb3aab76e6de41e4`:
+**38/38** exact-head workflows and **80/80** check runs SUCCESS,
+zero failed/pending/skipped at final census. Local Runtime Choice Proofs
+Hackage HTTP/2 transient failure recovered via run #42659541177 attempt 2.
+Protected [merge-intent #42678446654](https://github.com/abiggerhammer/phil/actions/runs/42678446654)
+and merge-pr SUCCESS. Conformance Matrix supplemental row 58 written and
+six cells independently read back; 244 original normative cases unchanged.
+
+**Executed bounded evidence:** exact checked source-manifest producer,
+independent accepted raw manifest R/L, VER-010 source, INT-005
+CertifiedRelease/StageClosure consumer, checked atom-only D/V/Q/M,
+normalized S, common C, closed F, B/I/A/P, checked descriptor K.
+Upload/Steve positives, foreign-role R/L/S/C/F/B/I/A/P,
+changed K and K-as-P negatives, plus four conditional Rocq string-model
+theorems and named assumptions passed on exact head.
+
+**Nonclaims:** StageClosure has no K; its producer is not authenticated
+by checked (K,I) equality. Diagnostic is not native authority. Recursive
+SemanticForm, native Unicode and Map/Set order bridge, accepted authority
+reflection, predecessor authority, FixedFinalAuthorityAdapter,
+FinalArtifactCertified remain unproved. No nat encoder or model Prop as
+derived authority. Public bytes and independent final-delta signoff
+separate/uncredited. Historic audit, TCB, generated outputs, strict
+GHC/Rocq/LLVM unchanged. **Independent freeze NOT YET.**

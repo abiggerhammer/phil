@@ -117,6 +117,12 @@ module Phil.Verification.NativeFinalInstanceCorrespondence
   , nativeAtomManifestOccurrenceKeyReplayKey
   , NativeAtomManifestOccurrenceKeyReplayError (..)
   , replayNativeAtomManifestOccurrenceKeyCandidate
+  , NativeAtomManifestCheckedRevisionWireCandidate (..)
+  , NativeAtomManifestCheckedRevisionReplay
+  , nativeAtomManifestCheckedRevisionReplayBase
+  , nativeAtomManifestCheckedRevisionReplayRevision
+  , NativeAtomManifestCheckedRevisionReplayError (..)
+  , replayNativeAtomManifestCheckedRevisionCandidate
   , NativeVerifierProfileText (..)
   , encodeNativeVerifierProfileWire
   , decodeNativeVerifierProfileWire
@@ -1386,3 +1392,54 @@ replayNativeAtomManifestOccurrenceKeyCandidate witness producer sourceObject rel
   if key /= checkedKey
     then Left NativeAtomManifestOccurrenceKeyDifferent
     else pure (NativeAtomManifestOccurrenceKeyReplay profileReceipt key)
+
+-- | Diagnostic of the independently checked architecture's I_checked.
+-- | Concrete StageClosure I_stage has the SAME native InstanceRevision domain
+-- and the SAME I-tagged wire, but a different evidence origin.
+data NativeAtomManifestCheckedRevisionWireCandidate =
+  NativeAtomManifestCheckedRevisionWireCandidate
+    { nativeAtomManifestCheckedRevisionBaseCandidate :: NativeAtomManifestOccurrenceKeyWireCandidate
+    , nativeAtomManifestCheckedRevisionWire :: Text
+    } deriving (Eq, Show)
+
+-- | Private unaccepted diagnostic; no occurrence-to-stage producer certificate.
+data NativeAtomManifestCheckedRevisionReplay = NativeAtomManifestCheckedRevisionReplay
+  { nativeAtomManifestCheckedRevisionReplayBase :: NativeAtomManifestOccurrenceKeyReplay
+  , nativeAtomManifestCheckedRevisionReplayRevision :: InstanceRevision
+  } deriving (Eq, Show)
+
+data NativeAtomManifestCheckedRevisionReplayError
+  = NativeAtomManifestCheckedRevisionBaseDifferent NativeAtomManifestOccurrenceKeyReplayError
+  | NativeAtomManifestCheckedRevisionRoleMalformed
+  | NativeAtomManifestCheckedRevisionDifferent
+  deriving (Eq, Show)
+
+-- | Check the exact producer, independently accepted manifest/source/release,
+-- and D/V/Q/M/R/L/S/C/F/B/I_stage/A/P/K first; I_checked comes ONLY from the
+-- checked (K,I_checked) descriptor, not StageClosure. No stage-origin claim.
+replayNativeAtomManifestCheckedRevisionCandidate
+  :: NativeFinalInstanceCorrespondence
+  -> CertifiedSourceManifestBinding
+  -> CertifiedApplicationArtifact
+  -> CertifiedReleaseArtifact
+  -> NativeAtomManifestCheckedRevisionWireCandidate
+  -> Either NativeAtomManifestCheckedRevisionReplayError NativeAtomManifestCheckedRevisionReplay
+replayNativeAtomManifestCheckedRevisionCandidate witness producer sourceObject releaseObject candidate = do
+  keyReceipt <- either (Left . NativeAtomManifestCheckedRevisionBaseDifferent) Right
+    (replayNativeAtomManifestOccurrenceKeyCandidate witness producer sourceObject releaseObject
+       (nativeAtomManifestCheckedRevisionBaseCandidate candidate))
+  revision <- maybe (Left NativeAtomManifestCheckedRevisionRoleMalformed) Right
+    (decodeNativeInstanceRevisionWire (nativeAtomManifestCheckedRevisionWire candidate))
+  let profileReceipt = nativeAtomManifestOccurrenceKeyReplayBase keyReceipt
+      realizationReceipt = nativeAtomManifestProfileReplayBase profileReceipt
+      instanceReceipt = nativeAtomManifestRealizationReplayBase realizationReceipt
+      subjectReceipt = nativeAtomManifestInstanceReplayBase instanceReceipt
+      closedReceipt = nativeAtomManifestSubjectReplayBase subjectReceipt
+      commonReceipt = nativeAtomManifestClosedReplayBase closedReceipt
+      systemsReceipt = nativeAtomManifestCommonReplayBase commonReceipt
+      checkedReceipt = nativeAtomManifestSystemsReplayBase systemsReceipt
+      checkedRevision = identityInstanceRevision
+        (nativeAtomManifestReplayCheckedOccurrence checkedReceipt)
+  if revision /= checkedRevision
+    then Left NativeAtomManifestCheckedRevisionDifferent
+    else pure (NativeAtomManifestCheckedRevisionReplay keyReceipt revision)
