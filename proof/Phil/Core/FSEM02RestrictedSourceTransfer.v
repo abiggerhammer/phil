@@ -146,7 +146,7 @@ Proof.
       owners clientOccurrence serverOccurrence clientProcess serverProcess
       clientOld clientNext serverOld serverNext endpointOwners Howners)
     as [Hclient [Hserver Hframe]].
-  repeat split.
+  repeat (apply conj).
   - exact Hsource.
   - exact Hmessage.
   - exact Hheads.
