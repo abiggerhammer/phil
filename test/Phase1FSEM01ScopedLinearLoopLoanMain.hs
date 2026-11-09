@@ -6,6 +6,7 @@ module Main (main) where
 import qualified Data.Map.Strict as Map
 import qualified Data.Set as Set
 import Data.Text (Text)
+import qualified Data.Text as Text
 import qualified Data.Text.IO as TextIO
 import qualified Phil.Core.Context as Core
 import Phil.Core.Static (DeclarationKey (..), emptyStaticContext)
@@ -186,8 +187,15 @@ main = do
         rejected leak BorrowEscape
           [TraceBeforeLoan,TraceLoanStarted,
             TraceBodyResult True,TraceEscapeRejected] False
-        rejected moved BorrowEscape
+        rejected moved StructuralUse
           [TraceBeforeLoan,TraceLoanStarted] False
+        movedEvidence <- checked moved
+        case linearLoopCheckedOutcome movedEvidence of
+          Left err -> assert
+            (surfaceErrorDetail err == Text.pack (show
+              (Core.OwnerBorrowed (name (linearLoopHeaderBinder movedEvidence)))))
+            "attempted move did not preserve the exact native OwnerBorrowed error"
+          Right () -> Left "borrowed owner moved unexpectedly"
         rejected stale StructuralUse [] False
         rejected wrongMode BorrowEscape [TraceBeforeLoan] False
         rejected wrongBackedge TypeMismatch

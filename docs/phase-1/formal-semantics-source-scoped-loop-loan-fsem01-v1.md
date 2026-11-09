@@ -56,8 +56,8 @@ read 11 real parsed source witnesses. Accepted lexical alpha-renaming,
 borrow-body use and closed loan preserve the exact native flag/owner
 maps, their active-loan sets, old owner consumption and post-join header.
 The negative witnesses exercise leaked view values (`BorrowEscape`),
-attempted move while the loan is live (`OwnerBorrowed`, surfaced as
-`BorrowEscape`), stale original owner (`StructuralUse`),
+attempted move while the loan is live (native `OwnerBorrowed`, surfaced as
+`StructuralUse`), stale original owner (`StructuralUse`),
 unrestricted borrow source (`BorrowEscape`), wrong continuing actual
 (`TypeMismatch`), unproved invariant (`MissingEvidence`) and
 unsupported unscoped view/multiple borrow bodies. Independent Core
