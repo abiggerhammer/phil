@@ -69,6 +69,12 @@ module Phil.Verification.NativeFinalInstanceCorrespondence
   , nativeAtomManifestReplayCheckedOccurrence
   , NativeAtomManifestReplayError (..)
   , replayNativeAtomManifestCandidate
+  , NativeAtomManifestSystemsWireCandidate (..)
+  , NativeAtomManifestSystemsReplay
+  , nativeAtomManifestSystemsReplayBase
+  , nativeAtomManifestSystemsReplayRevision
+  , NativeAtomManifestSystemsReplayError (..)
+  , replayNativeAtomManifestSystemsCandidate
   , NativeVerifierProfileText (..)
   , encodeNativeVerifierProfileWire
   , decodeNativeVerifierProfileWire
@@ -977,3 +983,43 @@ replayNativeAtomManifestCandidate witness producer sourceObject releaseObject ca
   pure (NativeAtomManifestReplay
     decodedApplication decodedRaw decodedRoot coordinates
     (nativeCorrespondenceArchitectureInstance witness))
+
+-- | Read-only unaccepted S candidate with the already checked D/V/Q/M and
+-- independently accepted R/L domains: not a source of stage authority.
+data NativeAtomManifestSystemsWireCandidate = NativeAtomManifestSystemsWireCandidate
+  { nativeAtomManifestSystemsBaseCandidate :: NativeAtomManifestWireCandidate
+  , nativeAtomManifestSystemsRevisionWire :: Text
+  } deriving (Eq, Show)
+
+-- | Constructor private: retains typed S from the exact accepted StageClosure.
+data NativeAtomManifestSystemsReplay = NativeAtomManifestSystemsReplay
+  { nativeAtomManifestSystemsReplayBase :: NativeAtomManifestReplay
+  , nativeAtomManifestSystemsReplayRevision :: SystemsArtifactRevision
+  } deriving (Eq, Show)
+
+data NativeAtomManifestSystemsReplayError
+  = NativeAtomManifestSystemsBaseDifferent NativeAtomManifestReplayError
+  | NativeAtomManifestSystemsRoleMalformed
+  | NativeAtomManifestSystemsDifferent
+  deriving (Eq, Show)
+
+-- | First recheck the entire checked producer and independently accepted
+-- VER-010 source / INT-005 CertifiedRelease, then compare S to the actual
+-- native normalized SystemsArtifactRevision. Never infer stage provenance.
+replayNativeAtomManifestSystemsCandidate
+  :: NativeFinalInstanceCorrespondence
+  -> CertifiedSourceManifestBinding
+  -> CertifiedApplicationArtifact
+  -> CertifiedReleaseArtifact
+  -> NativeAtomManifestSystemsWireCandidate
+  -> Either NativeAtomManifestSystemsReplayError NativeAtomManifestSystemsReplay
+replayNativeAtomManifestSystemsCandidate witness producer sourceObject releaseObject candidate = do
+  baseReceipt <- either (Left . NativeAtomManifestSystemsBaseDifferent) Right
+    (replayNativeAtomManifestCandidate witness producer sourceObject releaseObject
+       (nativeAtomManifestSystemsBaseCandidate candidate))
+  normalized <- maybe (Left NativeAtomManifestSystemsRoleMalformed) Right
+    (decodeNativeSystemsRevisionWire (nativeAtomManifestSystemsRevisionWire candidate))
+  if normalized /= nativeReplaySystemsRevision
+       (nativeAtomManifestReplayStageCoordinates baseReceipt)
+    then Left NativeAtomManifestSystemsDifferent
+    else pure (NativeAtomManifestSystemsReplay baseReceipt normalized)

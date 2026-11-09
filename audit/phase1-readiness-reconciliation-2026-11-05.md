@@ -648,3 +648,35 @@ signoff remain separately uncredited. Original **244 normative cases**
 (236 Exit, 8 Profile), historical independent audit, Phase 1 TCB,
 generated outputs and strict GHC/LLVM/Rocq policy unchanged.
 **Independent Phase 1 audit-freeze verdict: NOT YET.**
+
+## Implementation evidence — 2026-11-09: checked D/V/Q/M + independently accepted manifest R/L (#1691)
+
+[PR #1691](https://github.com/abiggerhammer/phil/pull/1691),
+[issue #1584](https://github.com/abiggerhammer/phil/issues/1584),
+exact tested head `14b6a7709e7463dae347378d708d7c58e0e2be05`,
+merge `3544b298afab366c93ef50a11416fedb73de3926`,
+2026-11-09 03:49:43 UTC. Independently refetched exact-head **36/36
+pull_request workflows SUCCESS, 78/78 check runs SUCCESS**, none failed,
+pending, queued or skipped. Protected
+[Hamster Merge Intent #42558472709](https://github.com/abiggerhammer/phil/actions/runs/42558472709)
+and merge-pr job SUCCESS; supplemental Matrix row **50** appended and
+all six cells read back.
+
+**Bounded executed result:** checked atom-only GenericApplicationIdentity
+D/V/Q/M data plus independently accepted raw Systems manifest digest R and
+lowering root L, requiring actual checked source-manifest producer and
+whole independently accepted VER-010 source and INT-005 CertifiedRelease/
+StageClosure. Upload/Steve negative tests cover altered Q/M, duplicate Q,
+wrong R/L roles, normalized S substituted for R, same-role changed R/L and
+substituted exact release. Four conditional Rocq string-model theorems
+and named Print Assumptions passed. Typed native S/C/F, B/I/A/P, K/I
+occurrence remain distinct; no occurrence-to-StageClosure origin derived.
+
+**Nonclaims:** total recursive SemanticForm, Unicode Text/Rocq string,
+Map/Set ordering, accepted object reflection, authenticated stage production,
+predecessor authority, FixedFinalAuthorityAdapter, FinalArtifactCertified;
+no ad hoc nat encoding or model Prop as native authority. Public release-byte
+verification and independent pinned final-delta signoff separately
+uncredited. Original 244 normative cases (236 Exit, 8 Profile), historical
+independent audit, Phase 1 TCB, generated artifacts and strict GHC/LLVM/Rocq
+unchanged. **Independent audit freeze NOT YET.**

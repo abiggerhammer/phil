@@ -1061,3 +1061,26 @@ mapping, model Prop made into native authority, public-release byte
 verification or independently pinned final-delta signoff credit. Original
 244 normative cases, historical independent audit, TCB, generated outputs
 and strict GHC/LLVM/Rocq policies preserved. **Independent freeze NOT YET.**
+
+## 2026-11-09 — checked R/L beside normalized stage S (#1584)
+
+An unaccepted native S-tagged candidate now composes the previous exact
+checked D/V/Q/M + independently accepted manifest R/L diagnostic with
+the native normalized SystemsArtifactRevision from the actual retained
+StageClosure. Exact source-manifest producer, independently accepted VER-010
+source, and INT-005 CertifiedRelease are replayed *before* comparison.
+Upload/Steve tests reject same-payload foreign R/L/C/F roles, changed
+S payload under a valid S tag, and S masquerading as raw R. Four Rocq
+conditional string-model theorems with named Print Assumptions cover
+roundtrip, injectivity, role rejection, and S sensitivity.
+
+**Remaining-premise ledger:** this is NOT complete recursive SemanticForm,
+Unicode Data.Text/Rocq string transport, native Map/Set ordering refinement,
+accepted application/manifest/source/stage/release reflection, authenticated
+checked occurrence-to-concrete StageClosure production, predecessor authority,
+FixedFinalAuthorityAdapter or FinalArtifactCertified. R raw digest, L lowering
+root, normalized S, common C, closed F, B/I/A/P, K/I checked occurrence and
+D/V/Q/M/H remain distinct. No unproved nat mapping, model Prop promoted to
+native authority, public release-byte verification, or independent pinned
+final-delta signoff. Original 244 normative cases, historical audit, Phase 1
+TCB, generated artifacts and strict GHC/LLVM/Rocq unchanged. **NOT YET.**
