@@ -328,6 +328,8 @@ def release(api: GitHub, number: int, *, expected_sha: str | None = None,
         raise ClaimFailure("closed claim PR needs exact lane and same-repo source branch")
     if require_merged and not pr.get("merged_at"):
         raise ClaimFailure("automatic recovery requires a MERGED PR")
+    if require_merged and (pr.get("base") or {}).get("ref") != "main":
+        raise ClaimFailure("automatic recovery requires merge into main")
     match = BODY_SLICE_RE.search(pr.get("body") or "")
     if not match:
         raise ClaimFailure("closed PR missing FSEM-Slice declaration")
@@ -391,6 +393,7 @@ def reconcile(api: GitHub):
         for pr in api.pages(endpoint):
             pr_head = pr.get("head") or {}
             if (pr.get("state") != "closed" or not pr.get("merged_at") or
+                    (pr.get("base") or {}).get("ref") != "main" or
                     pr_head.get("ref") != record["branch"] or
                     (pr_head.get("repo") or {}).get("full_name") != api.repo or
                     not has_lane(pr)):
