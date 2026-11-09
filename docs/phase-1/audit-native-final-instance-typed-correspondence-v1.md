@@ -1084,3 +1084,31 @@ D/V/Q/M/H remain distinct. No unproved nat mapping, model Prop promoted to
 native authority, public release-byte verification, or independent pinned
 final-delta signoff. Original 244 normative cases, historical audit, Phase 1
 TCB, generated artifacts and strict GHC/LLVM/Rocq unchanged. **NOT YET.**
+
+
+## 2026-11-09 — exact native common C after normalized S and raw R/L (#1584)
+
+The next bounded, read-only typed diagnostic extends the checked D/V/Q/M,
+independently accepted manifest R/L, normalized SystemsArtifactRevision S
+comparison with the *common* Phase1StageContractRevision C from the **same**
+exactly accepted StageClosure. Every call replays the checked producer,
+independently accepted VER-010 source and INT-005 CertifiedRelease before
+comparison; no candidate wire is evidence of acceptance or production.
+Haskell Upload/Steve replay requires exact C, tests changed same-role C,
+wrong same-payload R/L/S/F roles, and C substituted for S. Conditional
+Rocq string-model roundtrip, injectivity, wrong-role and C-sensitivity
+have four named Print Assumptions, independently gated by CI.
+
+**Remaining-premise ledger:** no total recursive SemanticForm, native
+Data.Text Unicode/Rocq string encoding, native Map/Set Ord correspondence,
+accepted native-to-Rocq producer/object representation, checked architecture
+occurrence -> concrete StageClosure production, predecessor authority,
+FixedFinalAuthorityAdapter or FinalArtifactCertified. R raw digest, L lowering
+root, S normalized revision, C common contract and F closed contract are
+different domains even with identical payloads. B/I/A/P stage coordinates,
+K/I occurrence and D/V/Q/M/H generic/value/field domains remain distinct.
+No unproved nat encoder or externally supplied model Prop becomes native
+authority. Public release-byte verification and independently pinned
+final-delta signoff remain uncredited. The original 244 normative cases,
+Phase 1 TCB, historical audit, generated outputs, strict GHC/LLVM/Rocq
+remain unchanged. Independent freeze: NOT YET.

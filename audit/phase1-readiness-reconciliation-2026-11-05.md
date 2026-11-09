@@ -680,3 +680,35 @@ verification and independent pinned final-delta signoff separately
 uncredited. Original 244 normative cases (236 Exit, 8 Profile), historical
 independent audit, Phase 1 TCB, generated artifacts and strict GHC/LLVM/Rocq
 unchanged. **Independent audit freeze NOT YET.**
+
+
+## Implementation evidence — 2026-11-09: independently accepted R/L plus normalized S (#1693)
+
+[PR #1693](https://github.com/abiggerhammer/phil/pull/1693),
+[controlling issue #1584](https://github.com/abiggerhammer/phil/issues/1584),
+exact tested head `61b0e72c85be4f325b047f83240cb02306911bdf`,
+protected merge `d87d500357f341fc8d34dd698b2015a26b2894f7`,
+2026-11-09 04:53:14 UTC. Exact-head **38/38** pull_request workflows
+SUCCESS and **80/80** check runs SUCCESS, no failed, pending or skipped
+checks. [Hamster Merge Intent #42564188814](https://github.com/abiggerhammer/phil/actions/runs/42564188814)
+and merge-pr job completed SUCCESS. Supplemental Conformance Matrix row 51
+was appended and all six cells independently read back.
+
+**Bounded executed result:** checked atom-only D/V/Q/M application and
+independently accepted raw manifest digest R / lowering root L now also
+compare typed normalized SystemsArtifactRevision S with the exact accepted
+StageClosure. Upload/Steve checked producer and independent VER-010 source /
+INT-005 release consumer replay, same-payload R/L/C/F foreign-role negatives,
+changed tagged S rejection and S-as-raw-R rejection; four Rocq string-model
+theorems with named Print Assumptions executed at exact tested head.
+Only an unaccepted private diagnostic is returned.
+
+**Nonclaims:** complete recursive SemanticForm, Unicode Text/Rocq string,
+native Map/Set order, accepted authority representation, occurrence-to-stage
+producer authenticity, predecessor authority, FixedFinalAuthorityAdapter or
+FinalArtifactCertified. Raw R, lowering L, normalized S, common C, closed F,
+B/I/A/P coordinates, K/I checked occurrence and D/V/Q/M/H roles remain
+separate. Public release bytes and independent pinned final-delta signoff
+separately uncredited. Original 244 normative cases (236 Exit, 8 Profile),
+historical audit, TCB, generated outputs and strict GHC/LLVM/Rocq unchanged.
+**Independent audit freeze NOT YET.**

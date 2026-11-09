@@ -75,6 +75,12 @@ module Phil.Verification.NativeFinalInstanceCorrespondence
   , nativeAtomManifestSystemsReplayRevision
   , NativeAtomManifestSystemsReplayError (..)
   , replayNativeAtomManifestSystemsCandidate
+  , NativeAtomManifestCommonWireCandidate (..)
+  , NativeAtomManifestCommonReplay
+  , nativeAtomManifestCommonReplayBase
+  , nativeAtomManifestCommonReplayRevision
+  , NativeAtomManifestCommonReplayError (..)
+  , replayNativeAtomManifestCommonCandidate
   , NativeVerifierProfileText (..)
   , encodeNativeVerifierProfileWire
   , decodeNativeVerifierProfileWire
@@ -1023,3 +1029,47 @@ replayNativeAtomManifestSystemsCandidate witness producer sourceObject releaseOb
        (nativeAtomManifestReplayStageCoordinates baseReceipt)
     then Left NativeAtomManifestSystemsDifferent
     else pure (NativeAtomManifestSystemsReplay baseReceipt normalized)
+
+
+-- | Unaccepted C candidate extends the exactly replayed D/V/Q/M, raw R/L,
+-- and normalized S coordinate. C is the *common* Phase1StageContractRevision,
+-- not the final ClosedStageContractRevision F or any raw manifest digest.
+data NativeAtomManifestCommonWireCandidate = NativeAtomManifestCommonWireCandidate
+  { nativeAtomManifestCommonBaseCandidate :: NativeAtomManifestSystemsWireCandidate
+  , nativeAtomManifestCommonRevisionWire :: Text
+  } deriving (Eq, Show)
+
+-- | Private receipt: the accepted objects and exact stage coordinates are
+-- still retained by the nested replay. No wire grants stage authority.
+data NativeAtomManifestCommonReplay = NativeAtomManifestCommonReplay
+  { nativeAtomManifestCommonReplayBase :: NativeAtomManifestSystemsReplay
+  , nativeAtomManifestCommonReplayRevision :: Phase1StageContractRevision
+  } deriving (Eq, Show)
+
+data NativeAtomManifestCommonReplayError
+  = NativeAtomManifestCommonBaseDifferent NativeAtomManifestSystemsReplayError
+  | NativeAtomManifestCommonRoleMalformed
+  | NativeAtomManifestCommonDifferent
+  deriving (Eq, Show)
+
+-- | Recheck checked source-manifest production and exact independent VER-010
+-- and INT-005 consumers, then S, before comparing native common C against
+-- the same retained StageClosure. Do not derive architecture-stage provenance.
+replayNativeAtomManifestCommonCandidate
+  :: NativeFinalInstanceCorrespondence
+  -> CertifiedSourceManifestBinding
+  -> CertifiedApplicationArtifact
+  -> CertifiedReleaseArtifact
+  -> NativeAtomManifestCommonWireCandidate
+  -> Either NativeAtomManifestCommonReplayError NativeAtomManifestCommonReplay
+replayNativeAtomManifestCommonCandidate witness producer sourceObject releaseObject candidate = do
+  baseReceipt <- either (Left . NativeAtomManifestCommonBaseDifferent) Right
+    (replayNativeAtomManifestSystemsCandidate witness producer sourceObject releaseObject
+       (nativeAtomManifestCommonBaseCandidate candidate))
+  common <- maybe (Left NativeAtomManifestCommonRoleMalformed) Right
+    (decodeNativeCommonContractRevisionWire (nativeAtomManifestCommonRevisionWire candidate))
+  if common /= nativeReplayCommonRevision
+       (nativeAtomManifestReplayStageCoordinates
+         (nativeAtomManifestSystemsReplayBase baseReceipt))
+    then Left NativeAtomManifestCommonDifferent
+    else pure (NativeAtomManifestCommonReplay baseReceipt common)
