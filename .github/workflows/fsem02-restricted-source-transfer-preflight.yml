@@ -16,14 +16,19 @@ on:
       - 'src/Phil/Surface/GrammarV1/ComponentRestrictedRendezvous.hs'
       - 'test/Phase1FSEM02RestrictedSourceTransferMain.hs'
       - 'proof/Phil/Core/FSEM02RestrictedSourceTransfer.v'
+      - 'test/fixtures/fsem02-restricted-source-transfer-v1/**'
       - 'phil-core.cabal'
       - '.github/workflows/fsem02-restricted-source-transfer-preflight.yml'
+
+concurrency:
+  group: fsem02-restricted-source-${{ github.ref }}
+  cancel-in-progress: true
 
 permissions:
   contents: read
 
 jobs:
-  strict-source-and-owner-ledger:
+  strict-restricted-source-and-owner-transfer:
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v4
