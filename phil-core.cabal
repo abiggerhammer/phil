@@ -237,6 +237,7 @@ library
       Phil.Surface.GrammarV1.SourceTwoBoolJoinTelescope
       Phil.Surface.GrammarV1.LoopStateScope
       Phil.Surface.GrammarV1.SourceBoolLoopResource
+      Phil.Surface.GrammarV1.SourceBoolLoopBreak
       Phil.Surface.GrammarV1.ComponentSelectClose
       Phil.Surface.GrammarV1.ComponentOfferCoverage
       Phil.Surface.GrammarV1.ComponentOfferReplay

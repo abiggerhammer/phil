@@ -1,0 +1,6 @@
+fn exit(seed : Bool, payload : Bytes[8]) -> Bytes[8] satisfies C {
+  loop state (cursor : Bool = seed) invariant cursor == cursor {
+    break;
+  };
+  return cursor;
+}
