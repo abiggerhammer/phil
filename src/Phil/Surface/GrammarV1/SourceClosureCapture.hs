@@ -96,7 +96,7 @@ grammarV1SourceDirectClosure static key fn = do
             let typed = zip binders params
             case grammarV1ClosureParameterScope outer closure of
               Left err -> Just (Left (SourceClosureBinderError err))
-              Right (inside,scope) | not (null inside) -> Nothing
+              Right (inside,_) | not (null inside) -> Nothing
               Right (_,scope) -> case mapM
                   (\sourceName -> grammarV1ResolveLocal sourceName scope)
                   sourceCaptures of
@@ -129,11 +129,11 @@ runDirect typed resolved closure =
           { directOutcome = Left (SourceClosureCaptureError err) }
         Right summary ->
           let observed = start { directSummary = Just summary }
-              minimum = closureMinimumStructuralMode summary
+              requiredMode = closureMinimumStructuralMode summary
           in case sourceMode (grammarV1ClosureMode closure) of
-            Just declared | declared /= minimum -> observed
+            Just declared | declared /= requiredMode -> observed
               { directOutcome = Left
-                  (SourceClosureModeMismatch minimum declared) }
+                  (SourceClosureModeMismatch requiredMode declared) }
             _ -> case foldM (consumeCapture typed) initial resolved of
               Left err -> observed { directOutcome = Left err }
               Right final -> observed
@@ -178,7 +178,7 @@ grammarV1SourceBorrowClosure static key fn = do
           Right (view,loanScope) ->
             case grammarV1ClosureParameterScope loanScope closure of
               Left err -> Just (Left (SourceClosureBinderError err))
-              Right (inside,scope) | not (null inside) -> Nothing
+              Right (inside,_) | not (null inside) -> Nothing
               Right (_,scope) ->
                 case grammarV1ResolveLocal (head captures) scope of
                   Left err -> Just (Left (SourceClosureBinderError err))
