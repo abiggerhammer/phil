@@ -60,6 +60,15 @@ module Phil.Verification.NativeFinalInstanceCorrespondence
   , decodeNativeGenericAtomActualPairWires
   , encodeNativeGenericAtomApplicationWires
   , decodeNativeGenericAtomApplicationWires
+  , NativeAtomManifestWireCandidate (..)
+  , NativeAtomManifestReplay
+  , nativeAtomManifestReplayApplication
+  , nativeAtomManifestReplayRawDigest
+  , nativeAtomManifestReplayLoweringRoot
+  , nativeAtomManifestReplayStageCoordinates
+  , nativeAtomManifestReplayCheckedOccurrence
+  , NativeAtomManifestReplayError (..)
+  , replayNativeAtomManifestCandidate
   , NativeVerifierProfileText (..)
   , encodeNativeVerifierProfileWire
   , decodeNativeVerifierProfileWire
@@ -95,7 +104,10 @@ import qualified Data.Map.Strict as Map
 import qualified Data.Set as Set
 import Data.Text (Text)
 import qualified Data.Text as Text
-import Phil.Core.Generic (GenericApplicationIdentity (..), GenericStaticParameterKey (..))
+import Phil.Core.Generic
+  ( GenericApplicationIdentity (..), GenericStaticParameterKey (..)
+  , GenericDischargeLineage (..)
+  )
 import Phil.Assurance.Types
   ( AssuranceLedger, AssuranceManifest (..), Digest (..), VerificationContext )
 import Phil.Core.Static
@@ -142,7 +154,8 @@ import Phil.Verification.FinalAuthorityAdapter
   , nativeFinalClosedContractRevision
   , nativeFinalVerifierProfile
   )
-import Phil.Verification.GenericAssurance (GenericApplicationAssurance)
+import Phil.Verification.GenericAssurance
+  ( GenericApplicationAssurance, genericApplicationAssuranceLineage )
 import Phil.Verification.ManifestClosure (ManifestClosureSelection)
 import Phil.Verification.SourceManifestBinding
   ( CertifiedSourceManifestBinding
@@ -871,3 +884,96 @@ closeNativeFinalInstanceCorrespondence
       (certifiedReleaseStageClosure release)
       release
       authority)
+
+-- | Candidate TRANSPORT ONLY: a complete atom-only D/V/Q/M application
+-- projection alongside two independently named raw manifest digest domains.
+-- Its public constructor cannot carry acceptance or stage-origin authority.
+data NativeAtomManifestWireCandidate = NativeAtomManifestWireCandidate
+  { nativeAtomManifestCandidateApplication :: (Text, Text, [(Text, Text)])
+  , nativeAtomManifestCandidateRawWire :: Text
+  , nativeAtomManifestCandidateLoweringWire :: Text
+  }
+  deriving (Eq, Show)
+
+-- | Private diagnostic receipt. It is obtainable only by replaying the exact
+-- checked producer and independently accepted VER-010/INT-005 whole objects.
+-- All values are native typed data; no native-to-Rocq Text/string or nat bridge
+-- is manufactured. The occurrence key is NOT a StageClosure producer proof.
+data NativeAtomManifestReplay = NativeAtomManifestReplay
+  { nativeAtomManifestReplayApplication ::
+      (DeclarationKey, InterfaceRevision, Map.Map GenericStaticParameterKey SemanticForm)
+  , nativeAtomManifestReplayRawDigest :: NativeRawSystemsDigest
+  , nativeAtomManifestReplayLoweringRoot :: NativeLoweringRootDigest
+  , nativeAtomManifestReplayStageCoordinates :: NativeManifestStageReplay
+  , nativeAtomManifestReplayCheckedOccurrence :: ArchitectureInstanceIdentity
+  }
+  deriving (Eq, Show)
+
+data NativeAtomManifestReplayError
+  = NativeAtomManifestExactConsumersDifferent NativeExactAcceptedConsumerReplayError
+  | NativeAtomManifestStructuredActualsUnsupported
+  | NativeAtomManifestApplicationWireMalformed
+  | NativeAtomManifestApplicationDifferent
+  | NativeAtomManifestRawRoleMalformed
+  | NativeAtomManifestLoweringRoleMalformed
+  | NativeAtomManifestRawDifferent
+  | NativeAtomManifestLoweringDifferent
+  | NativeAtomManifestStageCoordinatesDifferent
+  deriving (Eq, Show)
+
+-- | Bounded native D/V/Q/M + R/L correspondence across accepted boundaries.
+-- First recheck the *whole* checked producer and independently accepted
+-- source/release objects, with StageClosure retained exactly. The actual
+-- checked GenericApplicationIdentity comes from its accepted source lineage;
+-- the R raw Systems digest and L lowering root come from the independently
+-- accepted producer manifest and must equal actual typed stage coordinates.
+-- Structured SemanticForm actuals fail closed, as do malformed roles and
+-- same-D/V-but-changed Q/M associations. The caller's wires are NOT authority.
+-- No claim of generic-application acceptance by decode, occurrence-to-stage
+-- production, FixedFinalAuthorityAdapter or FinalArtifactCertified follows.
+replayNativeAtomManifestCandidate
+  :: NativeFinalInstanceCorrespondence
+  -> CertifiedSourceManifestBinding
+  -> CertifiedApplicationArtifact
+  -> CertifiedReleaseArtifact
+  -> NativeAtomManifestWireCandidate
+  -> Either NativeAtomManifestReplayError NativeAtomManifestReplay
+replayNativeAtomManifestCandidate witness producer sourceObject releaseObject candidate = do
+  exact <- either (Left . NativeAtomManifestExactConsumersDifferent) Right
+    (replayNativeExactAcceptedConsumers witness producer sourceObject releaseObject)
+  let checkedSource = sourceManifestBindingSourceAssurance
+        (nativeExactReplayCheckedProducer exact)
+      checkedApplication = genericDischargeApplicationIdentity
+        (genericApplicationAssuranceLineage checkedSource)
+      manifest = sourceManifestBindingManifest
+        (nativeExactReplayCheckedProducer exact)
+      coordinates = nativeExactReplayCoordinates exact
+      expectedRaw = NativeRawSystemsDigest (manifestImplementationDigest manifest)
+      expectedRoot = NativeLoweringRootDigest (manifestLoweringLedgerRoot manifest)
+  expectedApplicationWires <- maybe
+    (Left NativeAtomManifestStructuredActualsUnsupported) Right
+    (encodeNativeGenericAtomApplicationWires checkedApplication)
+  decodedApplication <- maybe
+    (Left NativeAtomManifestApplicationWireMalformed) Right
+    (decodeNativeGenericAtomApplicationWires
+      (nativeAtomManifestCandidateApplication candidate))
+  if nativeAtomManifestCandidateApplication candidate /= expectedApplicationWires
+    then Left NativeAtomManifestApplicationDifferent
+    else Right ()
+  decodedRaw <- maybe (Left NativeAtomManifestRawRoleMalformed) Right
+    (decodeNativeRawSystemsDigestWire (nativeAtomManifestCandidateRawWire candidate))
+  decodedRoot <- maybe (Left NativeAtomManifestLoweringRoleMalformed) Right
+    (decodeNativeLoweringRootWire (nativeAtomManifestCandidateLoweringWire candidate))
+  if decodedRaw /= expectedRaw
+    then Left NativeAtomManifestRawDifferent
+    else Right ()
+  if decodedRoot /= expectedRoot
+    then Left NativeAtomManifestLoweringDifferent
+    else Right ()
+  if decodedRaw /= nativeReplayRawDigest coordinates
+      || decodedRoot /= nativeReplayLoweringRoot coordinates
+    then Left NativeAtomManifestStageCoordinatesDifferent
+    else Right ()
+  pure (NativeAtomManifestReplay
+    decodedApplication decodedRaw decodedRoot coordinates
+    (nativeCorrespondenceArchitectureInstance witness))

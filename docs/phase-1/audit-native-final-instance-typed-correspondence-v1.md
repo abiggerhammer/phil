@@ -1022,3 +1022,42 @@ roles distinct. No nat mapping or model Prop elevated to native authority.
 Public-byte verification and independent final-delta signoff uncredited;
 original 244 normative cases, historical audit, Phase 1 TCB, generated outputs,
 strict GHC/LLVM/Rocq and independent freeze NOT YET unchanged.
+
+## 2026-11-09 — checked atom-only generic actuals beside independently accepted manifest R/L (#1584)
+
+A further bounded **read-only** native gate now composes the actual
+source-checked `GenericApplicationIdentity` D/V/Q/M atom-only data with the
+independently accepted INT-002 manifest's raw Systems digest (R) and lowering
+root (L). A caller supplies a *candidate transport*, never an acceptance
+token. The private native receipt is produced only after replaying the exact
+checked source-manifest producer, independently accepted VER-010 source and
+INT-005 CertifiedRelease, including their complete common StageClosure. It
+retains the actual native typed manifest/stage coordinates and separately
+checked architecture occurrence; it does **not** equate that occurrence with
+the stage producer or replace full certified objects with matching revisions.
+
+Executable Upload/Steve tests cover real producer/consumer replay; identical
+D/V but altered Q/M actuals; reversed D/V; duplicate Q; R/L crossed roles;
+S normalized-revision masquerading as R raw digest; equal-role altered R and
+L payloads; and a different accepted release's exact-envelope rejection.
+Structured native SemanticForm actuals refuse this partial projection.
+Four new Rocq string-model theorems and `Print Assumptions` ask only for
+data-level D/V/Q/M + R/L roundtrip, injectivity, role substitution rejection,
+and changed-application sensitivity. They deliberately **do not** make
+native-to-Rocq Text/Unicode, native map ordering, accepted authority or a
+producer-to-StageClosure proof magically follow from string algebra.
+
+**Remaining-premise ledger:** no complete recursive SemanticForm,
+native Map/Set ordering to Rocq candidate-list refinement, Unicode
+Data.Text/string transport, authenticated architecture occurrence to
+concrete StageClosure production, complete accepted manifest/stage/source/
+release correspondence in Rocq, predecessor authority,
+FixedFinalAuthorityAdapter or FinalArtifactCertified. Keep raw R digest and
+L lowering root distinct from S normalized SystemsArtifactRevision,
+C Phase1StageContractRevision, F ClosedStageContractRevision; B subject,
+I stage instance, A realization, P verifier profile, K/I checked occurrence
+and D/V/Q/M/H generic/semantic/field domains disjoint. No ad hoc nat
+mapping, model Prop made into native authority, public-release byte
+verification or independently pinned final-delta signoff credit. Original
+244 normative cases, historical independent audit, TCB, generated outputs
+and strict GHC/LLVM/Rocq policies preserved. **Independent freeze NOT YET.**
