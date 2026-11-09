@@ -3355,7 +3355,7 @@ Theorem native_ascii_raw_manifest_model_accepts_seven_bit :
 Proof.
   intros raw root Hr Hl.
   unfold nativeAsciiRawManifestPairModel.
-  rewrite native_ascii7_raw_tag, native_ascii7_lowering_tag.
+  rewrite native_ascii7_raw_tag_preserves, native_ascii7_lowering_tag_preserves.
   rewrite Hr, Hl. reflexivity.
 Qed.
 
