@@ -100,10 +100,19 @@ accepted input moved copied = do
 
 directError :: Text -> (SourceClosureError -> Bool) -> Either String ()
 directError input f = do
-  run <- direct input
-  assert (directFinal run == Nothing &&
-          either f (const False) (directOutcome run))
-    ("wrong capture error or fabricated post-state " ++ show run)
+  fn <- parse input
+  case grammarV1SourceDirectClosure emptyStaticContext root fn of
+    -- Lexical resolution rejects before a resource run exists; there can
+    -- be no successor context to inspect at this stage.
+    Just (Left err) ->
+      assert (f err) ("wrong early capture error " ++ show err)
+    -- Once resource checking starts, a rejected capture must not invent
+    -- a post-transition resource context.
+    Just (Right run) ->
+      assert (directFinal run == Nothing &&
+              either f (const False) (directOutcome run))
+        ("wrong capture error or fabricated post-state " ++ show run)
+    Nothing -> Left "rejected fixture fell outside the admitted source fragment"
 
 borrowSuccess :: Text -> Either String ()
 borrowSuccess input = do
