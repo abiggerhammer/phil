@@ -3805,3 +3805,4 @@ nativeAtomManifestOccurrenceKeyReplayAccepts source fixture =
                            Left (NativeAtomManifestOccurrenceKeyBaseDifferent
                              NativeAtomManifestProfileRoleMalformed) -> True
                            _ -> False
+    _ -> False
