@@ -116,3 +116,5 @@ The theorem models opaque named-type arguments by a canonical structural key rat
 ### PHIL-SURFACE-FAIL-001 — no proof-relevant guessing
 
 The proof model has no successful path for an unknown projection sort, symbolic-by-symbolic multiplication outside the Phase 0 refinement fragment, a non-name validation context/subject identity, an unsupported opaque type argument, or an integer literal with no expected UInt width. These are competence-boundary failures rather than defaults. Source-span precision and the exact Haskell error constructor are implementation-level tested properties.
+
+The bounded **FSEM-02 source restricted-send/receive transfer** extension is indexed in [the Phase 1 reader](../docs/phase-1/formal-semantics-restricted-source-transfer-fsem02-v1.md), with conditional owner-map lemmas in `Phil/Core/FSEM02RestrictedSourceTransfer.v`. It composes source-binder checks with native atomic restricted transfer; it does **not** prove full Haskell-to-Rocq refinement or independent source architecture admission.
