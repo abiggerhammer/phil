@@ -150,7 +150,7 @@ Proof.
   inversion Hstep; subst; clear Hstep.
   pose proof (fsem02AdvanceChoiceOwnersSuccessExactAndFrame
     owners clientOccurrence offerOccurrence clientProcess offerProcess
-    clientOld clientNext offerOld offerNext ownerResult Howner) as Howners.
+    clientOld clientNext offerOld offerNext ownersAfter Howner) as Howners.
   destruct Howners as [Hclient [Hoffer Hframe]].
   repeat split; assumption.
 Qed.
