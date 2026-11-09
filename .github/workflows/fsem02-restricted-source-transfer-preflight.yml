@@ -10,6 +10,7 @@ on:
       - 'proof/Phil/Core/FSEM02RestrictedSourceTransfer.v'
       - 'test/fixtures/fsem02-restricted-source-transfer-v1/**'
       - 'phil-core.cabal'
+      - 'docs/phase-1/formal-semantics-restricted-source-transfer-fsem02-v1.md'
       - '.github/workflows/fsem02-restricted-source-transfer-preflight.yml'
   pull_request:
     paths:
@@ -18,6 +19,7 @@ on:
       - 'proof/Phil/Core/FSEM02RestrictedSourceTransfer.v'
       - 'test/fixtures/fsem02-restricted-source-transfer-v1/**'
       - 'phil-core.cabal'
+      - 'docs/phase-1/formal-semantics-restricted-source-transfer-fsem02-v1.md'
       - '.github/workflows/fsem02-restricted-source-transfer-preflight.yml'
 
 concurrency:
