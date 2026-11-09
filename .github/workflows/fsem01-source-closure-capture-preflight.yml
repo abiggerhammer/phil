@@ -1,7 +1,7 @@
 name: FSEM-01 Source Closure Capture Early Preflight
 concurrency:
-  group: fsem01-source-closure-preflight
-  cancel-in-progress: false
+  group: ${{ github.workflow_ref }}-${{ github.event.pull_request.number || github.run_id }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 on:
   push:
     branches:
