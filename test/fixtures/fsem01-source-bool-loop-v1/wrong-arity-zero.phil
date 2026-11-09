@@ -1,0 +1,5 @@
+fn cycle(seed : Bool, alternative : Bool, payload : Bytes[8]) -> Unit satisfies C {
+  loop state (cursor : Bool = seed) invariant cursor == cursor {
+    continue;
+  };
+}
