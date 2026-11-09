@@ -24,6 +24,9 @@ module Phil.Surface.Check.Engine
   , SourceBoolLoopRun (..)
   , checkSurfaceSourceBoolLoopComponent
   , traceSurfaceSourceBoolLoopComponent
+  , SourceBoolLoopBreakRun (..)
+  , checkSurfaceSourceBoolLoopBreakComponent
+  , traceSurfaceSourceBoolLoopBreakComponent
   , BorrowTracePhase (..)
   , BorrowTraceCheckpoint (..)
   , BorrowTraceResourceObservation (..)
@@ -929,6 +932,137 @@ traceSurfaceSourceBoolLoopComponent env locatedComponent entry backedge
       , sourceBoolLoopEntryType = Nothing
       , sourceBoolLoopBackedgeType = Nothing
       , sourceBoolLoopOutcome = result
+      }
+
+-- | Bounded parsed-source break/exit route. A zero-actual source break
+-- contributes a continuation ONLY outside the lexical loop-header scope;
+-- ordinary production Return then enforces terminal LinearCompletion.
+-- Every optional checkpoint is reached by production Surface/Core checks,
+-- not synthesized from a source syntax label.
+data SourceBoolLoopBreakRun = SourceBoolLoopBreakRun
+  { sourceBoolLoopBreakBefore :: Maybe ResourceContext
+  , sourceBoolLoopBreakEntry :: Maybe ResourceContext
+  , sourceBoolLoopBreakHeader :: Maybe ResourceContext
+  , sourceBoolLoopBreakExited :: Maybe ResourceContext
+  , sourceBoolLoopBreakTerminal :: Maybe ResourceContext
+  , sourceBoolLoopBreakEntryType :: Maybe (Mode, Ty)
+  , sourceBoolLoopBreakOutcome :: Either SurfaceCheckError SurfaceCheckResult
+  } deriving (Eq, Show)
+
+-- | One single explicitly checked zero-actual break, not a dynamic loop or
+-- general source break evaluator. Lexical LoopStateScope / LoopControl have
+-- separately certified that the body really ends in break with zero actuals.
+-- After that source break we REMOVE its fresh header using the production
+-- pruneScopedPath, then check the source-authorized return through the real
+-- checkStatements / returnPath / ensureTerminalState implementation.
+checkSurfaceSourceBoolLoopBreakComponent
+  :: SurfaceEnvironment -> Located Component
+  -> Located Block -> SourceSpan -> Text -> SourceBoolJoinInvariant
+  -> [Located Statement]
+  -> Either SurfaceCheckError SurfaceCheckResult
+checkSurfaceSourceBoolLoopBreakComponent env locatedComponent entry
+    loopSpan headerName invariant afterBreak = do
+  let component = locatedValue locatedComponent
+  initial <- initializeState env component
+  checkProvides env initial component
+  entryPath <- checkSourceBoolLoopEdge
+    "loop break initial entry must produce one unrestricted Bool"
+    env initial entry
+  header <- insertBindingMeta loopSpan headerName
+    (BindingMeta Unrestricted TyBool (shapeForType TyBool))
+    (pathState entryPath)
+  checkSourceBoolLoopInvariant loopSpan invariant
+  exited <- pruneScopedPath loopSpan
+    (Map.keysSet (stateBindings initial)) (continuePath header)
+  returned <- checkStatements env [exited] afterBreak
+  finished <- mapM
+    (finalizePath env (locatedSpan locatedComponent)) returned
+  Right SurfaceCheckResult
+    { checkedComponentName = componentName component
+    , checkedTerminalControls = map toCoreControl finished
+    }
+
+-- | Same native checks recorded independently; when a return rejects unpaid
+-- Linear debt, only pre-terminal exit context exists, never fabricated return.
+traceSurfaceSourceBoolLoopBreakComponent
+  :: SurfaceEnvironment -> Located Component
+  -> Located Block -> SourceSpan -> Text -> SourceBoolJoinInvariant
+  -> [Located Statement]
+  -> SourceBoolLoopBreakRun
+traceSurfaceSourceBoolLoopBreakComponent env locatedComponent entry
+    loopSpan headerName invariant afterBreak =
+  case initializeState env component of
+    Left err -> emptyRun (Left err)
+    Right initial -> case checkProvides env initial component of
+      Left err -> (emptyRun (Left err))
+        { sourceBoolLoopBreakBefore = Just (context initial) }
+      Right () ->
+        let start = context initial
+        in case checkSourceBoolLoopEdge
+          "loop break initial entry must produce one unrestricted Bool"
+          env initial entry of
+          Left err -> (emptyRun (Left err))
+            { sourceBoolLoopBreakBefore = Just start }
+          Right entryPath ->
+            let entered = (emptyRun (throw locatedComponent
+                  IncompatibleBranchResidue "loop exit not reached"))
+                  { sourceBoolLoopBreakBefore = Just start
+                  , sourceBoolLoopBreakEntry =
+                      Just (context (pathState entryPath))
+                  , sourceBoolLoopBreakEntryType =
+                      case pathValue entryPath of
+                        Just (RuntimeScalar scalar) ->
+                          Just (scalarMode scalar,scalarType scalar)
+                        _ -> Nothing }
+            in case insertBindingMeta loopSpan headerName
+                (BindingMeta Unrestricted TyBool (shapeForType TyBool))
+                (pathState entryPath) of
+              Left err -> entered { sourceBoolLoopBreakOutcome = Left err }
+              Right header ->
+                let bounded = entered
+                      { sourceBoolLoopBreakHeader = Just (context header) }
+                in case checkSourceBoolLoopInvariant loopSpan invariant of
+                  Left err -> bounded { sourceBoolLoopBreakOutcome = Left err }
+                  Right () ->
+                    case pruneScopedPath loopSpan
+                      (Map.keysSet (stateBindings initial))
+                      (continuePath header) of
+                      Left err -> bounded
+                        { sourceBoolLoopBreakOutcome = Left err }
+                      Right exited ->
+                        let afterExit = bounded
+                              { sourceBoolLoopBreakExited =
+                                  Just (context (pathState exited)) }
+                            terminal = do
+                              returned <- checkStatements env
+                                [exited] afterBreak
+                              mapM (finalizePath env
+                                (locatedSpan locatedComponent)) returned
+                        in case terminal of
+                          Left err -> afterExit
+                            { sourceBoolLoopBreakOutcome = Left err }
+                          Right paths -> afterExit
+                            { sourceBoolLoopBreakTerminal =
+                                case paths of
+                                  [path] | pathControl path /= PathContinue ->
+                                    Just (context (pathState path))
+                                  _ -> Nothing
+                            , sourceBoolLoopBreakOutcome =
+                                Right SurfaceCheckResult
+                                  { checkedComponentName = componentName component
+                                  , checkedTerminalControls =
+                                      map toCoreControl paths } }
+  where
+    component = locatedValue locatedComponent
+    context state = resourceContext (stateCore state)
+    emptyRun result = SourceBoolLoopBreakRun
+      { sourceBoolLoopBreakBefore = Nothing
+      , sourceBoolLoopBreakEntry = Nothing
+      , sourceBoolLoopBreakHeader = Nothing
+      , sourceBoolLoopBreakExited = Nothing
+      , sourceBoolLoopBreakTerminal = Nothing
+      , sourceBoolLoopBreakEntryType = Nothing
+      , sourceBoolLoopBreakOutcome = result
       }
 
 -- | Concrete checkpoints from the *same* production borrow evaluator used by
