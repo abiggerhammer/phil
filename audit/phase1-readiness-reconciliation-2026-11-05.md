@@ -1014,3 +1014,48 @@ nat encoder or supplied model Prop promoted to authority. Public
 release-byte verification and independent pinned final-delta signoff
 separately uncredited. Historical independent audit, TCB, generated
 artifacts, strict GHC/Rocq/LLVM unchanged. **Independent freeze NOT YET.**
+
+
+## Implementation evidence — 2026-11-10: ASCII-7 concrete StageClosure profile P (#1715)
+
+[PR #1715](https://github.com/abiggerhammer/phil/pull/1715) merged
+at `6840b26ec5e1a2fc80aa4c4dba5725c68296bf33` on 2026-11-10 01:52:20 UTC; exact tested PR head
+`ef3149f81533d4181c8a7c23b979da483993a63c`.
+**38/38 exact-head workflow runs SUCCESS** (37 PR plus 1 publication push)
+and **80/80 exact-head check runs SUCCESS**, no failed/pending/skipped.
+Protected [Hamster Merge Intent #42738775095](https://github.com/abiggerhammer/phil/actions/runs/42738775095)
+and merge-pr job #129574400550 SUCCESS; independently confirmed
+closed/merged and main at merge commit. Phase 1 Conformance Matrix
+supplemental row 61 written; all six cells independently read back;
+original 244 normative cases (236 Exit and 8 Profile) preserved.
+
+**Executed bounded evidence:** the actual accepted StageClosure plain-Text
+verifier profile P is admitted only to a seven-bit optional model subdomain,
+before checked source-manifest producer and exact independently accepted
+manifest R/L, VER-010 source and INT-005 CertifiedRelease/StageClosure
+replay. Haskell Upload/Steve positives, U+00E9 and U+1F642 profile
+exclusion, same-payload wrong-role R/L-as-P and P-for-A, and altered tagged
+P; six conditional Rocq ASCII-7 theorems and named Print Assumptions
+executed on the exact head. Strict GHC/Rocq/LLVM policies unchanged.
+
+**Nonclaims:** the optional model guard does not restrict accepted native
+Text; ASCII-7 includes control characters and does not prove Unicode/UTF-8
+correspondence. An exact checked (K,I_checked) alongside concrete I_stage
+does not authenticate occurrence-to-StageClosure production. No total
+recursive SemanticForm codec, Map/Set canonicality, complete accepted
+native-to-Rocq authority reflection, predecessor competence,
+FixedFinalAuthorityAdapter discharge or FinalArtifactCertified. Public
+release-byte verification and independently pinned final-delta signoff
+remain separately uncredited. Historical evidence, TCB and generated
+outputs unchanged. **Independent freeze NOT YET.**
+
+## Finite #1584 closeout inventory — 2026-11-10
+
+See [issue #1584 closeout/blocker inventory](phase1-impl-audit-1584-closeout-inventory-2026-11-10.md).
+The accepted-path provenance, complete object reflection, representation
+competence and predecessor-authority premises have explicit owners and
+fail-closed dispositions. No new code/proof authority is credited by this
+documentation-only inventory. In the absence of an authoritative
+StageClosure-occurrence producer certificate or competent semantic/audit
+TCB/claim-narrowing decision, the required #1584 final-authority claim is
+**BLOCKED**, not COMPLETE. Independent Phase 1 audit freeze remains NOT YET.
