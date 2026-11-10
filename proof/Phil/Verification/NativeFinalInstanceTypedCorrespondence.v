@@ -3315,3 +3315,92 @@ Proof.
   apply native_instance_revision_wire_injective.
   exact (f_equal snd Heq).
 Qed.
+
+(* #1584: a deliberately partial ASCII-7 R/L string-model subdomain.
+   Native Data.Text is Unicode; no Haskell Text -> Rocq String transport is
+   asserted. The native counterpart explicitly rejects non-ASCII wires
+   before replaying the checked producer and accepted consumers. *)
+Definition nativeAscii7Octet (c : ascii) : bool :=
+  match c with Ascii _ _ _ _ _ _ _ high => negb high end.
+Fixpoint nativeAscii7Wire (w : string) : bool :=
+  match w with
+  | EmptyString => true
+  | String c rest => andb (nativeAscii7Octet c) (nativeAscii7Wire rest)
+  end.
+Definition nativeAsciiRawManifestPairModel
+  (raw : NativeRawSystemsDigestRole)
+  (root : NativeLoweringRootDigestRole) : option (string * string) :=
+  let rawWire := nativeRawSystemsDigestWire raw in
+  let rootWire := nativeLoweringRootWire root in
+  if andb (nativeAscii7Wire rawWire) (nativeAscii7Wire rootWire)
+  then Some (rawWire, rootWire)
+  else None.
+
+Theorem native_ascii7_raw_tag_preserves :
+  forall raw, nativeAscii7Wire (nativeRawSystemsDigestWire raw) =
+    nativeAscii7Wire (rawSystemsDigestPayload raw).
+Proof. intros [raw]. reflexivity. Qed.
+
+Theorem native_ascii7_lowering_tag_preserves :
+  forall root, nativeAscii7Wire (nativeLoweringRootWire root) =
+    nativeAscii7Wire (loweringRootDigestPayload root).
+Proof. intros [root]. reflexivity. Qed.
+
+Theorem native_ascii_raw_manifest_model_accepts_seven_bit :
+  forall raw root,
+    nativeAscii7Wire (rawSystemsDigestPayload raw) = true ->
+    nativeAscii7Wire (loweringRootDigestPayload root) = true ->
+    nativeAsciiRawManifestPairModel raw root =
+      Some (nativeRawSystemsDigestWire raw, nativeLoweringRootWire root).
+Proof.
+  intros raw root Hr Hl.
+  unfold nativeAsciiRawManifestPairModel.
+  rewrite native_ascii7_raw_tag_preserves, native_ascii7_lowering_tag_preserves.
+  rewrite Hr, Hl. reflexivity.
+Qed.
+
+Theorem native_ascii_raw_manifest_model_sound :
+  forall raw root rw lw,
+    nativeAsciiRawManifestPairModel raw root = Some (rw, lw) ->
+    rw = nativeRawSystemsDigestWire raw /\
+    lw = nativeLoweringRootWire root /\
+    nativeAscii7Wire rw = true /\
+    nativeAscii7Wire lw = true.
+Proof.
+  intros raw root rw lw H.
+  unfold nativeAsciiRawManifestPairModel in H.
+  destruct (nativeAscii7Wire (nativeRawSystemsDigestWire raw)) eqn:Hr;
+    destruct (nativeAscii7Wire (nativeLoweringRootWire root)) eqn:Hl;
+    simpl in H; try discriminate.
+  inversion H; subst. repeat split; assumption.
+Qed.
+
+Theorem native_ascii_raw_manifest_model_rejects_high_bit_raw :
+  forall root,
+    nativeAsciiRawManifestPairModel
+      (mkNativeRawSystemsDigestRole
+        (String (Ascii false false false false false false false true) EmptyString))
+      root = None.
+Proof. intros [root]. reflexivity. Qed.
+
+Theorem native_ascii_raw_manifest_model_rejects_high_bit_root :
+  forall raw,
+    nativeAsciiRawManifestPairModel raw
+      (mkNativeLoweringRootDigestRole
+        (String (Ascii false false false false false false false true) EmptyString))
+      = None.
+Proof.
+  intros [raw].
+  unfold nativeAsciiRawManifestPairModel.
+  simpl.
+  destruct (nativeAscii7Wire raw); reflexivity.
+Qed.
+
+Theorem native_ascii_raw_manifest_model_wrong_role_reject :
+  forall raw root, nativeAsciiRawManifestPairModel raw root =
+    Some (nativeRawSystemsDigestWire raw, nativeLoweringRootWire root) ->
+    nativeDecodeRawSystemsDigestWire (nativeLoweringRootWire root) = None /\
+    nativeDecodeLoweringRootWire (nativeRawSystemsDigestWire raw) = None.
+Proof.
+  intros raw root _. apply native_wrong_role_decoding_fails.
+Qed.

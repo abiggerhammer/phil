@@ -240,6 +240,13 @@ jobs:
           Print Assumptions native_atom_manifest_checked_revision_model_injective.
           Print Assumptions native_atom_manifest_checked_revision_model_wrong_role_reject.
           Print Assumptions native_atom_manifest_checked_revision_model_sensitive.
+          Print Assumptions native_ascii7_raw_tag_preserves.
+          Print Assumptions native_ascii7_lowering_tag_preserves.
+          Print Assumptions native_ascii_raw_manifest_model_accepts_seven_bit.
+          Print Assumptions native_ascii_raw_manifest_model_sound.
+          Print Assumptions native_ascii_raw_manifest_model_rejects_high_bit_raw.
+          Print Assumptions native_ascii_raw_manifest_model_rejects_high_bit_root.
+          Print Assumptions native_ascii_raw_manifest_model_wrong_role_reject.
           Print Assumptions fixed_adapter_full_certification_preserves_predecessors.
           EOF
           rocq c -Q proof/Phil Phil /tmp/NativeFinalInstanceAssumptions.v 2>&1 | tee typed-native-instance-assumptions.log

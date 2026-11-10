@@ -943,3 +943,35 @@ FinalArtifactCertified remain unproved. No nat encoder or model Prop as
 derived authority. Public bytes and independent final-delta signoff
 separate/uncredited. Historic audit, TCB, generated outputs, strict
 GHC/Rocq/LLVM unchanged. **Independent freeze NOT YET.**
+
+## Implementation evidence — 2026-11-09: checked I_checked (#1709)
+
+[PR #1709](https://github.com/abiggerhammer/phil/pull/1709) merged
+as `57812a055face94910c18df6c35c06b5c20de65a` at
+2026-11-09 21:00:52 UTC. Exact tested head
+`69226b331127c3baf1e505e8f9d519fab65fc9ed`:
+**37/37** exact-head workflow runs and **78/78** check runs SUCCESS,
+zero failed/pending/skipped. Protected
+[merge-intent #42697071680](https://github.com/abiggerhammer/phil/actions/runs/42697071680)
+and `merge-pr` SUCCESS. Conformance Matrix supplemental row 59 written
+and all six cells read back; original 244 normative cases unchanged.
+
+**Executed bounded evidence:** exact checked source-manifest producer,
+independently accepted raw manifest R/L, VER-010 source, exact INT-005
+CertifiedRelease/StageClosure consumers; atom-only D/V/Q/M, normalized S,
+common C, closed F, concrete B/I_stage/A/P, checked architecture K/I_checked.
+Upload/Steve positive replay; correctly tagged altered I_checked, wrong
+R/L/S/C/F/B/A/P/K roles and checked I-for-K negatives; conditional Rocq
+string-model roundtrip/injectivity/wrong-role/I-sensitivity and named
+Print Assumptions at exact head.
+
+**Nonclaims:** I_checked and accepted I_stage share the same native
+InstanceRevision/I-tag domain but not the same evidence origin; equality
+cannot certify occurrence-to-StageClosure production. Diagnostic is not
+accepted authority. No recursive SemanticForm, native Unicode Data.Text/
+Rocq string bridge, Map/Set ordering, accepted authority reflection,
+predecessor authority, FixedFinalAuthorityAdapter or FinalArtifactCertified.
+No unsupported nat mapping or model Prop promoted to authority. Public
+release-byte verification and independent pinned final-delta signoff remain
+separately uncredited. TCB, generated artifacts, historical audit, strict
+GHC/Rocq/LLVM unchanged. **Independent freeze NOT YET.**
