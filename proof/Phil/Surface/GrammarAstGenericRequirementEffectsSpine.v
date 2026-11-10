@@ -62,8 +62,8 @@ Proof.
   destruct (phase1_surface_expect_sequence tree)
     as [items |] eqn:Hsequence; try discriminate Hnormalize.
   destruct (phase1_surface_exact5 items)
-    as [[[[keyword_tree actual_name_tree] within_tree] effects_tree]
-          terminator_tree |]
+    as [[[[[keyword_tree actual_name_tree] within_tree] effects_tree]
+          terminator_tree] |]
       eqn:Hitems; try discriminate Hnormalize.
   destruct (phase1_surface_expect_literal "effects" keyword_tree)
     as [[] |] eqn:Hkeyword; try discriminate Hnormalize.
