@@ -231,6 +231,8 @@ Read:
 [concurrency semantics](../../proof/Phil/Core/ConcurrencySemantics.v),
 and its [proof scope and exclusions](concurrency-semantics-proof-v1.md).
 
+The bounded [restricted Send/Receive one-sided End-prefix ledger check](formal-semantics-restricted-close-prefix-ledgers-fsem02-v1.md) independently replays actual production Core prefixes and proves a conditional Rocq owner/payload/spectator model; the terminal authority, payload disposition and architecture/root boundary remain explicit premises.
+
 ## 6. Architectures, occurrence identity, and root selection
 
 The source differentiates:
