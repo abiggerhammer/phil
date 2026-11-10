@@ -1,0 +1,77 @@
+name: FSEM-01 CORR-1 Closure Capture Early Preflight
+
+concurrency:
+  group: ${{ github.workflow_ref }}-${{ github.event.pull_request.number || github.run_id }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+on:
+  push:
+    branches:
+      - formal-semantics/fsem01-corr1-closure-capture-trace
+  pull_request:
+    paths:
+      - 'src/Phil/Surface/GrammarV1/SourceClosureCapture.hs'
+      - 'src/Phil/Surface/GrammarV1/SourceClosureCaptureCorrespondence.hs'
+      - 'test/Phase1FSEM01ClosureCaptureCorrMain.hs'
+      - 'proof/Phil/Surface/SurfaceSourceClosureCaptureCorr1.v'
+      - 'phil-core.cabal'
+      - '.github/workflows/fsem01-corr1-closure-capture-preflight.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  strict-closure-corr:
+    name: Source-resolved capture/native-cut and exact-error replay
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: haskell-actions/setup@v2
+        with:
+          ghc-version: '9.6.7'
+          cabal-version: 'latest'
+          cabal-update: false
+      - name: Bounded Hackage HTTP1 retry
+        run: bash scripts/ci/cabal-update-retry.sh
+      - name: Strict warning-free production Haskell library
+        run: cabal build lib:phil-core --ghc-options=-Werror
+      - name: Previous C-1 and CORR-1 exact source fixtures
+        shell: bash
+        run: |
+          set -euo pipefail
+          for test in Phase1FSEM01SourceClosureCaptureMain Phase1FSEM01ClosureCaptureCorrMain
+          do
+            cabal exec -- ghc -isrc -Wall -Werror -fno-code "test/$test.hs"
+            cabal exec -- runghc -isrc -Wall -Werror "test/$test.hs"
+          done
+          sha256sum src/Phil/Surface/GrammarV1/SourceClosureCapture.hs \
+            src/Phil/Surface/GrammarV1/SourceClosureCaptureCorrespondence.hs \
+            test/Phase1FSEM01ClosureCaptureCorrMain.hs
+  conditional-rocq-corr:
+    name: Rocq 9.2 conditional cut/error prefix model without admissions
+    runs-on: ubuntu-24.04
+    container:
+      image: rocq/rocq-prover:9.2.0
+      options: --user root
+    steps:
+      - uses: actions/checkout@v4
+      - name: Compile conditional native cut and scope model
+        shell: bash
+        run: |
+          set -euo pipefail
+          export PATH="/home/rocq/.opam/$COMPILER/bin:$PATH"
+          for file in \
+            proof/Phil/Core/GenericStructural.v \
+            proof/Phil/Core/CallableMode.v \
+            proof/Phil/Core/CallableScope.v \
+            proof/Phil/Core/Syntax.v \
+            proof/Phil/Core/Context.v \
+            proof/Phil/Surface/SurfaceSourceClosureCapture.v \
+            proof/Phil/Surface/SurfaceSourceClosureCaptureCorr1.v
+          do
+            rocq c -Q proof/Phil Phil "$file"
+          done
+          if grep -nE '^[[:space:]]*(Admitted[.]|Axiom[[:space:]]|Parameter[[:space:]])' \
+              proof/Phil/Surface/SurfaceSourceClosureCaptureCorr1.v; then
+            exit 1
+          fi
