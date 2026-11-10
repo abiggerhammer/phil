@@ -236,16 +236,16 @@ Proof.
       (phase1_surface_normalize_effect_set_expression_outer_spine effects)
       as [actual |] eqn:Heffects; try discriminate Hnormalize.
     inversion Hnormalize; subst refined.
-    cbn [phase1_surface_generic_requirement_expression_outer_spine_tree
-         phase1_surface_generic_requirement_expression_outer_spine_index
-         phase1_surface_generic_requirement_expression_outer_selected_tree
-         phase1_surface_generic_requirement_effects_spine_tree
-         phase1_surface_generic_requirement_effects_spine_index
-         phase1_surface_generic_requirement_effects_selected_tree].
-    rewrite
-      (phase1_surface_normalize_effect_set_expression_outer_spine_round_trip
-        effects actual Heffects).
-    reflexivity.
+    exact
+      (f_equal
+        (fun child_tree =>
+          PTNonterminal "generic_requirement"
+            (PTAlternative 6
+              (PTSequence
+                [ PTLiteral "effects"; name_tree; PTLiteral "within";
+                  child_tree; PTLiteral ";" ])))
+        (phase1_surface_normalize_effect_set_expression_outer_spine_round_trip
+          effects actual Heffects)).
   - inversion Hnormalize; subst refined. reflexivity.
   - inversion Hnormalize; subst refined. reflexivity.
   - inversion Hnormalize; subst refined. reflexivity.
