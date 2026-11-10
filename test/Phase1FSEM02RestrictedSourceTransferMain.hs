@@ -13,7 +13,8 @@ import Phil.Core.Generic (GenericStaticParameterKey (..), strictGenericInstantia
 import Phil.Core.Process
 import Phil.Core.ProcessActivation
 import Phil.Core.ProcessRendezvous
-import Phil.Core.ProcessEndpointClosure (ProcessEndpointClosureError (..))
+import Phil.Core.ProcessEndpointClosure
+  ( ProcessEndpointClosureError (..), closeProcessEndpointState )
 import Phil.Core.ProcessLifecycle
 import Phil.Core.Session (SessionError (..))
 import Phil.Core.Protocol
@@ -58,6 +59,12 @@ main = do
           , sourceCloseWrongOutcome fx
           , sourceCloseWrongHead fx
           , sourceCloseWrongRole fx
+          , sourceCloseDiamondReplay fx
+          , sourceCloseDiamondRejectedSource fx rejected
+          , sourceCloseDiamondStalePredecessor fx
+          , sourceCloseDiamondWrongSessionHead fx
+          , sourceCloseDiamondWrongOutcome fx
+          , sourceCloseDiamondReceiverFirstStale fx
           , sourceTerminalReplay fx
           , sourceTerminalNegativeGates fx
           , sourceTerminalRejectForgedClosedState fx
@@ -689,6 +696,149 @@ sourceCloseWrongRole fx = do
           "incorrect terminal role did not preserve endpoint identity"
     other -> Left ("receiver source close accepted the wrong nominal role: " <> show other)
 
+
+
+-- Distinct from the select/offer diamond: this rechecks a real parsed
+-- restricted Bytes[8] send/receive and its ORIGINAL Core predecessor
+-- before executing the two possible explicitly authorized End close orders.
+sourceCloseDiamondFrom
+  :: Fixture -> GrammarV1ComponentDecl -> GrammarV1ComponentDecl
+  -> ProcessCommunicationState -> Outcome -> Outcome
+  -> Either GrammarV1RestrictedSourceCloseDiamondError
+       GrammarV1RestrictedSourceCloseDiamondTransition
+sourceCloseDiamondFrom fx sender receiver before senderOutcome receiverOutcome =
+  grammarV1CheckRestrictedSourceCloseDiamond
+    emptyStaticContext senderRoot sender receiverRoot receiver
+    (fxInstance fx) clientRole serverRole
+    (fxClientProcess fx) (fxServerProcess fx) payloadOccurrence
+    (fxNetwork fx) before senderOutcome receiverOutcome
+
+sourceCloseDiamondReplay :: Fixture -> Either String ()
+sourceCloseDiamondReplay fx = do
+  let run = sourceCloseDiamondFrom fx (fxSender fx) (fxReceiver fx)
+        (fxBefore fx) doneOutcome doneOutcome
+  first <- mapLeft show run
+  second <- mapLeft show run
+  assert (first == second) "restricted source diamond is nondeterministic"
+  let rendezvous = restrictedSourceDiamondRendezvous first
+      forward = restrictedSourceDiamondForward first
+      ready = restrictedSourceNext rendezvous
+      peerFirst = restrictedSourceDiamondReceiverFirst first
+      after = restrictedSourceDiamondReverse first
+      ownersBefore = communicationRestrictedOwners ready
+      ownersPeerFirst = communicationRestrictedOwners peerFirst
+      ownersAfter = communicationRestrictedOwners after
+      revision = binaryProtocolInstanceRevision (fxInstance fx)
+  independentlyChecked <- mapLeft show $
+    checked fx (fxSender fx) (fxReceiver fx) (fxBefore fx)
+  independentlyForward <- mapLeft show $
+    closeFromSource fx (fxSender fx) (fxReceiver fx)
+      independentlyChecked clientRole serverRole doneOutcome doneOutcome
+  independentlyPeerFirst <- mapLeft show $
+    closeProcessEndpointState (fxNetwork fx) ready
+      (fxServerProcess fx) (fxServerNext fx) revision serverRole doneOutcome
+  independentlyAfter <- mapLeft show $
+    closeProcessEndpointState (fxNetwork fx) independentlyPeerFirst
+      (fxClientProcess fx) (fxClientNext fx) revision clientRole doneOutcome
+  assert (rendezvous == independentlyChecked
+       && forward == independentlyForward
+       && peerFirst == independentlyPeerFirst
+       && after == independentlyAfter
+       && after == restrictedSourceCloseNext forward)
+    "restricted source close diamond did not equal independent full Core replay"
+  assert (Map.lookup serverEndpointOccurrence ownersPeerFirst == Nothing
+       && Map.lookup clientEndpointOccurrence ownersPeerFirst ==
+            Map.lookup clientEndpointOccurrence ownersBefore
+       && Map.lookup payloadOccurrence ownersPeerFirst ==
+            Just (fxServerProcess fx, fxPayloadReceiver fx)
+       && Map.lookup spectatorOccurrence ownersPeerFirst ==
+            Map.lookup spectatorOccurrence ownersBefore
+       && ownersAfter == Map.delete clientEndpointOccurrence
+          (Map.delete serverEndpointOccurrence ownersBefore))
+    "restricted diamond modified endpoint/payload/spectator occurrence ledger"
+  senderContext <- requireProtocol (fxClientProcess fx) after
+  receiverContext <- requireProtocol (fxServerProcess fx) after
+  assert (Map.lookup (fxPayloadReceiver fx)
+            (linearBindings (protocolResources receiverContext)) == Just payloadTy
+       && Map.lookup spectatorName
+            (affineBindings (protocolResources senderContext)) == Just TyBool
+       && Map.notMember (fxClientNext fx) (protocolEndpoints senderContext)
+       && Map.notMember (fxServerNext fx) (protocolEndpoints receiverContext))
+    "restricted diamond disposed the payload/spectator or retained End heads"
+
+sourceCloseDiamondRejectedSource :: Fixture -> Text -> Either String ()
+sourceCloseDiamondRejectedSource fx rejected = do
+  (_, badSender, _) <- parseParts rejected
+  case sourceCloseDiamondFrom fx badSender (fxReceiver fx)
+      (fxBefore fx) doneOutcome doneOutcome of
+    Left (RestrictedSourceCloseDiamondRendezvousError
+      (RestrictedSourceSendError
+        (GrammarV1ComponentSendCloseCloseMismatch _ _))) -> Right ()
+    other -> Left ("minimally rejected source entered restricted close diamond: " <> show other)
+
+sourceCloseDiamondStalePredecessor :: Fixture -> Either String ()
+sourceCloseDiamondStalePredecessor fx = do
+  checkedTransition <- mapLeft show $
+    checked fx (fxSender fx) (fxReceiver fx) (fxBefore fx)
+  case sourceCloseDiamondFrom fx (fxSender fx) (fxReceiver fx)
+      (restrictedSourceNext checkedTransition) doneOutcome doneOutcome of
+    Left (RestrictedSourceCloseDiamondRendezvousError
+      (RestrictedSourceCoreError
+        (RestrictedMessageOwnerMismatch key _ _ actualProcess actualName))) ->
+      assert (key == payloadOccurrence
+           && actualProcess == fxServerProcess fx
+           && actualName == fxPayloadReceiver fx)
+        "stale restricted payload did not retain exact transferred owner"
+    other -> Left ("stale predecessor advanced to the close diamond: " <> show other)
+
+sourceCloseDiamondWrongSessionHead :: Fixture -> Either String ()
+sourceCloseDiamondWrongSessionHead fx = do
+  sender <- requireProtocol (fxClientProcess fx) (fxBefore fx)
+  let old = fxClientOld fx
+      wrong = ProtocolEndpointBinding old
+        (binaryProtocolInstanceRevision (fxInstance fx)) clientRole
+        (End doneOutcome)
+      altered = sender { protocolEndpoints =
+        Map.insert old wrong (protocolEndpoints sender) }
+      before = (fxBefore fx) { communicationProtocolContexts =
+        Map.insert (fxClientProcess fx) altered
+          (communicationProtocolContexts (fxBefore fx)) }
+  case sourceCloseDiamondFrom fx (fxSender fx) (fxReceiver fx)
+      before doneOutcome doneOutcome of
+    Left (RestrictedSourceCloseDiamondRendezvousError
+      (RestrictedSourceCoreError (RendezvousProtocolError process _))) ->
+      assert (process == fxClientProcess fx)
+        "wrong predecessor session head lost exact sending process"
+    other -> Left ("wrong session head advanced to restricted close diamond: " <> show other)
+
+sourceCloseDiamondWrongOutcome :: Fixture -> Either String ()
+sourceCloseDiamondWrongOutcome fx = do
+  let wrong = Outcome "NotDone"
+  case sourceCloseDiamondFrom fx (fxSender fx) (fxReceiver fx)
+      (fxBefore fx) doneOutcome wrong of
+    Left (RestrictedSourceCloseDiamondForwardError
+      (RestrictedSourceCloseReceiverCoreError
+        (EndpointClosureProtocolError process
+          (ProtocolSessionError (CloseOutcomeMismatch expected actual))))) ->
+      assert (process == fxServerProcess fx
+           && expected == doneOutcome && actual == wrong)
+        "receiver End mismatch lost exact error class"
+    other -> Left ("wrong End outcome advanced to restricted close diamond: " <> show other)
+
+sourceCloseDiamondReceiverFirstStale :: Fixture -> Either String ()
+sourceCloseDiamondReceiverFirstStale fx = do
+  diamond <- mapLeft show $
+    sourceCloseDiamondFrom fx (fxSender fx) (fxReceiver fx)
+      (fxBefore fx) doneOutcome doneOutcome
+  case closeProcessEndpointState (fxNetwork fx)
+      (restrictedSourceDiamondReceiverFirst diamond)
+      (fxServerProcess fx) (fxServerNext fx)
+      (binaryProtocolInstanceRevision (fxInstance fx))
+      serverRole doneOutcome of
+    Left (EndpointClosureOccurrenceUnknown process endpoint) ->
+      assert (process == fxServerProcess fx && endpoint == fxServerNext fx)
+        "receiver-first repeat close lost the retired endpoint identity"
+    other -> Left ("receiver-first close allowed stale endpoint reuse: " <> show other)
 
 -- The actual source is first parsed/checked, then sent/received and closed.
 -- The residual payload and independent activation spectator are NOT silently
