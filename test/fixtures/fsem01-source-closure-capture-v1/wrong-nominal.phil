@@ -1,0 +1,3 @@
+fn build(flag : Bool, payload : Bytes[8]) -> Other satisfies C {
+  return closure mode linear () satisfies OneShot captures (payload) { unit; };
+}

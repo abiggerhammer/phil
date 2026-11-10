@@ -1,0 +1,6 @@
+fn scope(flag : Bool, payload : Bytes[8]) -> Unit satisfies C {
+  borrow payload as sight {
+    closure () satisfies OneShot captures (sight) { unit; };
+    unit;
+  };
+}
