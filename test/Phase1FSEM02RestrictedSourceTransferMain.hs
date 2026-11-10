@@ -61,6 +61,11 @@ main = do
           , sourceCloseWrongRole fx
           , sourceCloseDiamondReplay fx
           , sourceSuccessorTraceReplay fx
+          , sourceClosePrefixReplay fx
+          , sourceClosePrefixRejectedSource fx rejected
+          , sourceClosePrefixStalePredecessor fx
+          , sourceClosePrefixWrongOutcome fx
+          , sourceClosePrefixRepeatRetirement fx
           , sourceSuccessorTraceAlphaRename fx accepted
           , sourceSuccessorTraceRejectedSource fx rejected
           , sourceSuccessorTraceWrongOccurrence fx
@@ -820,6 +825,139 @@ sourceSuccessorTraceReplay fx = do
        && Map.lookup payloadOccurrence terminal ==
            Just (fxServerProcess fx, fxPayloadReceiver fx))
     "source-derived successor trace lost predecessor/successor identity, payload or spectator"
+
+
+-- Restricted Bytes[8] source + original activated Core predecessor are
+-- independently rechecked before exposing either one-sided End-prefix state.
+-- This is distinct from the choice prefix case: the transferred linear payload
+-- MUST survive on the receiver after either endpoint is retired.
+sourceClosePrefixFrom
+  :: Fixture -> GrammarV1ComponentDecl -> GrammarV1ComponentDecl
+  -> ProcessCommunicationState -> Outcome -> Outcome
+  -> Either GrammarV1RestrictedClosePrefixError GrammarV1RestrictedClosePrefixes
+sourceClosePrefixFrom fx sender receiver original senderOutcome receiverOutcome =
+  grammarV1CheckRestrictedSourceClosePrefixes
+    emptyStaticContext senderRoot sender receiverRoot receiver
+    (fxInstance fx) clientRole serverRole
+    (fxClientProcess fx) (fxServerProcess fx)
+    clientEndpointOccurrence serverEndpointOccurrence payloadOccurrence
+    (fxNetwork fx) original senderOutcome receiverOutcome
+
+sourceClosePrefixReplay :: Fixture -> Either String ()
+sourceClosePrefixReplay fx = do
+  first <- mapLeft show $ sourceClosePrefixFrom fx (fxSender fx) (fxReceiver fx)
+    (fxBefore fx) doneOutcome doneOutcome
+  again <- mapLeft show $ sourceClosePrefixFrom fx (fxSender fx) (fxReceiver fx)
+    (fxBefore fx) doneOutcome doneOutcome
+  let trace = restrictedClosePrefixTrace first
+      diamond = restrictedSuccessorTraceDiamond trace
+      ready = restrictedSourceNext (restrictedSourceDiamondRendezvous diamond)
+      senderFirst = restrictedClosePrefixSenderFirst first
+      receiverFirst = restrictedClosePrefixReceiverFirst first
+      readyOwners = communicationRestrictedOwners ready
+      senderOwners = communicationRestrictedOwners senderFirst
+      receiverOwners = communicationRestrictedOwners receiverFirst
+      revision = binaryProtocolInstanceRevision (fxInstance fx)
+      expectedPayload = Just (fxServerProcess fx, fxPayloadReceiver fx)
+  independentlySender <- mapLeft show $
+    closeProcessEndpointState (fxNetwork fx) ready
+      (fxClientProcess fx) (fxClientNext fx) revision clientRole doneOutcome
+  independentlyReceiver <- mapLeft show $
+    closeProcessEndpointState (fxNetwork fx) ready
+      (fxServerProcess fx) (fxServerNext fx) revision serverRole doneOutcome
+  assert (first == again
+       && senderFirst == independentlySender
+       && receiverFirst == independentlyReceiver
+       && receiverFirst == restrictedSourceDiamondReceiverFirst diamond
+       && senderOwners == Map.delete clientEndpointOccurrence readyOwners
+       && receiverOwners == Map.delete serverEndpointOccurrence readyOwners
+       && Map.lookup clientEndpointOccurrence senderOwners == Nothing
+       && Map.lookup serverEndpointOccurrence receiverOwners == Nothing
+       && Map.lookup serverEndpointOccurrence senderOwners ==
+           Just (fxServerProcess fx, fxServerNext fx)
+       && Map.lookup clientEndpointOccurrence receiverOwners ==
+           Just (fxClientProcess fx, fxClientNext fx)
+       && Map.lookup payloadOccurrence senderOwners == expectedPayload
+       && Map.lookup payloadOccurrence receiverOwners == expectedPayload
+       && Map.lookup spectatorOccurrence senderOwners ==
+           Map.lookup spectatorOccurrence readyOwners
+       && Map.lookup spectatorOccurrence receiverOwners ==
+           Map.lookup spectatorOccurrence readyOwners
+       && restrictedSourceDiamondReverse diamond ==
+           restrictedSourceCloseNext (restrictedSourceDiamondForward diamond))
+    "restricted one-sided close prefix changed payload, spectators, live peer or final equality"
+  senderContext <- requireProtocol (fxClientProcess fx) senderFirst
+  receiverContext <- requireProtocol (fxServerProcess fx) receiverFirst
+  assert (Map.lookup spectatorName
+            (affineBindings (protocolResources senderContext)) == Just TyBool
+       && Map.lookup (fxPayloadReceiver fx)
+            (linearBindings (protocolResources receiverContext)) == Just payloadTy)
+    "one-sided Core close disposed a nonendpoint resource"
+
+sourceClosePrefixRejectedSource :: Fixture -> Text -> Either String ()
+sourceClosePrefixRejectedSource fx rejected = do
+  (_, badSender, _) <- parseParts rejected
+  case sourceClosePrefixFrom fx badSender (fxReceiver fx)
+      (fxBefore fx) doneOutcome doneOutcome of
+    Left (RestrictedClosePrefixSourceError
+      (RestrictedSuccessorTraceDiamondError
+        (RestrictedSourceCloseDiamondRendezvousError
+          (RestrictedSourceSendError
+            (GrammarV1ComponentSendCloseCloseMismatch _ _))))) -> Right ()
+    other -> Left ("rejected source acquired a close prefix: " <> show other)
+
+sourceClosePrefixStalePredecessor :: Fixture -> Either String ()
+sourceClosePrefixStalePredecessor fx = do
+  rendezvous <- mapLeft show $
+    checked fx (fxSender fx) (fxReceiver fx) (fxBefore fx)
+  case sourceClosePrefixFrom fx (fxSender fx) (fxReceiver fx)
+      (restrictedSourceNext rendezvous) doneOutcome doneOutcome of
+    Left (RestrictedClosePrefixSourceError
+      (RestrictedSuccessorTraceDiamondError
+        (RestrictedSourceCloseDiamondRendezvousError
+          (RestrictedSourceCoreError
+            (RestrictedMessageOwnerMismatch key _ _ process name))))) ->
+      assert (key == payloadOccurrence
+           && process == fxServerProcess fx
+           && name == fxPayloadReceiver fx)
+        "stale prefix predecessor lost exact consumed/received payload identity"
+    other -> Left ("stale restricted predecessor acquired a prefix: " <> show other)
+
+sourceClosePrefixWrongOutcome :: Fixture -> Either String ()
+sourceClosePrefixWrongOutcome fx = do
+  let wrong = Outcome "NotDone"
+  case sourceClosePrefixFrom fx (fxSender fx) (fxReceiver fx)
+      (fxBefore fx) doneOutcome wrong of
+    Left (RestrictedClosePrefixSourceError
+      (RestrictedSuccessorTraceDiamondError
+        (RestrictedSourceCloseDiamondForwardError
+          (RestrictedSourceCloseReceiverCoreError
+            (EndpointClosureProtocolError process
+              (ProtocolSessionError (CloseOutcomeMismatch expected actual))))))) ->
+      assert (process == fxServerProcess fx
+           && expected == doneOutcome && actual == wrong)
+        "wrong peer End outcome lost exact rejection provenance"
+    other -> Left ("unauthorized peer End outcome acquired a prefix: " <> show other)
+
+sourceClosePrefixRepeatRetirement :: Fixture -> Either String ()
+sourceClosePrefixRepeatRetirement fx = do
+  prefix <- mapLeft show $ sourceClosePrefixFrom fx
+    (fxSender fx) (fxReceiver fx) (fxBefore fx) doneOutcome doneOutcome
+  let revision = binaryProtocolInstanceRevision (fxInstance fx)
+  case closeProcessEndpointState (fxNetwork fx)
+      (restrictedClosePrefixSenderFirst prefix) (fxClientProcess fx)
+      (fxClientNext fx) revision clientRole doneOutcome of
+    Left (EndpointClosureOccurrenceUnknown process endpoint) ->
+      assert (process == fxClientProcess fx && endpoint == fxClientNext fx)
+        "sender-first stale endpoint rejection lost exact retired identity"
+    other -> Left ("sender endpoint was retired twice: " <> show other)
+  case closeProcessEndpointState (fxNetwork fx)
+      (restrictedClosePrefixReceiverFirst prefix) (fxServerProcess fx)
+      (fxServerNext fx) revision serverRole doneOutcome of
+    Left (EndpointClosureOccurrenceUnknown process endpoint) ->
+      assert (process == fxServerProcess fx && endpoint == fxServerNext fx)
+        "receiver-first stale endpoint rejection lost exact retired identity"
+    other -> Left ("receiver endpoint was retired twice: " <> show other)
 
 -- Alpha-renaming source display spelling without changing declaration-rooted
 -- binder ordinal MUST keep the semantic successor and native Core state.

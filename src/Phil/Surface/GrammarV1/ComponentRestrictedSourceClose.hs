@@ -12,6 +12,9 @@ module Phil.Surface.GrammarV1.ComponentRestrictedSourceClose
   , GrammarV1RestrictedSourceSuccessorTraceError (..)
   , GrammarV1RestrictedSourceSuccessorTrace (..)
   , grammarV1CheckRestrictedSourceSuccessorTrace
+  , GrammarV1RestrictedClosePrefixError (..)
+  , GrammarV1RestrictedClosePrefixes (..)
+  , grammarV1CheckRestrictedSourceClosePrefixes
   ) where
 
 import qualified Data.Map.Strict as Map
@@ -355,6 +358,82 @@ grammarV1CheckRestrictedSourceSuccessorTrace
       , restrictedSuccessorTraceTerminalOwners = finalOwners
       }
     else Left RestrictedSuccessorTraceTerminalOwnerMismatch
+
+
+-- | NON-NORMATIVE FSEM-02: complete restricted owner ledgers at EACH
+-- one-sided End-close prefix. Rechecks source against the ORIGINAL activation
+-- predecessor through the exact successor-trace adapter; never trusts an
+-- externally supplied cached transfer. Endpoint identities, protocol/boundary
+-- admission and terminal outcomes are still independent trusted inputs.
+-- Failure returns no purported successor state.
+data GrammarV1RestrictedClosePrefixError
+  = RestrictedClosePrefixSourceError GrammarV1RestrictedSourceSuccessorTraceError
+  | RestrictedClosePrefixSenderCoreError ProcessEndpointClosureError
+  | RestrictedClosePrefixSenderOwnerMismatch
+  | RestrictedClosePrefixReceiverOwnerMismatch
+  deriving (Eq, Show)
+
+data GrammarV1RestrictedClosePrefixes = GrammarV1RestrictedClosePrefixes
+  { restrictedClosePrefixTrace :: GrammarV1RestrictedSourceSuccessorTrace
+  , restrictedClosePrefixSenderFirst :: ProcessCommunicationState
+  , restrictedClosePrefixReceiverFirst :: ProcessCommunicationState
+  }
+  deriving (Eq, Show)
+
+-- | Source + Σ0 -- restricted Send/Receive --> Σ1;
+--   Σ1 -- authorized sender End --> Σsender
+--   Σ1 -- authorized receiver End --> Σreceiver.
+-- In each successful prefix, the full activation occurrence owner map equals
+-- Σ1 owners minus EXACTLY the just-retired endpoint. In particular the
+-- transferred Bytes payload and every other spectator survive unchanged.
+-- This checks the actual Core transitions, not merely a projected equality.
+-- It does not authorize disposal of either endpoint or the payload.
+grammarV1CheckRestrictedSourceClosePrefixes
+  :: StaticContext
+  -> DeclarationKey -> GrammarV1ComponentDecl
+  -> DeclarationKey -> GrammarV1ComponentDecl
+  -> BinaryProtocolInstance
+  -> ProtocolRoleKey -> ProtocolRoleKey
+  -> ProcessKey -> ProcessKey
+  -> ActivationOccurrenceKey -> ActivationOccurrenceKey
+  -> ActivationOccurrenceKey
+  -> ProcessNetwork -> ProcessCommunicationState
+  -> Outcome -> Outcome
+  -> Either GrammarV1RestrictedClosePrefixError GrammarV1RestrictedClosePrefixes
+grammarV1CheckRestrictedSourceClosePrefixes
+    staticContext senderRoot senderSource receiverRoot receiverSource
+    instanceValue senderRole receiverRole senderProcess receiverProcess
+    senderOccurrence receiverOccurrence payloadOccurrence
+    network original senderOutcome receiverOutcome = do
+  sourceTrace <- mapLeft RestrictedClosePrefixSourceError $
+    grammarV1CheckRestrictedSourceSuccessorTrace
+      staticContext senderRoot senderSource receiverRoot receiverSource
+      instanceValue senderRole receiverRole senderProcess receiverProcess
+      senderOccurrence receiverOccurrence payloadOccurrence
+      network original senderOutcome receiverOutcome
+  let diamond = restrictedSuccessorTraceDiamond sourceTrace
+      rendezvous = restrictedSourceDiamondRendezvous diamond
+      forward = restrictedSourceDiamondForward diamond
+      ready = restrictedSourceNext rendezvous
+      readyOwners = communicationRestrictedOwners ready
+      revision = binaryProtocolInstanceRevision instanceValue
+      peerFirst = restrictedSourceDiamondReceiverFirst diamond
+  senderFirst <- mapLeft RestrictedClosePrefixSenderCoreError $
+    closeProcessEndpointState network ready senderProcess
+      (restrictedSourceClosedSender forward) revision senderRole senderOutcome
+  if communicationRestrictedOwners senderFirst ==
+       Map.delete senderOccurrence readyOwners
+    then Right ()
+    else Left RestrictedClosePrefixSenderOwnerMismatch
+  if communicationRestrictedOwners peerFirst ==
+       Map.delete receiverOccurrence readyOwners
+    then Right ()
+    else Left RestrictedClosePrefixReceiverOwnerMismatch
+  pure GrammarV1RestrictedClosePrefixes
+    { restrictedClosePrefixTrace = sourceTrace
+    , restrictedClosePrefixSenderFirst = senderFirst
+    , restrictedClosePrefixReceiverFirst = peerFirst
+    }
 
 mapLeft :: (a -> b) -> Either a c -> Either b c
 mapLeft f = either (Left . f) Right
