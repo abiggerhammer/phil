@@ -298,6 +298,8 @@ data GrammarV1ChoiceSourceSuccessorTraceError
   | ChoiceSourceTracePredecessorMismatch
       ActivationOccurrenceKey (ProcessKey, Name) (Maybe (ProcessKey, Name))
   | ChoiceSourceTraceProgressionOwnerMismatch
+  | ChoiceSourceTraceClientFirstPrefixOwnerMismatch
+  | ChoiceSourceTracePeerFirstPrefixOwnerMismatch
   | ChoiceSourceTraceTerminalOwnerMismatch
   deriving (Eq, Show)
 
@@ -305,6 +307,10 @@ data GrammarV1ChoiceSourceSuccessorTrace =
   GrammarV1ChoiceSourceSuccessorTrace
     { choiceSourceTraceDiamond :: GrammarV1ChoiceCloseDiamond
     , choiceSourceTraceReadyOwners ::
+        Map.Map ActivationOccurrenceKey (ProcessKey, Name)
+    , choiceSourceTraceAfterClientOwners ::
+        Map.Map ActivationOccurrenceKey (ProcessKey, Name)
+    , choiceSourceTraceAfterPeerOwners ::
         Map.Map ActivationOccurrenceKey (ProcessKey, Name)
     , choiceSourceTraceTerminalOwners ::
         Map.Map ActivationOccurrenceKey (ProcessKey, Name)
@@ -359,6 +365,10 @@ grammarV1CheckChoiceSourceSuccessorTrace
         (replayedComponentOfferSourceEndpoint offered)
       beforeOwners = communicationRestrictedOwners original
       readyOwners = communicationRestrictedOwners (statefulChoiceSuccessor progressed)
+      afterClientOwners = communicationRestrictedOwners $
+        statefulChoiceClientCloseSuccessor
+          (statefulChoiceExplicitPeerCloseClient (choiceCloseDiamondForward diamond))
+      afterPeerOwners = communicationRestrictedOwners (choiceCloseDiamondPeerFirst diamond)
       finalOwners = communicationRestrictedOwners (choiceCloseDiamondReverse diamond)
       checkPredecessor occurrence expected =
         if Map.lookup occurrence beforeOwners == Just expected
@@ -369,11 +379,19 @@ grammarV1CheckChoiceSourceSuccessorTrace
   checkPredecessor offerOccurrence (offerProcess, offerOld)
   let expectedReady = Map.insert offerOccurrence (offerProcess, offeredSuccessor)
         (Map.insert clientOccurrence (clientProcess, clientNext) beforeOwners)
-      expectedFinal = Map.delete clientOccurrence
-        (Map.delete offerOccurrence expectedReady)
+      expectedAfterClient = Map.delete clientOccurrence expectedReady
+      expectedAfterPeer = Map.delete offerOccurrence expectedReady
+      expectedFinal = Map.delete clientOccurrence expectedAfterPeer
   if readyOwners == expectedReady
     then Right ()
     else Left ChoiceSourceTraceProgressionOwnerMismatch
+  -- Verify each actual one-sided native End prefix independently.
+  if afterClientOwners == expectedAfterClient
+    then Right ()
+    else Left ChoiceSourceTraceClientFirstPrefixOwnerMismatch
+  if afterPeerOwners == expectedAfterPeer
+    then Right ()
+    else Left ChoiceSourceTracePeerFirstPrefixOwnerMismatch
   if finalOwners == expectedFinal
       && communicationRestrictedOwners
            (statefulChoiceExplicitPeerCloseSuccessor
@@ -381,6 +399,8 @@ grammarV1CheckChoiceSourceSuccessorTrace
     then Right GrammarV1ChoiceSourceSuccessorTrace
       { choiceSourceTraceDiamond = diamond
       , choiceSourceTraceReadyOwners = readyOwners
+      , choiceSourceTraceAfterClientOwners = afterClientOwners
+      , choiceSourceTraceAfterPeerOwners = afterPeerOwners
       , choiceSourceTraceTerminalOwners = finalOwners
       }
     else Left ChoiceSourceTraceTerminalOwnerMismatch

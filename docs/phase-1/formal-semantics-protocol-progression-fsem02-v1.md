@@ -111,3 +111,7 @@ claim-guard, branch protections and all applicable CI.
 ### Explicit select/offer source successor owner correspondence (FSEM-02)
 
 [Source-derived Select/Offer predecessor→successor→terminal owner trace](formal-semantics-choice-source-successor-trace-fsem02-v1.md) independently replays parsed Go/Cancel selector and return-unit offer sources against an ORIGINAL live Core predecessor. It checks two exact occurrence identities, the source-resolved Client successor, the **externally supplied** Server successor, complete owner map framing, full native equality across two separately authorized terminal End orders, and exact source/stale/forged/aliased/wrong-outcome rejections. Rocq proves only a **conditional finite-model owner-trace composition and two-order equality**, not Server source-close authority, universal Haskell-to-Rocq refinement, architecture/root/assurance discharge, or FSEM-02 closure.
+
+### One-sided source Select/Offer End prefix owner cuts (FSEM-02)
+
+[Both source-checked one-sided End closure owner ledgers](formal-semantics-choice-close-prefix-ledgers-fsem02-v1.md) independently observe the real Client-first and Server-first Core intermediate owner maps, preserve the opposite live endpoint and every unrelated affine spectator, and reject exact wrong-source, wrong-Client-End and stale duplicate-close cases. Rocq 9.2 proves only conditional pointwise owner-ledger prefix facts given separately authorized End steps—not source Server disposal, general native-to-Rocq refinement, root/assurance discharge, or FSEM-02 completion.
