@@ -12,6 +12,8 @@ import Phil.Core.Context (ResourceContext (..), insertBinding)
 import Phil.Core.Generic (strictGenericInstantiationPolicy)
 import Phil.Core.Process
 import Phil.Core.ProcessActivation
+import Phil.Core.ProcessEndpointClosure
+import Phil.Core.Session (SessionError (..))
 import Phil.Core.ProcessRendezvous
 import Phil.Core.Protocol
 import Phil.Core.Protocol.Family
@@ -52,6 +54,13 @@ main = do
     , test "minimally wrong offer body rejects before owner transition" (statefulWrongBodyRejected go offer wrongBody)
     , test "stateful consumed predecessor cannot replay" (statefulStaleRejected go offer)
     , test "stateful wrong session head rejects" (statefulWrongHeadRejected go offer)
+    , test "Go source close retires only the chosen client endpoint" (choiceClientCloseAccepted go offer "Go" (Outcome "Done"))
+    , test "Cancel source close preserves distinct terminal outcome" (choiceClientCloseAccepted cancel offer "Cancel" (Outcome "Cancel"))
+    , test "wrong selected-client close outcome rejects exact Core class" (choiceClientCloseWrongOutcome go offer)
+    , test "source offer wrong body rejects before client close" (choiceClientCloseWrongBody go offer wrongBody)
+    , test "stale select/offer predecessor cannot authorize another close" (choiceClientCloseStale go offer)
+    , test "missing activation client owner blocks source close" (choiceClientCloseMissingOwner go offer)
+    , test "client endpoint cannot be closed twice" (choiceClientCloseTwice go offer)
     ]
   if and outcomes then pure () else exitFailure
 
@@ -425,6 +434,127 @@ statefulWrongHeadRejected client server = do
                && expected == Select branches && actual == End (Outcome "Done"))
             "stateful mismatch lost the exact original head and observed state"
     other -> Left ("stateful wrong head advanced: " <> show other)
+
+
+-- FSEM-02: source-level 'close chosen' is a real Core terminal endpoint
+-- transition, but the source offer arm returns unit: it does NOT close the
+-- independent server endpoint or discharge that process/root's obligations.
+choiceClientCloseFrom
+  :: Fixture -> Text -> Outcome -> ProcessCommunicationState
+  -> Either GrammarV1StatefulChoiceClientCloseError
+       GrammarV1StatefulChoiceClientClose
+choiceClientCloseFrom fx label outcome state =
+  grammarV1CloseStatefulSourceChoiceClient
+    clientRoot (fxClient fx) serverRoot (fxServer fx) (fxInstance fx)
+    clientRole serverRole (fxClientProcess fx) (fxServerProcess fx)
+    serverNext label (fxNetwork fx) state outcome
+
+choiceClientClose
+  :: Fixture -> Text -> Outcome
+  -> Either GrammarV1StatefulChoiceClientCloseError
+       GrammarV1StatefulChoiceClientClose
+choiceClientClose fx label outcome =
+  choiceClientCloseFrom fx label outcome (fxState fx)
+
+choiceClientCloseAccepted :: Text -> Text -> Text -> Outcome -> Either String ()
+choiceClientCloseAccepted client server label outcome = do
+  fx <- fixture client server
+  checked <- mapLeft show $ choiceClientClose fx label outcome
+  again <- mapLeft show $ choiceClientClose fx label outcome
+  assert (checked == again) "source select/offer/client-close replay changed with identical inputs"
+  let progressed = statefulChoiceSuccessor
+        (statefulChoiceClientCloseSourceReplay checked)
+      final = statefulChoiceClientCloseSuccessor checked
+      endpoint = statefulChoiceClientCloseEndpoint checked
+      revision = binaryProtocolInstanceRevision (fxInstance fx)
+      afterOwners = communicationRestrictedOwners final
+      beforeOwners = communicationRestrictedOwners progressed
+      afterContexts = communicationProtocolContexts final
+  assert (endpoint == fxClientNext fx)
+    "the actually closed client endpoint did not come from the checked source binder"
+  independent <- mapLeft show $
+    closeProcessEndpointState (fxNetwork fx) progressed
+      (fxClientProcess fx) (fxClientNext fx) revision clientRole outcome
+  assert (final == independent)
+    "source client-close result diverged from independent native Core close replay"
+  assert (Map.lookup clientOccurrence afterOwners == Nothing
+       && Map.lookup serverOccurrence afterOwners == Just (fxServerProcess fx, serverNext)
+       && Map.lookup spectatorOccurrence afterOwners == Map.lookup spectatorOccurrence beforeOwners
+       && Map.keysSet beforeOwners == Map.keysSet (Map.insert clientOccurrence
+            (fxClientProcess fx, fxClientNext fx) afterOwners))
+    "client-close owner retirement changed the peer or spectator ledger"
+  clientContext <- maybe (Left "client context missing after close")
+    Right (Map.lookup (fxClientProcess fx) afterContexts)
+  assert (Map.notMember (fxClientOld fx) (protocolEndpoints clientContext)
+       && Map.notMember endpoint (protocolEndpoints clientContext)
+       && Map.notMember endpoint (linearBindings (protocolResources clientContext)))
+    "closed client's endpoint still lives in protocol or resource state"
+  checkSide afterContexts (fxServerProcess fx) (fxServerOld fx) serverNext
+    (TyEndpoint (End outcome)) revision serverRole
+
+choiceClientCloseWrongOutcome :: Text -> Text -> Either String ()
+choiceClientCloseWrongOutcome client server = do
+  fx <- fixture client server
+  case choiceClientClose fx "Go" (Outcome "Cancel") of
+    Left (GrammarV1StatefulChoiceClientCloseCoreError
+      (EndpointClosureProtocolError process
+        (ProtocolSessionError (CloseOutcomeMismatch
+          (Outcome "Done") (Outcome "Cancel"))))) ->
+      assert (process == fxClientProcess fx) "close error lost original client process"
+    other -> Left ("wrong close outcome was not rejected by actual Core: " <> show other)
+
+choiceClientCloseWrongBody :: Text -> Text -> Text -> Either String ()
+choiceClientCloseWrongBody client server bad = do
+  fx <- fixture client server
+  (_, badServer) <- parsePair bad
+  case choiceClientClose (fx { fxServer = badServer }) "Go" (Outcome "Done") of
+    Left (GrammarV1StatefulChoiceClientCloseSourceError
+      (GrammarV1StatefulChoiceSourceError
+        (GrammarV1JointChoiceOfferSourceError
+          (GrammarV1OfferReplayCoverageError GrammarV1ComponentOfferArmBodyUnsupported)))) ->
+      Right ()
+    other -> Left ("unsupported source arm was silently admitted: " <> show other)
+
+choiceClientCloseStale :: Text -> Text -> Either String ()
+choiceClientCloseStale client server = do
+  fx <- fixture client server
+  first <- mapLeft show $ stateful fx "Go" (fxState fx)
+  case choiceClientCloseFrom fx "Go" (Outcome "Done")
+      (statefulChoiceSuccessor first) of
+    Left (GrammarV1StatefulChoiceClientCloseSourceError
+      (GrammarV1StatefulChoiceSourceError
+        (GrammarV1JointChoiceOfferSourceError
+          (GrammarV1OfferReplayProtocolError (ProtocolEndpointUnknown endpoint))))) ->
+      assert (endpoint == fxServerOld fx) "stale error named another endpoint"
+    other -> Left ("stale source endpoint was reaccepted: " <> show other)
+
+choiceClientCloseMissingOwner :: Text -> Text -> Either String ()
+choiceClientCloseMissingOwner client server = do
+  fx <- fixture client server
+  let bad = (fxState fx)
+        { communicationRestrictedOwners =
+            Map.delete clientOccurrence (communicationRestrictedOwners (fxState fx)) }
+  case choiceClientCloseFrom fx "Go" (Outcome "Done") bad of
+    Left (GrammarV1StatefulChoiceClientCloseSourceError
+      (GrammarV1StatefulChoiceOwnerError
+        (RendezvousEndpointOccurrenceUnknown process endpoint))) ->
+      assert (process == fxClientProcess fx && endpoint == fxClientOld fx)
+        "owner-index rejection lost exact process/endpoint"
+    other -> Left ("missing owner accepted before client close: " <> show other)
+
+choiceClientCloseTwice :: Text -> Text -> Either String ()
+choiceClientCloseTwice client server = do
+  fx <- fixture client server
+  first <- mapLeft show $ choiceClientClose fx "Go" (Outcome "Done")
+  let revision = binaryProtocolInstanceRevision (fxInstance fx)
+  case closeProcessEndpointState (fxNetwork fx)
+      (statefulChoiceClientCloseSuccessor first)
+      (fxClientProcess fx) (fxClientNext fx) revision clientRole
+      (Outcome "Done") of
+    Left (EndpointClosureOccurrenceUnknown process endpoint) ->
+      assert (process == fxClientProcess fx && endpoint == fxClientNext fx)
+        "duplicate close lost its exact endpoint/process"
+    other -> Left ("second close returned a successor: " <> show other)
 
 branches :: [Branch]
 branches =
