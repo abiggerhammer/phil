@@ -236,8 +236,13 @@ Proof.
       (phase1_surface_normalize_effect_set_expression_outer_spine effects)
       as [actual |] eqn:Heffects; try discriminate Hnormalize.
     inversion Hnormalize; subst refined.
-    cbn.
-    rewrite <-
+    cbn [phase1_surface_generic_requirement_expression_outer_spine_tree
+         phase1_surface_generic_requirement_expression_outer_spine_index
+         phase1_surface_generic_requirement_expression_outer_selected_tree
+         phase1_surface_generic_requirement_effects_spine_tree
+         phase1_surface_generic_requirement_effects_spine_index
+         phase1_surface_generic_requirement_effects_selected_tree].
+    rewrite
       (phase1_surface_normalize_effect_set_expression_outer_spine_round_trip
         effects actual Heffects).
     reflexivity.
