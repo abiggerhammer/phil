@@ -1,6 +1,6 @@
 # FSEM-01 C-1 — parsed closure capture ownership and bounded scoped-loan validity
 
-> Status: non-normative candidate, exact-head CI pending. Tracks
+> Status: bounded non-normative C-1 **merged in [#1712](https://github.com/abiggerhammer/phil/pull/1712)**, protected squash `28f84201b5007bc89b2e2f48def7f250c75bee8f`; FSEM-01 remains OPEN. Tracks
 > [FSEM #1613](https://github.com/abiggerhammer/phil/issues/1613),
 > exit matrix R13/R15, and callable-scope CALL-010/CALL-014.
 > Authority, effects and assurance still belong to FSEM-04.
@@ -92,3 +92,7 @@ restricted capture provenance in a realized closure environment,
 source-derived recursive closure graphs, invocation/effects/authority,
 satisfies-C discharge, target representation, general Source↔Rocq
 simulation and FSEM-05/06/07 graduation. FSEM-01 remains OPEN.
+
+## Merged C-1 evidence and COVERAGE-1 handoff
+
+The unchanged #1712 source head `70fc60ee2bb44ebc60dcb053747735a5c671d927` passed 217 successful exact-head checks plus one intentional skip and a fresh successful post-ready claim guard. Protected squash merge and trusted claim release were independently verified. This is *bounded* source capture ownership/scope evidence, not general callable source acceptance or `satisfies C` discharge. The [COVERAGE-1 inventory](formal-semantics-fsem01-coverage1-v1.md) explicitly tracks source-derived recursive capture graphs, arbitrary closure bodies/nominal contracts, nested loan scopes, and FSEM-04 effects/assurance premises without calling noncompetent source forms invalid.
