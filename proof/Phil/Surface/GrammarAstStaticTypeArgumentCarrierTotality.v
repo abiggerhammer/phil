@@ -7,6 +7,7 @@ From Phil.Surface Require Import
   GrammarAstGenericRequirementsSpine
   GrammarAstGenericRequirementsTotality
   GrammarAstTypeTotality
+  GrammarAstRefinementTupleTypeCarrierTotality
   GrammarDeterminacySimpleResolverSoundness
   GrammarAstStaticTypeArgumentCarrierSpine
   GrammarAstStaticReferenceSpine
