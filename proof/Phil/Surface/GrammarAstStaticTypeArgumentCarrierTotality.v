@@ -749,5 +749,5 @@ Proof.
       * eapply phase1_surface_normalize_static_type_arguments_type_tree_round_trip.
         exact Hresult.
     + cbn in Hnth.
-      discriminate Hnth.
+      destruct index; cbn in Hnth; discriminate Hnth.
 Qed.
