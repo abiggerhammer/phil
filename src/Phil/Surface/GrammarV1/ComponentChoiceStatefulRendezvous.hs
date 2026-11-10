@@ -15,10 +15,15 @@ module Phil.Surface.GrammarV1.ComponentChoiceStatefulRendezvous
   , grammarV1CheckSourceChoiceCloseDiamond
   , GrammarV1ChoiceCloseDiamondError (..)
   , GrammarV1ChoiceCloseDiamond (..)
+  , GrammarV1ChoiceSourceSuccessorTraceError (..)
+  , GrammarV1ChoiceSourceSuccessorTrace (..)
+  , grammarV1CheckChoiceSourceSuccessorTrace
   ) where
 
+import qualified Data.Map.Strict as Map
 import Data.Text (Text)
 import Phil.Core.Process (ProcessKey, ProcessNetwork)
+import Phil.Core.ProcessActivation (ActivationOccurrenceKey)
 import Phil.Core.ProcessEndpointClosure
   ( ProcessEndpointClosureError, closeProcessEndpointState )
 import Phil.Core.ProcessRendezvous
@@ -33,6 +38,8 @@ import Phil.Core.Syntax (Name, Outcome)
 import Phil.Surface.GrammarV1.BinderScope (GrammarV1ResolvedBinder (..))
 import Phil.Surface.GrammarV1.ComponentSelectClose
   ( GrammarV1CheckedComponentSelectClose (..) )
+import Phil.Surface.GrammarV1.ComponentOfferReplay
+  ( GrammarV1ComponentOfferReplay (..) )
 import Phil.Surface.GrammarV1.ComponentChoiceRendezvous
   ( GrammarV1ChoiceRendezvous (..)
   , GrammarV1ChoiceRendezvousError
@@ -280,6 +287,103 @@ grammarV1CheckSourceChoiceCloseDiamond
       , choiceCloseDiamondReverse = reverseResult
       }
     else Left GrammarV1ChoiceCloseDiamondDivergence
+
+-- | Bounded source-select/offer predecessor -> successor -> two-End owner
+-- trace. The chosen label, offered successor, occurrence identities, protocol
+-- instance/roles, activation and BOTH End authorizations remain caller inputs.
+-- A Server return-unit offer arm is NOT a source endpoint-close statement.
+data GrammarV1ChoiceSourceSuccessorTraceError
+  = ChoiceSourceTraceAliasedOccurrence
+  | ChoiceSourceTraceDiamondError GrammarV1ChoiceCloseDiamondError
+  | ChoiceSourceTracePredecessorMismatch
+      ActivationOccurrenceKey (ProcessKey, Name) (Maybe (ProcessKey, Name))
+  | ChoiceSourceTraceProgressionOwnerMismatch
+  | ChoiceSourceTraceTerminalOwnerMismatch
+  deriving (Eq, Show)
+
+data GrammarV1ChoiceSourceSuccessorTrace =
+  GrammarV1ChoiceSourceSuccessorTrace
+    { choiceSourceTraceDiamond :: GrammarV1ChoiceCloseDiamond
+    , choiceSourceTraceReadyOwners ::
+        Map.Map ActivationOccurrenceKey (ProcessKey, Name)
+    , choiceSourceTraceTerminalOwners ::
+        Map.Map ActivationOccurrenceKey (ProcessKey, Name)
+    }
+  deriving (Eq, Show)
+
+-- | Partial, non-normative FSEM-02 judgment. Reparse/check BOTH component
+-- sources and replay the true Core select/offer, then both independently
+-- authorized End close orders from the ORIGINAL communication predecessor.
+-- No cached transition is accepted as source authority.
+--
+-- Require the two distinct externally supplied occurrence keys to identify
+-- the exact old source-rooted endpoint binders. The Client successor comes
+-- from the checked select/close source. The Server successor is an explicit
+-- external input checked by the existing Core transition, NOT fabricated
+-- from its return-unit offer arm. All other owners must be preserved.
+-- Rejection gives a precise Left with no successful progressed state.
+grammarV1CheckChoiceSourceSuccessorTrace
+  :: DeclarationKey -> GrammarV1ComponentDecl
+  -> DeclarationKey -> GrammarV1ComponentDecl
+  -> BinaryProtocolInstance
+  -> ProtocolRoleKey -> ProtocolRoleKey
+  -> ProcessKey -> ProcessKey
+  -> ActivationOccurrenceKey -> ActivationOccurrenceKey
+  -> Name -> Text -> ProcessNetwork -> ProcessCommunicationState
+  -> Outcome -> Outcome
+  -> Either GrammarV1ChoiceSourceSuccessorTraceError
+       GrammarV1ChoiceSourceSuccessorTrace
+grammarV1CheckChoiceSourceSuccessorTrace
+    clientRoot clientSource offerRoot offerSource instanceValue
+    clientRole offerRole clientProcess offerProcess
+    clientOccurrence offerOccurrence offeredSuccessor peerLabel network
+    original clientOutcome peerOutcome = do
+  if clientOccurrence /= offerOccurrence
+    then Right ()
+    else Left ChoiceSourceTraceAliasedOccurrence
+  diamond <- mapLeft ChoiceSourceTraceDiamondError $
+    grammarV1CheckSourceChoiceCloseDiamond
+      clientRoot clientSource offerRoot offerSource instanceValue
+      clientRole offerRole clientProcess offerProcess offeredSuccessor
+      peerLabel network original clientOutcome peerOutcome
+  let progressed = statefulChoiceClientCloseSourceReplay
+        (statefulChoiceExplicitPeerCloseClient (choiceCloseDiamondForward diamond))
+      replay = statefulChoiceSourceReplay progressed
+      selected = jointChoiceSelectedSource replay
+      offered = jointChoiceCheckedOffer replay
+      clientOld = grammarV1ResolvedBinderCoreName
+        (checkedComponentSelectEndpoint selected)
+      clientNext = grammarV1ResolvedBinderCoreName
+        (checkedComponentSelectSuccessor selected)
+      offerOld = grammarV1ResolvedBinderCoreName
+        (replayedComponentOfferSourceEndpoint offered)
+      beforeOwners = communicationRestrictedOwners original
+      readyOwners = communicationRestrictedOwners (statefulChoiceSuccessor progressed)
+      finalOwners = communicationRestrictedOwners (choiceCloseDiamondReverse diamond)
+      checkPredecessor occurrence expected =
+        if Map.lookup occurrence beforeOwners == Just expected
+          then Right ()
+          else Left (ChoiceSourceTracePredecessorMismatch
+            occurrence expected (Map.lookup occurrence beforeOwners))
+  checkPredecessor clientOccurrence (clientProcess, clientOld)
+  checkPredecessor offerOccurrence (offerProcess, offerOld)
+  let expectedReady = Map.insert offerOccurrence (offerProcess, offeredSuccessor)
+        (Map.insert clientOccurrence (clientProcess, clientNext) beforeOwners)
+      expectedFinal = Map.delete clientOccurrence
+        (Map.delete offerOccurrence expectedReady)
+  if readyOwners == expectedReady
+    then Right ()
+    else Left ChoiceSourceTraceProgressionOwnerMismatch
+  if finalOwners == expectedFinal
+      && communicationRestrictedOwners
+           (statefulChoiceExplicitPeerCloseSuccessor
+             (choiceCloseDiamondForward diamond)) == expectedFinal
+    then Right GrammarV1ChoiceSourceSuccessorTrace
+      { choiceSourceTraceDiamond = diamond
+      , choiceSourceTraceReadyOwners = readyOwners
+      , choiceSourceTraceTerminalOwners = finalOwners
+      }
+    else Left ChoiceSourceTraceTerminalOwnerMismatch
 
 mapLeft :: (a -> b) -> Either a c -> Either b c
 mapLeft f = either (Left . f) Right
