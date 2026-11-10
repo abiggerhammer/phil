@@ -1,0 +1,33 @@
+name: FSEM-01 COVERAGE-1 Early Preflight
+
+concurrency:
+  group: ${{ github.workflow_ref }}-${{ github.event.pull_request.number || github.run_id }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+on:
+  push:
+    branches:
+      - formal-semantics/fsem01-coverage1-competence-inventory
+  pull_request:
+    paths:
+      - 'docs/phase-1/fsem01-coverage1-register.json'
+      - 'docs/phase-1/formal-semantics-fsem01-coverage1-v1.md'
+      - 'docs/phase-1/formal-semantics-fsem01-exit-matrix-v1.md'
+      - 'scripts/test_fsem01_coverage.py'
+      - '.github/workflows/fsem01-coverage1-preflight.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  exact-grammar-coverage:
+    name: Index Grammar-v1 source, evidence, and bounded nonclaims
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - name: Run referential and negative drift controls
+        run: |
+          set -euo pipefail
+          python3 -m py_compile scripts/test_fsem01_coverage.py
+          python3 scripts/test_fsem01_coverage.py -v
+          sha256sum grammar/phase1-surface.ebnf docs/phase-1/fsem01-coverage1-register.json docs/phase-1/formal-semantics-fsem01-coverage1-v1.md
