@@ -1,5 +1,5 @@
 From Stdlib Require Import Strings.String.
-From Phil.Core Require Import Syntax FSEM02SelectedClientClose.
+From Phil.Core Require Import Syntax FSEM02StatefulSourceChoice FSEM02SelectedClientClose.
 
 (*
   FSEM-02: conditional explicit Server End retirement after the already

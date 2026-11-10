@@ -8,12 +8,14 @@ on:
       - 'src/Phil/Surface/GrammarV1/ComponentChoiceStatefulRendezvous.hs'
       - 'test/Phase1FSEM02SourceJointChoiceMain.hs'
       - 'proof/Phil/Core/FSEM02SelectedClientClose.v'
+      - 'proof/Phil/Core/FSEM02ExplicitPeerClose.v'
       - '.github/workflows/fsem02-explicit-peer-end-preflight.yml'
   pull_request:
     paths:
       - 'src/Phil/Surface/GrammarV1/ComponentChoiceStatefulRendezvous.hs'
       - 'test/Phase1FSEM02SourceJointChoiceMain.hs'
       - 'proof/Phil/Core/FSEM02SelectedClientClose.v'
+      - 'proof/Phil/Core/FSEM02ExplicitPeerClose.v'
       - '.github/workflows/fsem02-explicit-peer-end-preflight.yml'
 
 permissions:
