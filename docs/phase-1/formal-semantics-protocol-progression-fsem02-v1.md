@@ -99,3 +99,7 @@ claim-guard, branch protections and all applicable CI.
 ### Additional bounded terminal order evidence (FSEM-02)
 
 [Source-checked, explicitly authorized terminal End close order diamond](formal-semantics-terminal-close-diamond-fsem02-v1.md) independently replays Client-then-Server and Server-then-Client native Core closes, and accepts only complete successor equality. Server endpoint disposal remains externally supplied, not source `return unit` authority. This is finite checked conformance and a conditional owner-ledger theorem, not universal refinement or FSEM-02 completion.
+
+### Additional restricted send/receive close-order evidence (FSEM-02)
+
+[Source-rechecked restricted send/receive terminal End close-order diamond](formal-semantics-restricted-close-diamond-fsem02-v1.md) checks full production Core state equality for sender-first and receiver-first closes, preserving the receiver's transferred restricted payload and affine spectators. It requires external protocol, activation and two authorized End outcomes; neither payload disposal nor root/assurance discharge is inferred. Rocq provides a conditional owner-ledger frame/diamond theorem, not universal implementation refinement or FSEM-02 completion.
