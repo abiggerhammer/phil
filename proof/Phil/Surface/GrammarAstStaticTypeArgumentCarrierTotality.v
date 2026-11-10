@@ -583,7 +583,7 @@ Proof.
         phase1_surface_expect_nonterminal,
         phase1_surface_expect_alternative.
       cbn.
-      rewrite String.eqb_refl.
+      repeat rewrite String.eqb_refl.
       rewrite Houter.
       reflexivity.
     }
@@ -671,7 +671,7 @@ Proof.
         unfold phase1_surface_normalize_named_type_spine,
           phase1_surface_expect_nonterminal.
         cbn.
-        rewrite String.eqb_refl.
+        repeat rewrite String.eqb_refl.
         exact Hbase_reference.
       }
       let outer_type := constr:(Phase1NamedTypeSpine selected) in
@@ -689,7 +689,7 @@ Proof.
           phase1_surface_expect_nonterminal,
           phase1_surface_expect_alternative.
         cbn.
-        rewrite String.eqb_refl.
+        repeat rewrite String.eqb_refl.
         reflexivity.
       }
       assert (Hprimitive_type :
