@@ -10,11 +10,14 @@ module Phil.Surface.GrammarV1.SourceClosureCaptureCorrespondence
   ) where
 
 import qualified Phil.Core.Context as Core
-import Phil.Core.Callable (CallableOccurrenceKey (..), CaptureOccurrenceKey (..))
+import Phil.Core.Callable
+  ( CallableOccurrenceKey (..), CaptureOccurrenceKey (..)
+  , CaptureTransfer (..), ClosureCapture (..), checkClosureCaptures )
+import qualified Data.Map.Strict as Map
 import Phil.Core.CallableScope
-  ( ClosureExtent (..), ClosureScopeCapture (..), LoanScopeKey (..)
+  ( ClosureScopeCapture (..), LoanScopeKey (..)
   , checkClosureCaptureScope )
-import Phil.Core.Syntax (Name (..))
+import Phil.Core.Syntax (Mode (..), Name (..))
 import Phil.Surface.GrammarV1.BinderScope
   ( GrammarV1ResolvedBinder (..))
 import Phil.Surface.GrammarV1.SourceClosureCapture
@@ -52,24 +55,47 @@ verifyDirectCaptureCuts run =
     prechecked = cut == [initial] && directFinal run == Nothing
     (nativeCuts, nativeResult) =
       replayNativeUses initial (directCaptures run)
+    describe binder =
+      let name = grammarV1ResolvedBinderCoreName binder
+          key = CaptureOccurrenceKey (unName name)
+          capture transfer mode = ClosureCapture key transfer mode
+      in case Map.lookup name (Core.unrestrictedBindings initial) of
+           Just _ -> Just (capture CopyCapture Unrestricted)
+           Nothing -> case Map.lookup name (Core.affineBindings initial) of
+             Just _ -> Just (capture MoveCapture Affine)
+             Nothing -> case Map.lookup name (Core.linearBindings initial) of
+               Just _ -> Just (capture MoveCapture Linear)
+               Nothing -> Nothing
+    nativeSummary = case mapM describe (directCaptures run) of
+      Just descriptions -> Just (checkClosureCaptures descriptions)
+      Nothing -> Nothing
     consistent = case directOutcome run of
       Right () ->
         directFailureStage run == Nothing &&
-        directSummary run /= Nothing &&
-        cut == nativeCuts &&
-        case nativeResult of
-          Right next -> directFinal run == Just next
-          Left _ -> False
-      Left (SourceClosureCaptureError _) ->
+        case nativeSummary of
+          Just (Right summary) ->
+            directSummary run == Just summary && cut == nativeCuts &&
+            case nativeResult of
+              Right next -> directFinal run == Just next
+              Left _ -> False
+          _ -> False
+      Left (SourceClosureCaptureError err) ->
         directFailureStage run == Just ClosureCaptureValidation &&
-        directSummary run == Nothing && prechecked
+        directSummary run == Nothing && prechecked &&
+        nativeSummary == Just (Left err)
       Left (SourceClosureModeMismatch _ _) ->
         directFailureStage run == Just ClosureModeValidation &&
-        directSummary run /= Nothing && prechecked
+        prechecked &&
+        case nativeSummary of
+          Just (Right summary) -> directSummary run == Just summary
+          _ -> False
       Left (SourceClosureCoreError err) ->
         directFailureStage run == Just ClosureNativeUse &&
-        directSummary run /= Nothing && directFinal run == Nothing &&
-        cut == nativeCuts && nativeResult == Left err
+        directFinal run == Nothing &&
+        cut == nativeCuts && nativeResult == Left err &&
+        case nativeSummary of
+          Just (Right summary) -> directSummary run == Just summary
+          _ -> False
       _ -> False
 
 -- | Reconstruct the exact production native loan start and (where
