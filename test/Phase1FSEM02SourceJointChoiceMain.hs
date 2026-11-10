@@ -80,6 +80,10 @@ main = do
     , test "source-choice trace rejects minimally wrong offer source precisely" (choiceSourceTraceWrongBody go offer wrongBody)
     , test "source-choice trace rejects stale source endpoint rather than replaying" (choiceSourceTraceStale go offer)
     , test "source-choice trace preserves exact wrong terminal outcome class" (choiceSourceTraceWrongPeerOutcome go offer)
+    , test "one-sided Client-first and peer-first Go End prefixes are exact" (choiceSourceTraceAccepted go offer "Go" (Outcome "Done"))
+    , test "one-sided Client-first and peer-first Cancel End prefixes are exact" (choiceSourceTraceAccepted cancel offer "Cancel" (Outcome "Cancel"))
+    , test "both one-sided End prefixes refuse repeated stale closes" (choiceSourceTracePrefixStale go offer)
+    , test "wrong Client End outcome rejects before a successful prefix" (choiceSourceTraceWrongClientOutcome go offer)
     ]
   if and outcomes then pure () else exitFailure
 
@@ -825,15 +829,26 @@ choiceSourceTraceAccepted client server label outcome = do
   independent <- mapLeft show $ choiceCloseDiamond fx label outcome outcome
   let before = communicationRestrictedOwners (fxState fx)
       ready = choiceSourceTraceReadyOwners trace
+      afterClient = choiceSourceTraceAfterClientOwners trace
+      afterPeer = choiceSourceTraceAfterPeerOwners trace
       terminal = choiceSourceTraceTerminalOwners trace
       expectedReady = Map.insert clientOccurrence (fxClientProcess fx, fxClientNext fx)
         (Map.insert serverOccurrence (fxServerProcess fx, serverNext) before)
-      expectedTerminal = Map.delete clientOccurrence
-        (Map.delete serverOccurrence expectedReady)
+      expectedAfterClient = Map.delete clientOccurrence expectedReady
+      expectedAfterPeer = Map.delete serverOccurrence expectedReady
+      expectedTerminal = Map.delete clientOccurrence expectedAfterPeer
   assert (trace == again
        && choiceSourceTraceDiamond trace == independent
        && ready == expectedReady
+       && afterClient == expectedAfterClient
+       && afterPeer == expectedAfterPeer
+       && Map.lookup clientOccurrence afterClient == Nothing
+       && Map.lookup serverOccurrence afterClient == Just (fxServerProcess fx, serverNext)
+       && Map.lookup serverOccurrence afterPeer == Nothing
+       && Map.lookup clientOccurrence afterPeer == Just (fxClientProcess fx, fxClientNext fx)
        && terminal == expectedTerminal
+       && Map.lookup spectatorOccurrence afterClient == Map.lookup spectatorOccurrence before
+       && Map.lookup spectatorOccurrence afterPeer == Map.lookup spectatorOccurrence before
        && Map.lookup spectatorOccurrence ready ==
             Just (fxClientProcess fx, spectatorName)
        && Map.lookup spectatorOccurrence terminal ==
@@ -906,6 +921,48 @@ choiceSourceTraceWrongPeerOutcome client server = do
       assert (process == fxServerProcess fx)
         "wrong peer End authority lost exact server process classification"
     other -> Left ("wrong externally supplied peer End outcome was accepted: " <> show other)
+
+-- Invalid Client End authority fails with no successful one-sided trace.
+choiceSourceTraceWrongClientOutcome :: Text -> Text -> Either String ()
+choiceSourceTraceWrongClientOutcome client server = do
+  fx <- fixture client server
+  case choiceSourceTraceFrom fx clientOccurrence serverOccurrence "Go"
+       (Outcome "Cancel") (Outcome "Done") (fxState fx) of
+    Left (ChoiceSourceTraceDiamondError
+      (GrammarV1ChoiceCloseDiamondForwardError
+        (GrammarV1StatefulChoiceExplicitPeerClosePriorError
+          (GrammarV1StatefulChoiceClientCloseCoreError
+            (EndpointClosureProtocolError process
+              (ProtocolSessionError (CloseOutcomeMismatch
+                (Outcome "Done") (Outcome "Cancel"))))))) ->
+      assert (process == fxClientProcess fx)
+        "wrong Client End outcome named wrong process"
+    other -> Left ("wrong Client End outcome fabricated a prefix: " <> show other)
+
+-- Verify both native one-sided states are terminal for their own occurrence,
+-- while the other live occurrence is retained for its separately granted End.
+choiceSourceTracePrefixStale :: Text -> Text -> Either String ()
+choiceSourceTracePrefixStale client server = do
+  fx <- fixture client server
+  trace <- mapLeft show $ choiceSourceTraceFrom fx clientOccurrence serverOccurrence
+    "Go" (Outcome "Done") (Outcome "Done") (fxState fx)
+  let diamond = choiceSourceTraceDiamond trace
+      clientFirst = statefulChoiceClientCloseSuccessor
+        (statefulChoiceExplicitPeerCloseClient (choiceCloseDiamondForward diamond))
+      peerFirst = choiceCloseDiamondPeerFirst diamond
+      revision = binaryProtocolInstanceRevision (fxInstance fx)
+  case closeProcessEndpointState (fxNetwork fx) clientFirst
+       (fxClientProcess fx) (fxClientNext fx) revision clientRole (Outcome "Done") of
+    Left (EndpointClosureOccurrenceUnknown process endpoint) ->
+      assert (process == fxClientProcess fx && endpoint == fxClientNext fx)
+        "Client-first duplicate close named wrong retired endpoint"
+    other -> Left ("Client-first prefix reused stale endpoint: " <> show other)
+  case closeProcessEndpointState (fxNetwork fx) peerFirst
+       (fxServerProcess fx) serverNext revision serverRole (Outcome "Done") of
+    Left (EndpointClosureOccurrenceUnknown process endpoint) ->
+      assert (process == fxServerProcess fx && endpoint == serverNext)
+        "Peer-first duplicate close named wrong retired endpoint"
+    other -> Left ("Peer-first prefix reused stale endpoint: " <> show other)
 
 branches :: [Branch]
 branches =
