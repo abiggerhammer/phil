@@ -9,6 +9,9 @@ module Phil.Surface.GrammarV1.ComponentChoiceStatefulRendezvous
   , GrammarV1StatefulChoiceClientCloseError (..)
   , GrammarV1StatefulChoiceClientClose (..)
   , grammarV1CloseStatefulSourceChoiceClient
+  , GrammarV1StatefulChoiceExplicitPeerCloseError (..)
+  , GrammarV1StatefulChoiceExplicitPeerClose (..)
+  , grammarV1CloseStatefulSourceChoiceExplicitPeer
   ) where
 
 import Data.Text (Text)
@@ -143,6 +146,63 @@ grammarV1CloseStatefulSourceChoiceClient
     { statefulChoiceClientCloseSourceReplay = progressed
     , statefulChoiceClientCloseEndpoint = clientSuccessor
     , statefulChoiceClientCloseSuccessor = closed
+    }
+
+-- | The Server's literal source offer arm returns unit; it does NOT close an
+-- End endpoint. This separate, opt-in Core operation requires the caller to
+-- supply the Server's independently authorized terminal outcome, process,
+-- role and fresh successor. It replays the checked source and Client close
+-- from original activated state, then closes only the still-live Server End.
+data GrammarV1StatefulChoiceExplicitPeerCloseError
+  = GrammarV1StatefulChoiceExplicitPeerClosePriorError GrammarV1StatefulChoiceClientCloseError
+  | GrammarV1StatefulChoiceExplicitPeerCloseCoreError ProcessEndpointClosureError
+  deriving (Eq, Show)
+
+data GrammarV1StatefulChoiceExplicitPeerClose = GrammarV1StatefulChoiceExplicitPeerClose
+  { statefulChoiceExplicitPeerCloseClient :: GrammarV1StatefulChoiceClientClose
+  , statefulChoiceExplicitPeerCloseSuccessor :: ProcessCommunicationState
+  }
+  deriving (Eq, Show)
+
+-- | A successful result is a Core terminal-pair transition under TWO
+-- separately supplied authorizations, not source Server close execution.
+-- There is no hidden fallback for unknown heads, owners or wrong outcomes.
+-- On any rejection no successor state is exposed to the caller.
+grammarV1CloseStatefulSourceChoiceExplicitPeer
+  :: DeclarationKey
+  -> GrammarV1ComponentDecl
+  -> DeclarationKey
+  -> GrammarV1ComponentDecl
+  -> BinaryProtocolInstance
+  -> ProtocolRoleKey
+  -> ProtocolRoleKey
+  -> ProcessKey
+  -> ProcessKey
+  -> Name
+  -> Text
+  -> ProcessNetwork
+  -> ProcessCommunicationState
+  -> Outcome
+  -> Outcome
+  -> Either GrammarV1StatefulChoiceExplicitPeerCloseError
+       GrammarV1StatefulChoiceExplicitPeerClose
+grammarV1CloseStatefulSourceChoiceExplicitPeer
+    clientRoot clientSource offerRoot offerSource instanceValue
+    clientRole offerRole clientProcess offerProcess offeredSuccessor peerLabel
+    network initialState clientOutcome explicitPeerOutcome = do
+  clientClosed <- mapLeft GrammarV1StatefulChoiceExplicitPeerClosePriorError $
+    grammarV1CloseStatefulSourceChoiceClient
+      clientRoot clientSource offerRoot offerSource instanceValue
+      clientRole offerRole clientProcess offerProcess offeredSuccessor
+      peerLabel network initialState clientOutcome
+  serverClosed <- mapLeft GrammarV1StatefulChoiceExplicitPeerCloseCoreError $
+    closeProcessEndpointState network
+      (statefulChoiceClientCloseSuccessor clientClosed)
+      offerProcess offeredSuccessor (binaryProtocolInstanceRevision instanceValue)
+      offerRole explicitPeerOutcome
+  pure GrammarV1StatefulChoiceExplicitPeerClose
+    { statefulChoiceExplicitPeerCloseClient = clientClosed
+    , statefulChoiceExplicitPeerCloseSuccessor = serverClosed
     }
 
 mapLeft :: (a -> b) -> Either a c -> Either b c
