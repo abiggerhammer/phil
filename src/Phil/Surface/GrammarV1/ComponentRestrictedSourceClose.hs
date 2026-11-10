@@ -6,9 +6,13 @@ module Phil.Surface.GrammarV1.ComponentRestrictedSourceClose
   ( GrammarV1RestrictedSourceCloseError (..)
   , GrammarV1RestrictedSourceCloseTransition (..)
   , grammarV1CheckRestrictedSourceClose
+  , GrammarV1RestrictedSourceCloseDiamondError (..)
+  , GrammarV1RestrictedSourceCloseDiamondTransition (..)
+  , grammarV1CheckRestrictedSourceCloseDiamond
   ) where
 
 import Phil.Core.Process (ProcessKey, ProcessNetwork)
+import Phil.Core.ProcessActivation (ActivationOccurrenceKey)
 import Phil.Core.ProcessEndpointClosure
   ( ProcessEndpointClosureError
   , closeProcessEndpointState
@@ -20,7 +24,8 @@ import Phil.Core.ProcessRendezvous
   , RestrictedMessageTransfer (..)
   )
 import Phil.Core.Protocol (ProtocolInstanceRevision, ProtocolRoleKey)
-import Phil.Core.Static (DeclarationKey)
+import Phil.Core.Protocol.Family (BinaryProtocolInstance (..))
+import Phil.Core.Static (DeclarationKey, StaticContext)
 import Phil.Core.Syntax (Name, Outcome)
 import Phil.Surface.GrammarV1.BinderScope (GrammarV1ResolvedBinder (..))
 import Phil.Surface.GrammarV1.ComponentReceiveClose
@@ -29,7 +34,9 @@ import Phil.Surface.GrammarV1.ComponentReceiveClose
   , grammarV1CheckedComponentReceiveClose
   )
 import Phil.Surface.GrammarV1.ComponentRestrictedRendezvous
-  ( GrammarV1RestrictedSourceTransition (..)
+  ( GrammarV1RestrictedSourceError
+  , GrammarV1RestrictedSourceTransition (..)
+  , grammarV1CheckRestrictedSourceRendezvous
   )
 import Phil.Surface.GrammarV1.ComponentSendClose
   ( GrammarV1ComponentSendCloseError
@@ -148,6 +155,95 @@ grammarV1CheckRestrictedSourceClose
     , restrictedSourceClosedReceiver = receiverEndpoint
     , restrictedSourceCloseNext = afterReceiver
     }
+
+
+-- | A restricted send/receive terminal-order diamond, not a new close
+-- authority. Unlike the cached-carrier close adapter above, this operation
+-- RECHECKS the parsed source pair and the original live activation-derived
+-- Core predecessor through the production restricted rendezvous checker.
+-- Both End outcomes, protocol instance and process/role identities are
+-- independent inputs. The receiver keeps ownership of the transferred
+-- restricted payload: endpoint closure is not payload disposition.
+data GrammarV1RestrictedSourceCloseDiamondError
+  = RestrictedSourceCloseDiamondRendezvousError GrammarV1RestrictedSourceError
+  | RestrictedSourceCloseDiamondForwardError GrammarV1RestrictedSourceCloseError
+  | RestrictedSourceCloseDiamondReceiverFirstError ProcessEndpointClosureError
+  | RestrictedSourceCloseDiamondSenderSecondError ProcessEndpointClosureError
+  | RestrictedSourceCloseDiamondDivergentState
+  deriving (Eq, Show)
+
+data GrammarV1RestrictedSourceCloseDiamondTransition =
+  GrammarV1RestrictedSourceCloseDiamondTransition
+    { restrictedSourceDiamondRendezvous :: GrammarV1RestrictedSourceTransition
+    , restrictedSourceDiamondForward :: GrammarV1RestrictedSourceCloseTransition
+    , restrictedSourceDiamondReceiverFirst :: ProcessCommunicationState
+    , restrictedSourceDiamondReverse :: ProcessCommunicationState
+    }
+  deriving (Eq, Show)
+
+-- | Partial judgment for the admitted two-statement Grammar-v1
+-- send/close and receive/close fragment with externally authorized End
+-- outcomes:
+--
+--   source + original Σ0 -- send/receive (restricted) --> Σ1
+--   Σ1 -- sender End --> Σs -- receiver End --> Σsr
+--   Σ1 -- receiver End --> Σr -- sender End --> Σrs
+--   accept iff Σsr == Σrs, comparing ALL Core protocol contexts,
+--   resource collections and activation owner occurrences.
+--
+-- Each actual Core close consumes its own live successor. Any source,
+-- rendezvous, close, or equality error returns a precise Left with NO
+-- successful state. This says nothing about arbitrary interleavings,
+-- automatic process disposal, root closure, or universal refinement.
+grammarV1CheckRestrictedSourceCloseDiamond
+  :: StaticContext
+  -> DeclarationKey
+  -> GrammarV1ComponentDecl
+  -> DeclarationKey
+  -> GrammarV1ComponentDecl
+  -> BinaryProtocolInstance
+  -> ProtocolRoleKey
+  -> ProtocolRoleKey
+  -> ProcessKey
+  -> ProcessKey
+  -> ActivationOccurrenceKey
+  -> ProcessNetwork
+  -> ProcessCommunicationState
+  -> Outcome
+  -> Outcome
+  -> Either GrammarV1RestrictedSourceCloseDiamondError
+       GrammarV1RestrictedSourceCloseDiamondTransition
+grammarV1CheckRestrictedSourceCloseDiamond
+    staticContext senderRoot senderSource receiverRoot receiverSource
+    instanceValue senderRole receiverRole senderProcess receiverProcess
+    payloadOccurrence network predecessor senderOutcome receiverOutcome = do
+  rendezvous <- mapLeft RestrictedSourceCloseDiamondRendezvousError $
+    grammarV1CheckRestrictedSourceRendezvous
+      staticContext senderRoot senderSource receiverRoot receiverSource
+      instanceValue senderRole receiverRole senderProcess receiverProcess
+      payloadOccurrence network predecessor
+  let revision = binaryProtocolInstanceRevision instanceValue
+  forward <- mapLeft RestrictedSourceCloseDiamondForwardError $
+    grammarV1CheckRestrictedSourceClose
+      senderRoot senderSource receiverRoot receiverSource
+      network rendezvous senderProcess receiverProcess revision
+      senderRole receiverRole senderOutcome receiverOutcome
+  afterReceiver <- mapLeft RestrictedSourceCloseDiamondReceiverFirstError $
+    closeProcessEndpointState network (restrictedSourceNext rendezvous)
+      receiverProcess (restrictedSourceClosedReceiver forward)
+      revision receiverRole receiverOutcome
+  afterBoth <- mapLeft RestrictedSourceCloseDiamondSenderSecondError $
+    closeProcessEndpointState network afterReceiver
+      senderProcess (restrictedSourceClosedSender forward)
+      revision senderRole senderOutcome
+  if afterBoth == restrictedSourceCloseNext forward
+    then Right GrammarV1RestrictedSourceCloseDiamondTransition
+      { restrictedSourceDiamondRendezvous = rendezvous
+      , restrictedSourceDiamondForward = forward
+      , restrictedSourceDiamondReceiverFirst = afterReceiver
+      , restrictedSourceDiamondReverse = afterBoth
+      }
+    else Left RestrictedSourceCloseDiamondDivergentState
 
 mapLeft :: (a -> b) -> Either a c -> Either b c
 mapLeft f = either (Left . f) Right
