@@ -1,0 +1,67 @@
+name: FSEM Slice Claim Recovery
+
+# This is a separate trusted workflow, not a retry job inside the release
+# workflow: pull_request_target can fail before any jobs are scheduled.
+on:
+  workflow_run:
+    workflows: ["FSEM Slice Claim Release"]
+    types: [completed]
+  schedule:
+    # Independent fallback if the workflow_run event is also lost.
+    - cron: '17,47 * * * *'
+  workflow_dispatch:
+    inputs:
+      pr:
+        description: "Merged PR number for exact manual recovery (leave both inputs empty to reconcile)"
+        type: string
+        required: false
+      expected_claim_sha:
+        description: "Expected 40-hex claim commit SHA; required with PR number"
+        type: string
+        required: false
+
+permissions:
+  contents: write
+  issues: write
+  pull-requests: read
+
+# Reconciliations do not cancel one another or run concurrently.
+concurrency:
+  group: fsem-claim-release-recovery
+  cancel-in-progress: false
+
+jobs:
+  reconcile-exact-merged-claims:
+    if: >-
+      github.event_name != 'workflow_run' ||
+      github.event.workflow_run.conclusion != 'success'
+    runs-on: ubuntu-latest
+    steps:
+      # workflow_run is privileged: NEVER check out the triggering head.
+      # Only the default branch's reviewed controller is executable.
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.repository.default_branch }}
+          persist-credentials: false
+      - name: Offline fail-closed claim release controls
+        run: |
+          set -euo pipefail
+          python3 -m py_compile scripts/fsem_claim.py scripts/test_fsem_claim.py
+          python3 scripts/test_fsem_claim.py
+      - name: Reconcile only uniquely merged exact-claim branches
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          RECOVERY_PR: ${{ inputs.pr }}
+          RECOVERY_EXPECTED_SHA: ${{ inputs.expected_claim_sha }}
+        run: |
+          set -euo pipefail
+          if [[ -n "$RECOVERY_PR" || -n "$RECOVERY_EXPECTED_SHA" ]]; then
+            if [[ -z "$RECOVERY_PR" || -z "$RECOVERY_EXPECTED_SHA" ]]; then
+              echo "::error::Manual recovery requires both PR number and expected claim SHA"
+              exit 2
+            fi
+            python3 scripts/fsem_claim.py recover \
+              --pr "$RECOVERY_PR" --expected-claim-sha "$RECOVERY_EXPECTED_SHA"
+          else
+            python3 scripts/fsem_claim.py reconcile
+          fi

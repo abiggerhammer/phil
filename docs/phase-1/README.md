@@ -16,6 +16,7 @@ The important exceptions are documents that explicitly declare themselves curren
 ## CI operational safety
 
 - [PR-head workflow supersession policy](pr-head-ci-supersession-policy-v1.md) — bounded migration of the highest-traffic PR checks to cancellation-safe concurrency groups, with automated guard tests and explicit exceptions for main/release and coordination workflows.
+- [FSEM claim-release recovery](fsem-claim-release-recovery-v1.md) — independent trusted reconciliation when a close-event release fails before any job starts; includes exact merged-PR safeguards and manual fallback.
 
 ## Entry points for formal-methods review
 
