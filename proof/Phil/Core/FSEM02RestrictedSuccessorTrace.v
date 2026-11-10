@@ -74,7 +74,7 @@ Proof.
     HsenderClose HreceiverClose HreceiverFirst HsenderSecond)
     as [HsenderGone [HreceiverGone [HforwardPayload
       [HreversePayload [HcloseFrame Hdiamond]]]]].
-  repeat split.
+  repeat (apply conj).
   - exact Hsource.
   - exact Hmessage.
   - exact Hheads.
