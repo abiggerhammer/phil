@@ -737,7 +737,7 @@ choiceCloseDiamondBadPeer client server = do
       (GrammarV1StatefulChoiceExplicitPeerCloseCoreError
         (EndpointClosureProtocolError process
           (ProtocolSessionError (CloseOutcomeMismatch
-            (Outcome "Done") (Outcome "Cancel"))))))) ->
+            (Outcome "Done") (Outcome "Cancel")))))) ->
       assert (process == fxServerProcess fx) "wrong peer outcome named wrong process"
     other -> Left ("wrong peer outcome silently reached diamond: " <> show other)
 
@@ -902,7 +902,7 @@ choiceSourceTraceWrongPeerOutcome client server = do
         (GrammarV1StatefulChoiceExplicitPeerCloseCoreError
           (EndpointClosureProtocolError process
             (ProtocolSessionError (CloseOutcomeMismatch
-              (Outcome "Done") (Outcome "Cancel")))))) ->
+              (Outcome "Done") (Outcome "Cancel"))))))) ->
       assert (process == fxServerProcess fx)
         "wrong peer End authority lost exact server process classification"
     other -> Left ("wrong externally supplied peer End outcome was accepted: " <> show other)
