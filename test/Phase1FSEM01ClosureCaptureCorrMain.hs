@@ -11,7 +11,7 @@ import Phil.Core.CallableScope (CallableScopeError (..), ClosureExtent (..))
 import Phil.Core.Static (DeclarationKey (..), emptyStaticContext)
 import Phil.Core.Syntax (Mode (..))
 import Phil.Surface.GrammarV1.BinderScope
-  (GrammarV1BinderScopeError (..), GrammarV1ResolvedBinder (..))
+  (GrammarV1BinderScopeError (..))
 import Phil.Surface.GrammarV1.Parser
   (GrammarV1FunctionDecl, GrammarV1SourceFile (..),
    GrammarV1TopLevelDecl (..), GrammarV1Declaration (..),
