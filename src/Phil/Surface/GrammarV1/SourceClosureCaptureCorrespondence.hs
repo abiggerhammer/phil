@@ -75,9 +75,9 @@ verifyDirectCaptureCuts run =
         case nativeSummary of
           Just (Right summary) ->
             directSummary run == Just summary && cut == nativeCuts &&
-            case nativeResult of
+            (case nativeResult of
               Right next -> directFinal run == Just next
-              Left _ -> False
+              Left _ -> False)
           _ -> False
       Left (SourceClosureCaptureError err) ->
         directFailureStage run == Just ClosureCaptureValidation &&
@@ -127,7 +127,7 @@ verifyBorrowCaptureCuts run =
             baseCuts = borrowCuts run == [initial, loaned]
             scoped = checkClosureCaptureScope
               callable (borrowExtent run) [captured]
-        in started && case borrowOutcome run of
+        in started && (case borrowOutcome run of
           Right () ->
             borrowFailureStage run == Nothing &&
             scoped == Right () &&
@@ -150,4 +150,4 @@ verifyBorrowCaptureCuts run =
             borrowFailureStage run == Just ClosureLoanClose &&
             borrowClosed run == Nothing && baseCuts &&
             Core.endSharedLoan owner loaned == Left err
-          _ -> False
+          _ -> False)
