@@ -773,7 +773,7 @@ choiceCloseDiamondStale client server = do
         (GrammarV1StatefulChoiceClientCloseSourceError
           (GrammarV1StatefulChoiceSourceError
             (GrammarV1JointChoiceOfferSourceError
-              (GrammarV1OfferReplayProtocolError (ProtocolEndpointUnknown endpoint)))))) ->
+              (GrammarV1OfferReplayProtocolError (ProtocolEndpointUnknown endpoint))))))) ->
       assert (endpoint == fxServerOld fx) "stale predecessor named wrong endpoint"
     other -> Left ("stale predecessor unexpectedly reached diamond: " <> show other)
 
