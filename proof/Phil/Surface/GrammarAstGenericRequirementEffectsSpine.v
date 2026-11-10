@@ -297,7 +297,7 @@ Proof.
       try discriminate Hnormalize.
     inversion Hnormalize; subst refined.
     cbn.
-    rewrite
+    rewrite <-
       (phase1_surface_normalize_effects_requirement_payload_round_trip
         selected name_tree effects Heffects).
     reflexivity.
