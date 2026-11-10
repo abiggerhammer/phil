@@ -865,12 +865,12 @@ sourceSuccessorTraceRejectedSource fx rejected = do
 
 sourceSuccessorTraceWrongOccurrence :: Fixture -> Either String ()
 sourceSuccessorTraceWrongOccurrence fx =
-  let foreign = ActivationOccurrenceKey "fsem02.external.foreign.endpoint"
+  let unexpectedOccurrence = ActivationOccurrenceKey "fsem02.external.foreign.endpoint"
   in case sourceSuccessorTraceFrom fx (fxSender fx) (fxReceiver fx)
-      foreign serverEndpointOccurrence of
+      unexpectedOccurrence serverEndpointOccurrence of
     Left (RestrictedSuccessorTracePredecessorMismatch
       occurrence expected Nothing) ->
-        assert (occurrence == foreign
+        assert (occurrence == unexpectedOccurrence
              && expected == (fxClientProcess fx, fxClientOld fx))
           "foreign occurrence rejection lost exact checked source predecessor"
     other -> Left ("invented external endpoint occurrence entered successor trace: " <> show other)
