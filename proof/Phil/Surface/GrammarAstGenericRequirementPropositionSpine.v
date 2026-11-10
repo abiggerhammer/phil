@@ -285,7 +285,7 @@ Proof.
       as [proposition |] eqn:Hproposition; try discriminate Hnormalize.
     inversion Hnormalize; subst refined.
     cbn.
-    rewrite
+    rewrite <-
       (phase1_surface_normalize_proposition_requirement_payload_round_trip
         "proposition" selected proposition Hproposition).
     reflexivity.
@@ -302,7 +302,7 @@ Proof.
       as [proposition |] eqn:Hproposition; try discriminate Hnormalize.
     inversion Hnormalize; subst refined.
     cbn.
-    rewrite
+    rewrite <-
       (phase1_surface_normalize_proposition_requirement_payload_round_trip
         "representation" selected proposition Hproposition).
     reflexivity.
@@ -312,7 +312,7 @@ Proof.
       as [proposition |] eqn:Hproposition; try discriminate Hnormalize.
     inversion Hnormalize; subst refined.
     cbn.
-    rewrite
+    rewrite <-
       (phase1_surface_normalize_proposition_requirement_payload_round_trip
         "placement" selected proposition Hproposition).
     reflexivity.
@@ -322,7 +322,7 @@ Proof.
       as [proposition |] eqn:Hproposition; try discriminate Hnormalize.
     inversion Hnormalize; subst refined.
     cbn.
-    rewrite
+    rewrite <-
       (phase1_surface_normalize_proposition_requirement_payload_round_trip
         "cost" selected proposition Hproposition).
     reflexivity.
@@ -332,7 +332,7 @@ Proof.
       as [proposition |] eqn:Hproposition; try discriminate Hnormalize.
     inversion Hnormalize; subst refined.
     cbn.
-    rewrite
+    rewrite <-
       (phase1_surface_normalize_proposition_requirement_payload_round_trip
         "environment" selected proposition Hproposition).
     reflexivity.
