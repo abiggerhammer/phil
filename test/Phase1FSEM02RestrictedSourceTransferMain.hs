@@ -60,6 +60,11 @@ main = do
           , sourceCloseWrongHead fx
           , sourceCloseWrongRole fx
           , sourceCloseDiamondReplay fx
+          , sourceSuccessorTraceReplay fx
+          , sourceSuccessorTraceAlphaRename fx accepted
+          , sourceSuccessorTraceRejectedSource fx rejected
+          , sourceSuccessorTraceWrongOccurrence fx
+          , sourceSuccessorTraceAliasedOccurrence fx
           , sourceCloseDiamondRejectedSource fx rejected
           , sourceCloseDiamondStalePredecessor fx
           , sourceCloseDiamondWrongSessionHead fx
@@ -765,6 +770,117 @@ sourceCloseDiamondReplay fx = do
        && Map.notMember (fxClientNext fx) (protocolEndpoints senderContext)
        && Map.notMember (fxServerNext fx) (protocolEndpoints receiverContext))
     "restricted diamond disposed the payload/spectator or retained End heads"
+
+
+-- Separately project an end-to-end EXACT finite source-derived owner trace
+-- through the new production adapter. No root or payload-disposition authority
+-- is inferred from the local source close.
+sourceSuccessorTraceFrom
+  :: Fixture -> GrammarV1ComponentDecl -> GrammarV1ComponentDecl
+  -> ActivationOccurrenceKey -> ActivationOccurrenceKey
+  -> Either GrammarV1RestrictedSourceSuccessorTraceError
+       GrammarV1RestrictedSourceSuccessorTrace
+sourceSuccessorTraceFrom fx sender receiver senderOccurrence receiverOccurrence =
+  grammarV1CheckRestrictedSourceSuccessorTrace
+    emptyStaticContext senderRoot sender receiverRoot receiver
+    (fxInstance fx) clientRole serverRole
+    (fxClientProcess fx) (fxServerProcess fx)
+    senderOccurrence receiverOccurrence payloadOccurrence
+    (fxNetwork fx) (fxBefore fx) doneOutcome doneOutcome
+
+sourceSuccessorTraceReplay :: Fixture -> Either String ()
+sourceSuccessorTraceReplay fx = do
+  trace <- mapLeft show $
+    sourceSuccessorTraceFrom fx (fxSender fx) (fxReceiver fx)
+      clientEndpointOccurrence serverEndpointOccurrence
+  again <- mapLeft show $
+    sourceSuccessorTraceFrom fx (fxSender fx) (fxReceiver fx)
+      clientEndpointOccurrence serverEndpointOccurrence
+  diamond <- mapLeft show $
+    sourceCloseDiamondFrom fx (fxSender fx) (fxReceiver fx)
+      (fxBefore fx) doneOutcome doneOutcome
+  let before = communicationRestrictedOwners (fxBefore fx)
+      next = restrictedSuccessorTraceRendezvousOwners trace
+      terminal = restrictedSuccessorTraceTerminalOwners trace
+      expectedNext = Map.insert payloadOccurrence
+        (fxServerProcess fx, fxPayloadReceiver fx)
+        (Map.insert clientEndpointOccurrence
+          (fxClientProcess fx, fxClientNext fx)
+          (Map.insert serverEndpointOccurrence
+            (fxServerProcess fx, fxServerNext fx) before))
+  assert (trace == again
+       && restrictedSuccessorTraceDiamond trace == diamond
+       && next == expectedNext
+       && terminal == Map.delete clientEndpointOccurrence
+           (Map.delete serverEndpointOccurrence expectedNext)
+       && Map.lookup spectatorOccurrence next ==
+           Map.lookup spectatorOccurrence before
+       && Map.lookup spectatorOccurrence terminal ==
+           Map.lookup spectatorOccurrence before
+       && Map.lookup payloadOccurrence terminal ==
+           Just (fxServerProcess fx, fxPayloadReceiver fx))
+    "source-derived successor trace lost predecessor/successor identity, payload or spectator"
+
+-- Alpha-renaming source display spelling without changing declaration-rooted
+-- binder ordinal MUST keep the semantic successor and native Core state.
+-- This is one checked fixture, not universal alpha-equivalence.
+sourceSuccessorTraceAlphaRename :: Fixture -> Text -> Either String ()
+sourceSuccessorTraceAlphaRename fx accepted = do
+  let changed = Text.replace
+        "let done = send payload on endpoint;\n  close done;"
+        "let successor = send payload on endpoint;\n  close successor;"
+        accepted
+  assert (changed /= accepted) "alpha-renaming fixture did not change source"
+  (_, renamedSender, _) <- parseParts changed
+  checkedSender <- case grammarV1CheckedComponentSendClose senderRoot renamedSender of
+    Just (Right result) -> Right result
+    other -> Left ("renamed source no longer checks: " <> show other)
+  assert (grammarV1ResolvedBinderDisplayName
+            (checkedComponentSendSuccessor checkedSender) == "successor"
+       && grammarV1ResolvedBinderCoreName
+            (checkedComponentSendSuccessor checkedSender) == fxClientNext fx)
+    "alpha-renamed successor changed its declaration-rooted semantic identity"
+  renamedTrace <- mapLeft show $
+    sourceSuccessorTraceFrom fx renamedSender (fxReceiver fx)
+      clientEndpointOccurrence serverEndpointOccurrence
+  originalTrace <- mapLeft show $
+    sourceSuccessorTraceFrom fx (fxSender fx) (fxReceiver fx)
+      clientEndpointOccurrence serverEndpointOccurrence
+  assert (restrictedSuccessorTraceRendezvousOwners renamedTrace ==
+            restrictedSuccessorTraceRendezvousOwners originalTrace
+       && restrictedSuccessorTraceTerminalOwners renamedTrace ==
+            restrictedSuccessorTraceTerminalOwners originalTrace)
+    "alpha-renamed source changed native successor/terminal owner trace"
+
+sourceSuccessorTraceRejectedSource :: Fixture -> Text -> Either String ()
+sourceSuccessorTraceRejectedSource fx rejected = do
+  (_, badSender, _) <- parseParts rejected
+  case sourceSuccessorTraceFrom fx badSender (fxReceiver fx)
+      clientEndpointOccurrence serverEndpointOccurrence of
+    Left (RestrictedSuccessorTraceDiamondError
+      (RestrictedSourceCloseDiamondRendezvousError
+        (RestrictedSourceSendError
+          (GrammarV1ComponentSendCloseCloseMismatch _ _)))) -> Right ()
+    other -> Left ("minimally rejected source acquired a successor trace: " <> show other)
+
+sourceSuccessorTraceWrongOccurrence :: Fixture -> Either String ()
+sourceSuccessorTraceWrongOccurrence fx =
+  let foreign = ActivationOccurrenceKey "fsem02.external.foreign.endpoint"
+  in case sourceSuccessorTraceFrom fx (fxSender fx) (fxReceiver fx)
+      foreign serverEndpointOccurrence of
+    Left (RestrictedSuccessorTracePredecessorMismatch
+      occurrence expected Nothing) ->
+        assert (occurrence == foreign
+             && expected == (fxClientProcess fx, fxClientOld fx))
+          "foreign occurrence rejection lost exact checked source predecessor"
+    other -> Left ("invented external endpoint occurrence entered successor trace: " <> show other)
+
+sourceSuccessorTraceAliasedOccurrence :: Fixture -> Either String ()
+sourceSuccessorTraceAliasedOccurrence fx =
+  case sourceSuccessorTraceFrom fx (fxSender fx) (fxReceiver fx)
+      payloadOccurrence serverEndpointOccurrence of
+    Left RestrictedSuccessorTraceAliasedOccurrence -> Right ()
+    other -> Left ("aliased payload and endpoint occurrence entered trace: " <> show other)
 
 sourceCloseDiamondRejectedSource :: Fixture -> Text -> Either String ()
 sourceCloseDiamondRejectedSource fx rejected = do
