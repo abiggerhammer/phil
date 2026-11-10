@@ -90,3 +90,8 @@ source-to-Rocq refinement/evidence before the family is considered complete.
 Focused pre-PR checks: `.github/workflows/fsem02-exact-head-preflight.yml`
 (2 independent Haskell and Rocq 9.2 jobs). Any PR must also pass exact-head
 claim-guard, branch protections and all applicable CI.
+
+
+### Additional bounded terminal peer step (FSEM-02)
+
+[Explicit Server End Core close after checked Client choice/close](formal-semantics-explicit-peer-close-fsem02-v1.md) separately requires externally supplied Server terminal authority; an offer arm's `return unit` does not count as source endpoint closure, process/root completion, or normative semantics.

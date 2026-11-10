@@ -61,6 +61,11 @@ main = do
     , test "stale select/offer predecessor cannot authorize another close" (choiceClientCloseStale go offer)
     , test "missing activation client owner blocks source close" (choiceClientCloseMissingOwner go offer)
     , test "client endpoint cannot be closed twice" (choiceClientCloseTwice go offer)
+    , test "Go explicit peer End closure retires both terminal owners" (choiceExplicitPeerAccepted go offer "Go" (Outcome "Done"))
+    , test "Cancel explicit peer End closure preserves separate outcome" (choiceExplicitPeerAccepted cancel offer "Cancel" (Outcome "Cancel"))
+    , test "external server wrong End outcome rejects exact Core class" (choiceExplicitPeerWrongOutcome go offer)
+    , test "unsupported source offer body rejects before any terminal pair" (choiceExplicitPeerWrongBody go offer wrongBody)
+    , test "externally closed server endpoint cannot close twice" (choiceExplicitPeerTwice go offer)
     ]
   if and outcomes then pure () else exitFailure
 
@@ -555,6 +560,103 @@ choiceClientCloseTwice client server = do
       assert (process == fxClientProcess fx && endpoint == fxClientNext fx)
         "duplicate close lost its exact endpoint/process"
     other -> Left ("second close returned a successor: " <> show other)
+
+-- The offer arm returns unit and cannot authorize this action. The second
+-- Outcome is an independent, explicit trusted caller input checked by Core.
+choiceExplicitPeerFrom
+  :: Fixture -> Text -> Outcome -> Outcome -> ProcessCommunicationState
+  -> Either GrammarV1StatefulChoiceExplicitPeerCloseError
+       GrammarV1StatefulChoiceExplicitPeerClose
+choiceExplicitPeerFrom fx label clientOutcome peerOutcome state =
+  grammarV1CloseStatefulSourceChoiceExplicitPeer
+    clientRoot (fxClient fx) serverRoot (fxServer fx) (fxInstance fx)
+    clientRole serverRole (fxClientProcess fx) (fxServerProcess fx)
+    serverNext label (fxNetwork fx) state clientOutcome peerOutcome
+
+choiceExplicitPeer
+  :: Fixture -> Text -> Outcome -> Outcome
+  -> Either GrammarV1StatefulChoiceExplicitPeerCloseError
+       GrammarV1StatefulChoiceExplicitPeerClose
+choiceExplicitPeer fx label clientOutcome peerOutcome =
+  choiceExplicitPeerFrom fx label clientOutcome peerOutcome (fxState fx)
+
+choiceExplicitPeerAccepted :: Text -> Text -> Text -> Outcome -> Either String ()
+choiceExplicitPeerAccepted client server label outcome = do
+  fx <- fixture client server
+  result <- mapLeft show $ choiceExplicitPeer fx label outcome outcome
+  repeatResult <- mapLeft show $ choiceExplicitPeer fx label outcome outcome
+  assert (result == repeatResult) "explicit peer terminal replay is nondeterministic"
+  let afterClient = statefulChoiceClientCloseSuccessor
+        (statefulChoiceExplicitPeerCloseClient result)
+      final = statefulChoiceExplicitPeerCloseSuccessor result
+      owners = communicationRestrictedOwners final
+      beforeOwners = communicationRestrictedOwners (fxState fx)
+      contexts = communicationProtocolContexts final
+      revision = binaryProtocolInstanceRevision (fxInstance fx)
+  independent <- mapLeft show $
+    closeProcessEndpointState (fxNetwork fx) afterClient
+      (fxServerProcess fx) serverNext revision serverRole outcome
+  assert (final == independent)
+    "explicit peer terminal replay diverged from native Core close"
+  assert (Map.lookup clientOccurrence owners == Nothing
+       && Map.lookup serverOccurrence owners == Nothing
+       && Map.lookup spectatorOccurrence owners ==
+            Map.lookup spectatorOccurrence beforeOwners
+       && Map.keysSet owners ==
+            Map.keysSet (Map.delete clientOccurrence
+              (Map.delete serverOccurrence beforeOwners)))
+    "terminal pair retired wrong owners or changed unrelated spectator"
+  clientContext <- maybe (Left "client context vanished") Right
+    (Map.lookup (fxClientProcess fx) contexts)
+  serverContext <- maybe (Left "server context vanished") Right
+    (Map.lookup (fxServerProcess fx) contexts)
+  assert (Map.notMember (fxClientNext fx) (protocolEndpoints clientContext)
+       && Map.notMember serverNext (protocolEndpoints serverContext)
+       && Map.notMember (fxClientNext fx)
+            (linearBindings (protocolResources clientContext))
+       && Map.notMember serverNext
+            (linearBindings (protocolResources serverContext)))
+    "terminal pair retained a closed protocol or linear resource"
+
+choiceExplicitPeerWrongOutcome :: Text -> Text -> Either String ()
+choiceExplicitPeerWrongOutcome client server = do
+  fx <- fixture client server
+  case choiceExplicitPeer fx "Go" (Outcome "Done") (Outcome "Cancel") of
+    Left (GrammarV1StatefulChoiceExplicitPeerCloseCoreError
+      (EndpointClosureProtocolError process
+        (ProtocolSessionError (CloseOutcomeMismatch
+          (Outcome "Done") (Outcome "Cancel"))))) ->
+      assert (process == fxServerProcess fx)
+        "wrong peer End outcome lost the rejecting Server process"
+    other -> Left ("wrong peer outcome unexpectedly advanced: " <> show other)
+
+choiceExplicitPeerWrongBody :: Text -> Text -> Text -> Either String ()
+choiceExplicitPeerWrongBody client server bad = do
+  fx <- fixture client server
+  (_, badServer) <- parsePair bad
+  case choiceExplicitPeer (fx { fxServer = badServer })
+      "Go" (Outcome "Done") (Outcome "Done") of
+    Left (GrammarV1StatefulChoiceExplicitPeerClosePriorError
+      (GrammarV1StatefulChoiceClientCloseSourceError
+        (GrammarV1StatefulChoiceSourceError
+          (GrammarV1JointChoiceOfferSourceError
+            (GrammarV1OfferReplayCoverageError GrammarV1ComponentOfferArmBodyUnsupported))))) ->
+      Right ()
+    other -> Left ("bad source arm unexpectedly authorized terminal pair: " <> show other)
+
+choiceExplicitPeerTwice :: Text -> Text -> Either String ()
+choiceExplicitPeerTwice client server = do
+  fx <- fixture client server
+  result <- mapLeft show $
+    choiceExplicitPeer fx "Go" (Outcome "Done") (Outcome "Done")
+  let final = statefulChoiceExplicitPeerCloseSuccessor result
+      revision = binaryProtocolInstanceRevision (fxInstance fx)
+  case closeProcessEndpointState (fxNetwork fx) final
+      (fxServerProcess fx) serverNext revision serverRole (Outcome "Done") of
+    Left (EndpointClosureOccurrenceUnknown process endpoint) ->
+      assert (process == fxServerProcess fx && endpoint == serverNext)
+        "stale server close lost precise endpoint/process evidence"
+    other -> Left ("duplicate Server End closure advanced: " <> show other)
 
 branches :: [Branch]
 branches =
