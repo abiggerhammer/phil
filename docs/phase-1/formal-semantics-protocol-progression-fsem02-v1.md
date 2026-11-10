@@ -95,3 +95,7 @@ claim-guard, branch protections and all applicable CI.
 ### Additional bounded terminal peer step (FSEM-02)
 
 [Explicit Server End Core close after checked Client choice/close](formal-semantics-explicit-peer-close-fsem02-v1.md) separately requires externally supplied Server terminal authority; an offer arm's `return unit` does not count as source endpoint closure, process/root completion, or normative semantics.
+
+### Additional bounded terminal order evidence (FSEM-02)
+
+[Source-checked, explicitly authorized terminal End close order diamond](formal-semantics-terminal-close-diamond-fsem02-v1.md) independently replays Client-then-Server and Server-then-Client native Core closes, and accepts only complete successor equality. Server endpoint disposal remains externally supplied, not source `return unit` authority. This is finite checked conformance and a conditional owner-ledger theorem, not universal refinement or FSEM-02 completion.
