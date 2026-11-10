@@ -237,7 +237,7 @@ Proof.
       as [actual |] eqn:Heffects; try discriminate Hnormalize.
     inversion Hnormalize; subst refined.
     cbn.
-    rewrite
+    rewrite <-
       (phase1_surface_normalize_effect_set_expression_outer_spine_round_trip
         effects actual Heffects).
     reflexivity.
