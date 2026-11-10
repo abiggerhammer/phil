@@ -6,19 +6,27 @@ module Phil.Surface.GrammarV1.ComponentChoiceStatefulRendezvous
   ( GrammarV1StatefulChoiceError (..)
   , GrammarV1StatefulChoice (..)
   , grammarV1CheckStatefulSourceChoice
+  , GrammarV1StatefulChoiceClientCloseError (..)
+  , GrammarV1StatefulChoiceClientClose (..)
+  , grammarV1CloseStatefulSourceChoiceClient
   ) where
 
 import Data.Text (Text)
 import Phil.Core.Process (ProcessKey, ProcessNetwork)
+import Phil.Core.ProcessEndpointClosure
+  ( ProcessEndpointClosureError, closeProcessEndpointState )
 import Phil.Core.ProcessRendezvous
   ( ProcessCommunicationState (..)
   , ProcessRendezvousError
   , checkProcessCommunicationState
   )
 import Phil.Core.Protocol (ProtocolRoleKey)
-import Phil.Core.Protocol.Family (BinaryProtocolInstance)
+import Phil.Core.Protocol.Family (BinaryProtocolInstance (..))
 import Phil.Core.Static (DeclarationKey)
-import Phil.Core.Syntax (Name)
+import Phil.Core.Syntax (Name, Outcome)
+import Phil.Surface.GrammarV1.BinderScope (GrammarV1ResolvedBinder (..))
+import Phil.Surface.GrammarV1.ComponentSelectClose
+  ( GrammarV1CheckedComponentSelectClose (..) )
 import Phil.Surface.GrammarV1.ComponentChoiceRendezvous
   ( GrammarV1ChoiceRendezvous (..)
   , GrammarV1ChoiceRendezvousError
@@ -75,6 +83,67 @@ grammarV1CheckStatefulSourceChoice clientRoot clientSource offerRoot offerSource
       , statefulChoiceSuccessor = advanced
       }
     else Left GrammarV1StatefulChoiceContextDivergence
+
+
+-- | The selected client's literal source 'close chosen' is actually executed
+-- after a newly checked two-party stateful choice. The server's 'return unit'
+-- arm is deliberately NOT interpreted as a peer endpoint close.
+data GrammarV1StatefulChoiceClientCloseError
+  = GrammarV1StatefulChoiceClientCloseSourceError GrammarV1StatefulChoiceError
+  | GrammarV1StatefulChoiceClientCloseCoreError ProcessEndpointClosureError
+  deriving (Eq, Show)
+
+data GrammarV1StatefulChoiceClientClose = GrammarV1StatefulChoiceClientClose
+  { statefulChoiceClientCloseSourceReplay :: GrammarV1StatefulChoice
+  , statefulChoiceClientCloseEndpoint :: Name
+  , statefulChoiceClientCloseSuccessor :: ProcessCommunicationState
+  }
+  deriving (Eq, Show)
+
+-- | The caller supplies the initial activation-derived communication state,
+-- checked instance, roles, process network, peer choice and terminal outcome.
+-- Source checking resolves the exact selected successor / close operand.
+-- The native Core stateful rendezvous and endpoint close both replay from
+-- that input; no cached successor or source-derived nominal/root authority
+-- is trusted. A failed close returns no progressed communication state.
+grammarV1CloseStatefulSourceChoiceClient
+  :: DeclarationKey
+  -> GrammarV1ComponentDecl
+  -> DeclarationKey
+  -> GrammarV1ComponentDecl
+  -> BinaryProtocolInstance
+  -> ProtocolRoleKey
+  -> ProtocolRoleKey
+  -> ProcessKey
+  -> ProcessKey
+  -> Name
+  -> Text
+  -> ProcessNetwork
+  -> ProcessCommunicationState
+  -> Outcome
+  -> Either GrammarV1StatefulChoiceClientCloseError
+       GrammarV1StatefulChoiceClientClose
+grammarV1CloseStatefulSourceChoiceClient
+    clientRoot clientSource offerRoot offerSource instanceValue
+    clientRole offerRole clientProcess offerProcess offeredSuccessor peerLabel
+    network initialState outcome = do
+  progressed <- mapLeft GrammarV1StatefulChoiceClientCloseSourceError $
+    grammarV1CheckStatefulSourceChoice
+      clientRoot clientSource offerRoot offerSource instanceValue
+      clientRole offerRole clientProcess offerProcess offeredSuccessor
+      peerLabel network initialState
+  let selected = jointChoiceSelectedSource (statefulChoiceSourceReplay progressed)
+      clientSuccessor = grammarV1ResolvedBinderCoreName
+        (checkedComponentSelectSuccessor selected)
+  closed <- mapLeft GrammarV1StatefulChoiceClientCloseCoreError $
+    closeProcessEndpointState network (statefulChoiceSuccessor progressed)
+      clientProcess clientSuccessor (binaryProtocolInstanceRevision instanceValue)
+      clientRole outcome
+  pure GrammarV1StatefulChoiceClientClose
+    { statefulChoiceClientCloseSourceReplay = progressed
+    , statefulChoiceClientCloseEndpoint = clientSuccessor
+    , statefulChoiceClientCloseSuccessor = closed
+    }
 
 mapLeft :: (a -> b) -> Either a c -> Either b c
 mapLeft f = either (Left . f) Right

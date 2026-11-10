@@ -80,3 +80,6 @@ general send/receive payload transfer, source offer-arm execution,
 source-to-Core elaboration preservation, network scheduling, unrestricted
 process progress, nor normative semantic graduation is established. FSEM-02,
 FSEM-05/06/07, and architecture/assurance obligations remain open.
+
+
+For the distinct, still-open source-choice terminal endpoint obligation, see [the bounded selected-client close bridge](formal-semantics-selected-client-close-fsem02-v1.md). This consumes only the source-selected client's End endpoint after stateful joint choice, **not** the offerer's unit-return arm or the architecture root.
