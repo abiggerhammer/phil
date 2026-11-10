@@ -4,13 +4,13 @@
 -- Does NOT implement whole-source callable elaboration or target conversion.
 module Phil.Surface.GrammarV1.SourceClosureCapture
   ( SourceClosureError (..)
+  , SourceClosureFailureStage (..)
   , SourceDirectClosureRun (..)
   , SourceBorrowClosureRun (..)
   , grammarV1SourceDirectClosure
   , grammarV1SourceBorrowClosure
   ) where
 
-import Control.Monad (foldM)
 import qualified Data.Map.Strict as Map
 import qualified Phil.Core.Context as Core
 import Phil.Core.Callable
@@ -51,11 +51,27 @@ data SourceClosureError
   | SourceClosureTypeModeMismatch Name Mode Mode
   deriving (Eq, Show)
 
+-- | Exact failing gate in the bounded C-1 producer, never a normative
+-- source-invalidity verdict for an out-of-fragment shape. Lexical binder
+-- failures occur before a Source*Run exists at all.
+data SourceClosureFailureStage
+  = ClosureCaptureValidation
+  | ClosureModeValidation
+  | ClosureNativeUse
+  | ClosureLoanStart
+  | ClosureLoanScope
+  | ClosureLoanClose
+  deriving (Eq, Show)
+
 data SourceDirectClosureRun = SourceDirectClosureRun
   { directParameters :: [GrammarV1ResolvedBinder]
   , directCaptures :: [GrammarV1ResolvedBinder]
   , directInitial :: Core.ResourceContext
   , directSummary :: Maybe ClosureCaptureSummary
+  -- | Exact native resource contexts: initial and each successful useBinding.
+  -- A rejected use preserves its successful prefix, NOT an invented successor.
+  , directCuts :: [Core.ResourceContext]
+  , directFailureStage :: Maybe SourceClosureFailureStage
   , directFinal :: Maybe Core.ResourceContext
   , directOutcome :: Either SourceClosureError ()
   } deriving (Eq, Show)
@@ -65,6 +81,9 @@ data SourceBorrowClosureRun = SourceBorrowClosureRun
   , borrowView :: GrammarV1ResolvedBinder
   , borrowExtent :: ClosureExtent
   , borrowInitial :: Core.ResourceContext
+  -- | Native initial, successful loan-start, and (only on success) loan-close.
+  , borrowCuts :: [Core.ResourceContext]
+  , borrowFailureStage :: Maybe SourceClosureFailureStage
   , borrowStarted :: Maybe Core.ResourceContext
   , borrowClosed :: Maybe Core.ResourceContext
   , borrowOutcome :: Either SourceClosureError ()
@@ -117,27 +136,50 @@ runDirect typed resolved closure =
         , directCaptures = resolved
         , directInitial = initial
         , directSummary = Nothing
+        , directCuts = [initial]
+        , directFailureStage = Nothing
         , directFinal = Nothing
         , directOutcome = Right () }
       descriptions = map (makeCapture typed) resolved
   in case sequence descriptions of
-    Nothing -> start { directOutcome = Left
-      (SourceClosureModeMismatch Unrestricted Linear) }
+    Nothing -> start
+      { directFailureStage = Just ClosureCaptureValidation
+      , directOutcome = Left (SourceClosureModeMismatch Unrestricted Linear) }
     Just captures ->
       case checkClosureCaptures captures of
         Left err -> start
-          { directOutcome = Left (SourceClosureCaptureError err) }
+          { directFailureStage = Just ClosureCaptureValidation
+          , directOutcome = Left (SourceClosureCaptureError err) }
         Right summary ->
           let observed = start { directSummary = Just summary }
               requiredMode = closureMinimumStructuralMode summary
           in case sourceMode (grammarV1ClosureMode closure) of
             Just declared | declared /= requiredMode -> observed
-              { directOutcome = Left
+              { directFailureStage = Just ClosureModeValidation
+              , directOutcome = Left
                   (SourceClosureModeMismatch requiredMode declared) }
-            _ -> case foldM (consumeCapture typed) initial resolved of
-              Left err -> observed { directOutcome = Left err }
-              Right final -> observed
-                { directFinal = Just final, directOutcome = Right () }
+            _ -> case replayCaptureSteps typed initial resolved of
+              (cuts, Left err) -> observed
+                { directCuts = cuts
+                , directFailureStage = Just ClosureNativeUse
+                , directOutcome = Left err }
+              (cuts, Right final) -> observed
+                { directCuts = cuts, directFinal = Just final
+                , directOutcome = Right () }
+
+-- | Record only contexts actually returned by native Core.useBinding.
+-- In particular the failed step has no successor and cannot appear in cuts.
+replayCaptureSteps
+  :: [(GrammarV1ResolvedBinder, CheckedTypeMode)]
+  -> Core.ResourceContext -> [GrammarV1ResolvedBinder]
+  -> ([Core.ResourceContext], Either SourceClosureError Core.ResourceContext)
+replayCaptureSteps typed initial = go initial [initial]
+  where
+    go ctx reversed [] = (reverse reversed, Right ctx)
+    go ctx reversed (binder : rest) =
+      case consumeCapture typed ctx binder of
+        Left err -> (reverse reversed, Left err)
+        Right next -> go next (next : reversed) rest
 
 -- | Source shape: borrow payload as view {
 --   closure mode unrestricted () satisfies OneShot captures(view) { unit; };
@@ -205,32 +247,41 @@ runBorrow typed owner view isEscape closure =
         else ClosureContainedIn loanKey
       start = SourceBorrowClosureRun
         { borrowOwner = owner, borrowView = view, borrowExtent = extent
-        , borrowInitial = initial, borrowStarted = Nothing
+        , borrowInitial = initial, borrowCuts = [initial]
+        , borrowFailureStage = Nothing, borrowStarted = Nothing
         , borrowClosed = Nothing, borrowOutcome = Right () }
   in case Core.startSharedLoan ownerName initial of
-    Left err -> start { borrowOutcome = Left (SourceClosureCoreError err) }
+    Left err -> start
+      { borrowFailureStage = Just ClosureLoanStart
+      , borrowOutcome = Left (SourceClosureCoreError err) }
     Right loaned ->
-      let begun = start { borrowStarted = Just loaned }
+      let begun = start
+            { borrowStarted = Just loaned, borrowCuts = [initial, loaned] }
           capture = ClosureCapture captureKey CopyCapture Unrestricted
       in case checkClosureCaptures [capture] of
         Left err -> begun
-          { borrowOutcome = Left (SourceClosureCaptureError err) }
+          { borrowFailureStage = Just ClosureCaptureValidation
+          , borrowOutcome = Left (SourceClosureCaptureError err) }
         Right summary ->
           case sourceMode (grammarV1ClosureMode closure) of
             Just declared
               | declared /= closureMinimumStructuralMode summary ->
-                  begun { borrowOutcome = Left
-                    (SourceClosureModeMismatch
-                      (closureMinimumStructuralMode summary) declared) }
+                  begun { borrowFailureStage = Just ClosureModeValidation
+                    , borrowOutcome = Left
+                        (SourceClosureModeMismatch
+                          (closureMinimumStructuralMode summary) declared) }
             _ -> case checkClosureCaptureScope closureKey extent
                 [ScopedSharedLoanCapture captureKey loanKey] of
               Left err -> begun
-                { borrowOutcome = Left (SourceClosureScopeError err) }
+                { borrowFailureStage = Just ClosureLoanScope
+                , borrowOutcome = Left (SourceClosureScopeError err) }
               Right () -> case Core.endSharedLoan ownerName loaned of
                 Left err -> begun
-                  { borrowOutcome = Left (SourceClosureCoreError err) }
+                  { borrowFailureStage = Just ClosureLoanClose
+                  , borrowOutcome = Left (SourceClosureCoreError err) }
                 Right closed -> begun
-                  { borrowClosed = Just closed, borrowOutcome = Right () }
+                  { borrowCuts = [initial, loaned, closed]
+                  , borrowClosed = Just closed, borrowOutcome = Right () }
 
 sourceParameters
   :: StaticContext -> GrammarV1FunctionDecl
