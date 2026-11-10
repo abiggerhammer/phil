@@ -66,6 +66,13 @@ main = do
     , test "external server wrong End outcome rejects exact Core class" (choiceExplicitPeerWrongOutcome go offer)
     , test "unsupported source offer body rejects before any terminal pair" (choiceExplicitPeerWrongBody go offer wrongBody)
     , test "externally closed server endpoint cannot close twice" (choiceExplicitPeerTwice go offer)
+    , test "Go source choice terminal End closes commute under two external outcomes" (choiceCloseDiamondAccepted go offer "Go" (Outcome "Done"))
+    , test "Cancel source choice terminal closes commute and preserve spectators" (choiceCloseDiamondAccepted cancel offer "Cancel" (Outcome "Cancel"))
+    , test "diamond rejects wrong externally authorized peer outcome precisely" (choiceCloseDiamondBadPeer go offer)
+    , test "diamond rejects wrong source Client close outcome precisely" (choiceCloseDiamondBadClient go offer)
+    , test "diamond rejects minimally malformed source offer before both orders" (choiceCloseDiamondWrongBody go offer wrongBody)
+    , test "diamond rejects already consumed predecessor without fallback" (choiceCloseDiamondStale go offer)
+    , test "peer-first terminal close cannot reuse retired server endpoint" (choiceCloseDiamondPeerDoubleClose go offer)
     ]
   if and outcomes then pure () else exitFailure
 
@@ -657,6 +664,132 @@ choiceExplicitPeerTwice client server = do
       assert (process == fxServerProcess fx && endpoint == serverNext)
         "stale server close lost precise endpoint/process evidence"
     other -> Left ("duplicate Server End closure advanced: " <> show other)
+
+-- The two orders are *explicit* Core choices. The source contains only
+-- Client close; a Server return-unit arm cannot authorize peer disposition.
+choiceCloseDiamondFrom
+  :: Fixture -> Text -> Outcome -> Outcome -> ProcessCommunicationState
+  -> Either GrammarV1ChoiceCloseDiamondError GrammarV1ChoiceCloseDiamond
+choiceCloseDiamondFrom fx label clientOutcome peerOutcome initial =
+  grammarV1CheckSourceChoiceCloseDiamond
+    clientRoot (fxClient fx) serverRoot (fxServer fx) (fxInstance fx)
+    clientRole serverRole (fxClientProcess fx) (fxServerProcess fx)
+    serverNext label (fxNetwork fx) initial clientOutcome peerOutcome
+
+choiceCloseDiamond
+  :: Fixture -> Text -> Outcome -> Outcome
+  -> Either GrammarV1ChoiceCloseDiamondError GrammarV1ChoiceCloseDiamond
+choiceCloseDiamond fx label clientOutcome peerOutcome =
+  choiceCloseDiamondFrom fx label clientOutcome peerOutcome (fxState fx)
+
+choiceCloseDiamondAccepted :: Text -> Text -> Text -> Outcome -> Either String ()
+choiceCloseDiamondAccepted client server label outcome = do
+  fx <- fixture client server
+  diamond <- mapLeft show $ choiceCloseDiamond fx label outcome outcome
+  again <- mapLeft show $ choiceCloseDiamond fx label outcome outcome
+  assert (diamond == again) "terminal diamond changed under identical source and external inputs"
+  let forward = choiceCloseDiamondForward diamond
+      ready = statefulChoiceSuccessor
+        (statefulChoiceClientCloseSourceReplay
+          (statefulChoiceExplicitPeerCloseClient forward))
+      peerFirst = choiceCloseDiamondPeerFirst diamond
+      after = choiceCloseDiamondReverse diamond
+      revision = binaryProtocolInstanceRevision (fxInstance fx)
+      ownersBefore = communicationRestrictedOwners ready
+      ownersPeerFirst = communicationRestrictedOwners peerFirst
+      ownersAfter = communicationRestrictedOwners after
+  independentPeerFirst <- mapLeft show $
+    closeProcessEndpointState (fxNetwork fx) ready
+      (fxServerProcess fx) serverNext revision serverRole outcome
+  independentClientSecond <- mapLeft show $
+    closeProcessEndpointState (fxNetwork fx) independentPeerFirst
+      (fxClientProcess fx) (fxClientNext fx) revision clientRole outcome
+  assert (peerFirst == independentPeerFirst
+       && after == independentClientSecond
+       && after == statefulChoiceExplicitPeerCloseSuccessor forward)
+    "actual Core close orders did not form the exact full-state diamond"
+  assert (Map.lookup serverOccurrence ownersPeerFirst == Nothing
+       && Map.lookup clientOccurrence ownersPeerFirst ==
+            Map.lookup clientOccurrence ownersBefore
+       && Map.lookup spectatorOccurrence ownersPeerFirst ==
+            Map.lookup spectatorOccurrence ownersBefore
+       && Map.lookup clientOccurrence ownersAfter == Nothing
+       && Map.lookup serverOccurrence ownersAfter == Nothing
+       && Map.lookup spectatorOccurrence ownersAfter ==
+            Map.lookup spectatorOccurrence ownersBefore
+       && Map.keysSet ownersAfter ==
+            Map.keysSet (Map.delete clientOccurrence
+              (Map.delete serverOccurrence ownersBefore)))
+    "terminal diamond consumed wrong occurrence or changed affine spectator"
+
+choiceCloseDiamondBadPeer :: Text -> Text -> Either String ()
+choiceCloseDiamondBadPeer client server = do
+  fx <- fixture client server
+  case choiceCloseDiamond fx "Go" (Outcome "Done") (Outcome "Cancel") of
+    Left (GrammarV1ChoiceCloseDiamondForwardError
+      (GrammarV1StatefulChoiceExplicitPeerCloseCoreError
+        (EndpointClosureProtocolError process
+          (ProtocolSessionError (CloseOutcomeMismatch
+            (Outcome "Done") (Outcome "Cancel")))))) ->
+      assert (process == fxServerProcess fx) "wrong peer outcome named wrong process"
+    other -> Left ("wrong peer outcome silently reached diamond: " <> show other)
+
+choiceCloseDiamondBadClient :: Text -> Text -> Either String ()
+choiceCloseDiamondBadClient client server = do
+  fx <- fixture client server
+  case choiceCloseDiamond fx "Go" (Outcome "Cancel") (Outcome "Done") of
+    Left (GrammarV1ChoiceCloseDiamondForwardError
+      (GrammarV1StatefulChoiceExplicitPeerClosePriorError
+        (GrammarV1StatefulChoiceClientCloseCoreError
+          (EndpointClosureProtocolError process
+            (ProtocolSessionError (CloseOutcomeMismatch
+              (Outcome "Done") (Outcome "Cancel"))))))) ->
+      assert (process == fxClientProcess fx) "wrong client outcome named wrong process"
+    other -> Left ("wrong client outcome silently reached diamond: " <> show other)
+
+choiceCloseDiamondWrongBody :: Text -> Text -> Text -> Either String ()
+choiceCloseDiamondWrongBody client server bad = do
+  fx <- fixture client server
+  (_, badServer) <- parsePair bad
+  case choiceCloseDiamond (fx { fxServer = badServer })
+       "Go" (Outcome "Done") (Outcome "Done") of
+    Left (GrammarV1ChoiceCloseDiamondForwardError
+      (GrammarV1StatefulChoiceExplicitPeerClosePriorError
+        (GrammarV1StatefulChoiceClientCloseSourceError
+          (GrammarV1StatefulChoiceSourceError
+            (GrammarV1JointChoiceOfferSourceError
+              (GrammarV1OfferReplayCoverageError GrammarV1ComponentOfferArmBodyUnsupported)))))) ->
+      Right ()
+    other -> Left ("malformed offer body silently reached diamond: " <> show other)
+
+choiceCloseDiamondStale :: Text -> Text -> Either String ()
+choiceCloseDiamondStale client server = do
+  fx <- fixture client server
+  first <- mapLeft show $ stateful fx "Go" (fxState fx)
+  case choiceCloseDiamondFrom fx "Go" (Outcome "Done") (Outcome "Done")
+      (statefulChoiceSuccessor first) of
+    Left (GrammarV1ChoiceCloseDiamondForwardError
+      (GrammarV1StatefulChoiceExplicitPeerClosePriorError
+        (GrammarV1StatefulChoiceClientCloseSourceError
+          (GrammarV1StatefulChoiceSourceError
+            (GrammarV1JointChoiceOfferSourceError
+              (GrammarV1OfferReplayProtocolError (ProtocolEndpointUnknown endpoint)))))) ->
+      assert (endpoint == fxServerOld fx) "stale predecessor named wrong endpoint"
+    other -> Left ("stale predecessor unexpectedly reached diamond: " <> show other)
+
+choiceCloseDiamondPeerDoubleClose :: Text -> Text -> Either String ()
+choiceCloseDiamondPeerDoubleClose client server = do
+  fx <- fixture client server
+  diamond <- mapLeft show $
+    choiceCloseDiamond fx "Go" (Outcome "Done") (Outcome "Done")
+  let revision = binaryProtocolInstanceRevision (fxInstance fx)
+  case closeProcessEndpointState (fxNetwork fx)
+      (choiceCloseDiamondPeerFirst diamond)
+      (fxServerProcess fx) serverNext revision serverRole (Outcome "Done") of
+    Left (EndpointClosureOccurrenceUnknown process endpoint) ->
+      assert (process == fxServerProcess fx && endpoint == serverNext)
+        "duplicate peer-first close lost its process/endpoint classification"
+    other -> Left ("peer-first endpoint was reused: " <> show other)
 
 branches :: [Branch]
 branches =

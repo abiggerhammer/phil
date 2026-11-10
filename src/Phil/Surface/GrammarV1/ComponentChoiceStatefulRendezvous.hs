@@ -12,6 +12,9 @@ module Phil.Surface.GrammarV1.ComponentChoiceStatefulRendezvous
   , GrammarV1StatefulChoiceExplicitPeerCloseError (..)
   , GrammarV1StatefulChoiceExplicitPeerClose (..)
   , grammarV1CloseStatefulSourceChoiceExplicitPeer
+  , grammarV1CheckSourceChoiceCloseDiamond
+  , GrammarV1ChoiceCloseDiamondError (..)
+  , GrammarV1ChoiceCloseDiamond (..)
   ) where
 
 import Data.Text (Text)
@@ -204,6 +207,79 @@ grammarV1CloseStatefulSourceChoiceExplicitPeer
     { statefulChoiceExplicitPeerCloseClient = clientClosed
     , statefulChoiceExplicitPeerCloseSuccessor = serverClosed
     }
+
+-- | Only a conditional diamond: the caller grants the same TWO terminal
+-- End outcomes independently of the source 'return unit'. The checked
+-- select/offer source is replayed from the activation-derived predecessor
+-- in each direction. Full native protocol, resource and owner state must
+-- agree, not just the list of removed endpoint occurrences.
+data GrammarV1ChoiceCloseDiamondError
+  = GrammarV1ChoiceCloseDiamondForwardError GrammarV1StatefulChoiceExplicitPeerCloseError
+  | GrammarV1ChoiceCloseDiamondSourceError GrammarV1StatefulChoiceError
+  | GrammarV1ChoiceCloseDiamondPeerFirstError ProcessEndpointClosureError
+  | GrammarV1ChoiceCloseDiamondClientSecondError ProcessEndpointClosureError
+  | GrammarV1ChoiceCloseDiamondDivergence
+  deriving (Eq, Show)
+
+data GrammarV1ChoiceCloseDiamond = GrammarV1ChoiceCloseDiamond
+  { choiceCloseDiamondForward :: GrammarV1StatefulChoiceExplicitPeerClose
+  , choiceCloseDiamondPeerFirst :: ProcessCommunicationState
+  , choiceCloseDiamondReverse :: ProcessCommunicationState
+  }
+  deriving (Eq, Show)
+
+-- | This checks one explicit scheduler permutation of independent terminal
+-- closes, not arbitrary commutation, fairness, or source-authorized Server
+-- disposition. Each close uses the production Core transition. A rejected
+-- branch returns its exact class and exposes NO successful successor.
+grammarV1CheckSourceChoiceCloseDiamond
+  :: DeclarationKey
+  -> GrammarV1ComponentDecl
+  -> DeclarationKey
+  -> GrammarV1ComponentDecl
+  -> BinaryProtocolInstance
+  -> ProtocolRoleKey
+  -> ProtocolRoleKey
+  -> ProcessKey
+  -> ProcessKey
+  -> Name
+  -> Text
+  -> ProcessNetwork
+  -> ProcessCommunicationState
+  -> Outcome
+  -> Outcome
+  -> Either GrammarV1ChoiceCloseDiamondError GrammarV1ChoiceCloseDiamond
+grammarV1CheckSourceChoiceCloseDiamond
+    clientRoot clientSource offerRoot offerSource instanceValue
+    clientRole offerRole clientProcess offerProcess offeredSuccessor peerLabel
+    network initialState clientOutcome peerOutcome = do
+  forward <- mapLeft GrammarV1ChoiceCloseDiamondForwardError $
+    grammarV1CloseStatefulSourceChoiceExplicitPeer
+      clientRoot clientSource offerRoot offerSource instanceValue
+      clientRole offerRole clientProcess offerProcess offeredSuccessor peerLabel
+      network initialState clientOutcome peerOutcome
+  checked <- mapLeft GrammarV1ChoiceCloseDiamondSourceError $
+    grammarV1CheckStatefulSourceChoice
+      clientRoot clientSource offerRoot offerSource instanceValue
+      clientRole offerRole clientProcess offerProcess offeredSuccessor
+      peerLabel network initialState
+  let selected = jointChoiceSelectedSource (statefulChoiceSourceReplay checked)
+      clientSuccessor = grammarV1ResolvedBinderCoreName
+        (checkedComponentSelectSuccessor selected)
+      revision = binaryProtocolInstanceRevision instanceValue
+  peerFirst <- mapLeft GrammarV1ChoiceCloseDiamondPeerFirstError $
+    closeProcessEndpointState network (statefulChoiceSuccessor checked)
+      offerProcess offeredSuccessor revision offerRole peerOutcome
+  reverseResult <- mapLeft GrammarV1ChoiceCloseDiamondClientSecondError $
+    closeProcessEndpointState network peerFirst
+      clientProcess clientSuccessor revision clientRole clientOutcome
+  if reverseResult == statefulChoiceExplicitPeerCloseSuccessor forward
+    then Right GrammarV1ChoiceCloseDiamond
+      { choiceCloseDiamondForward = forward
+      , choiceCloseDiamondPeerFirst = peerFirst
+      , choiceCloseDiamondReverse = reverseResult
+      }
+    else Left GrammarV1ChoiceCloseDiamondDivergence
 
 mapLeft :: (a -> b) -> Either a c -> Either b c
 mapLeft f = either (Left . f) Right
