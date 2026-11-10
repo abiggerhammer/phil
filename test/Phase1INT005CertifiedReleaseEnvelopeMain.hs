@@ -263,6 +263,10 @@ main = do
           , nativeAtomManifestAsciiRawReplayAccepts source upload)
         , ( "Steve ASCII-7 raw manifest R/L admission after exact accepted consumers"
           , nativeAtomManifestAsciiRawReplayAccepts source steve)
+        , ( "Upload ASCII-7 actual StageClosure plain Text verifier profile P admission"
+          , nativeAtomManifestAsciiProfileReplayAccepts source upload)
+        , ( "Steve ASCII-7 actual StageClosure plain Text verifier profile P admission"
+          , nativeAtomManifestAsciiProfileReplayAccepts source steve)
         , ( "Upload checked SemanticUnordered atom-only canonical M-set rejects duplicates, order, and roles"
           , nativeSemanticUnorderedAtomSetReplayAccepts source upload)
         , ( "Steve checked SemanticUnordered atom-only canonical M-set rejects duplicates, order, and roles"
@@ -3984,4 +3988,100 @@ nativeAtomManifestAsciiRawReplayAccepts source fixture =
                       && nativeAtomManifestReplayLoweringRoot receipt == rootDigest
                       && raw /= root
                       && rejectsRaw && rejectsRoot && rejectsSwap && rejectsChanged
+    _ -> False
+
+
+-- | Partial ASCII-7 diagnostic on P from the exact accepted StageClosure.
+-- Source-manifest and independent source/release acceptance remain native.
+-- Unicode is rejected only by this diagnostic; native acceptance is unchanged.
+nativeAtomManifestAsciiProfileReplayAccepts
+  :: GenericApplicationAssurance -> ReleaseFixture -> Bool
+nativeAtomManifestAsciiProfileReplayAccepts source fixture =
+  case (producerInputs source, produceFixture source fixture) of
+    (Right (bundle, policy), Right (_, produced)) ->
+      case nativeAdapterPair source produced of
+        Nothing -> False
+        Just (sourceObject, releaseObject) ->
+          case closeNativeFinalInstanceCorrespondence
+              source (sourceInstanceDescriptor source) bundle policy
+              (fixtureContext produced) (fixtureLedger produced)
+              emptyProducerSelection sourceObject releaseObject of
+            Left _ -> False
+            Right witness ->
+              let producer = nativeCorrespondenceSourceManifestBinding witness
+                  acceptedSource = nativeCorrespondenceCertifiedSource witness
+                  acceptedRelease = nativeCorrespondenceCertifiedRelease witness
+                  manifest = nativeCorrespondenceManifest witness
+                  app = nativeAdapterSourceId
+                    (nativeCorrespondenceSourceAssurance witness)
+                  raw = encodeNativeRawSystemsDigestWire
+                    (NativeRawSystemsDigest (manifestImplementationDigest manifest))
+                  root = encodeNativeLoweringRootWire
+                    (NativeLoweringRootDigest (manifestLoweringLedgerRoot manifest))
+                  authority = nativeCorrespondenceAuthority witness
+                  revisionS = nativeFinalSystemsRevision authority
+                  common = nativeFinalCommonContractRevision authority
+                  closed = nativeFinalClosedContractRevision authority
+                  subject = nativeFinalSubjectRevision authority
+                  instanceRevision = nativeFinalInstanceRevision authority
+                  realization = nativeFinalRealizationRevision authority
+                  profile = NativeVerifierProfileText (nativeFinalVerifierProfile authority)
+                  NativeVerifierProfileText payload = profile
+                  wireP = encodeNativeVerifierProfileWire profile
+                  check = replayNativeAtomManifestAsciiProfileCandidate
+                    witness producer acceptedSource acceptedRelease
+              in case encodeNativeGenericAtomApplicationWires app of
+                Nothing -> False
+                Just applicationWires ->
+                  let base = NativeAtomManifestWireCandidate applicationWires raw root
+                      sCandidate = NativeAtomManifestSystemsWireCandidate base
+                        (encodeNativeSystemsRevisionWire revisionS)
+                      cCandidate = NativeAtomManifestCommonWireCandidate sCandidate
+                        (encodeNativeCommonContractRevisionWire common)
+                      fCandidate = NativeAtomManifestClosedWireCandidate cCandidate
+                        (encodeNativeClosedContractRevisionWire closed)
+                      bCandidate = NativeAtomManifestSubjectWireCandidate fCandidate
+                        (encodeNativeSubjectRevisionWire subject)
+                      iCandidate = NativeAtomManifestInstanceWireCandidate bCandidate
+                        (encodeNativeInstanceRevisionWire instanceRevision)
+                      aCandidate = NativeAtomManifestRealizationWireCandidate iCandidate
+                        (encodeNativeRealizationRevisionWire realization)
+                      candidate = NativeAtomManifestProfileWireCandidate aCandidate wireP
+                      nonAsciiBmp = candidate
+                        { nativeAtomManifestProfileTextWire = wireP <> "\x00e9" }
+                      nonAsciiAstral = candidate
+                        { nativeAtomManifestProfileTextWire = wireP <> "\x1f642" }
+                      foreignR = candidate { nativeAtomManifestProfileTextWire = raw }
+                      foreignL = candidate { nativeAtomManifestProfileTextWire = root }
+                      altered = candidate
+                        { nativeAtomManifestProfileTextWire =
+                            encodeNativeVerifierProfileWire
+                              (NativeVerifierProfileText (payload <> ".forged")) }
+                      badBase = candidate { nativeAtomManifestProfileBaseCandidate =
+                        aCandidate { nativeAtomManifestRealizationRevisionWire = wireP } }
+                      rejectsUnicode c = case check c of
+                        Left NativeAtomManifestAsciiProfileNonAscii -> True
+                        _ -> False
+                      rejectsForeign c = case check c of
+                        Left (NativeAtomManifestAsciiProfileBaseDifferent
+                          NativeAtomManifestProfileRoleMalformed) -> True
+                        _ -> False
+                  in case check candidate of
+                    Left _ -> False
+                    Right receipt ->
+                      nativeAtomManifestProfileReplayText receipt == profile
+                      && decodeNativeVerifierProfileWire wireP == Just profile
+                      && rejectsUnicode nonAsciiBmp
+                      && rejectsUnicode nonAsciiAstral
+                      && rejectsForeign foreignR
+                      && rejectsForeign foreignL
+                      && case check altered of
+                           Left (NativeAtomManifestAsciiProfileBaseDifferent
+                             NativeAtomManifestProfileDifferent) -> True
+                           _ -> False
+                      && case check badBase of
+                           Left (NativeAtomManifestAsciiProfileBaseDifferent
+                             (NativeAtomManifestProfileBaseDifferent
+                               NativeAtomManifestRealizationRoleMalformed)) -> True
+                           _ -> False
     _ -> False

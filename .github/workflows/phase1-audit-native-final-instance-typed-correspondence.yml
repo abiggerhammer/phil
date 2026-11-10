@@ -247,6 +247,12 @@ jobs:
           Print Assumptions native_ascii_raw_manifest_model_rejects_high_bit_raw.
           Print Assumptions native_ascii_raw_manifest_model_rejects_high_bit_root.
           Print Assumptions native_ascii_raw_manifest_model_wrong_role_reject.
+          Print Assumptions native_ascii7_profile_tag_preserves.
+          Print Assumptions native_ascii_profile_model_accepts_seven_bit.
+          Print Assumptions native_ascii_profile_model_sound.
+          Print Assumptions native_ascii_profile_model_decodes_role.
+          Print Assumptions native_ascii_profile_model_rejects_high_bit.
+          Print Assumptions native_ascii_profile_model_wrong_raw_roles.
           Print Assumptions fixed_adapter_full_certification_preserves_predecessors.
           EOF
           rocq c -Q proof/Phil Phil /tmp/NativeFinalInstanceAssumptions.v 2>&1 | tee typed-native-instance-assumptions.log

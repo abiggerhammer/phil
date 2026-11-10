@@ -975,3 +975,42 @@ No unsupported nat mapping or model Prop promoted to authority. Public
 release-byte verification and independent pinned final-delta signoff remain
 separately uncredited. TCB, generated artifacts, historical audit, strict
 GHC/Rocq/LLVM unchanged. **Independent freeze NOT YET.**
+
+
+## Implementation evidence — 2026-11-10: ASCII-7 raw R/L (#1711)
+
+[PR #1711](https://github.com/abiggerhammer/phil/pull/1711)
+merged as `83997cd1a0ed3f698865df3c2b30d30f1590e6e5`
+at 2026-11-10 00:55:29 UTC, exact tested head
+`a11846a8fe59a7ac2f30156ba1653cdfbd42efb5`.
+**37/37 exact-head GitHub workflow runs** and **78/78 check runs**
+SUCCESS, no failed/pending/skipped at final census. Phase 0 Response
+Proof Chain Hackage HTTP/2 transient recovered by run #42715785588
+attempt 2 without implementation or verification-policy changes.
+Protected [Hamster Merge Intent #42731948930](https://github.com/abiggerhammer/phil/actions/runs/42731948930)
+and `merge-pr` SUCCESS; PR independently confirmed closed and merged,
+main at merge commit. Phase 1 Conformance Matrix supplemental row 60
+written and all six cells independently read back; original 244
+normative cases (236 Exit, 8 Profile) preserved.
+
+**Executed bounded evidence:** actual independently accepted manifest raw
+Systems digest R and lowering root L seven-bit-only *diagnostic* admission,
+checked source-manifest producer, exact accepted VER-010 source and
+INT-005 CertifiedRelease/StageClosure replay, Upload/Steve positives,
+U+00E9 R and U+1F642 L rejection, swapped roles and altered tagged R
+negative pressure; conditional Rocq role-prefix, admitted-pair, soundness,
+high-bit and wrong-role model theorems plus seven named assumption queries
+verified on exact head.
+
+**Nonclaims:** native acceptance remains unrestricted and ASCII-7
+includes controls, not a general Unicode/UTF-8 proof. Diagnostic is not
+accepted authority. No authenticated (K,I_checked)-to-concrete
+StageClosure production, recursive SemanticForm, Map/Set order,
+complete accepted source/manifest/stage/release reflection, predecessor
+authority, FixedFinalAuthorityAdapter or FinalArtifactCertified.
+Raw R/L, normalized S, common C, closed F, B/I_stage/A/plain P
+and checked K/I_checked remain distinguished. No invented native-to-Rocq
+nat encoder or supplied model Prop promoted to authority. Public
+release-byte verification and independent pinned final-delta signoff
+separately uncredited. Historical independent audit, TCB, generated
+artifacts, strict GHC/Rocq/LLVM unchanged. **Independent freeze NOT YET.**

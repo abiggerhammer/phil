@@ -1340,3 +1340,42 @@ FinalArtifactCertified remain unproved. Public release-byte and independent
 pinned final-delta signoffs remain separate, uncredited gates. Original
 244 normative cases, historic audit, Phase 1 TCB, generated outputs and
 strict GHC/Rocq/LLVM unchanged. **Independent freeze NOT YET.**
+
+
+## 2026-11-10 — partial ASCII-7 StageClosure verifier P admission (#1584)
+
+A second **separately scoped** optional model-admission gate now checks the
+actual accepted StageClosure's plain native `Text` verifier profile P wire.
+The native `NativeVerifierProfileText` wrapper is a *data role*, not a
+fabricated nominal verifier-profile revision or release authority. The
+new fail-closed diagnostic rejects non-ASCII P wires before replaying the
+checked source-manifest producer, independently accepted raw Systems digest
+R and lowering root L, accepted VER-010 source, and exact INT-005
+CertifiedRelease/StageClosure consumers, with D/V/Q/M/S/C/F/B/I_stage/A/P.
+It never changes native StageClosure acceptance or requires valid native
+profiles to be ASCII. The prior R/L ASCII gate is separate: neither gate
+proves unrestricted native Text/Rocq String transport, and seven-bit is
+not printable-text or UTF-8 authority.
+
+Upload/Steve Haskell positive replay and U+00E9 / U+1F642 profile
+substitutions, wrong raw R/L role substitution, changed correctly tagged
+P and P-for-realization A negative pressure are submitted. Six named
+Rocq assumption queries accompany conditional ASCII-7 P-tag preservation,
+admission, soundness, profile role decoding, high-bit and wrong-R/L-role
+rejection. These are submitted tests pending exact-head CI.
+
+**Remaining-premise ledger:** the private typed receipt is unaccepted
+diagnostic data. Matching P/I_stage does NOT authenticate checked
+architecture occurrence (K,I_checked) as producer of concrete StageClosure
+or CertifiedRelease. No complete recursive SemanticForm, native Unicode
+Data.Text/Rocq string encoding, native Map/Set ordering correspondence,
+accepted application/manifest/source/stage/release authority reflection,
+predecessor authority, FixedFinalAuthorityAdapter or FinalArtifactCertified.
+Distinct R raw digest, L lowering root, S normalized Systems revision,
+C common contract, F closed contract, B subject, I_stage instance, A
+realization, plain P and checked K/I_checked are preserved. No invented
+nat encoder or supplied model Prop promoted to authority. Public release
+bytes and independent pinned final-delta signoff remain separately
+uncredited. Original 244 normative cases, historical audit, Phase 1 TCB,
+generated artifacts and strict GHC/LLVM/Rocq policies untouched.
+**Independent audit freeze NOT YET.**

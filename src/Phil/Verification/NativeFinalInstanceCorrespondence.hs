@@ -125,6 +125,8 @@ module Phil.Verification.NativeFinalInstanceCorrespondence
   , replayNativeAtomManifestCheckedRevisionCandidate
   , NativeAtomManifestAsciiRawReplayError (..)
   , replayNativeAtomManifestAsciiRawCandidate
+  , NativeAtomManifestAsciiProfileReplayError (..)
+  , replayNativeAtomManifestAsciiProfileCandidate
   , NativeVerifierProfileText (..)
   , encodeNativeVerifierProfileWire
   , decodeNativeVerifierProfileWire
@@ -1476,4 +1478,34 @@ replayNativeAtomManifestAsciiRawCandidate witness producer sourceObject releaseO
   | otherwise =
       either (Left . NativeAtomManifestAsciiRawBaseDifferent) Right
         (replayNativeAtomManifestCandidate
+          witness producer sourceObject releaseObject candidate)
+
+
+-- | Separate, fail-closed ASCII-7 admission for the *actual accepted*
+-- StageClosure plain-Text verifier profile P. This is not a new nominal
+-- revision domain, not a Unicode Text-to-Rocq encoder, and not stage origin.
+-- Full native profile acceptance remains unrestricted.
+data NativeAtomManifestAsciiProfileReplayError
+  = NativeAtomManifestAsciiProfileNonAscii
+  | NativeAtomManifestAsciiProfileBaseDifferent NativeAtomManifestProfileReplayError
+  deriving (Eq, Show)
+
+-- | Admit P's tagged wire to the optional seven-bit string-model subdomain,
+-- then replay the actual checked producer, independent manifest, accepted
+-- VER-010 source and exact INT-005 CertifiedRelease/StageClosure consumers,
+-- including all D/V/Q/M/R/L/S/C/F/B/I_stage/A/P comparisons. The private
+-- receipt is diagnostic only; checked (K,I_checked) is not the stage producer.
+replayNativeAtomManifestAsciiProfileCandidate
+  :: NativeFinalInstanceCorrespondence
+  -> CertifiedSourceManifestBinding
+  -> CertifiedApplicationArtifact
+  -> CertifiedReleaseArtifact
+  -> NativeAtomManifestProfileWireCandidate
+  -> Either NativeAtomManifestAsciiProfileReplayError NativeAtomManifestProfileReplay
+replayNativeAtomManifestAsciiProfileCandidate witness producer sourceObject releaseObject candidate
+  | not (Text.all isAscii (nativeAtomManifestProfileTextWire candidate)) =
+      Left NativeAtomManifestAsciiProfileNonAscii
+  | otherwise =
+      either (Left . NativeAtomManifestAsciiProfileBaseDifferent) Right
+        (replayNativeAtomManifestProfileCandidate
           witness producer sourceObject releaseObject candidate)

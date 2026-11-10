@@ -3404,3 +3404,68 @@ Theorem native_ascii_raw_manifest_model_wrong_role_reject :
 Proof.
   intros raw root _. apply native_wrong_role_decoding_fails.
 Qed.
+
+
+(* #1584: a SECOND optional ASCII-7 model-admission coordinate, this time
+   exact StageClosure's plain-Text verifier profile P. The Haskell guard
+   replays actual independently accepted consumers after checking P's wire;
+   no Unicode native Data.Text transport or stage-origin theorem follows. *)
+Definition nativeAsciiProfileModel
+  (p : NativeVerifierProfileTextRole) : option string :=
+  let wire := nativeVerifierProfileTextWire p in
+  if nativeAscii7Wire wire then Some wire else None.
+
+Theorem native_ascii7_profile_tag_preserves :
+  forall p, nativeAscii7Wire (nativeVerifierProfileTextWire p) =
+    nativeAscii7Wire (nativeVerifierProfileTextPayload p).
+Proof. intros [p]. reflexivity. Qed.
+
+Theorem native_ascii_profile_model_accepts_seven_bit :
+  forall p,
+    nativeAscii7Wire (nativeVerifierProfileTextPayload p) = true ->
+    nativeAsciiProfileModel p = Some (nativeVerifierProfileTextWire p).
+Proof.
+  intros p H.
+  unfold nativeAsciiProfileModel.
+  rewrite native_ascii7_profile_tag_preserves, H.
+  reflexivity.
+Qed.
+
+Theorem native_ascii_profile_model_sound :
+  forall p wire, nativeAsciiProfileModel p = Some wire ->
+    wire = nativeVerifierProfileTextWire p /\
+    nativeAscii7Wire wire = true.
+Proof.
+  intros p wire H.
+  unfold nativeAsciiProfileModel in H.
+  destruct (nativeAscii7Wire (nativeVerifierProfileTextWire p)) eqn:Hp;
+    simpl in H; try discriminate.
+  inversion H; subst.
+  split; [reflexivity | exact Hp].
+Qed.
+
+Theorem native_ascii_profile_model_decodes_role :
+  forall p wire, nativeAsciiProfileModel p = Some wire ->
+    nativeDecodeVerifierProfileTextWire wire = Some p.
+Proof.
+  intros p wire H.
+  apply native_ascii_profile_model_sound in H as [Hwire _].
+  subst. apply native_verifier_profile_text_wire_roundtrip.
+Qed.
+
+Theorem native_ascii_profile_model_rejects_high_bit :
+  nativeAsciiProfileModel
+    (mkNativeVerifierProfileTextRole
+      (String (Ascii false false false false false false false true) EmptyString))
+    = None.
+Proof. reflexivity. Qed.
+
+Theorem native_ascii_profile_model_wrong_raw_roles :
+  forall p raw root,
+    nativeAsciiProfileModel p = Some (nativeVerifierProfileTextWire p) ->
+    nativeDecodeVerifierProfileTextWire (nativeRawSystemsDigestWire raw) = None /\
+    nativeDecodeVerifierProfileTextWire (nativeLoweringRootWire root) = None.
+Proof.
+  intros p [raw] [root] _.
+  split; reflexivity.
+Qed.
