@@ -73,6 +73,13 @@ main = do
     , test "diamond rejects minimally malformed source offer before both orders" (choiceCloseDiamondWrongBody go offer wrongBody)
     , test "diamond rejects already consumed predecessor without fallback" (choiceCloseDiamondStale go offer)
     , test "peer-first terminal close cannot reuse retired server endpoint" (choiceCloseDiamondPeerDoubleClose go offer)
+    , test "Go source-choice predecessor to successor to both terminal orders" (choiceSourceTraceAccepted go offer "Go" (Outcome "Done"))
+    , test "Cancel source-choice predecessor trace preserves external branch outcome" (choiceSourceTraceAccepted cancel offer "Cancel" (Outcome "Cancel"))
+    , test "source-choice trace refuses fabricated original occurrence" (choiceSourceTraceMissingOccurrence go offer)
+    , test "source-choice trace refuses aliased endpoint occurrence keys" (choiceSourceTraceAliasedOccurrence go offer)
+    , test "source-choice trace rejects minimally wrong offer source precisely" (choiceSourceTraceWrongBody go offer wrongBody)
+    , test "source-choice trace rejects stale source endpoint rather than replaying" (choiceSourceTraceStale go offer)
+    , test "source-choice trace preserves exact wrong terminal outcome class" (choiceSourceTraceWrongPeerOutcome go offer)
     ]
   if and outcomes then pure () else exitFailure
 
@@ -790,6 +797,115 @@ choiceCloseDiamondPeerDoubleClose client server = do
       assert (process == fxServerProcess fx && endpoint == serverNext)
         "duplicate peer-first close lost its process/endpoint classification"
     other -> Left ("peer-first endpoint was reused: " <> show other)
+
+-- A finite, source-relative choice trace, distinct from restricted
+-- Bytes[8] send/receive. The offer's successor and both terminal outcomes
+-- remain separate external authority: its return-unit arms do not close End.
+choiceSourceTraceFrom
+  :: Fixture -> ActivationOccurrenceKey -> ActivationOccurrenceKey
+  -> Text -> Outcome -> Outcome -> ProcessCommunicationState
+  -> Either GrammarV1ChoiceSourceSuccessorTraceError
+       GrammarV1ChoiceSourceSuccessorTrace
+choiceSourceTraceFrom fx clientKey offerKey label clientOutcome offerOutcome initial =
+  grammarV1CheckChoiceSourceSuccessorTrace
+    clientRoot (fxClient fx) serverRoot (fxServer fx) (fxInstance fx)
+    clientRole serverRole (fxClientProcess fx) (fxServerProcess fx)
+    clientKey offerKey serverNext label (fxNetwork fx) initial
+    clientOutcome offerOutcome
+
+choiceSourceTraceAccepted :: Text -> Text -> Text -> Outcome -> Either String ()
+choiceSourceTraceAccepted client server label outcome = do
+  fx <- fixture client server
+  trace <- mapLeft show $
+    choiceSourceTraceFrom fx clientOccurrence serverOccurrence
+      label outcome outcome (fxState fx)
+  again <- mapLeft show $
+    choiceSourceTraceFrom fx clientOccurrence serverOccurrence
+      label outcome outcome (fxState fx)
+  independent <- mapLeft show $ choiceCloseDiamond fx label outcome outcome
+  let before = communicationRestrictedOwners (fxState fx)
+      ready = choiceSourceTraceReadyOwners trace
+      terminal = choiceSourceTraceTerminalOwners trace
+      expectedReady = Map.insert clientOccurrence (fxClientProcess fx, fxClientNext fx)
+        (Map.insert serverOccurrence (fxServerProcess fx, serverNext) before)
+      expectedTerminal = Map.delete clientOccurrence
+        (Map.delete serverOccurrence expectedReady)
+  assert (trace == again
+       && choiceSourceTraceDiamond trace == independent
+       && ready == expectedReady
+       && terminal == expectedTerminal
+       && Map.lookup spectatorOccurrence ready ==
+            Just (fxClientProcess fx, spectatorName)
+       && Map.lookup spectatorOccurrence terminal ==
+            Map.lookup spectatorOccurrence before)
+    "source-choice trace did not preserve exact original/next/terminal owner identities"
+
+choiceSourceTraceMissingOccurrence :: Text -> Text -> Either String ()
+choiceSourceTraceMissingOccurrence client server = do
+  fx <- fixture client server
+  let invented = ActivationOccurrenceKey "fsem02.choice.fabricated"
+  case choiceSourceTraceFrom fx invented serverOccurrence "Go"
+      (Outcome "Done") (Outcome "Done") (fxState fx) of
+    Left (ChoiceSourceTracePredecessorMismatch key expected Nothing) ->
+      assert (key == invented && expected == (fxClientProcess fx, fxClientOld fx))
+        "fabricated client occurrence lost exact original source binder"
+    other -> Left ("fabricated source-choice occurrence was accepted: " <> show other)
+
+choiceSourceTraceAliasedOccurrence :: Text -> Text -> Either String ()
+choiceSourceTraceAliasedOccurrence client server = do
+  fx <- fixture client server
+  case choiceSourceTraceFrom fx clientOccurrence clientOccurrence "Go"
+      (Outcome "Done") (Outcome "Done") (fxState fx) of
+    Left ChoiceSourceTraceAliasedOccurrence -> Right ()
+    other -> Left ("aliased source-choice occurrences were accepted: " <> show other)
+
+choiceSourceTraceWrongBody :: Text -> Text -> Text -> Either String ()
+choiceSourceTraceWrongBody client server bad = do
+  fx <- fixture client server
+  (_, badServer) <- parsePair bad
+  case choiceSourceTraceFrom (fx { fxServer = badServer })
+       clientOccurrence serverOccurrence "Go"
+       (Outcome "Done") (Outcome "Done") (fxState fx) of
+    Left (ChoiceSourceTraceDiamondError
+      (GrammarV1ChoiceCloseDiamondForwardError
+        (GrammarV1StatefulChoiceExplicitPeerClosePriorError
+          (GrammarV1StatefulChoiceClientCloseSourceError
+            (GrammarV1StatefulChoiceSourceError
+              (GrammarV1JointChoiceOfferSourceError
+                (GrammarV1OfferReplayCoverageError
+                  GrammarV1ComponentOfferArmBodyUnsupported)))))) -> Right ()
+    other -> Left ("minimally malformed source offer reached choice trace: " <> show other)
+
+choiceSourceTraceStale :: Text -> Text -> Either String ()
+choiceSourceTraceStale client server = do
+  fx <- fixture client server
+  first <- mapLeft show $ stateful fx "Go" (fxState fx)
+  case choiceSourceTraceFrom fx clientOccurrence serverOccurrence "Go"
+      (Outcome "Done") (Outcome "Done") (statefulChoiceSuccessor first) of
+    Left (ChoiceSourceTraceDiamondError
+      (GrammarV1ChoiceCloseDiamondForwardError
+        (GrammarV1StatefulChoiceExplicitPeerClosePriorError
+          (GrammarV1StatefulChoiceClientCloseSourceError
+            (GrammarV1StatefulChoiceSourceError
+              (GrammarV1JointChoiceOfferSourceError
+                (GrammarV1OfferReplayProtocolError (ProtocolEndpointUnknown name))))))) ->
+      assert (name == fxServerOld fx) "stale trace rejection changed source offer endpoint"
+    other -> Left ("stale source-choice predecessor advanced: " <> show other)
+
+choiceSourceTraceWrongPeerOutcome :: Text -> Text -> Either String ()
+choiceSourceTraceWrongPeerOutcome client server = do
+  fx <- fixture client server
+  case choiceSourceTraceFrom fx clientOccurrence serverOccurrence "Go"
+      (Outcome "Done") (Outcome "Cancel") (fxState fx) of
+    Left (ChoiceSourceTraceDiamondError
+      (GrammarV1ChoiceCloseDiamondForwardError
+        (GrammarV1StatefulChoiceExplicitPeerCloseCoreError
+          (EndpointClosureProtocolError process
+            (ProtocolSessionError (CloseOutcomeMismatch
+              (Outcome "Done") (Outcome "Cancel")))))) ->
+      assert (process == fxServerProcess fx)
+        "wrong peer End authority lost exact server process classification"
+    other -> Left ("wrong externally supplied peer End outcome was accepted: " <> show other)
 
 branches :: [Branch]
 branches =
