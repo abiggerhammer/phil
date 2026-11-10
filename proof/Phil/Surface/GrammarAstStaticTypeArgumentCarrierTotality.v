@@ -568,13 +568,13 @@ Proof.
         input rest selected Hselected)
       as [type_value [primitive [shallow [nonreference
           [Houter [Hprimitive [Hshallow [Hrefine Hround]]]]]]]].
-    let outer_type := constr:(Phase1NonreferenceTypeSpine type_value) in
-    let primitive_type := constr:(Phase1PrimitiveNonreferenceTypeSpine primitive) in
-    let shallow_type := constr:(Phase1ShallowCompoundNonreferenceTypeSpine shallow) in
-    let refinement_type := constr:(Phase1RefinementTupleNonreferenceTypeSpine nonreference) in
-    let static_reference_type := constr:(Phase1StaticReferenceNonreferenceType nonreference) in
-    let static_arguments_type := constr:(Phase1StaticArgumentsNonreferenceType nonreference) in
-    let result := constr:(Phase1StaticTypeArgumentsNonreferenceType nonreference) in
+    pose (outer_type := Phase1NonreferenceTypeSpine type_value).
+    pose (primitive_type := Phase1PrimitiveNonreferenceTypeSpine primitive).
+    pose (shallow_type := Phase1ShallowCompoundNonreferenceTypeSpine shallow).
+    pose (refinement_type := Phase1RefinementTupleNonreferenceTypeSpine nonreference).
+    pose (static_reference_type := Phase1StaticReferenceNonreferenceType nonreference).
+    pose (static_arguments_type := Phase1StaticArgumentsNonreferenceType nonreference).
+    pose (result := Phase1StaticTypeArgumentsNonreferenceType nonreference).
     assert (Htype :
       phase1_surface_normalize_type_spine tree = Some outer_type).
     {
@@ -674,13 +674,13 @@ Proof.
         repeat rewrite String.eqb_refl.
         exact Hbase_reference.
       }
-      let outer_type := constr:(Phase1NamedTypeSpine selected) in
-      let primitive_type := constr:(Phase1PrimitiveNamedTypeSpine selected) in
-      let shallow_type := constr:(Phase1ShallowCompoundNamedTypeSpine selected) in
-      let refinement_type := constr:(Phase1RefinementTupleNamedTypeSpine selected) in
-      let static_reference_type := constr:(Phase1StaticReferenceNamedType base_reference) in
-      let static_arguments_type := constr:(Phase1StaticArgumentsNamedType middle_reference) in
-      let result := constr:(Phase1StaticTypeArgumentsNamedType refined_reference) in
+      pose (outer_type := Phase1NamedTypeSpine selected).
+      pose (primitive_type := Phase1PrimitiveNamedTypeSpine selected).
+      pose (shallow_type := Phase1ShallowCompoundNamedTypeSpine selected).
+      pose (refinement_type := Phase1RefinementTupleNamedTypeSpine selected).
+      pose (static_reference_type := Phase1StaticReferenceNamedType base_reference).
+      pose (static_arguments_type := Phase1StaticArgumentsNamedType middle_reference).
+      pose (result := Phase1StaticTypeArgumentsNamedType refined_reference).
       assert (Htype :
         phase1_surface_normalize_type_spine tree = Some outer_type).
       {
