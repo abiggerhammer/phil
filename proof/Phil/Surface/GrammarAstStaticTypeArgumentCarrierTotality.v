@@ -6,6 +6,10 @@ From Phil.Surface Require Import
   GrammarAstSourceHeaderTotality
   GrammarAstGenericRequirementsSpine
   GrammarAstGenericRequirementsTotality
+  GrammarAstTypeSpine
+  GrammarAstPrimitiveTypePayloadSpine
+  GrammarAstShallowCompoundTypePayloadSpine
+  GrammarAstRefinementTupleTypePayloadSpine
   GrammarAstTypeTotality
   GrammarAstRefinementTupleTypeCarrierTotality
   GrammarDeterminacySimpleResolverSoundness
