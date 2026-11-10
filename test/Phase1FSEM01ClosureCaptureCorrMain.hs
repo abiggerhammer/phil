@@ -170,7 +170,7 @@ mutations linear duplicate scoped = do
       fakeSummary = good { directSummary = Nothing }
       fakeStage = good { directFailureStage = Just ClosureNativeUse }
       fakeDup = dup { directFinal = Just (directInitial dup) }
-      fakeLoanClosed = loan { borrowClosed = Just (borrowInitial loan) }
+      fakeLoanClosed = loan { borrowClosed = Nothing }
       fakeLoanCuts = loan { borrowCuts = [borrowInitial loan] }
       fakeLoanExtent = loan { borrowExtent = EscapingClosure }
   assert (all (== Left DirectCutOrErrorMismatch)
