@@ -934,7 +934,7 @@ choiceSourceTraceWrongClientOutcome client server = do
           (GrammarV1StatefulChoiceClientCloseCoreError
             (EndpointClosureProtocolError process
               (ProtocolSessionError (CloseOutcomeMismatch
-                (Outcome "Done") (Outcome "Cancel"))))))) ->
+                (Outcome "Done") (Outcome "Cancel")))))))) ->
       assert (process == fxClientProcess fx)
         "wrong Client End outcome named wrong process"
     other -> Left ("wrong Client End outcome fabricated a prefix: " <> show other)
