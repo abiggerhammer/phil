@@ -1,5 +1,5 @@
 From Stdlib Require Import Strings.String.
-From Phil.Core Require Import Syntax FSEM02StatefulSourceChoice
+From Phil.Core Require Import Syntax FSEM02JointSourceChoice FSEM02StatefulSourceChoice
   FSEM02SelectedClientClose FSEM02ExplicitPeerClose
   FSEM02TerminalCloseDiamond.
 
