@@ -9,8 +9,12 @@ module Phil.Surface.GrammarV1.ComponentRestrictedSourceClose
   , GrammarV1RestrictedSourceCloseDiamondError (..)
   , GrammarV1RestrictedSourceCloseDiamondTransition (..)
   , grammarV1CheckRestrictedSourceCloseDiamond
+  , GrammarV1RestrictedSourceSuccessorTraceError (..)
+  , GrammarV1RestrictedSourceSuccessorTrace (..)
+  , grammarV1CheckRestrictedSourceSuccessorTrace
   ) where
 
+import qualified Data.Map.Strict as Map
 import Phil.Core.Process (ProcessKey, ProcessNetwork)
 import Phil.Core.ProcessActivation (ActivationOccurrenceKey)
 import Phil.Core.ProcessEndpointClosure
@@ -18,7 +22,7 @@ import Phil.Core.ProcessEndpointClosure
   , closeProcessEndpointState
   )
 import Phil.Core.ProcessRendezvous
-  ( ProcessCommunicationState
+  ( ProcessCommunicationState (..)
   , ProcessRendezvousRequest (..)
   , ProcessRendezvousSide (..)
   , RestrictedMessageTransfer (..)
@@ -244,6 +248,113 @@ grammarV1CheckRestrictedSourceCloseDiamond
       , restrictedSourceDiamondReverse = afterBoth
       }
     else Left RestrictedSourceCloseDiamondDivergentState
+
+
+-- | Non-normative FSEM-02 finite observation of exact source-derived
+-- predecessor/successor ownership, retained payload and endpoint retirement.
+-- All nominal occurrence keys and terminal outcomes are EXTERNAL inputs.
+-- The checker replays the original source and original live predecessor; a
+-- supplied cached transition is never accepted as source authority.
+data GrammarV1RestrictedSourceSuccessorTraceError
+  = RestrictedSuccessorTraceDiamondError GrammarV1RestrictedSourceCloseDiamondError
+  | RestrictedSuccessorTraceAliasedOccurrence
+  | RestrictedSuccessorTracePredecessorMismatch
+      ActivationOccurrenceKey (ProcessKey, Name) (Maybe (ProcessKey, Name))
+  | RestrictedSuccessorTraceRendezvousOwnerMismatch
+  | RestrictedSuccessorTraceTerminalOwnerMismatch
+  deriving (Eq, Show)
+
+data GrammarV1RestrictedSourceSuccessorTrace =
+  GrammarV1RestrictedSourceSuccessorTrace
+    { restrictedSuccessorTraceDiamond :: GrammarV1RestrictedSourceCloseDiamondTransition
+    , restrictedSuccessorTraceRendezvousOwners ::
+        Map.Map ActivationOccurrenceKey (ProcessKey, Name)
+    , restrictedSuccessorTraceTerminalOwners ::
+        Map.Map ActivationOccurrenceKey (ProcessKey, Name)
+    }
+  deriving (Eq, Show)
+
+-- | Source + original communication state -> either a precise rejection or
+-- an exact finite owner trace over three DISTINCT externally named endpoint/
+-- payload occurrences. The production restricted rendezvous and both Core End
+-- close orders are independently re-executed by the diamond adapter.
+--
+-- Sender/receiver successor identities are taken from CHECKED lexical
+-- binders in that replay, not surface spelling or guessed role authority.
+-- The full occurrence map must change only at the three modeled keys:
+-- endpoints acquire their exact successors, payload transfers to the receiver,
+-- and both endpoints are subsequently retired without payload disposal.
+-- Every other occurrence (including unrelated affine spectators) is framed.
+grammarV1CheckRestrictedSourceSuccessorTrace
+  :: StaticContext
+  -> DeclarationKey -> GrammarV1ComponentDecl
+  -> DeclarationKey -> GrammarV1ComponentDecl
+  -> BinaryProtocolInstance
+  -> ProtocolRoleKey -> ProtocolRoleKey
+  -> ProcessKey -> ProcessKey
+  -> ActivationOccurrenceKey -> ActivationOccurrenceKey
+  -> ActivationOccurrenceKey
+  -> ProcessNetwork -> ProcessCommunicationState
+  -> Outcome -> Outcome
+  -> Either GrammarV1RestrictedSourceSuccessorTraceError
+       GrammarV1RestrictedSourceSuccessorTrace
+grammarV1CheckRestrictedSourceSuccessorTrace
+    staticContext senderRoot senderSource receiverRoot receiverSource
+    instanceValue senderRole receiverRole senderProcess receiverProcess
+    senderOccurrence receiverOccurrence payloadOccurrence
+    network original senderOutcome receiverOutcome = do
+  if senderOccurrence /= receiverOccurrence
+      && senderOccurrence /= payloadOccurrence
+      && receiverOccurrence /= payloadOccurrence
+    then Right ()
+    else Left RestrictedSuccessorTraceAliasedOccurrence
+  diamond <- mapLeft RestrictedSuccessorTraceDiamondError $
+    grammarV1CheckRestrictedSourceCloseDiamond
+      staticContext senderRoot senderSource receiverRoot receiverSource
+      instanceValue senderRole receiverRole senderProcess receiverProcess
+      payloadOccurrence network original senderOutcome receiverOutcome
+  let rendezvous = restrictedSourceDiamondRendezvous diamond
+      checkedSender = restrictedSourceSend rendezvous
+      checkedReceiver = restrictedSourceReceive rendezvous
+      transfer = restrictedSourceTransfer rendezvous
+      beforeOwners = communicationRestrictedOwners original
+      afterOwners = communicationRestrictedOwners (restrictedSourceNext rendezvous)
+      finalOwners = communicationRestrictedOwners (restrictedSourceDiamondReverse diamond)
+      senderOld = grammarV1ResolvedBinderCoreName
+        (checkedComponentSendEndpoint checkedSender)
+      receiverOld = grammarV1ResolvedBinderCoreName
+        (checkedComponentReceiveEndpoint checkedReceiver)
+      senderNext = grammarV1ResolvedBinderCoreName
+        (checkedComponentSendSuccessor checkedSender)
+      receiverNext = grammarV1ResolvedBinderCoreName
+        (checkedComponentReceiveSuccessor checkedReceiver)
+      payloadOld = restrictedMessageSenderName transfer
+      payloadNext = restrictedMessageReceiverName transfer
+      requirePredecessor occurrence expected =
+        if Map.lookup occurrence beforeOwners == Just expected
+          then Right ()
+          else Left (RestrictedSuccessorTracePredecessorMismatch
+            occurrence expected (Map.lookup occurrence beforeOwners))
+  requirePredecessor senderOccurrence (senderProcess, senderOld)
+  requirePredecessor receiverOccurrence (receiverProcess, receiverOld)
+  requirePredecessor payloadOccurrence (senderProcess, payloadOld)
+  let expectedAfter = Map.insert payloadOccurrence (receiverProcess, payloadNext)
+        (Map.insert senderOccurrence (senderProcess, senderNext)
+          (Map.insert receiverOccurrence (receiverProcess, receiverNext) beforeOwners))
+      expectedFinal = Map.delete senderOccurrence
+        (Map.delete receiverOccurrence expectedAfter)
+  if afterOwners == expectedAfter
+    then Right ()
+    else Left RestrictedSuccessorTraceRendezvousOwnerMismatch
+  if finalOwners == expectedFinal
+      && communicationRestrictedOwners (restrictedSourceCloseNext
+           (restrictedSourceDiamondForward diamond)) == expectedFinal
+    then Right GrammarV1RestrictedSourceSuccessorTrace
+      { restrictedSuccessorTraceDiamond = diamond
+      , restrictedSuccessorTraceRendezvousOwners = afterOwners
+      , restrictedSuccessorTraceTerminalOwners = finalOwners
+      }
+    else Left RestrictedSuccessorTraceTerminalOwnerMismatch
 
 mapLeft :: (a -> b) -> Either a c -> Either b c
 mapLeft f = either (Left . f) Right

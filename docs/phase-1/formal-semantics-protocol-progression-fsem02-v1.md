@@ -103,3 +103,7 @@ claim-guard, branch protections and all applicable CI.
 ### Additional restricted send/receive close-order evidence (FSEM-02)
 
 [Source-rechecked restricted send/receive terminal End close-order diamond](formal-semantics-restricted-close-diamond-fsem02-v1.md) checks full production Core state equality for sender-first and receiver-first closes, preserving the receiver's transferred restricted payload and affine spectators. It requires external protocol, activation and two authorized End outcomes; neither payload disposal nor root/assurance discharge is inferred. Rocq provides a conditional owner-ledger frame/diamond theorem, not universal implementation refinement or FSEM-02 completion.
+
+### Explicit end-to-end restricted successor identity trace (FSEM-02)
+
+[Source-derived restricted predecessor→successor→terminal owner trace](formal-semantics-source-successor-trace-fsem02-v1.md) independently replays accepted parsed restricted send/receive source against the original production Core state and checks a separate exact finite owner observation through both externally authorized End orders. Executable positive and negative source/occurrence witnesses (including semantic alpha-renaming and a minimally rejected stale source close) accompany a **conditional** Rocq end-to-end owner-map composition from the *original* predecessor. This is bounded source/native test correspondence, **not** universal native-to-Rocq refinement, root/assurance authority, or FSEM-02 closure.

@@ -1,0 +1,89 @@
+name: FSEM-02 Restricted Source Successor Trace Early Preflight
+
+on:
+  push:
+    branches:
+      - formal-semantics/fsem02-source-successor-trace
+    paths:
+      - 'src/Phil/Surface/GrammarV1/ComponentRestrictedSourceClose.hs'
+      - 'test/Phase1FSEM02RestrictedSourceTransferMain.hs'
+      - 'proof/Phil/Core/FSEM02RestrictedSuccessorTrace.v'
+      - 'test/fixtures/fsem02-restricted-source-transfer-v1/**'
+      - 'docs/phase-1/formal-semantics-source-successor-trace-fsem02-v1.md'
+      - '.github/workflows/fsem02-source-successor-trace-preflight.yml'
+  pull_request:
+    paths:
+      - 'src/Phil/Surface/GrammarV1/ComponentRestrictedSourceClose.hs'
+      - 'test/Phase1FSEM02RestrictedSourceTransferMain.hs'
+      - 'proof/Phil/Core/FSEM02RestrictedSuccessorTrace.v'
+      - 'test/fixtures/fsem02-restricted-source-transfer-v1/**'
+      - 'docs/phase-1/formal-semantics-source-successor-trace-fsem02-v1.md'
+      - '.github/workflows/fsem02-source-successor-trace-preflight.yml'
+
+concurrency:
+  group: fsem02-source-successor-trace-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  strict-restricted-source-diamond:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: haskell-actions/setup@v2
+        with:
+          ghc-version: '9.6.7'
+          cabal-version: 'latest'
+          cabal-update: false
+      - run: bash scripts/ci/cabal-update-retry.sh
+      - run: cabal build lib:phil-core --ghc-options=-Werror
+      - name: Source successor identity, native trace and negative identity classes
+        run: |
+          set -euo pipefail
+          cabal exec -- ghc -isrc -Wall -Werror -fno-code test/Phase1FSEM02RestrictedSourceTransferMain.hs
+          cabal exec -- runghc -isrc -Wall -Werror test/Phase1FSEM02RestrictedSourceTransferMain.hs
+          sha256sum src/Phil/Surface/GrammarV1/ComponentRestrictedSourceClose.hs test/Phase1FSEM02RestrictedSourceTransferMain.hs test/fixtures/fsem02-restricted-source-transfer-v1/*.phil
+  rocq:
+    runs-on: ubuntu-24.04
+    container:
+      image: rocq/rocq-prover:9.2.0
+      options: --user root
+    steps:
+      - uses: actions/checkout@v4
+      - name: Conditional end-to-end successor trace and no new admissions
+        shell: bash
+        run: |
+          set -euo pipefail
+          export PATH="/home/rocq/.opam/${COMPILER}/bin:$PATH"
+          for file in \
+            proof/Phil/Core/Syntax.v \
+            proof/Phil/Core/Context.v \
+            proof/Phil/Core/ContextJoin.v \
+            proof/Phil/Core/ProcessJoin.v \
+            proof/Phil/Core/ProcessTerminal.v \
+            proof/Phil/Core/ArchitectureIdentity.v \
+            proof/Phil/Core/ArchitectureInstantiation.v \
+            proof/Phil/Core/ProviderReplacementQualification.v \
+            proof/Phil/Core/ArchitectureRealization.v \
+            proof/Phil/Systems/FactDisposition.v \
+            proof/Phil/Assurance/ValidityScope.v \
+            proof/Phil/Core/SystemsStageClosure.v \
+            proof/Phil/Core/SystemsGenericLowering.v \
+            proof/Phil/Core/ConcurrencySemantics.v \
+            proof/Phil/Core/SessionStep.v \
+            proof/Phil/Core/FSEM02ProtocolHeadProgression.v \
+            proof/Phil/Core/FSEM02JointSourceChoice.v \
+            proof/Phil/Core/FSEM02StatefulSourceChoice.v \
+            proof/Phil/Core/FSEM02RestrictedSourceTransfer.v \
+            proof/Phil/Core/FSEM02SelectedClientClose.v \
+            proof/Phil/Core/FSEM02ExplicitPeerClose.v \
+            proof/Phil/Core/FSEM02TerminalCloseDiamond.v \
+            proof/Phil/Core/FSEM02RestrictedCloseDiamond.v \
+            proof/Phil/Core/FSEM02RestrictedSuccessorTrace.v
+          do
+            rocq c -Q proof/Phil Phil "$file"
+          done
+          if grep -nE '^[[:space:]]*(Admitted[.]|Axiom[[:space:]]|Parameter[[:space:]])' proof/Phil/Core/FSEM02RestrictedSuccessorTrace.v; then exit 1; fi
+          sha256sum proof/Phil/Core/FSEM02RestrictedSuccessorTrace.v proof/Phil/Core/FSEM02RestrictedSuccessorTrace.vo
