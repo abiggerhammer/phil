@@ -9,6 +9,7 @@ import qualified Phil.Core.Context as Core
 import Phil.Core.Callable (CallableCheckError (..), CaptureOccurrenceKey (..))
 import Phil.Core.CallableScope (CallableScopeError (..), ClosureExtent (..))
 import Phil.Core.Static (DeclarationKey (..), emptyStaticContext)
+import Phil.Core.Syntax (Mode (..))
 import Phil.Surface.GrammarV1.BinderScope
   (GrammarV1BinderScopeError (..), GrammarV1ResolvedBinder (..))
 import Phil.Surface.GrammarV1.Parser
