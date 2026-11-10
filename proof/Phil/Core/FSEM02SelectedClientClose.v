@@ -44,7 +44,7 @@ Proof.
   apply String.eqb_eq in Hprocess.
   apply String.eqb_eq in Hendpoint.
   subst actualProcess actualEndpoint.
-  exact Howner.
+  reflexivity.
 Qed.
 
 Theorem fsem02SelectedClientCloseExactRetirementAndFrame :
