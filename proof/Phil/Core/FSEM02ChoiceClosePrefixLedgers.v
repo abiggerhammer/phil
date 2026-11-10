@@ -61,7 +61,7 @@ Proof.
     offerOccurrence offerProcess offerNext
     afterClient afterForward afterPeer afterReverse
     Hdistinct Hclient Hpeer HpeerFirst HclientSecond) as Hdiamond.
-  repeat split.
+  repeat (apply conj).
   - exact HclientGone.
   - rewrite (HclientFrame offerOccurrence HofferDistinct).
     exact HofferReady.
