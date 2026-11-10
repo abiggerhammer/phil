@@ -737,7 +737,7 @@ choiceCloseDiamondBadPeer client server = do
       (GrammarV1StatefulChoiceExplicitPeerCloseCoreError
         (EndpointClosureProtocolError process
           (ProtocolSessionError (CloseOutcomeMismatch
-            (Outcome "Done") (Outcome "Cancel")))))) ->
+            (Outcome "Done") (Outcome "Cancel"))))))) ->
       assert (process == fxServerProcess fx) "wrong peer outcome named wrong process"
     other -> Left ("wrong peer outcome silently reached diamond: " <> show other)
 
@@ -873,7 +873,7 @@ choiceSourceTraceWrongBody client server bad = do
             (GrammarV1StatefulChoiceSourceError
               (GrammarV1JointChoiceOfferSourceError
                 (GrammarV1OfferReplayCoverageError
-                  GrammarV1ComponentOfferArmBodyUnsupported)))))) -> Right ()
+                  GrammarV1ComponentOfferArmBodyUnsupported))))))) -> Right ()
     other -> Left ("minimally malformed source offer reached choice trace: " <> show other)
 
 choiceSourceTraceStale :: Text -> Text -> Either String ()
@@ -888,7 +888,7 @@ choiceSourceTraceStale client server = do
           (GrammarV1StatefulChoiceClientCloseSourceError
             (GrammarV1StatefulChoiceSourceError
               (GrammarV1JointChoiceOfferSourceError
-                (GrammarV1OfferReplayProtocolError (ProtocolEndpointUnknown name))))))) ->
+                (GrammarV1OfferReplayProtocolError (ProtocolEndpointUnknown name)))))))) ->
       assert (name == fxServerOld fx) "stale trace rejection changed source offer endpoint"
     other -> Left ("stale source-choice predecessor advanced: " <> show other)
 
