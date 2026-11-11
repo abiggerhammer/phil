@@ -47,15 +47,13 @@ Theorem fsem02BothSourceOfferLabelsRefuseOccupiedSuccessor :
       endpoint successor context = StepFailed.
 Proof.
   intros done canceled endpoint successor context Hdistinct Hoccupied.
-  split; unfold fsem02Progression;
-    change (selectedContinuation
-      (FSEM02Offer "Go") (fsem02SeparatedOffer done canceled))
-      with (Some (Some (End done))) in *
-      || change (selectedContinuation
-      (FSEM02Offer "Cancel") (fsem02SeparatedOffer done canceled))
-      with (Some (Some (End canceled))) in *.
-  - apply fsem02OccupiedUnrelatedSuccessorCannotContinue; assumption.
-  - apply fsem02OccupiedUnrelatedSuccessorCannotContinue; assumption.
+  split.
+  - change (continueEndpointResource endpoint successor (End done) context
+      = StepFailed).
+    apply fsem02OccupiedUnrelatedSuccessorCannotContinue; assumption.
+  - change (continueEndpointResource endpoint successor (End canceled) context
+      = StepFailed).
+    apply fsem02OccupiedUnrelatedSuccessorCannotContinue; assumption.
 Qed.
 
 Theorem fsem02BothSourceOfferLabelsRefuseOldNameAsSuccessor :
