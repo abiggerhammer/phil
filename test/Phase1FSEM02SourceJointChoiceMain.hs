@@ -1048,7 +1048,7 @@ choiceTypedPrefixWrongBody client server bad = do
               (GrammarV1StatefulChoiceSourceError
                 (GrammarV1JointChoiceOfferSourceError
                   (GrammarV1OfferReplayCoverageError
-                    GrammarV1ComponentOfferArmBodyUnsupported))))) -> Right ()
+                    GrammarV1ComponentOfferArmBodyUnsupported)))))) -> Right ()
       other -> Left ("wrong nested minimally rejected source class: " <> show other)
     other -> Left ("minimally rejected offer was accepted as typed choice: " <> show other)
 
@@ -1066,7 +1066,7 @@ choiceTypedPrefixStale client server = do
               (GrammarV1StatefulChoiceSourceError
                 (GrammarV1JointChoiceOfferSourceError
                   (GrammarV1OfferReplayProtocolError
-                    (ProtocolEndpointUnknown old)))))) ->
+                    (ProtocolEndpointUnknown old))))))) ->
                       assert (old == fxServerOld fx) "wrong stale peer occurrence"
       other -> Left ("wrong exact stale error: " <> show other)
     other -> Left ("stale original choice predecessor was reused: " <> show other)
