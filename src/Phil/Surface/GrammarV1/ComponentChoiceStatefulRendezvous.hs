@@ -38,7 +38,6 @@ import Phil.Core.Protocol
   ( CheckedProtocolStep (..)
   , ProtocolActionRequest (..)
   , ProtocolCheckError
-  , ProtocolContext
   , ProtocolRoleKey
   , checkProtocolAction
   )
