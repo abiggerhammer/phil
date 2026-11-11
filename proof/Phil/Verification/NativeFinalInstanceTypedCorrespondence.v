@@ -3514,3 +3514,70 @@ Section NativeSealedWholeStageModel.
     congruence.
   Qed.
 End NativeSealedWholeStageModel.
+
+(* P7 #1584: a purely typed retention / full-envelope rejection MODEL.
+   Native authority is minted only by the independently checked Haskell
+   source->Systems->whole StageClosure->manifest/release producer and mandatory
+   accepting consumer. The model has NO function or theorem interpreting
+   Haskell bytes/UTF-8/LLVM into these abstract types. *)
+Section NativeFinalOriginRetentionModel.
+  Context {OriginKey OriginRevision WholeBinding WholeStage WholeRelease : Type}.
+  Record FinalOriginSelectionModel := {
+    finalModelOriginKey : OriginKey;
+    finalModelOriginRevision : OriginRevision;
+    finalModelBinding : WholeBinding;
+    finalModelStage : WholeStage;
+    finalModelRelease : WholeRelease
+  }.
+  Definition finalModelAccepts (selected : FinalOriginSelectionModel)
+      (key : OriginKey) (revision : OriginRevision)
+      (binding : WholeBinding) (stage : WholeStage)
+      (release : WholeRelease) : Prop :=
+    finalModelOriginKey selected = key /\
+    finalModelOriginRevision selected = revision /\
+    finalModelBinding selected = binding /\
+    finalModelStage selected = stage /\
+    finalModelRelease selected = release.
+
+  Theorem native_final_origin_model_retains_complete_selection :
+    forall selected key revision binding stage release,
+      finalModelAccepts selected key revision binding stage release ->
+      finalModelOriginKey selected = key /\
+      finalModelOriginRevision selected = revision /\
+      finalModelBinding selected = binding /\
+      finalModelStage selected = stage /\
+      finalModelRelease selected = release.
+  Proof. intros; assumption. Qed.
+
+  Theorem native_final_origin_model_wrong_key_rejected_same_revision :
+    forall selected key otherKey revision binding stage release,
+      finalModelOriginKey selected = key ->
+      key <> otherKey ->
+      ~ finalModelAccepts selected otherKey revision binding stage release.
+  Proof.
+    intros selected key otherKey revision binding stage release Hkey Hneq Haccept.
+    destruct Haccept as [Hother _].
+    apply Hneq.
+    rewrite <- Hkey. exact Hother.
+  Qed.
+
+  Theorem native_final_origin_model_changed_whole_release_rejected :
+    forall selected key revision binding stage release,
+      finalModelRelease selected <> release ->
+      ~ finalModelAccepts selected key revision binding stage release.
+  Proof.
+    intros selected key revision binding stage release Hneq Haccept.
+    apply Hneq. destruct Haccept as [_ [_ [_ [_ Hrelease]]]].
+    exact Hrelease.
+  Qed.
+
+  Theorem native_final_origin_model_changed_binding_rejected :
+    forall selected key revision binding stage release,
+      finalModelBinding selected <> binding ->
+      ~ finalModelAccepts selected key revision binding stage release.
+  Proof.
+    intros selected key revision binding stage release Hneq Haccept.
+    apply Hneq. destruct Haccept as [_ [_ [Hbinding _]]].
+    exact Hbinding.
+  Qed.
+End NativeFinalOriginRetentionModel.

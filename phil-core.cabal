@@ -112,6 +112,7 @@ library
       Phil.Verification.SourceManifestBinding
       Phil.Verification.NativeFinalInstanceCorrespondence
       Phil.Verification.VerifiedStageClosureProduction
+      Phil.Verification.VerifiedFinalOriginProduction
       AuthorityAttenuationKernel
       AuthorityConfinementKernel
       AuthorityPossessionKernel

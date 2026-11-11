@@ -61,11 +61,83 @@ import Phil.Systems.GenericLowering
   , GenericRealizationContext
   , coreSystemsProgramSemanticForm
   )
-import Phil.Systems.IR (systemsArtifactDigest)
-import Phil.Systems.Phase1Stage
+ import Phil.Systems.Phase1Stage
   ( phase1StageInstanceRevision
   , phase1StageSystemsArtifact
   , verifyPhase1StageBundle
+  )
+import Phil.Assurance.Types
+  ( ArtifactIdentity (..)
+  , ArtifactRef (..)
+  , AssuranceLedger
+  , Digest
+  , VerificationContext (..)
+  , digestText
+  , emptyLedger
+  , emptyVerificationContext
+  )
+import Phil.Core.Generic
+  ( GenericStaticParameterKey (..)
+  , checkGenericInstantiation
+  , deriveGenericApplicationIdentity
+  , deriveGenericDischargeLineage
+  , strictGenericInstantiationPolicy
+  )
+import Phil.Core.Static
+  ( ArchitectureInstanceDescriptor (..)
+  , ArchitectureInstanceIdentity (..)
+  , DeclarationIdentity (..)
+  , deriveArchitectureInstanceIdentity
+  )
+import Phil.Systems.ProviderCallCorrespondence (ProviderCallExpectationMap)
+import Phil.Systems.IR
+  ( loweringLedgerRoot
+  , systemsArtifactDigest
+  , systemsArtifactLoweringLedger
+  )
+import Phil.Verification
+  ( ApplicationAssurancePolicy (..)
+  , AssurancePolicyRevision (..)
+  , buildVerificationRevisionGraph
+  )
+import Phil.Verification.ArtifactClosure
+  ( certifyApplicationArtifact )
+import Phil.Verification.Bundle
+  ( buildVerificationBundle
+  , verificationBundleArchitectureDigest
+  )
+import Phil.Verification.CertifiedRelease
+  ( CertifiedReleaseProfile (..)
+  , ReleaseProfileRevision (..)
+  , ReleaseTrustBoundary (..)
+  , ReleaseTrustBoundaryId (..)
+  , ReleaseTrustKind (..)
+  , certifiedReleaseManifest
+  , certifiedReleaseStageClosure
+  , certifyReleaseArtifact
+  )
+import Phil.Verification.GenericAssurance
+  ( GenericApplicationAssurance
+  , composeGenericApplicationAssurance
+  , prepareReusableGenericBodyAssurance
+  )
+import Phil.Verification.ManifestClosure (ManifestClosureSelection (..))
+import Phil.Verification.SourceManifestBinding
+  ( CertifiedSourceManifestBinding
+  , closeSourceManifestBindingForInstance
+  , sourceManifestBindingManifest
+  , sourceManifestBindingSourceAssurance
+  )
+import Phil.Verification.VerifiedFinalOriginProduction
+  ( VerifiedFinalOriginProduction
+  , VerifiedFinalOriginError (..)
+  , acceptVerifiedFinalOrigin
+  , acceptedVerifiedFinalOriginProduction
+  , produceVerifiedFinalOrigin
+  , verifiedFinalOriginRelease
+  , verifiedFinalOriginSourceArtifact
+  , verifiedFinalOriginSourceBinding
+  , verifiedFinalOriginStageProduction
   )
 import System.Exit (exitFailure)
 
@@ -92,6 +164,12 @@ main = do
         (steveVerifiedStageClosure stevePut steveGet)
     , test "P6 Steve stage config cannot borrow Upload producer"
         (verifiedStageRejectsWrongConcrete uploadClient uploadServer)
+    , test "P7 Upload real source-to-final accepting consumer"
+        (p7UploadReplay uploadClient uploadServer)
+    , test "P7 Steve real source-to-final accepting consumer"
+        (p7SteveReplay stevePut steveGet)
+    , test "P7 wrong K/source/manifest/stage/release/LLVM/trust are rejected"
+        (p7Adversarial uploadClient uploadServer stevePut steveGet)
     ]
   if and results then pure () else exitFailure
 
@@ -555,3 +633,216 @@ assert condition detail
 
 mapLeft :: (a -> b) -> Either a c -> Either b c
 mapLeft f = either (Left . f) Right
+
+
+-- P7: the first final-origin positive fixture starts with ordinary PHIL text,
+-- not the independent generic-source/StageClosure fixtures in INT-005.
+data P7Fixture = P7Fixture
+  { p7Production :: VerifiedFinalOriginProduction
+  , p7Context :: VerificationContext
+  , p7Ledger :: AssuranceLedger
+  , p7Profile :: CertifiedReleaseProfile
+  , p7LLVM :: LLVMArtifact
+  , p7Trust :: [ReleaseTrustBoundary]
+  }
+
+p7UploadReplay :: Text -> Text -> Either String ()
+p7UploadReplay clientSource serverSource = do
+  prod <- verifiedUploadProduction clientSource serverSource
+  template <- uploadStageClosureBundle
+  fixture <- makeP7Fixture prod uploadProviderCallExpectations template
+  p7AcceptsExact fixture
+
+p7SteveReplay :: Text -> Text -> Either String ()
+p7SteveReplay putSource getSource = do
+  prod <- verifiedSteveProduction putSource getSource
+  template <- steveStageClosureBundle
+  fixture <- makeP7Fixture prod steveProviderCallExpectations template
+  p7AcceptsExact fixture
+
+p7AcceptsExact :: P7Fixture -> Either String ()
+p7AcceptsExact fixture = do
+  let produced = p7Production fixture
+  accepted <- mapLeft show (acceptVerifiedFinalOrigin produced
+    (verifiedFinalOriginSourceBinding produced)
+    (verifiedFinalOriginSourceArtifact produced)
+    (verifiedFinalOriginRelease produced))
+  assert (acceptedVerifiedFinalOriginProduction accepted == produced)
+    "final-origin accepted result lost the exact source/manifest/stage/release"
+
+makeP7Fixture
+  :: VerifiedSourceSystemsProduction
+  -> ProviderCallExpectationMap
+  -> StageClosureBundle
+  -> Either String P7Fixture
+makeP7Fixture prod expectations template = do
+  stageProd <- mapLeft show (produceVerifiedStageClosure prod expectations template)
+  let stage = verifiedStageClosureSelected stageProd
+      descriptor = verifiedSourceSystemsArchitectureDescriptor prod
+      systems = phase1StageSystemsArtifact (verifiedSourceSystemsStage prod)
+      llvm = lowerSystemsConservative phase0LLVMTarget systems
+  source <- makeP7Source descriptor (ArtifactRef "p7.ordinary-source-proof")
+  (binding, context) <- makeP7Binding source descriptor stage
+    (digestText "p7.accepted.phil-core")
+  let profile = CertifiedReleaseProfile
+        { releaseProfileRevision = ReleaseProfileRevision "p7.conventional.v1"
+        , releaseProfileManifestTarget = "phase1-p7-conventional"
+        , releaseProfileManifestCompilationProfile = "phase1-p7-checked"
+        , releaseProfileLLVMTarget = phase0LLVMTarget
+        , releaseProfileRequiredTrustKinds = Set.fromList
+            [ CompilerCheckerTrust, LLVMToolchainTrust, RuntimeTrust
+            , ProviderTrust, ExternalCheckerTrust, TargetAssumptionTrust ]
+        }
+      trust =
+        [ p7TrustValue "compiler" CompilerCheckerTrust
+        , p7TrustValue "llvm" LLVMToolchainTrust
+        , p7TrustValue "runtime" RuntimeTrust
+        , p7TrustValue "provider" ProviderTrust
+        , p7TrustValue "checker" ExternalCheckerTrust
+        , p7TrustValue "target" TargetAssumptionTrust ]
+      ledger = emptyLedger
+  result <- mapLeft show
+    (produceVerifiedFinalOrigin stageProd binding context ledger profile llvm trust)
+  assert (certifiedReleaseStageClosure (verifiedFinalOriginRelease result) == stage)
+    "P7 changed the complete P6-produced StageClosure"
+  assert (certifiedReleaseManifest (verifiedFinalOriginRelease result)
+    == sourceManifestBindingManifest binding)
+    "P7 changed the complete checked source manifest"
+  pure (P7Fixture result context ledger profile llvm trust)
+
+p7TrustValue :: Text -> ReleaseTrustKind -> ReleaseTrustBoundary
+p7TrustValue name kind = ReleaseTrustBoundary
+  { releaseTrustBoundaryId = ReleaseTrustBoundaryId name
+  , releaseTrustKind = kind
+  , releaseTrustName = name
+  , releaseTrustRevision = "p7.trust.v1"
+  , releaseTrustBasis = "existing Phase 1 declared TCB"
+  }
+
+makeP7Source
+  :: ArchitectureInstanceDescriptor
+  -> ArtifactRef
+  -> Either String GenericApplicationAssurance
+makeP7Source descriptor evidenceRef = do
+  let declaration = architectureDeclarationIdentity descriptor
+      key = identityDeclarationKey declaration
+      interface = identityInterfaceRevision declaration
+      definition = identityDefinitionRevision declaration
+      actuals =
+        [ (GenericStaticParameterKey k, value)
+        | (k, value) <- Map.toAscList (architectureStaticBindings descriptor) ]
+  body <- mapLeft show (prepareReusableGenericBodyAssurance
+    key interface definition Set.empty
+    (ArtifactIdentity evidenceRef (digestText "p7.checked.body-evidence")))
+  application <- mapLeft show (deriveGenericApplicationIdentity key interface actuals)
+  disposition <- mapLeft show (checkGenericInstantiation
+    strictGenericInstantiationPolicy Set.empty [])
+  mapLeft show (composeGenericApplicationAssurance body Set.empty
+    (deriveGenericDischargeLineage application definition disposition))
+
+makeP7Binding
+  :: GenericApplicationAssurance
+  -> ArchitectureInstanceDescriptor
+  -> StageClosureBundle
+  -> Digest
+  -> Either String (CertifiedSourceManifestBinding, VerificationContext)
+makeP7Binding source descriptor stage coreDigest = do
+  graph <- mapLeft show (buildVerificationRevisionGraph [] Set.empty)
+  let policy = ApplicationAssurancePolicy
+        (AssurancePolicyRevision "p7.source-manifest.v1") Set.empty
+  bundle <- mapLeft show (buildVerificationBundle
+    (digestText "p7.verified-ordinary-source-revision")
+    [architectureDeclarationIdentity descriptor]
+    [deriveArchitectureInstanceIdentity descriptor] [] graph policy [])
+  let systems = phase1StageSystemsArtifact
+        (subjectStageBase (concreteSubjectStage (stageClosureConcrete stage)))
+      context = emptyVerificationContext
+        { verificationArchitectureDigest = verificationBundleArchitectureDigest bundle
+        , verificationPhilCoreDigest = coreDigest
+        , verificationImplementationDigest = systemsArtifactDigest systems
+        , verificationTarget = "phase1-p7-conventional"
+        , verificationCompilationProfile = "phase1-p7-checked"
+        , verificationLoweringLedgerRoot =
+            loweringLedgerRoot (systemsArtifactLoweringLedger systems)
+        }
+      selection = ManifestClosureSelection
+        Set.empty Set.empty Map.empty Set.empty
+  binding <- mapLeft show (closeSourceManifestBindingForInstance
+    source descriptor bundle policy context emptyLedger selection)
+  pure (binding, context)
+
+-- Each negative is rejected by the mandatory P7 accepting consumer; earlier
+-- structural constructors alone never return the stronger accepted-origin type.
+p7Adversarial :: Text -> Text -> Text -> Text -> Either String ()
+p7Adversarial clientSource serverSource putSource getSource = do
+  uploadProd <- verifiedUploadProduction clientSource serverSource
+  uploadTemplate <- uploadStageClosureBundle
+  upload <- makeP7Fixture uploadProd uploadProviderCallExpectations uploadTemplate
+  steveProd <- verifiedSteveProduction putSource getSource
+  steveTemplate <- steveStageClosureBundle
+  steve <- makeP7Fixture steveProd steveProviderCallExpectations steveTemplate
+  let seal = p7Production upload
+      binding = verifiedFinalOriginSourceBinding seal
+      artifact = verifiedFinalOriginSourceArtifact seal
+      release = verifiedFinalOriginRelease seal
+      stageProd = verifiedFinalOriginStageProduction seal
+      selected = verifiedStageClosureSelected stageProd
+      descriptor = verifiedSourceSystemsArchitectureDescriptor uploadProd
+      source = sourceManifestBindingSourceAssurance binding
+      check candidateBinding candidateSource candidateRelease expected =
+        case acceptVerifiedFinalOrigin seal candidateBinding candidateSource candidateRelease of
+          Left actual | actual == expected -> Right ()
+          result -> Left ("wrong P7 rejection: " <> show result)
+  p7AcceptsExact upload
+  p7AcceptsExact steve
+  -- A public identity record CAN reuse I with a different K, but it is not
+  -- an admissible opaque P2/P6 producer or source-manifest certificate.
+  let actualIdentity = verifiedSourceSystemsArchitectureIdentity uploadProd
+      forgedSameI = ArchitectureInstanceIdentity
+        (InstanceKey "forged.other-occurrence-key")
+        (identityInstanceRevision actualIdentity)
+  assert (identityInstanceRevision forgedSameI == identityInstanceRevision actualIdentity
+       && identityInstanceKey forgedSameI /= identityInstanceKey actualIdentity)
+    "P7 same-I/different-K adversarial identity was not distinct"
+  let otherKey = descriptor
+        { architectureInstanceKey = identityInstanceKey forgedSameI }
+  (wrongKeyBinding, _) <- makeP7Binding source otherKey selected
+    (digestText "p7.accepted.phil-core")
+  assert (otherKey /= descriptor) "P7 K swap was not distinct"
+  case produceVerifiedFinalOrigin stageProd wrongKeyBinding
+      (p7Context upload) (p7Ledger upload) (p7Profile upload)
+      (p7LLVM upload) (p7Trust upload) of
+    Left VerifiedFinalOriginSourceOccurrenceMismatch -> Right ()
+    other -> Left ("P7 wrong K got: " <> show other)
+  check wrongKeyBinding artifact release VerifiedFinalOriginSourceBindingSubstituted
+  otherSource <- makeP7Source descriptor (ArtifactRef "p7.substituted-proof")
+  otherArtifact <- mapLeft show (certifyApplicationArtifact otherSource selected)
+  check binding otherArtifact release VerifiedFinalOriginCertifiedSourceSubstituted
+  (otherBinding, _) <- makeP7Binding source descriptor selected
+    (digestText "p7.changed.phil-core")
+  assert (otherBinding /= binding) "P7 manifest substitution was not distinct"
+  check otherBinding artifact release VerifiedFinalOriginSourceBindingSubstituted
+  oldStageArtifact <- mapLeft show (certifyApplicationArtifact source uploadTemplate)
+  assert (oldStageArtifact /= artifact) "P7 independently built stage was not distinct"
+  check binding oldStageArtifact release VerifiedFinalOriginCertifiedSourceSubstituted
+  check binding artifact (verifiedFinalOriginRelease (p7Production steve))
+    VerifiedFinalOriginCertifiedReleaseSubstituted
+  let alteredTrust = case p7Trust upload of
+        [] -> []
+        (first : rest) -> first { releaseTrustBasis = "changed accepted trust" } : rest
+  alternateTrustRelease <- mapLeft show (certifyReleaseArtifact
+    (p7Profile upload) (p7Context upload) (p7Ledger upload)
+    (sourceManifestBindingManifest binding) selected (p7LLVM upload) alteredTrust)
+  assert (alternateTrustRelease /= release) "P7 trust substitution was not distinct"
+  check binding artifact alternateTrustRelease VerifiedFinalOriginCertifiedReleaseSubstituted
+  let alternateTarget = phase0LLVMTarget
+        { llvmTargetTripleName = "aarch64-unknown-linux-gnu" }
+      alternateProfile = (p7Profile upload)
+        { releaseProfileLLVMTarget = alternateTarget }
+      alternateLLVM = lowerSystemsConservative alternateTarget
+        (phase1StageSystemsArtifact (verifiedSourceSystemsStage uploadProd))
+  alternateLLVMRelease <- mapLeft show (certifyReleaseArtifact
+    alternateProfile (p7Context upload) (p7Ledger upload)
+    (sourceManifestBindingManifest binding) selected alternateLLVM (p7Trust upload))
+  assert (alternateLLVMRelease /= release) "P7 LLVM substitution was not distinct"
+  check binding artifact alternateLLVMRelease VerifiedFinalOriginCertifiedReleaseSubstituted
