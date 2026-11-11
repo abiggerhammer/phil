@@ -231,7 +231,9 @@ Read:
 [concurrency semantics](../../proof/Phil/Core/ConcurrencySemantics.v),
 and its [proof scope and exclusions](concurrency-semantics-proof-v1.md).
 
-The [restricted Send/Receive typed terminal-head witness](formal-semantics-restricted-terminal-heads-fsem02-v1.md) checks actual source/Core endpoint metadata and exact linear `TyEndpoint End` continuations with externally supplied outcomes; wrong heads, stale predecessors and unsupported source reject without successor. This is a bounded, non-normative observation, not global refinement.\n\nThe bounded [restricted Send/Receive one-sided End-prefix ledger check](formal-semantics-restricted-close-prefix-ledgers-fsem02-v1.md) independently replays actual production Core prefixes and proves a conditional Rocq owner/payload/spectator model; the terminal authority, payload disposition and architecture/root boundary remain explicit premises.
+The [restricted Send/Receive typed terminal-head witness](formal-semantics-restricted-terminal-heads-fsem02-v1.md) checks actual source/Core endpoint metadata and exact linear `TyEndpoint End` continuations with externally supplied outcomes; wrong heads, stale predecessors and unsupported source reject without successor. This is a bounded, non-normative observation, not global refinement.
+
+The bounded [restricted Send/Receive one-sided End-prefix ledger check](formal-semantics-restricted-close-prefix-ledgers-fsem02-v1.md) independently replays actual production Core prefixes and proves a conditional Rocq owner/payload/spectator model; the terminal authority, payload disposition and architecture/root boundary remain explicit premises.
 
 ## 6. Architectures, occurrence identity, and root selection
 
