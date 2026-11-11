@@ -13,8 +13,6 @@ import Phil.Compiler.SourceSystems
 import Phil.Core.Static
   ( DeclarationKey (..)
   , emptyStaticContext
-  , identityInstanceRevision
-  , identityInstanceKey
   , InstanceKey (..)
   )
 import Phil.Core.Syntax (Mode (..), Ty (..))
