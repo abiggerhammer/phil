@@ -4,6 +4,8 @@ on:
   pull_request:
     paths:
       - 'src/Phil/Verification/NativeFinalInstanceCorrespondence.hs'
+      - 'src/Phil/Verification/VerifiedStageClosureProduction.hs'
+      - 'test/Phase1INT001WitnessE2EMain.hs'
       - 'src/Phil/Verification/SourceManifestBinding.hs'
       - 'test/Phase1INT005CertifiedReleaseEnvelopeMain.hs'
       - 'proof/Phil/Verification/NativeFinalInstanceTypedCorrespondence.v'
@@ -14,6 +16,8 @@ on:
     branches: [main]
     paths:
       - 'src/Phil/Verification/NativeFinalInstanceCorrespondence.hs'
+      - 'src/Phil/Verification/VerifiedStageClosureProduction.hs'
+      - 'test/Phase1INT001WitnessE2EMain.hs'
       - 'src/Phil/Verification/SourceManifestBinding.hs'
       - 'test/Phase1INT005CertifiedReleaseEnvelopeMain.hs'
       - 'proof/Phil/Verification/NativeFinalInstanceTypedCorrespondence.v'
@@ -37,6 +41,8 @@ jobs:
         run: cabal build all --enable-tests --ghc-options=-Werror
       - name: Typecheck the exact native witness and accepted consumers
         run: |
+          cabal exec -- ghc -isrc -itest -Wall -Werror -fno-code src/Phil/Verification/VerifiedStageClosureProduction.hs
+          cabal exec -- ghc -isrc -itest -Wall -Werror -fno-code test/Phase1INT001WitnessE2EMain.hs
           cabal exec -- ghc -isrc -itest -Wall -Werror -fno-code src/Phil/Verification/SourceManifestBinding.hs
           cabal exec -- ghc -isrc -itest -Wall -Werror -fno-code src/Phil/Verification/NativeFinalInstanceCorrespondence.hs
           cabal exec -- ghc -isrc -itest -Wall -Werror -fno-code test/Phase1INT005CertifiedReleaseEnvelopeMain.hs
@@ -46,6 +52,7 @@ jobs:
         run: |
           cabal exec -- runghc -isrc -Wall -Werror test/Phase1VerificationSourceArtifactClosureMain.hs
           cabal exec -- runghc -isrc -Wall -Werror test/Phase1StageClosureMain.hs
+          cabal exec -- runghc -isrc -Wall -Werror test/Phase1INT001WitnessE2EMain.hs
 
   typed-rocq-boundary:
     runs-on: ubuntu-24.04
@@ -253,6 +260,9 @@ jobs:
           Print Assumptions native_ascii_profile_model_decodes_role.
           Print Assumptions native_ascii_profile_model_rejects_high_bit.
           Print Assumptions native_ascii_profile_model_wrong_raw_roles.
+          Print Assumptions native_whole_stage_model_retains_exact_origin.
+          Print Assumptions native_whole_stage_model_retains_selected_whole_stage.
+          Print Assumptions native_whole_stage_model_rejects_same_revision_other_key.
           Print Assumptions fixed_adapter_full_certification_preserves_predecessors.
           EOF
           rocq c -Q proof/Phil Phil /tmp/NativeFinalInstanceAssumptions.v 2>&1 | tee typed-native-instance-assumptions.log

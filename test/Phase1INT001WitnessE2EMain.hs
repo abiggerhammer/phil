@@ -18,6 +18,24 @@ import Phil.Core.Static
   , InstanceKey (..)
   )
 import Phil.Core.Syntax (Mode (..), Ty (..))
+import Phil.Examples.Phase1.StageClosureWitnesses
+  ( steveStageClosureBundle
+  , uploadStageClosureBundle
+  )
+import Phil.Examples.Phase1.ProviderCallWitnesses
+  ( steveProviderCallExpectations
+  , uploadProviderCallExpectations
+  )
+import Phil.Verification.VerifiedStageClosureProduction
+import Phil.Systems.StageClosure
+  ( StageClosureBundle
+  , concreteSubjectStage
+  , nextStageSubjectStage
+  , stageClosureConcrete
+  , stageClosureNextStage
+  , verifyStageClosureBundle
+  )
+import Phil.Systems.SubjectCorrespondence (subjectStageBase)
 import Phil.Examples.Phase1.SystemsWitnesses
   ( steveCoreProgram
   , steveQualifiedRealizationContext
@@ -68,6 +86,12 @@ main = do
         (steveVerifiedProducer stevePut steveGet)
     , test "INT-001 source-owned producer refuses unlisted occurrence site"
         (verifiedProducerRejectsWrongSite uploadClient uploadServer)
+    , test "P6 Upload whole StageClosure built from sealed ordinary source"
+        (uploadVerifiedStageClosure uploadClient uploadServer)
+    , test "P6 Steve whole StageClosure built from sealed ordinary source"
+        (steveVerifiedStageClosure stevePut steveGet)
+    , test "P6 Steve stage config cannot borrow Upload producer"
+        (verifiedStageRejectsWrongConcrete uploadClient uploadServer)
     ]
   if and results then pure () else exitFailure
 
@@ -189,6 +213,79 @@ verifiedProducerRejectsWrongSite clientSource serverSource = do
         (SourceArchitectureInstanceLineageMissing missingSite))
       | missingSite == nonexistent -> Right ()
     other -> Left ("unlisted source producer site not refused: " <> show other)
+
+
+-- The legacy StageClosure witness is configuration only, not a production
+-- authority. Reconstruct every stage from an independently checked ordinary
+-- source producer with the REAL checked source occurrence.
+verifiedUploadProduction
+  :: Text -> Text -> Either String VerifiedSourceSystemsProduction
+verifiedUploadProduction clientSource serverSource = do
+  clientEnvironment <- mapLeft show (phase0EnvironmentFor "client.phil")
+  serverEnvironment <- mapLeft show (phase0EnvironmentFor "server.phil")
+  mapLeft show $ produceVerifiedSourceSystems
+    uploadRoots
+    (Map.fromList
+      [ (uploadClientDeclaration, clientEnvironment)
+      , (uploadServerDeclaration, serverEnvironment) ])
+    (Map.singleton "program:upload" (InstanceLineageSiteId "instance.upload"))
+    uploadPolicy (uploadBundle clientSource serverSource)
+    uploadCoreProgram uploadRealizationContext
+
+verifiedSteveProduction
+  :: Text -> Text -> Either String VerifiedSourceSystemsProduction
+verifiedSteveProduction putSource getSource = do
+  context <- steveQualifiedRealizationContext
+  mapLeft show $ produceVerifiedSourceSystems
+    steveRoots steveEnvironments
+    (Map.singleton "program:steve" (InstanceLineageSiteId "instance.steve"))
+    stevePolicy (steveBundle putSource getSource)
+    steveCoreProgram context
+
+uploadVerifiedStageClosure :: Text -> Text -> Either String ()
+uploadVerifiedStageClosure clientSource serverSource = do
+  production <- verifiedUploadProduction clientSource serverSource
+  template <- uploadStageClosureBundle
+  retained <- mapLeft show
+    (produceVerifiedStageClosure production uploadProviderCallExpectations template)
+  assert (verifiedStageClosureSourceProduction retained == production)
+    "Upload lost sealed producer"
+  assertStageFromProduction production (verifiedStageClosureSelected retained)
+
+steveVerifiedStageClosure :: Text -> Text -> Either String ()
+steveVerifiedStageClosure putSource getSource = do
+  production <- verifiedSteveProduction putSource getSource
+  template <- steveStageClosureBundle
+  retained <- mapLeft show
+    (produceVerifiedStageClosure production steveProviderCallExpectations template)
+  assert (verifiedStageClosureSourceProduction retained == production)
+    "Steve lost sealed producer"
+  assertStageFromProduction production (verifiedStageClosureSelected retained)
+
+assertStageFromProduction
+  :: VerifiedSourceSystemsProduction
+  -> StageClosureBundle
+  -> Either String ()
+assertStageFromProduction production selected = do
+  mapLeft show (verifyStageClosureBundle selected)
+  let sourceStage = verifiedSourceSystemsStage production
+      concreteStage = subjectStageBase
+        (concreteSubjectStage (stageClosureConcrete selected))
+      nextStage = subjectStageBase
+        (nextStageSubjectStage (stageClosureNextStage selected))
+  assert (concreteStage == sourceStage)
+    "concrete closure arm substituted the entire produced base"
+  assert (nextStage == sourceStage)
+    "next-stage closure arm substituted the entire produced base"
+
+verifiedStageRejectsWrongConcrete :: Text -> Text -> Either String ()
+verifiedStageRejectsWrongConcrete clientSource serverSource = do
+  production <- verifiedUploadProduction clientSource serverSource
+  steveTemplate <- steveStageClosureBundle
+  case produceVerifiedStageClosure
+      production steveProviderCallExpectations steveTemplate of
+    Left _ -> Right ()
+    Right _ -> Left "Steve stage unexpectedly accepted Upload producer"
 
 -- Framed upload ----------------------------------------------------------------
 

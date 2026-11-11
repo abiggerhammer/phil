@@ -94,6 +94,10 @@ library
       Phil.Surface.Lineage
       Phil.Compiler.SourceBundle
       Phil.Compiler.SourceArchitecture
+      Phil.Compiler.SourceCore
+      Phil.Compiler.SourceCorePolicy
+      Phil.Compiler.SourceSystems
+      Phil.Systems.GenericLowering
       Phil.Assurance.EvidenceAuthorityKernelBridge
       Phil.Assurance.Types
       Phil.Assurance.Handoff
@@ -107,6 +111,7 @@ library
       Phil.Verification.FinalAuthorityAdapter
       Phil.Verification.SourceManifestBinding
       Phil.Verification.NativeFinalInstanceCorrespondence
+      Phil.Verification.VerifiedStageClosureProduction
       AuthorityAttenuationKernel
       AuthorityConfinementKernel
       AuthorityPossessionKernel
