@@ -1,5 +1,6 @@
 From Stdlib Require Import Strings.String Bool.Bool.
-From Phil.Core Require Import Syntax FSEM02RestrictedTerminalHeads
+From Phil.Core Require Import Syntax FSEM02StatefulSourceChoice
+  FSEM02RestrictedSourceTransfer FSEM02RestrictedTerminalHeads
   FSEM02RestrictedClosePrefixLedgers FSEM02SelectedClientClose
   FSEM02ExplicitPeerClose.
 
