@@ -3469,3 +3469,48 @@ Proof.
   intros p [raw] [root] _.
   split; reflexivity.
 Qed.
+
+
+(* P6 #1584: abstract retention shape for a sealed native source event
+   threaded into a whole selected stage. Actual Haskell mint/rebuild/verification
+   supplies authority; these model equalities do NOT verify native admission,
+   Unicode transport, independent manifests or a final CertifiedRelease. *)
+Section NativeSealedWholeStageModel.
+  Context {OriginKey OriginRevision ProducedBase WholeClosure : Type}.
+  Record SourceOriginModel := {
+    modelOriginKey : OriginKey;
+    modelOriginRevision : OriginRevision;
+    modelOriginProducedBase : ProducedBase
+  }.
+  Record WholeStageOriginModel := {
+    modelRetainedOrigin : SourceOriginModel;
+    modelRetainedWholeClosure : WholeClosure
+  }.
+  Definition modelMintWholeStage (origin : SourceOriginModel)
+      (whole : WholeClosure) : WholeStageOriginModel :=
+    {| modelRetainedOrigin := origin;
+       modelRetainedWholeClosure := whole |}.
+
+  Theorem native_whole_stage_model_retains_exact_origin :
+    forall origin whole,
+      modelRetainedOrigin (modelMintWholeStage origin whole) = origin.
+  Proof. reflexivity. Qed.
+
+  Theorem native_whole_stage_model_retains_selected_whole_stage :
+    forall origin whole,
+      modelRetainedWholeClosure (modelMintWholeStage origin whole) = whole.
+  Proof. reflexivity. Qed.
+
+  Theorem native_whole_stage_model_rejects_same_revision_other_key :
+    forall left right leftWhole rightWhole,
+      modelOriginRevision left = modelOriginRevision right ->
+      modelOriginKey left <> modelOriginKey right ->
+      modelMintWholeStage left leftWhole <>
+        modelMintWholeStage right rightWhole.
+  Proof.
+    intros left right leftWhole rightWhole _ Hkey Hsame.
+    apply Hkey.
+    inversion Hsame.
+    congruence.
+  Qed.
+End NativeSealedWholeStageModel.

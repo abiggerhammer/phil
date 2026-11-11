@@ -107,6 +107,7 @@ library
       Phil.Verification.FinalAuthorityAdapter
       Phil.Verification.SourceManifestBinding
       Phil.Verification.NativeFinalInstanceCorrespondence
+      Phil.Verification.VerifiedStageClosureProduction
       AuthorityAttenuationKernel
       AuthorityConfinementKernel
       AuthorityPossessionKernel
