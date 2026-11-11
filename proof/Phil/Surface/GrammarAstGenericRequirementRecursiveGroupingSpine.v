@@ -297,11 +297,13 @@ Proof.
       as [[name_tree effects] |] eqn:Heffects;
       try discriminate Hnormalize.
     inversion Hnormalize; subst refined.
-    cbn.
-    rewrite
-      (phase1_surface_normalize_generic_requirement_recursive_grouping_payload_round_trip
-        selected name_tree effects Heffects).
-    reflexivity.
+    exact
+      (f_equal
+        (fun selected_tree =>
+          PTNonterminal "generic_requirement"
+            (PTAlternative 6 selected_tree))
+        (phase1_surface_normalize_generic_requirement_recursive_grouping_payload_round_trip
+          selected name_tree effects Heffects)).
   - inversion Hnormalize; subst refined. reflexivity.
   - inversion Hnormalize; subst refined. reflexivity.
   - inversion Hnormalize; subst refined. reflexivity.
@@ -396,10 +398,16 @@ Proof.
   - destruct (phase1_surface_refine_effect_set_recursive_grouping effects)
       as [actual |] eqn:Heffects; try discriminate Hnormalize.
     inversion Hnormalize; subst refined.
-    cbn.
-    rewrite (phase1_surface_refine_effect_set_recursive_grouping_round_trip
-      effects actual Heffects).
-    reflexivity.
+    exact
+      (f_equal
+        (fun child_tree =>
+          PTNonterminal "generic_requirement"
+            (PTAlternative 6
+              (PTSequence
+                [ PTLiteral "effects"; name_tree; PTLiteral "within";
+                  child_tree; PTLiteral ";" ])))
+        (phase1_surface_refine_effect_set_recursive_grouping_round_trip
+          effects actual Heffects)).
   - inversion Hnormalize; subst refined. reflexivity.
   - inversion Hnormalize; subst refined. reflexivity.
   - inversion Hnormalize; subst refined. reflexivity.
