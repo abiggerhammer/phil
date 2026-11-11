@@ -120,7 +120,6 @@ Proof.
     phase1_surface_exact5,
     phase1_surface_expect_literal.
   cbn.
-  rewrite String.eqb_refl.
   rewrite Hname_validate.
   rewrite Heffects_normalize.
   reflexivity.
