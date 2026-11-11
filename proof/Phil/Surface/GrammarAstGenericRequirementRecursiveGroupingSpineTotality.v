@@ -7,6 +7,9 @@ From Phil.Surface Require Import
   GrammarAstTopLevelSpine
   GrammarAstGenericRequirementsSpine
   GrammarAstGenericRequirementsTotality
+  GrammarAstGenericRequirementPropositionSpine
+  GrammarAstGenericRequirementExpressionFallbackBaseChoiceShiftRefinedSpine
+  GrammarAstEffectSetExpressionFallbackBaseChoiceShiftRefinedSpine
   GrammarAstGenericRequirementRecursiveGroupingSpine
   GrammarAstGenericRequirementPropositionTotality
   GrammarAstEffectSetRecursiveGroupingSpineTotality.
