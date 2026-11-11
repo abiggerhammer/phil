@@ -186,8 +186,8 @@ verifiedProducerRejectsWrongSite clientSource serverSource = do
       uploadPolicy (uploadBundle clientSource serverSource)
       uploadCoreProgram uploadRealizationContext of
     Left (VerifiedSourceArchitectureRejected
-        (SourceArchitectureInstanceLineageMissing site))
-      | site == nonexistent -> Right ()
+        (SourceArchitectureInstanceLineageMissing missingSite))
+      | missingSite == nonexistent -> Right ()
     other -> Left ("unlisted source producer site not refused: " <> show other)
 
 -- Framed upload ----------------------------------------------------------------
