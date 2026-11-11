@@ -26,6 +26,7 @@ import Phil.Surface.GrammarV1.ComponentReceiveClose
 import Phil.Surface.GrammarV1.ComponentRestrictedRendezvous
 import Phil.Surface.GrammarV1.ComponentRestrictedSourceTerminal
 import Phil.Surface.GrammarV1.ComponentRestrictedSourceClose
+import Phil.Surface.GrammarV1.ComponentRestrictedTerminalHead
 import Phil.Surface.GrammarV1.ComponentSendClose
 import Phil.Surface.GrammarV1.Parser
 import Phil.Surface.GrammarV1.ProtocolRoles (grammarV1CheckedBinaryProtocolFamily)
@@ -62,6 +63,11 @@ main = do
           , sourceCloseDiamondReplay fx
           , sourceSuccessorTraceReplay fx
           , sourceClosePrefixReplay fx
+          , typedHeadAccepted fx
+          , typedHeadRejectedSource fx rejected
+          , typedHeadWrongOutcome fx
+          , typedHeadWrongSessionHead fx
+          , typedHeadStaleOriginal fx
           , sourceClosePrefixRejectedSource fx rejected
           , sourceClosePrefixStalePredecessor fx
           , sourceClosePrefixWrongOutcome fx
@@ -1368,3 +1374,107 @@ sourceTerminalRejectWrongPredecessorHead fx = do
         assert (process == fxClientProcess fx)
           "predecessor protocol rejection changed sender identity"
     other -> Left ("wrong original session head admitted: " <> show other)
+
+
+-- FSEM-02 NON-NORMATIVE: exact production source/terminal-head and resource
+-- continuation agreement. The End expectations come from external protocol
+-- authority, not the source's spelling of a close operand.
+typedHeadFrom
+  :: Fixture -> GrammarV1ComponentDecl -> GrammarV1ComponentDecl
+  -> ProcessCommunicationState -> Outcome -> Outcome
+  -> Either GrammarV1RestrictedTerminalHeadError GrammarV1RestrictedTerminalHeadTrace
+typedHeadFrom fx sender receiver before senderEnd receiverEnd =
+  grammarV1CheckRestrictedTerminalHeadTrace
+    emptyStaticContext senderRoot sender receiverRoot receiver
+    (fxInstance fx) clientRole serverRole
+    (fxClientProcess fx) (fxServerProcess fx) payloadOccurrence
+    (fxNetwork fx) before senderEnd receiverEnd
+
+typedHeadAccepted :: Fixture -> Either String ()
+typedHeadAccepted fx = do
+  first <- mapLeft show $
+    typedHeadFrom fx (fxSender fx) (fxReceiver fx)
+      (fxBefore fx) doneOutcome doneOutcome
+  second <- mapLeft show $
+    typedHeadFrom fx (fxSender fx) (fxReceiver fx)
+      (fxBefore fx) doneOutcome doneOutcome
+  assert (first == second) "terminal head replay is nondeterministic"
+  let progressed = restrictedSourceNext (restrictedTerminalHeadSourceStep first)
+      revision = binaryProtocolInstanceRevision (fxInstance fx)
+      expectedSender = ProtocolEndpointBinding
+        (fxClientNext fx) revision clientRole (End doneOutcome)
+      expectedReceiver = ProtocolEndpointBinding
+        (fxServerNext fx) revision serverRole (End doneOutcome)
+  sender <- requireProtocol (fxClientProcess fx) progressed
+  receiver <- requireProtocol (fxServerProcess fx) progressed
+  assert (restrictedTerminalHeadSenderSuccessor first == expectedSender
+       && restrictedTerminalHeadReceiverSuccessor first == expectedReceiver
+       && Map.lookup (fxClientNext fx) (protocolEndpoints sender) == Just expectedSender
+       && Map.lookup (fxServerNext fx) (protocolEndpoints receiver) == Just expectedReceiver
+       && Map.lookup (fxClientNext fx) (linearBindings (protocolResources sender)) ==
+            Just (TyEndpoint (End doneOutcome))
+       && Map.lookup (fxServerNext fx) (linearBindings (protocolResources receiver)) ==
+            Just (TyEndpoint (End doneOutcome))
+       && Map.notMember (fxClientOld fx) (protocolEndpoints sender)
+       && Map.notMember (fxServerOld fx) (protocolEndpoints receiver)
+       && Map.notMember (fxClientOld fx) (linearBindings (protocolResources sender))
+       && Map.notMember (fxServerOld fx) (linearBindings (protocolResources receiver))
+       && Map.lookup payloadOccurrence (communicationRestrictedOwners progressed) ==
+            Just (fxServerProcess fx, fxPayloadReceiver fx)
+       && Map.lookup spectatorOccurrence (communicationRestrictedOwners progressed) ==
+            Map.lookup spectatorOccurrence (communicationRestrictedOwners (fxBefore fx)))
+    "typed successor head, exact nominal protocol identity, payload or frame drifted"
+
+typedHeadRejectedSource :: Fixture -> Text -> Either String ()
+typedHeadRejectedSource fx rejected = do
+  (_, badSender, _) <- parseParts rejected
+  case typedHeadFrom fx badSender (fxReceiver fx)
+      (fxBefore fx) doneOutcome doneOutcome of
+    Left (RestrictedTerminalHeadSourceError
+      (RestrictedSourceSendError
+        (GrammarV1ComponentSendCloseCloseMismatch _ _))) -> Right ()
+    other -> Left ("minimally malformed source acquired typed head: " <> show other)
+
+typedHeadWrongOutcome :: Fixture -> Either String ()
+typedHeadWrongOutcome fx =
+  let wrong = Outcome "NotDone" in
+  case typedHeadFrom fx (fxSender fx) (fxReceiver fx)
+      (fxBefore fx) doneOutcome wrong of
+    Left (RestrictedTerminalHeadOutcomeMismatch process name expected observed) ->
+      assert (process == fxServerProcess fx && name == fxServerOld fx
+           && expected == doneOutcome && observed == wrong)
+        "terminal mismatch did not retain exact peer, predecessor and outcomes"
+    other -> Left ("wrong external terminal outcome admitted: " <> show other)
+
+typedHeadWrongSessionHead :: Fixture -> Either String ()
+typedHeadWrongSessionHead fx = do
+  sender <- requireProtocol (fxClientProcess fx) (fxBefore fx)
+  let old = fxClientOld fx
+      wrong = ProtocolEndpointBinding old
+        (binaryProtocolInstanceRevision (fxInstance fx)) clientRole
+        (End doneOutcome)
+      changed = sender { protocolEndpoints =
+        Map.insert old wrong (protocolEndpoints sender) }
+      before = (fxBefore fx) { communicationProtocolContexts =
+        Map.insert (fxClientProcess fx) changed
+          (communicationProtocolContexts (fxBefore fx)) }
+  case typedHeadFrom fx (fxSender fx) (fxReceiver fx)
+      before doneOutcome doneOutcome of
+    Left (RestrictedTerminalHeadSourceError
+      (RestrictedSourceCoreError (RendezvousProtocolError process _))) ->
+      assert (process == fxClientProcess fx)
+        "wrong-head rejection lost the exact source sender process"
+    other -> Left ("wrong original session head acquired typed successor: " <> show other)
+
+typedHeadStaleOriginal :: Fixture -> Either String ()
+typedHeadStaleOriginal fx = do
+  first <- mapLeft show $ checked fx (fxSender fx) (fxReceiver fx) (fxBefore fx)
+  case typedHeadFrom fx (fxSender fx) (fxReceiver fx)
+      (restrictedSourceNext first) doneOutcome doneOutcome of
+    Left (RestrictedTerminalHeadSourceError
+      (RestrictedSourceCoreError
+        (RestrictedMessageOwnerMismatch occurrence _ _ process name))) ->
+      assert (occurrence == payloadOccurrence
+           && process == fxServerProcess fx && name == fxPayloadReceiver fx)
+        "stale replay lost exact previously transferred payload identity"
+    other -> Left ("consumed predecessor acquired second typed transition: " <> show other)
