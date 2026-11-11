@@ -73,7 +73,18 @@ Proof.
     afterForward afterPeer afterReverse Hdistinct Hchoice HclientClose
     HpeerClose HpeerFirst HclientSecond)
     as [HclientGone [HofferLive [HclientLive [HofferGone [Hframe Hdiamond]]]]].
-  repeat split; assumption.
+  repeat (apply conj).
+  - exact Hpeer.
+  - exact HclientOld.
+  - exact HclientNext.
+  - exact HofferOld.
+  - exact HofferNext.
+  - exact HclientGone.
+  - exact HofferLive.
+  - exact HclientLive.
+  - exact HofferGone.
+  - exact Hframe.
+  - exact Hdiamond.
 Qed.
 
 (* A source-listed peer label cannot turn an absent protocol branch into
