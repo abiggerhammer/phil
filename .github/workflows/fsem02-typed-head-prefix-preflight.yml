@@ -21,7 +21,7 @@ on:
       - '.github/workflows/fsem02-typed-head-prefix-preflight.yml'
 
 concurrency:
-  group: fsem02-restricted-close-prefix-${{ github.ref }}
+  group: fsem02-typed-head-prefix-${{ github.ref }}
   cancel-in-progress: true
 
 permissions:
