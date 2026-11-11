@@ -68,6 +68,12 @@ main = do
           , typedHeadWrongOutcome fx
           , typedHeadWrongSessionHead fx
           , typedHeadStaleOriginal fx
+          , typedPrefixAccepted fx
+          , typedPrefixRejectedSource fx rejected
+          , typedPrefixWrongOutcome fx
+          , typedPrefixWrongSessionHead fx
+          , typedPrefixStaleOriginal fx
+          , typedPrefixAliasedOccurrence fx
           , sourceClosePrefixRejectedSource fx rejected
           , sourceClosePrefixStalePredecessor fx
           , sourceClosePrefixWrongOutcome fx
@@ -1389,6 +1395,121 @@ typedHeadFrom fx sender receiver before senderEnd receiverEnd =
     (fxInstance fx) clientRole serverRole
     (fxClientProcess fx) (fxServerProcess fx) payloadOccurrence
     (fxNetwork fx) before senderEnd receiverEnd
+
+
+-- The original checked source and activated predecessor are independently
+-- replayed by both production adapters. The second adapter checks all owner
+-- occurrences at each first-End prefix, including restricted payload/frame.
+typedPrefixFrom
+  :: Fixture -> GrammarV1ComponentDecl -> GrammarV1ComponentDecl
+  -> ProcessCommunicationState -> Outcome -> Outcome
+  -> Either GrammarV1RestrictedTypedPrefixError GrammarV1RestrictedTypedPrefixTrace
+typedPrefixFrom fx sender receiver before senderEnd receiverEnd =
+  grammarV1CheckRestrictedTypedPrefixTrace
+    emptyStaticContext senderRoot sender receiverRoot receiver
+    (fxInstance fx) clientRole serverRole
+    (fxClientProcess fx) (fxServerProcess fx)
+    clientEndpointOccurrence serverEndpointOccurrence payloadOccurrence
+    (fxNetwork fx) before senderEnd receiverEnd
+
+typedPrefixAccepted :: Fixture -> Either String ()
+typedPrefixAccepted fx = do
+  first <- mapLeft show $ typedPrefixFrom fx (fxSender fx) (fxReceiver fx)
+    (fxBefore fx) doneOutcome doneOutcome
+  second <- mapLeft show $ typedPrefixFrom fx (fxSender fx) (fxReceiver fx)
+    (fxBefore fx) doneOutcome doneOutcome
+  separateHeads <- mapLeft show $ typedHeadFrom fx (fxSender fx) (fxReceiver fx)
+    (fxBefore fx) doneOutcome doneOutcome
+  separatePrefixes <- mapLeft show $ sourceClosePrefixFrom fx (fxSender fx)
+    (fxReceiver fx) (fxBefore fx) doneOutcome doneOutcome
+  let prefixes = restrictedTypedPrefixOwners first
+      headResult = restrictedTypedPrefixHeads first
+      ready = restrictedSourceNext (restrictedTerminalHeadSourceStep headResult)
+      senderOwners = communicationRestrictedOwners
+        (restrictedClosePrefixSenderFirst prefixes)
+      receiverOwners = communicationRestrictedOwners
+        (restrictedClosePrefixReceiverFirst prefixes)
+      expectedPayload = Just (fxServerProcess fx, fxPayloadReceiver fx)
+  assert (first == second
+       && headResult == separateHeads
+       && prefixes == separatePrefixes
+       && Map.lookup payloadOccurrence senderOwners == expectedPayload
+       && Map.lookup payloadOccurrence receiverOwners == expectedPayload
+       && Map.lookup spectatorOccurrence senderOwners ==
+            Map.lookup spectatorOccurrence (communicationRestrictedOwners ready)
+       && Map.lookup spectatorOccurrence receiverOwners ==
+            Map.lookup spectatorOccurrence (communicationRestrictedOwners ready))
+    "typed End-prefix composition changed replay, transferred payload or spectator"
+
+typedPrefixRejectedSource :: Fixture -> Text -> Either String ()
+typedPrefixRejectedSource fx rejected = do
+  (_, badSender, _) <- parseParts rejected
+  case typedPrefixFrom fx badSender (fxReceiver fx)
+      (fxBefore fx) doneOutcome doneOutcome of
+    Left (RestrictedTypedPrefixHeadError
+      (RestrictedTerminalHeadSourceError
+        (RestrictedSourceSendError
+          (GrammarV1ComponentSendCloseCloseMismatch _ _)))) -> Right ()
+    other -> Left ("stale-close source acquired typed End prefixes: " <> show other)
+
+typedPrefixWrongOutcome :: Fixture -> Either String ()
+typedPrefixWrongOutcome fx =
+  case typedPrefixFrom fx (fxSender fx) (fxReceiver fx)
+      (fxBefore fx) doneOutcome (Outcome "NotDone") of
+    Left (RestrictedTypedPrefixHeadError
+      (RestrictedTerminalHeadOutcomeMismatch process old actual supplied)) ->
+      assert (process == fxServerProcess fx && old == fxServerOld fx
+           && actual == doneOutcome && supplied == Outcome "NotDone")
+        "wrong End outcome lost exact predecessor/process diagnostic"
+    other -> Left ("wrong End authority acquired typed prefix: " <> show other)
+
+typedPrefixWrongSessionHead :: Fixture -> Either String ()
+typedPrefixWrongSessionHead fx = do
+  sender <- requireProtocol (fxClientProcess fx) (fxBefore fx)
+  let old = fxClientOld fx
+      wrong = ProtocolEndpointBinding old
+        (binaryProtocolInstanceRevision (fxInstance fx)) clientRole (End doneOutcome)
+      changed = sender { protocolEndpoints = Map.insert old wrong
+        (protocolEndpoints sender) }
+      before = (fxBefore fx) { communicationProtocolContexts =
+        Map.insert (fxClientProcess fx) changed
+          (communicationProtocolContexts (fxBefore fx)) }
+  case typedPrefixFrom fx (fxSender fx) (fxReceiver fx)
+      before doneOutcome doneOutcome of
+    Left (RestrictedTypedPrefixHeadError
+      (RestrictedTerminalHeadSourceError
+        (RestrictedSourceCoreError (RendezvousProtocolError process _)))) ->
+      assert (process == fxClientProcess fx)
+        "invalid original Send head lost its exact process diagnostic"
+    other -> Left ("wrong original session head acquired typed prefix: " <> show other)
+
+typedPrefixStaleOriginal :: Fixture -> Either String ()
+typedPrefixStaleOriginal fx = do
+  first <- mapLeft show $ checked fx (fxSender fx) (fxReceiver fx) (fxBefore fx)
+  case typedPrefixFrom fx (fxSender fx) (fxReceiver fx)
+      (restrictedSourceNext first) doneOutcome doneOutcome of
+    Left (RestrictedTypedPrefixHeadError
+      (RestrictedTerminalHeadSourceError
+        (RestrictedSourceCoreError
+          (RestrictedMessageOwnerMismatch key _ _ process name)))) ->
+      assert (key == payloadOccurrence && process == fxServerProcess fx
+           && name == fxPayloadReceiver fx)
+        "stale head lost its transferred occurrence diagnostic"
+    other -> Left ("consumed original endpoint acquired typed prefix: " <> show other)
+
+typedPrefixAliasedOccurrence :: Fixture -> Either String ()
+typedPrefixAliasedOccurrence fx =
+  case grammarV1CheckRestrictedTypedPrefixTrace
+    emptyStaticContext senderRoot (fxSender fx) receiverRoot (fxReceiver fx)
+    (fxInstance fx) clientRole serverRole
+    (fxClientProcess fx) (fxServerProcess fx)
+    serverEndpointOccurrence serverEndpointOccurrence payloadOccurrence
+    (fxNetwork fx) (fxBefore fx) doneOutcome doneOutcome of
+    Left (RestrictedTypedPrefixLedgerError
+      (RestrictedClosePrefixSourceError
+        RestrictedSuccessorTraceAliasedOccurrence)) -> Right ()
+    other -> Left ("aliased endpoint occurrences acquired typed prefix: " <> show other)
+
 
 typedHeadAccepted :: Fixture -> Either String ()
 typedHeadAccepted fx = do

@@ -5,6 +5,9 @@ module Phil.Surface.GrammarV1.ComponentRestrictedTerminalHead
   ( GrammarV1RestrictedTerminalHeadError (..)
   , GrammarV1RestrictedTerminalHeadTrace (..)
   , grammarV1CheckRestrictedTerminalHeadTrace
+  , GrammarV1RestrictedTypedPrefixError (..)
+  , GrammarV1RestrictedTypedPrefixTrace (..)
+  , grammarV1CheckRestrictedTypedPrefixTrace
   ) where
 
 import qualified Data.Map.Strict as Map
@@ -24,6 +27,13 @@ import Phil.Surface.GrammarV1.ComponentRestrictedRendezvous
   ( GrammarV1RestrictedSourceError
   , GrammarV1RestrictedSourceTransition (..)
   , grammarV1CheckRestrictedSourceRendezvous
+  )
+import Phil.Surface.GrammarV1.ComponentRestrictedSourceClose
+  ( GrammarV1RestrictedClosePrefixError
+  , GrammarV1RestrictedClosePrefixes (..)
+  , GrammarV1RestrictedSourceSuccessorTrace (..)
+  , GrammarV1RestrictedSourceCloseDiamondTransition (..)
+  , grammarV1CheckRestrictedSourceClosePrefixes
   )
 import Phil.Surface.GrammarV1.ComponentSendClose
   ( GrammarV1CheckedComponentSendClose (..) )
@@ -144,6 +154,97 @@ requireContext
 requireContext process state =
   maybe (Left (RestrictedTerminalHeadProcessMissing process)) Right
     (Map.lookup process (communicationProtocolContexts state))
+
+
+-- | NON-NORMATIVE FSEM-02 composition: the independently replayed *typed*
+-- terminal Send/Receive head check must agree exactly with the full source/
+-- Core owner-ledger replay through EITHER authorized first End closure.
+-- A successful checked source statement does not grant terminal authority.
+data GrammarV1RestrictedTypedPrefixError
+  = RestrictedTypedPrefixHeadError GrammarV1RestrictedTerminalHeadError
+  | RestrictedTypedPrefixLedgerError GrammarV1RestrictedClosePrefixError
+  | RestrictedTypedPrefixRendezvousMismatch
+  | RestrictedTypedPrefixSenderFirstMismatch
+  | RestrictedTypedPrefixReceiverFirstMismatch
+  deriving (Eq, Show)
+
+data GrammarV1RestrictedTypedPrefixTrace = GrammarV1RestrictedTypedPrefixTrace
+  { restrictedTypedPrefixHeads :: GrammarV1RestrictedTerminalHeadTrace
+  , restrictedTypedPrefixOwners :: GrammarV1RestrictedClosePrefixes
+  } deriving (Eq, Show)
+
+-- | Explicit pre-state, authorized protocol/network, distinct endpoint and
+-- payload occurrence keys, and two supplied End outcomes are mandatory.
+-- Rejects the source/Core head mismatch before attempting either close.
+-- Replays the source from the ORIGINAL state a second independent time:
+-- typed head success cannot be validated against a cached ledger.
+-- The complete Core rendezvous states must agree, not just their projections.
+-- At each one-sided prefix, the opposite typed End endpoint remains live and
+-- the retired endpoint is absent in BOTH protocol and linear resource maps.
+-- The underlying owner-prefix checker separately validates the complete
+-- occurrence ledger, transferred payload and all affine spectators.
+grammarV1CheckRestrictedTypedPrefixTrace
+  :: StaticContext
+  -> DeclarationKey -> GrammarV1ComponentDecl
+  -> DeclarationKey -> GrammarV1ComponentDecl
+  -> BinaryProtocolInstance
+  -> ProtocolRoleKey -> ProtocolRoleKey
+  -> ProcessKey -> ProcessKey
+  -> ActivationOccurrenceKey -> ActivationOccurrenceKey
+  -> ActivationOccurrenceKey
+  -> ProcessNetwork -> ProcessCommunicationState
+  -> Outcome -> Outcome
+  -> Either GrammarV1RestrictedTypedPrefixError GrammarV1RestrictedTypedPrefixTrace
+grammarV1CheckRestrictedTypedPrefixTrace
+    staticContext senderRoot senderSource receiverRoot receiverSource
+    instanceValue senderRole receiverRole senderProcess receiverProcess
+    senderOccurrence receiverOccurrence payloadOccurrence
+    network before senderOutcome receiverOutcome = do
+  heads <- mapLeft RestrictedTypedPrefixHeadError $
+    grammarV1CheckRestrictedTerminalHeadTrace
+      staticContext senderRoot senderSource receiverRoot receiverSource
+      instanceValue senderRole receiverRole senderProcess receiverProcess
+      payloadOccurrence network before senderOutcome receiverOutcome
+  prefixes <- mapLeft RestrictedTypedPrefixLedgerError $
+    grammarV1CheckRestrictedSourceClosePrefixes
+      staticContext senderRoot senderSource receiverRoot receiverSource
+      instanceValue senderRole receiverRole senderProcess receiverProcess
+      senderOccurrence receiverOccurrence payloadOccurrence
+      network before senderOutcome receiverOutcome
+  let headStep = restrictedTerminalHeadSourceStep heads
+      ledgerStep = restrictedSourceDiamondRendezvous
+        (restrictedSuccessorTraceDiamond (restrictedClosePrefixTrace prefixes))
+      senderEnd = restrictedTerminalHeadSenderSuccessor heads
+      receiverEnd = restrictedTerminalHeadReceiverSuccessor heads
+      senderContext = Map.lookup senderProcess . communicationProtocolContexts
+      receiverContext = Map.lookup receiverProcess . communicationProtocolContexts
+      senderFirst = restrictedClosePrefixSenderFirst prefixes
+      receiverFirst = restrictedClosePrefixReceiverFirst prefixes
+      stillLive endpoint context =
+        Map.lookup (protocolEndpointName endpoint) (protocolEndpoints context)
+          == Just endpoint
+        && Map.lookup (protocolEndpointName endpoint)
+             (linearBindings (protocolResources context))
+          == Just (TyEndpoint (protocolEndpointSession endpoint))
+      retired endpoint context =
+        Map.notMember (protocolEndpointName endpoint) (protocolEndpoints context)
+        && Map.notMember (protocolEndpointName endpoint)
+             (linearBindings (protocolResources context))
+  if headStep == ledgerStep
+    then Right ()
+    else Left RestrictedTypedPrefixRendezvousMismatch
+  case (senderContext senderFirst, receiverContext senderFirst) of
+    (Just sender, Just receiver)
+      | retired senderEnd sender && stillLive receiverEnd receiver -> Right ()
+    _ -> Left RestrictedTypedPrefixSenderFirstMismatch
+  case (senderContext receiverFirst, receiverContext receiverFirst) of
+    (Just sender, Just receiver)
+      | stillLive senderEnd sender && retired receiverEnd receiver -> Right ()
+    _ -> Left RestrictedTypedPrefixReceiverFirstMismatch
+  pure GrammarV1RestrictedTypedPrefixTrace
+    { restrictedTypedPrefixHeads = heads
+    , restrictedTypedPrefixOwners = prefixes
+    }
 
 mapLeft :: (a -> b) -> Either a c -> Either b c
 mapLeft f = either (Left . f) Right
