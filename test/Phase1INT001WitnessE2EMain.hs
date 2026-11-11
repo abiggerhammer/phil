@@ -61,7 +61,7 @@ import Phil.Systems.GenericLowering
   , GenericRealizationContext
   , coreSystemsProgramSemanticForm
   )
- import Phil.Systems.Phase1Stage
+import Phil.Systems.Phase1Stage
   ( phase1StageInstanceRevision
   , phase1StageSystemsArtifact
   , verifyPhase1StageBundle
