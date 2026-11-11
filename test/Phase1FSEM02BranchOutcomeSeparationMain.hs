@@ -8,13 +8,13 @@ module Main (main) where
 import qualified Data.Map.Strict as Map
 import qualified Data.Text as Text
 import qualified Data.Text.IO as TextIO
-import Phil.Core.Context (ResourceContext (..))
+import Phil.Core.Context (CheckError (..), ResourceContext (..), insertBinding, startSharedLoan)
 import Phil.Core.Generic (strictGenericInstantiationPolicy)
 import Phil.Core.Session (SessionError (..))
 import Phil.Core.Protocol
 import Phil.Core.Protocol.Family
 import Phil.Core.Static (DeclarationKey (..), InterfaceRevision (..))
-import Phil.Core.Syntax (Branch (..), Name (..), Outcome (..), Session (..), Ty (..))
+import Phil.Core.Syntax (Branch (..), Mode (..), Name (..), Outcome (..), Session (..), Ty (..))
 import Phil.Surface.GrammarV1.BinderScope (GrammarV1ResolvedBinder (..))
 import Phil.Surface.GrammarV1.ComponentOfferCoverage
 import Phil.Surface.GrammarV1.ComponentOfferReplay
@@ -38,6 +38,9 @@ main = do
     , test "permuted source cannot justify an unprojected live head" (wrongHeadRejected permuted)
     , test "distinct source-selected branches separate End outcomes at one original Core state" (crossBranchIsolation original)
     , test "one missing source branch rejects by exact class" (missingArmRejected missing)
+    , test "Go/Cancel reject occupied successor names in every resource mode" (occupiedSuccessorRejected original)
+    , test "Go/Cancel reject successor equal to the source predecessor" (reusedPredecessorRejected original)
+    , test "Go/Cancel and authorized End closes preserve a borrowed affine spectator" (borrowedSpectatorFrame original)
     ]
   if and results then pure () else exitFailure
 
@@ -266,6 +269,93 @@ crossBranchIsolation source = do
        && checkedProtocolContext closedGo == checkedProtocolContext closedCancel
        && checkedProtocolContext closedGo == emptyProtocolContext)
     "separate authorized End closes did not restore the SAME original empty state"
+
+
+-- A successor name occupied by ANY structural-mode owner is not fresh.
+-- These are independently executed source-covered choices, not manual
+-- substitutions into a successful step. The exact nested production error
+-- must identify the collision and must not produce a post-error context.
+occupiedSuccessorRejected :: Text.Text -> Either String ()
+occupiedSuccessorRejected source = do
+  plan <- sourcePlan source
+  coverage <- checked plan
+  let old = grammarV1ResolvedBinderCoreName (checkedComponentOfferEndpoint coverage)
+      occupied = Name "fsem02.occupied.successor"
+  before <- initial plan old expectedHead
+  mapM_ (checkMode plan occupied before) [Unrestricted, Affine, Linear]
+  where
+    checkMode plan occupied before mode = do
+      resources <- mapLeft show $
+        insertBinding mode occupied TyUnit (protocolResources before)
+      let withSpectator = before { protocolResources = resources }
+      mapM_ (rejectChoice plan occupied withSpectator mode) ["Go", "Cancel"]
+    rejectChoice plan occupied withSpectator mode label =
+      case replay plan label occupied withSpectator of
+        Left (GrammarV1OfferReplayProtocolError
+                (ProtocolSessionError
+                  (SessionResourceError (DuplicateBinding collision)))) ->
+          assert (collision == occupied)
+            ("collision in " <> show mode <> " lost the spectator name")
+        other -> Left ("source-offer " <> show label <> " with occupied " <>
+                        show mode <> " successor did not reject exactly: " <> show other)
+
+reusedPredecessorRejected :: Text.Text -> Either String ()
+reusedPredecessorRejected source = do
+  plan <- sourcePlan source
+  coverage <- checked plan
+  let old = grammarV1ResolvedBinderCoreName (checkedComponentOfferEndpoint coverage)
+  before <- initial plan old expectedHead
+  mapM_ (rejectSame plan old before) ["Go", "Cancel"]
+  where
+    rejectSame plan old before label =
+      case replay plan label old before of
+        Left (GrammarV1OfferReplayProtocolError
+                (ProtocolSessionError (SuccessorReusesEndpointName name))) ->
+          assert (name == old) "same-name rejection lost the exact source predecessor"
+        other -> Left ("same-name source offer incorrectly progressed " <>
+                       show label <> ": " <> show other)
+
+-- The source-replayed local offer and its separately authorized End close
+-- leave an unrelated borrowed affine owner untouched, including its loan
+-- token. The loan is an explicit Core premise, not inferred from the source.
+borrowedSpectatorFrame :: Text.Text -> Either String ()
+borrowedSpectatorFrame source = do
+  plan <- sourcePlan source
+  coverage <- checked plan
+  let predecessor = grammarV1ResolvedBinderCoreName (checkedComponentOfferEndpoint coverage)
+      spectator = Name "fsem02.borrowed.spectator"
+      next = Name "fsem02.fresh.endpoint"
+      revision = binaryProtocolInstanceRevision (planInstance plan)
+  before <- initial plan predecessor expectedHead
+  framed <- mapLeft show $ insertBinding Affine spectator TyUnit (protocolResources before)
+  loaned <- mapLeft show $ startSharedLoan spectator framed
+  let withSpectator = before { protocolResources = loaned }
+  mapM_ (checkFrame plan next revision withSpectator spectator)
+    [("Go", Outcome "Done"), ("Cancel", Outcome "Cancel")]
+  where
+    checkFrame plan next revision withSpectator spectator (label, outcome) = do
+      offer <- mapLeft show $ replay plan label next withSpectator
+      let after = checkedProtocolContext (replayedComponentOfferStep offer)
+      assert (Map.lookup spectator (affineBindings (protocolResources after))
+                == Just TyUnit
+           && protocolResources after == (protocolResources withSpectator)
+              { linearBindings = linearBindings (protocolResources after) }
+           && Map.lookup spectator (protocolEndpoints after) == Nothing)
+        ("offer " <> show label <> " modified the independent borrowed spectator")
+      close <- mapLeft show $ checkProtocolAction
+        (ProtocolCloseRequest next revision serverRole outcome) after
+      assert (checkedProtocolSuccessor close == Nothing
+           && checkedProtocolContext close == withSpectator
+                { protocolResources = (protocolResources withSpectator)
+                    { linearBindings = Map.delete
+                        (checkedProtocolPredecessorName offer)
+                        (linearBindings (protocolResources withSpectator)) } })
+        ("authorized End close on " <> show label <>
+          " did not return exactly to the borrowed spectator frame")
+
+checkedProtocolPredecessorName :: GrammarV1ComponentOfferReplay -> Name
+checkedProtocolPredecessorName =
+  protocolEndpointName . checkedProtocolPredecessor . replayedComponentOfferStep
 
 missingArmRejected :: Text.Text -> Either String ()
 missingArmRejected source = do
