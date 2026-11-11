@@ -9,6 +9,7 @@ module Phil.Compiler.SourceSystems
   , VerifiedSourceSystemsProductionError (..)
   , produceVerifiedSourceSystems
   , verifiedSourceSystemsArchitectureIdentity
+  , verifiedSourceSystemsArchitectureDescriptor
   , verifiedSourceSystemsStage
   , sourceSystemsArchitectureIdentity
   , sourceSystemsProgramSemantics
@@ -39,8 +40,10 @@ import Phil.Compiler.SourceCorePolicy
   , verifySourceCorePolicy
   )
 import Phil.Core.Static
-  ( ArchitectureInstanceIdentity
+  ( ArchitectureInstanceDescriptor
+  , ArchitectureInstanceIdentity
   , SemanticForm
+  , checkedArchitectureDescriptor
   , checkedArchitectureIdentity
   , identityInstanceRevision
   )
@@ -153,6 +156,15 @@ verifiedSourceSystemsArchitectureIdentity
 verifiedSourceSystemsArchitectureIdentity
   (VerifiedSourceSystemsProduction admitted _) =
     sourceSystemsArchitectureIdentity admitted
+
+-- | The exact descriptor independently rederived from the raw ordinary source
+-- and sealed in the checked producer. Full K, parent, declaration, and
+-- semantic actuals survive; no caller-created checked record is accepted.
+verifiedSourceSystemsArchitectureDescriptor
+  :: VerifiedSourceSystemsProduction -> ArchitectureInstanceDescriptor
+verifiedSourceSystemsArchitectureDescriptor
+  (VerifiedSourceSystemsProduction (SourceSystemsAdmission architecture _ _) _) =
+    checkedArchitectureDescriptor (checkedSourceArchitectureRoot architecture)
 
 verifiedSourceSystemsStage
   :: VerifiedSourceSystemsProduction -> Phase1StageBundle

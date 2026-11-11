@@ -1059,3 +1059,11 @@ documentation-only inventory. In the absence of an authoritative
 StageClosure-occurrence producer certificate or competent semantic/audit
 TCB/claim-narrowing decision, the required #1584 final-authority claim is
 **BLOCKED**, not COMPLETE. Independent Phase 1 audit freeze remains NOT YET.
+
+## #1584 authorized provenance route — executed P2/P6 evidence (2026-11-11)
+
+**P2 #1727, already merged:** exact tested head `f3cdd6930951febe89c1636398155a103db06d76`, 25/25 workflow runs and 27/27 checks successful; protected merge #43015876434 successful, merge `d88d8e3d51546a9e18d6c21d8531e500c79beb23` at 11:55:17 UTC. The constructor-private `VerifiedSourceSystemsProduction` independently rechecks raw ordinary Upload/Steve source lineage and source/Core policy before actual Systems lowering, retaining K/I and the complete `Phase1StageBundle`. The missing-lineage-site negative failed before minting. This is P2 bounded producer evidence only, **not** StageClosure or release provenance.
+
+**P6 #1729, already merged:** exact tested head `a8c18bea9027aa5a2bf399c113a77289298ba632`, 100/100 workflows successful, 205 successful checks and only the documented trusted PR-only `publish` skip; protected merge #43033077209 successful, merge `74fec3c50ff9f0724ba8810744ab8203b884ca90` at 13:52:45 UTC. `VerifiedStageClosureProduction` reconstructs both arms of the complete selected StageClosure from the same opaque P2 event and validates source-produced base equality. Executed Upload/Steve whole-stage positive tests and Steve-configuration-with-Upload negative, plus abstract Rocq retention and same-revision/different-K model/assumption queries. It does **not** authenticate an independently selected complete CertifiedRelease.
+
+**Pending P7, third budgeted implementation/proof PR:** no P7 checked result is credited here. The P7 final-origin typed consumer must be checked and actually merged before its evidence is eligible for a further append-only reconciliation. Existing 244 normative cases (236 Exit, 8 Profile), historical independent audit, declared Phase 1 TCB and strict GHC/LLVM/Rocq policies are unchanged. P8/P9/P10/P11 remain separately unresolved. `FinalArtifactCertified` unproved, independent audit freeze **NOT YET**.

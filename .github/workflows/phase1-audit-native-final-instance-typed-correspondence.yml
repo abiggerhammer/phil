@@ -263,6 +263,10 @@ jobs:
           Print Assumptions native_whole_stage_model_retains_exact_origin.
           Print Assumptions native_whole_stage_model_retains_selected_whole_stage.
           Print Assumptions native_whole_stage_model_rejects_same_revision_other_key.
+          Print Assumptions native_final_origin_model_retains_complete_selection.
+          Print Assumptions native_final_origin_model_wrong_key_rejected_same_revision.
+          Print Assumptions native_final_origin_model_changed_whole_release_rejected.
+          Print Assumptions native_final_origin_model_changed_binding_rejected.
           Print Assumptions fixed_adapter_full_certification_preserves_predecessors.
           EOF
           rocq c -Q proof/Phil Phil /tmp/NativeFinalInstanceAssumptions.v 2>&1 | tee typed-native-instance-assumptions.log
