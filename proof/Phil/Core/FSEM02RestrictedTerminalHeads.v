@@ -1,5 +1,5 @@
 From Stdlib Require Import Strings.String Bool.Bool.
-From Phil.Core Require Import Syntax FSEM02RestrictedSourceTransfer.
+From Phil.Core Require Import Syntax FSEM02StatefulSourceChoice FSEM02RestrictedSourceTransfer.
 
 (*
   FSEM-02 NON-NORMATIVE bounded terminal-continuation head gate.
