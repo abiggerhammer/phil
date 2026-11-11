@@ -13,7 +13,7 @@ import Phil.Core.Generic (strictGenericInstantiationPolicy)
 import Phil.Core.Protocol
 import Phil.Core.Protocol.Family
 import Phil.Core.Static (DeclarationKey (..), InterfaceRevision (..))
-import Phil.Core.Syntax (Name (..), Outcome (..), Session (..), Ty (..))
+import Phil.Core.Syntax (Branch (..), Name (..), Outcome (..), Session (..), Ty (..))
 import Phil.Surface.GrammarV1.BinderScope (GrammarV1ResolvedBinder (..))
 import Phil.Surface.GrammarV1.ComponentOfferCoverage
 import Phil.Surface.GrammarV1.ComponentOfferReplay
