@@ -336,20 +336,26 @@ borrowedSpectatorFrame source = do
     checkFrame plan next revision withSpectator spectator (label, outcome) = do
       offer <- mapLeft show $ replay plan label next withSpectator
       let after = checkedProtocolContext (replayedComponentOfferStep offer)
+      let old = checkedProtocolPredecessorName offer
+          originalResources = protocolResources withSpectator
+          expectedLinear = Map.insert next (TyEndpoint (End outcome))
+            (Map.delete old (linearBindings originalResources))
       assert (Map.lookup spectator (affineBindings (protocolResources after))
                 == Just TyUnit
-           && protocolResources after == (protocolResources withSpectator)
-              { linearBindings = linearBindings (protocolResources after) }
+           && protocolResources after == originalResources
+                { linearBindings = expectedLinear }
+           && Map.keys (protocolEndpoints after) == [next]
            && Map.lookup spectator (protocolEndpoints after) == Nothing)
-        ("offer " <> show label <> " modified the independent borrowed spectator")
+        ("offer " <> show label <> " modified the spectator or successor ledger")
       close <- mapLeft show $ checkProtocolAction
         (ProtocolCloseRequest next revision serverRole outcome) after
+      let expectedClosed = withSpectator
+            { protocolResources = originalResources
+                { linearBindings = Map.delete old (linearBindings originalResources) }
+            , protocolEndpoints = Map.empty
+            }
       assert (checkedProtocolSuccessor close == Nothing
-           && checkedProtocolContext close == withSpectator
-                { protocolResources = (protocolResources withSpectator)
-                    { linearBindings = Map.delete
-                        (checkedProtocolPredecessorName offer)
-                        (linearBindings (protocolResources withSpectator)) } })
+           && checkedProtocolContext close == expectedClosed)
         ("authorized End close on " <> show label <>
           " did not return exactly to the borrowed spectator frame")
 
