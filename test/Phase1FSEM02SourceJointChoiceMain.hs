@@ -84,6 +84,12 @@ main = do
     , test "one-sided Client-first and peer-first Cancel End prefixes are exact" (choiceSourceTraceAccepted cancel offer "Cancel" (Outcome "Cancel"))
     , test "both one-sided End prefixes refuse repeated stale closes" (choiceSourceTracePrefixStale go offer)
     , test "wrong Client End outcome rejects before a successful prefix" (choiceSourceTraceWrongClientOutcome go offer)
+    , test "Go choice local Select/Offer and both End prefixes match independent Core steps" (choiceTypedPrefixAccepted go offer "Go" (Outcome "Done"))
+    , test "Cancel choice local Select/Offer and both End prefixes match independent Core steps" (choiceTypedPrefixAccepted cancel offer "Cancel" (Outcome "Cancel"))
+    , test "typed choice replay rejects minimally wrong offer source exactly" (choiceTypedPrefixWrongBody go offer wrongBody)
+    , test "typed choice replay refuses consumed source predecessor exactly" (choiceTypedPrefixStale go offer)
+    , test "typed choice replay rejects independently wrong peer End exactly" (choiceTypedPrefixWrongPeerEnd go offer)
+    , test "typed choice replay rejects wrong original Select head exactly" (choiceTypedPrefixWrongHead go offer)
     ]
   if and outcomes then pure () else exitFailure
 
@@ -963,6 +969,149 @@ choiceSourceTracePrefixStale client server = do
       assert (process == fxServerProcess fx && endpoint == serverNext)
         "Peer-first duplicate close named wrong retired endpoint"
     other -> Left ("Peer-first prefix reused stale endpoint: " <> show other)
+
+-- FSEM-02 exact independent local-protocol observer. The single Client
+-- source 'close' cannot establish the separately authorized Server End.
+choiceTypedPrefixFrom
+  :: Fixture -> Text -> Outcome -> Outcome -> ProcessCommunicationState
+  -> Either GrammarV1ChoiceTypedPrefixError GrammarV1ChoiceTypedPrefix
+choiceTypedPrefixFrom fx label clientOutcome peerOutcome initial =
+  grammarV1CheckChoiceTypedPrefix
+    clientRoot (fxClient fx) serverRoot (fxServer fx) (fxInstance fx)
+    clientRole serverRole (fxClientProcess fx) (fxServerProcess fx)
+    clientOccurrence serverOccurrence serverNext label (fxNetwork fx) initial
+    clientOutcome peerOutcome
+
+choiceTypedPrefixAccepted :: Text -> Text -> Text -> Outcome -> Either String ()
+choiceTypedPrefixAccepted client server label outcome = do
+  fx <- fixture client server
+  checked <- mapLeft show $
+    choiceTypedPrefixFrom fx label outcome outcome (fxState fx)
+  repeated <- mapLeft show $
+    choiceTypedPrefixFrom fx label outcome outcome (fxState fx)
+  let selectStep = choiceTypedPrefixSelect checked
+      offerStep = choiceTypedPrefixOffer checked
+      clientEnd = choiceTypedPrefixClientEnd checked
+      peerEnd = choiceTypedPrefixPeerEnd checked
+      revision = binaryProtocolInstanceRevision (fxInstance fx)
+      expectedEnd = TyEndpoint (End outcome)
+      clientBefore = checkedProtocolPredecessor selectStep
+      peerBefore = checkedProtocolPredecessor offerStep
+      clientNext = checkedProtocolSuccessor selectStep
+      peerNext = checkedProtocolSuccessor offerStep
+      clientAfter = checkedProtocolContext selectStep
+      peerAfter = checkedProtocolContext offerStep
+      diamond = choiceSourceTraceDiamond (choiceTypedPrefixSource checked)
+      clientFirst = statefulChoiceClientCloseSuccessor
+        (statefulChoiceExplicitPeerCloseClient (choiceCloseDiamondForward diamond))
+      peerFirst = choiceCloseDiamondPeerFirst diamond
+      contexts state = communicationProtocolContexts state
+  assert (checked == repeated
+       && protocolEndpointName clientBefore == fxClientOld fx
+       && protocolEndpointName peerBefore == fxServerOld fx
+       && clientNext == Just (ProtocolEndpointBinding
+             (fxClientNext fx) revision clientRole (End outcome))
+       && peerNext == Just (ProtocolEndpointBinding
+             serverNext revision serverRole (End outcome))
+       && Map.lookup (fxClientNext fx)
+           (linearBindings (protocolResources clientAfter)) == Just expectedEnd
+       && Map.lookup serverNext
+           (linearBindings (protocolResources peerAfter)) == Just expectedEnd
+       && checkedProtocolSuccessor clientEnd == Nothing
+       && checkedProtocolSuccessor peerEnd == Nothing
+       && Map.lookup (fxClientProcess fx) (contexts clientFirst)
+            == Just (checkedProtocolContext clientEnd)
+       && Map.lookup (fxServerProcess fx) (contexts clientFirst)
+            == Just peerAfter
+       && Map.lookup (fxClientProcess fx) (contexts peerFirst)
+            == Just clientAfter
+       && Map.lookup (fxServerProcess fx) (contexts peerFirst)
+            == Just (checkedProtocolContext peerEnd)
+       && Map.lookup spectatorOccurrence
+            (communicationRestrictedOwners clientFirst)
+            == Map.lookup spectatorOccurrence
+                 (communicationRestrictedOwners (fxState fx)))
+    "native choice/head or one-sided End prefix diverged from independent local replay"
+
+choiceTypedPrefixWrongBody :: Text -> Text -> Text -> Either String ()
+choiceTypedPrefixWrongBody client server bad = do
+  fx <- fixture client server
+  (_, badServer) <- parsePair bad
+  let badFixture = fx {fxServer = badServer}
+  case choiceTypedPrefixFrom badFixture "Go" (Outcome "Done")
+      (Outcome "Done") (fxState fx) of
+    Left (ChoiceTypedPrefixSourceError sourceError) -> case sourceError of
+      ChoiceSourceTraceDiamondError
+        (GrammarV1ChoiceCloseDiamondForwardError
+          (GrammarV1StatefulChoiceExplicitPeerClosePriorError
+            (GrammarV1StatefulChoiceClientCloseSourceError
+              (GrammarV1StatefulChoiceSourceError
+                (GrammarV1JointChoiceOfferSourceError
+                  (GrammarV1OfferReplayCoverageError
+                    GrammarV1ComponentOfferArmBodyUnsupported))))) -> Right ()
+      other -> Left ("wrong nested minimally rejected source class: " <> show other)
+    other -> Left ("minimally rejected offer was accepted as typed choice: " <> show other)
+
+choiceTypedPrefixStale :: Text -> Text -> Either String ()
+choiceTypedPrefixStale client server = do
+  fx <- fixture client server
+  first <- mapLeft show $ stateful fx "Go" (fxState fx)
+  case choiceTypedPrefixFrom fx "Go" (Outcome "Done") (Outcome "Done")
+      (statefulChoiceSuccessor first) of
+    Left (ChoiceTypedPrefixSourceError sourceError) -> case sourceError of
+      ChoiceSourceTraceDiamondError
+        (GrammarV1ChoiceCloseDiamondForwardError
+          (GrammarV1StatefulChoiceExplicitPeerClosePriorError
+            (GrammarV1StatefulChoiceClientCloseSourceError
+              (GrammarV1StatefulChoiceSourceError
+                (GrammarV1JointChoiceOfferSourceError
+                  (GrammarV1OfferReplayProtocolError
+                    (ProtocolEndpointUnknown old)))))) ->
+                      assert (old == fxServerOld fx) "wrong stale peer occurrence"
+      other -> Left ("wrong exact stale error: " <> show other)
+    other -> Left ("stale original choice predecessor was reused: " <> show other)
+
+choiceTypedPrefixWrongPeerEnd :: Text -> Text -> Either String ()
+choiceTypedPrefixWrongPeerEnd client server = do
+  fx <- fixture client server
+  case choiceTypedPrefixFrom fx "Go" (Outcome "Done") (Outcome "Cancel")
+      (fxState fx) of
+    Left (ChoiceTypedPrefixSourceError sourceError) -> case sourceError of
+      ChoiceSourceTraceDiamondError
+        (GrammarV1ChoiceCloseDiamondForwardError
+          (GrammarV1StatefulChoiceExplicitPeerCloseCoreError
+            (EndpointClosureProtocolError process
+              (ProtocolSessionError (CloseOutcomeMismatch
+                (Outcome "Done") (Outcome "Cancel")))))) ->
+                  assert (process == fxServerProcess fx)
+                    "wrong terminal outcome named wrong peer"
+      other -> Left ("wrong exact peer End error: " <> show other)
+    other -> Left ("wrong peer End authority was silently accepted: " <> show other)
+
+choiceTypedPrefixWrongHead :: Text -> Text -> Either String ()
+choiceTypedPrefixWrongHead client server = do
+  fx <- fixture client server
+  let revision = binaryProtocolInstanceRevision (fxInstance fx)
+  wrong <- mapLeft show $ insertProtocolEndpoint
+    (fxClientOld fx) revision clientRole (End (Outcome "Done")) emptyProtocolContext
+  let bad = (fxState fx)
+        { communicationProtocolContexts = Map.insert
+            (fxClientProcess fx) wrong (communicationProtocolContexts (fxState fx)) }
+  case choiceTypedPrefixFrom fx "Go" (Outcome "Done") (Outcome "Done") bad of
+    Left (ChoiceTypedPrefixSourceError sourceError) -> case sourceError of
+      ChoiceSourceTraceDiamondError
+        (GrammarV1ChoiceCloseDiamondForwardError
+          (GrammarV1StatefulChoiceExplicitPeerClosePriorError
+            (GrammarV1StatefulChoiceClientCloseSourceError
+              (GrammarV1StatefulChoiceSourceError
+                (GrammarV1JointChoiceCoreError
+                  (RendezvousProjectionSessionMismatch process expected actual)))))) ->
+                    assert (process == fxClientProcess fx
+                         && expected == Select branches
+                         && actual == End (Outcome "Done"))
+                      "wrong original Select head lost precise rejection evidence"
+      other -> Left ("wrong exact session-head error: " <> show other)
+    other -> Left ("wrong original Select session was accepted: " <> show other)
 
 branches :: [Branch]
 branches =
