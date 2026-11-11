@@ -235,6 +235,8 @@ The [restricted Send/Receive typed terminal-head witness](formal-semantics-restr
 
 The bounded [restricted Send/Receive one-sided End-prefix ledger check](formal-semantics-restricted-close-prefix-ledgers-fsem02-v1.md) independently replays actual production Core prefixes and proves a conditional Rocq owner/payload/spectator model; the terminal authority, payload disposition and architecture/root boundary remain explicit premises.
 
+The bounded [source Select/Offer typed-head and both End-prefix local replay](formal-semantics-choice-typed-head-prefix-fsem02-v1.md) independently compares actual Core per-process protocol/resource contexts with reexecuted local Select, Offer and two authorized End actions for complete Go/Cancel source witnesses. Rocq proves only the conditional abstract End-head/one-sided-owner composition, not source-derived peer disposal or universal implementation refinement.
+
 ## 6. Architectures, occurrence identity, and root selection
 
 The source differentiates:
