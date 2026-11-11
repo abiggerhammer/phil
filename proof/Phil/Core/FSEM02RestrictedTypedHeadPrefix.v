@@ -38,20 +38,20 @@ Theorem fsem02TypedHeadGateComposesWithBothClosePrefixes :
       receiverProcess receiverNext = Some afterReceiver ->
     fsem02RetireSelectedClientOwner afterReceiver senderOccurrence
       senderProcess senderNext = Some afterReverse ->
-    (senderSend = true /\\ receiverReceive = true /\\
-     senderEndMatch = true /\\ receiverEndMatch = true) /\\
-    (afterSender senderOccurrence = None /\\
-     afterSender receiverOccurrence = Some (receiverProcess, receiverNext) /\\
-     afterSender payloadOccurrence = Some (receiverProcess, payloadNext) /\\
-     afterReceiver senderOccurrence = Some (senderProcess, senderNext) /\\
-     afterReceiver receiverOccurrence = None /\\
-     afterReceiver payloadOccurrence = Some (receiverProcess, payloadNext) /\\
+    (senderSend = true /\ receiverReceive = true /\
+     senderEndMatch = true /\ receiverEndMatch = true) /\
+    (afterSender senderOccurrence = None /\
+     afterSender receiverOccurrence = Some (receiverProcess, receiverNext) /\
+     afterSender payloadOccurrence = Some (receiverProcess, payloadNext) /\
+     afterReceiver senderOccurrence = Some (senderProcess, senderNext) /\
+     afterReceiver receiverOccurrence = None /\
+     afterReceiver payloadOccurrence = Some (receiverProcess, payloadNext) /\
      (forall spectator,
        spectator <> payloadOccurrence ->
        spectator <> senderOccurrence ->
        spectator <> receiverOccurrence ->
-       afterSender spectator = owners spectator /\\
-       afterReceiver spectator = owners spectator) /\\
+       afterSender spectator = owners spectator /\
+       afterReceiver spectator = owners spectator) /\
      (forall observed, afterForward observed = afterReverse observed)).
 Proof.
   intros sourceAccepted messageAdmitted
