@@ -9,6 +9,7 @@ on:
       - 'test/Phase1FSEM02SourceJointChoiceMain.hs'
       - 'proof/Phil/Core/FSEM02ChoiceTypedHeadPrefix.v'
       - 'docs/phase-1/formal-semantics-choice-typed-head-prefix-fsem02-v1.md'
+      - 'docs/phase-1/typing-and-semantics-reader-guide-v1.md'
       - '.github/workflows/fsem02-choice-typed-head-prefix-preflight.yml'
   pull_request:
     paths:
@@ -16,6 +17,7 @@ on:
       - 'test/Phase1FSEM02SourceJointChoiceMain.hs'
       - 'proof/Phil/Core/FSEM02ChoiceTypedHeadPrefix.v'
       - 'docs/phase-1/formal-semantics-choice-typed-head-prefix-fsem02-v1.md'
+      - 'docs/phase-1/typing-and-semantics-reader-guide-v1.md'
       - '.github/workflows/fsem02-choice-typed-head-prefix-preflight.yml'
 
 concurrency:
