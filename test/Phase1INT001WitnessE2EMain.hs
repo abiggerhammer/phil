@@ -14,6 +14,8 @@ import Phil.Core.Static
   ( DeclarationKey (..)
   , emptyStaticContext
   , identityInstanceRevision
+  , identityInstanceKey
+  , InstanceKey (..)
   )
 import Phil.Core.Syntax (Mode (..), Ty (..))
 import Phil.Examples.Phase1.SystemsWitnesses
@@ -60,6 +62,12 @@ main = do
         (uploadE2E uploadClient uploadServer)
     , test "INT-001 Steve traverses ordinary source through shared backend"
         (steveE2E stevePut steveGet)
+    , test "INT-001 Upload source-owned producer retains exact K/I and whole stage"
+        (uploadVerifiedProducer uploadClient uploadServer)
+    , test "INT-001 Steve source-owned producer retains exact K/I and whole stage"
+        (steveVerifiedProducer stevePut steveGet)
+    , test "INT-001 source-owned producer refuses unlisted occurrence site"
+        (verifiedProducerRejectsWrongSite uploadClient uploadServer)
     ]
   if and results then pure () else exitFailure
 
@@ -114,6 +122,73 @@ runWitness architecture policy program context = do
     (llvmContractSourceDigest (llvmArtifactContract llvmArtifact)
       == systemsArtifactDigest systemsArtifact)
     "shared LLVM backend did not bind the exact admitted Systems artifact"
+
+-- These attest only actual ordinary-source/Core-to-Systems production,
+-- not the independent StageClosure or final release's historical provenance.
+uploadVerifiedProducer :: Text -> Text -> Either String ()
+uploadVerifiedProducer clientSource serverSource = do
+  clientEnvironment <- mapLeft show (phase0EnvironmentFor "client.phil")
+  serverEnvironment <- mapLeft show (phase0EnvironmentFor "server.phil")
+  let environments = Map.fromList
+        [ (uploadClientDeclaration, clientEnvironment)
+        , (uploadServerDeclaration, serverEnvironment) ]
+  produced <- mapLeft show $ produceVerifiedSourceSystems
+    uploadRoots environments
+    (Map.singleton "program:upload" (InstanceLineageSiteId "instance.upload"))
+    uploadPolicy (uploadBundle clientSource serverSource)
+    uploadCoreProgram uploadRealizationContext
+  architecture <- checkedUploadArchitecture clientSource serverSource
+  admitted <- mapLeft show $
+    prepareSourceSystemsAdmission uploadPolicy architecture uploadCoreProgram
+  original <- mapLeft show (lowerSourceSystems admitted uploadRealizationContext)
+  let occurrence = verifiedSourceSystemsArchitectureIdentity produced
+      fullStage = verifiedSourceSystemsStage produced
+  mapLeft show (verifyPhase1StageBundle fullStage)
+  assert (identityInstanceKey occurrence == InstanceKey "inst:phase1.upload")
+    "source-owned producer lost Upload occurrence K"
+  assert (identityInstanceRevision occurrence == phase1StageInstanceRevision fullStage)
+    "source-owned producer lost Upload occurrence I"
+  assert (fullStage == original)
+    "source-owned producer changed complete Upload stage"
+
+steveVerifiedProducer :: Text -> Text -> Either String ()
+steveVerifiedProducer putSource getSource = do
+  context <- steveQualifiedRealizationContext
+  produced <- mapLeft show $ produceVerifiedSourceSystems
+    steveRoots steveEnvironments
+    (Map.singleton "program:steve" (InstanceLineageSiteId "instance.steve"))
+    stevePolicy (steveBundle putSource getSource) steveCoreProgram context
+  architecture <- checkedSteveArchitecture putSource getSource
+  admitted <- mapLeft show $
+    prepareSourceSystemsAdmission stevePolicy architecture steveCoreProgram
+  original <- mapLeft show (lowerSourceSystems admitted context)
+  let occurrence = verifiedSourceSystemsArchitectureIdentity produced
+      fullStage = verifiedSourceSystemsStage produced
+  mapLeft show (verifyPhase1StageBundle fullStage)
+  assert (identityInstanceKey occurrence == InstanceKey "inst:phase1.steve")
+    "source-owned producer lost Steve occurrence K"
+  assert (identityInstanceRevision occurrence == phase1StageInstanceRevision fullStage)
+    "source-owned producer lost Steve occurrence I"
+  assert (fullStage == original)
+    "source-owned producer changed complete Steve stage"
+
+verifiedProducerRejectsWrongSite :: Text -> Text -> Either String ()
+verifiedProducerRejectsWrongSite clientSource serverSource = do
+  clientEnvironment <- mapLeft show (phase0EnvironmentFor "client.phil")
+  serverEnvironment <- mapLeft show (phase0EnvironmentFor "server.phil")
+  let environments = Map.fromList
+        [ (uploadClientDeclaration, clientEnvironment)
+        , (uploadServerDeclaration, serverEnvironment) ]
+      nonexistent = InstanceLineageSiteId "instance.unlisted"
+  case produceVerifiedSourceSystems
+      uploadRoots environments
+      (Map.singleton "program:upload" nonexistent)
+      uploadPolicy (uploadBundle clientSource serverSource)
+      uploadCoreProgram uploadRealizationContext of
+    Left (VerifiedSourceArchitectureRejected
+        (SourceArchitectureInstanceLineageMissing site))
+      | site == nonexistent -> Right ()
+    other -> Left ("unlisted source producer site not refused: " <> show other)
 
 -- Framed upload ----------------------------------------------------------------
 
