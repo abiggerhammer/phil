@@ -239,6 +239,8 @@ The bounded [source Select/Offer typed-head and both End-prefix local replay](fo
 
 The bounded [FSEM-02 checked source-offer arm-order conformance](formal-semantics-offer-arm-order-fsem02-v1.md) differentially executes separately parsed Go/Cancel offer-arm orders against identical production Core predecessor states and compares typed successors and terminal states; a duplicate arm, stale endpoint and wrong live head reject with exact constructors. Rocq proves only conditional two-branch order invariance under distinct labels and a duplicate-label counterproperty—not source-derived protocol, root, closure authority or general implementation refinement.
 
+The bounded [FSEM-02 checked source choice branch outcome separation](formal-semantics-branch-outcome-separation-fsem02-v1.md) independently replays Go and Cancel choices from one original checked Core state. It distinguishes the two exact terminal endpoint types, rejects cross-label End closes and stale replays with precise constructors, and checks a complete minimally rejected missing-arm source. Rocq proves conditional two-branch head/resource facts; the external authority and full-refinement gaps remain open.
+
 ## 6. Architectures, occurrence identity, and root selection
 
 The source differentiates:
