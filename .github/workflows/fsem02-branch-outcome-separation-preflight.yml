@@ -3,10 +3,10 @@ name: FSEM-02 Branch Outcome Separation Early Preflight
 on:
   push:
     branches:
-      - formal-semantics/fsem02-branch-outcome-separation-conformance
+      - formal-semantics/fsem02-branch-outcome-separation
     paths:
       - 'test/Phase1FSEM02BranchOutcomeSeparationMain.hs'
-      - 'test/fixtures/fsem02-branch-outcome-separation-v1/reordered.phil'
+      - 'test/fixtures/fsem02-branch-outcome-separation-v1/missing-cancel.phil'
       - 'proof/Phil/Core/FSEM02BranchOutcomeSeparation.v'
       - 'docs/phase-1/formal-semantics-branch-outcome-separation-fsem02-v1.md'
       - 'docs/phase-1/typing-and-semantics-reader-guide-v1.md'
@@ -14,7 +14,7 @@ on:
   pull_request:
     paths:
       - 'test/Phase1FSEM02BranchOutcomeSeparationMain.hs'
-      - 'test/fixtures/fsem02-branch-outcome-separation-v1/reordered.phil'
+      - 'test/fixtures/fsem02-branch-outcome-separation-v1/missing-cancel.phil'
       - 'proof/Phil/Core/FSEM02BranchOutcomeSeparation.v'
       - 'docs/phase-1/formal-semantics-branch-outcome-separation-fsem02-v1.md'
       - 'docs/phase-1/typing-and-semantics-reader-guide-v1.md'
@@ -44,7 +44,7 @@ jobs:
           set -euo pipefail
           cabal exec -- ghc -isrc -Wall -Werror -fno-code test/Phase1FSEM02BranchOutcomeSeparationMain.hs
           cabal exec -- runghc -isrc -Wall -Werror test/Phase1FSEM02BranchOutcomeSeparationMain.hs
-          sha256sum test/Phase1FSEM02BranchOutcomeSeparationMain.hs test/fixtures/fsem02-branch-outcome-separation-v1/reordered.phil
+          sha256sum test/Phase1FSEM02BranchOutcomeSeparationMain.hs test/fixtures/fsem02-branch-outcome-separation-v1/missing-cancel.phil
   rocq:
     runs-on: ubuntu-24.04
     container:
