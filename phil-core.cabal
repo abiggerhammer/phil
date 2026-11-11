@@ -247,6 +247,7 @@ library
       Phil.Surface.GrammarV1.ComponentChoiceStatefulRendezvous
       Phil.Surface.GrammarV1.ComponentRestrictedRendezvous
       Phil.Surface.GrammarV1.ComponentRestrictedSourceClose
+      Phil.Surface.GrammarV1.ComponentRestrictedTerminalHead
       Phil.Surface.GrammarV1.ComponentRestrictedSourceTerminal
       Phil.Core.ProcessEndpointClosure
       Phil.Core.ProcessLifecycle
