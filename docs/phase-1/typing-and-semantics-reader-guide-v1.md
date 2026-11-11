@@ -241,6 +241,8 @@ The bounded [FSEM-02 checked source-offer arm-order conformance](formal-semantic
 
 The bounded [FSEM-02 checked source choice branch outcome separation](formal-semantics-branch-outcome-separation-fsem02-v1.md) independently replays Go and Cancel choices from one original checked Core state. It distinguishes the two exact terminal endpoint types, rejects cross-label End closes and stale replays with precise constructors, and checks a complete minimally rejected missing-arm source. Rocq proves conditional two-branch head/resource facts; the external authority and full-refinement gaps remain open.
 
+The bounded [FSEM-02 checked-source offer successor freshness and borrowed-spectator frame](formal-semantics-offer-successor-freshness-fsem02-v1.md) tests both source-covered labels against all three occupied successor structural modes and predecessor-name alias, preserving exact negative constructors, and checks complete state restoration after independently authorized End closure of each choice with an unrelated active affine loan. Rocq proves conditional extensional occupied-name failure and independent owner/loan framing; source-derived authority and global refinement remain open.
+
 ## 6. Architectures, occurrence identity, and root selection
 
 The source differentiates:
