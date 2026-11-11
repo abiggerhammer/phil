@@ -1,0 +1,82 @@
+name: FSEM-02 Offer Arm Order Early Preflight
+
+on:
+  push:
+    branches:
+      - formal-semantics/fsem02-offer-arm-order-conformance
+    paths:
+      - 'test/Phase1FSEM02ChoiceArmOrderMain.hs'
+      - 'test/fixtures/fsem02-offer-arm-order-v1/reordered.phil'
+      - 'proof/Phil/Core/FSEM02OfferArmOrder.v'
+      - 'docs/phase-1/formal-semantics-offer-arm-order-fsem02-v1.md'
+      - 'docs/phase-1/typing-and-semantics-reader-guide-v1.md'
+      - '.github/workflows/fsem02-offer-arm-order-preflight.yml'
+  pull_request:
+    paths:
+      - 'test/Phase1FSEM02ChoiceArmOrderMain.hs'
+      - 'test/fixtures/fsem02-offer-arm-order-v1/reordered.phil'
+      - 'proof/Phil/Core/FSEM02OfferArmOrder.v'
+      - 'docs/phase-1/formal-semantics-offer-arm-order-fsem02-v1.md'
+      - 'docs/phase-1/typing-and-semantics-reader-guide-v1.md'
+      - '.github/workflows/fsem02-offer-arm-order-preflight.yml'
+
+concurrency:
+  group: fsem02-offer-arm-order-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  strict-haskell-source-order:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: haskell-actions/setup@v2
+        with:
+          ghc-version: '9.6.7'
+          cabal-version: 'latest'
+          cabal-update: false
+      - run: bash scripts/ci/cabal-update-retry.sh
+      - run: cabal build lib:phil-core --ghc-options=-Werror
+      - name: Exact parsed source order, typed successor and duplicate/stale rejections
+        run: |
+          set -euo pipefail
+          cabal exec -- ghc -isrc -Wall -Werror -fno-code test/Phase1FSEM02ChoiceArmOrderMain.hs
+          cabal exec -- runghc -isrc -Wall -Werror test/Phase1FSEM02ChoiceArmOrderMain.hs
+          sha256sum test/Phase1FSEM02ChoiceArmOrderMain.hs test/fixtures/fsem02-offer-arm-order-v1/reordered.phil
+  rocq:
+    runs-on: ubuntu-24.04
+    container:
+      image: rocq/rocq-prover:9.2.0
+      options: --user root
+    steps:
+      - uses: actions/checkout@v4
+      - name: Bounded two-branch permutation, ambiguity and stale-step proofs
+        shell: bash
+        run: |
+          set -euo pipefail
+          export PATH="/home/rocq/.opam/${COMPILER}/bin:$PATH"
+          for file in \
+            proof/Phil/Core/Syntax.v \
+            proof/Phil/Core/Context.v \
+            proof/Phil/Core/ContextJoin.v \
+            proof/Phil/Core/ProcessJoin.v \
+            proof/Phil/Core/ProcessTerminal.v \
+            proof/Phil/Core/ArchitectureIdentity.v \
+            proof/Phil/Core/ArchitectureInstantiation.v \
+            proof/Phil/Core/ProviderReplacementQualification.v \
+            proof/Phil/Core/ArchitectureRealization.v \
+            proof/Phil/Systems/FactDisposition.v \
+            proof/Phil/Assurance/ValidityScope.v \
+            proof/Phil/Core/SystemsStageClosure.v \
+            proof/Phil/Core/SystemsGenericLowering.v \
+            proof/Phil/Core/ConcurrencySemantics.v \
+            proof/Phil/Core/SessionStep.v \
+            proof/Phil/Core/FSEM02ProtocolHeadProgression.v \
+            proof/Phil/Core/FSEM02OfferArmOrder.v
+          do
+            rocq c -Q proof/Phil Phil "$file"
+          done
+          if grep -nE '^[[:space:]]*(Admitted[.]|Axiom[[:space:]]|Parameter[[:space:]])' proof/Phil/Core/FSEM02OfferArmOrder.v; then exit 1; fi
+          sha256sum proof/Phil/Core/FSEM02OfferArmOrder.v proof/Phil/Core/FSEM02OfferArmOrder.vo
