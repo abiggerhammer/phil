@@ -18,6 +18,9 @@ module Phil.Surface.GrammarV1.ComponentChoiceStatefulRendezvous
   , GrammarV1ChoiceSourceSuccessorTraceError (..)
   , GrammarV1ChoiceSourceSuccessorTrace (..)
   , grammarV1CheckChoiceSourceSuccessorTrace
+  , GrammarV1ChoiceTypedPrefixError (..)
+  , GrammarV1ChoiceTypedPrefix (..)
+  , grammarV1CheckChoiceTypedPrefix
   ) where
 
 import qualified Data.Map.Strict as Map
@@ -31,7 +34,14 @@ import Phil.Core.ProcessRendezvous
   , ProcessRendezvousError
   , checkProcessCommunicationState
   )
-import Phil.Core.Protocol (ProtocolRoleKey)
+import Phil.Core.Protocol
+  ( CheckedProtocolStep (..)
+  , ProtocolActionRequest (..)
+  , ProtocolCheckError
+  , ProtocolContext
+  , ProtocolRoleKey
+  , checkProtocolAction
+  )
 import Phil.Core.Protocol.Family (BinaryProtocolInstance (..))
 import Phil.Core.Static (DeclarationKey)
 import Phil.Core.Syntax (Name, Outcome)
@@ -404,6 +414,132 @@ grammarV1CheckChoiceSourceSuccessorTrace
       , choiceSourceTraceTerminalOwners = finalOwners
       }
     else Left ChoiceSourceTraceTerminalOwnerMismatch
+
+-- | A bounded independent local-protocol replay of BOTH source-selected
+-- Select/Offer successors and their independently authorized End prefixes.
+-- This checks the actual native context maps, not merely the occurrence ledger.
+-- An offer arm's return-unit does not authorize the Server End close.
+data GrammarV1ChoiceTypedPrefixError
+  = ChoiceTypedPrefixSourceError GrammarV1ChoiceSourceSuccessorTraceError
+  | ChoiceTypedPrefixOriginalProcessMissing ProcessKey
+  | ChoiceTypedPrefixSelectError ProtocolCheckError
+  | ChoiceTypedPrefixOfferError ProtocolCheckError
+  | ChoiceTypedPrefixClientEndError ProtocolCheckError
+  | ChoiceTypedPrefixPeerEndError ProtocolCheckError
+  | ChoiceTypedPrefixReadyMismatch ProcessKey
+  | ChoiceTypedPrefixClientFirstMismatch ProcessKey
+  | ChoiceTypedPrefixPeerFirstMismatch ProcessKey
+  | ChoiceTypedPrefixTerminalMismatch ProcessKey
+  deriving (Eq, Show)
+
+data GrammarV1ChoiceTypedPrefix = GrammarV1ChoiceTypedPrefix
+  { choiceTypedPrefixSource :: GrammarV1ChoiceSourceSuccessorTrace
+  , choiceTypedPrefixSelect :: CheckedProtocolStep
+  , choiceTypedPrefixOffer :: CheckedProtocolStep
+  , choiceTypedPrefixClientEnd :: CheckedProtocolStep
+  , choiceTypedPrefixPeerEnd :: CheckedProtocolStep
+  }
+  deriving (Eq, Show)
+
+-- | The caller supplies BOTH complete checked source programs and separately
+-- admitted protocol family, role/process/occurrence identities, actual original
+-- activation-derived state, chosen peer label and both terminal End outcomes.
+-- The independent local checkProtocolAction steps MUST reproduce both Core
+-- states after the real joint stateful rendezvous and each one-sided close.
+-- No source-derived nominal authority, opaque fallback or scheduler is inferred.
+grammarV1CheckChoiceTypedPrefix
+  :: DeclarationKey -> GrammarV1ComponentDecl
+  -> DeclarationKey -> GrammarV1ComponentDecl
+  -> BinaryProtocolInstance
+  -> ProtocolRoleKey -> ProtocolRoleKey
+  -> ProcessKey -> ProcessKey
+  -> ActivationOccurrenceKey -> ActivationOccurrenceKey
+  -> Name -> Text -> ProcessNetwork -> ProcessCommunicationState
+  -> Outcome -> Outcome
+  -> Either GrammarV1ChoiceTypedPrefixError GrammarV1ChoiceTypedPrefix
+grammarV1CheckChoiceTypedPrefix
+    clientRoot clientSource offerRoot offerSource instanceValue
+    clientRole offerRole clientProcess offerProcess
+    clientOccurrence offerOccurrence offeredSuccessor peerLabel network
+    initialState clientOutcome peerOutcome = do
+  sourceTrace <- mapLeft ChoiceTypedPrefixSourceError $
+    grammarV1CheckChoiceSourceSuccessorTrace
+      clientRoot clientSource offerRoot offerSource instanceValue
+      clientRole offerRole clientProcess offerProcess
+      clientOccurrence offerOccurrence offeredSuccessor peerLabel network
+      initialState clientOutcome peerOutcome
+  let diamond = choiceSourceTraceDiamond sourceTrace
+      clientClosed = statefulChoiceExplicitPeerCloseClient
+        (choiceCloseDiamondForward diamond)
+      progressed = statefulChoiceClientCloseSourceReplay clientClosed
+      replay = statefulChoiceSourceReplay progressed
+      selected = jointChoiceSelectedSource replay
+      offered = jointChoiceCheckedOffer replay
+      clientOld = grammarV1ResolvedBinderCoreName
+        (checkedComponentSelectEndpoint selected)
+      clientNext = grammarV1ResolvedBinderCoreName
+        (checkedComponentSelectSuccessor selected)
+      offerOld = grammarV1ResolvedBinderCoreName
+        (replayedComponentOfferSourceEndpoint offered)
+      selectedLabel = checkedComponentSelectLabel selected
+      revision = binaryProtocolInstanceRevision instanceValue
+      originalContexts = communicationProtocolContexts initialState
+      ready = statefulChoiceSuccessor progressed
+      afterClient = statefulChoiceClientCloseSuccessor clientClosed
+      afterPeer = choiceCloseDiamondPeerFirst diamond
+      terminal = choiceCloseDiamondReverse diamond
+      expectContext state process expected mismatch =
+        if Map.lookup process (communicationProtocolContexts state) == Just expected
+          then Right ()
+          else Left mismatch
+      originalContext process = maybe
+        (Left (ChoiceTypedPrefixOriginalProcessMissing process))
+        Right (Map.lookup process originalContexts)
+  clientContext <- originalContext clientProcess
+  peerContext <- originalContext offerProcess
+  selectStep <- mapLeft ChoiceTypedPrefixSelectError $
+    checkProtocolAction
+      (ProtocolSelectRequest clientOld clientNext revision clientRole selectedLabel)
+      clientContext
+  offerStep <- mapLeft ChoiceTypedPrefixOfferError $
+    checkProtocolAction
+      (ProtocolOfferRequest offerOld offeredSuccessor revision offerRole peerLabel)
+      peerContext
+  let clientReady = checkedProtocolContext selectStep
+      peerReady = checkedProtocolContext offerStep
+  expectContext ready clientProcess clientReady
+    (ChoiceTypedPrefixReadyMismatch clientProcess)
+  expectContext ready offerProcess peerReady
+    (ChoiceTypedPrefixReadyMismatch offerProcess)
+  clientEnd <- mapLeft ChoiceTypedPrefixClientEndError $
+    checkProtocolAction
+      (ProtocolCloseRequest clientNext revision clientRole clientOutcome)
+      clientReady
+  peerEnd <- mapLeft ChoiceTypedPrefixPeerEndError $
+    checkProtocolAction
+      (ProtocolCloseRequest offeredSuccessor revision offerRole peerOutcome)
+      peerReady
+  let clientRetired = checkedProtocolContext clientEnd
+      peerRetired = checkedProtocolContext peerEnd
+  expectContext afterClient clientProcess clientRetired
+    (ChoiceTypedPrefixClientFirstMismatch clientProcess)
+  expectContext afterClient offerProcess peerReady
+    (ChoiceTypedPrefixClientFirstMismatch offerProcess)
+  expectContext afterPeer clientProcess clientReady
+    (ChoiceTypedPrefixPeerFirstMismatch clientProcess)
+  expectContext afterPeer offerProcess peerRetired
+    (ChoiceTypedPrefixPeerFirstMismatch offerProcess)
+  expectContext terminal clientProcess clientRetired
+    (ChoiceTypedPrefixTerminalMismatch clientProcess)
+  expectContext terminal offerProcess peerRetired
+    (ChoiceTypedPrefixTerminalMismatch offerProcess)
+  pure GrammarV1ChoiceTypedPrefix
+    { choiceTypedPrefixSource = sourceTrace
+    , choiceTypedPrefixSelect = selectStep
+    , choiceTypedPrefixOffer = offerStep
+    , choiceTypedPrefixClientEnd = clientEnd
+    , choiceTypedPrefixPeerEnd = peerEnd
+    }
 
 mapLeft :: (a -> b) -> Either a c -> Either b c
 mapLeft f = either (Left . f) Right
