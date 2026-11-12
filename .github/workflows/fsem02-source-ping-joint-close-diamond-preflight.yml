@@ -19,7 +19,7 @@ on:
       - '.github/workflows/fsem02-source-ping-joint-close-diamond-preflight.yml'
 
 concurrency:
-  group: fsem02-source-ping-joint-nominal-${{ github.ref }}
+  group: fsem02-source-ping-joint-close-diamond-${{ github.ref }}
   cancel-in-progress: true
 
 permissions:
