@@ -896,6 +896,50 @@ sourcePingJointCloseRefusalRetry source = do
     (ProtocolInstanceMismatch clientNext foreignRevision revision)
   checkServer (ProtocolCloseRequest serverNext foreignRevision foreignRole done)
     (ProtocolInstanceMismatch serverNext foreignRevision revision)
+  -- Two refused local Closes on opposite source-derived Ping participants
+  -- leave BOTH original process contexts untouched, irrespective of order.
+  -- A later valid Close is not a rollback of any previously committed action.
+  let refuseWithoutCommit label process bad expected contexts = do
+        current <- maybe (Left ("missing double-refusal " <> label)) Right
+          (Map.lookup process contexts)
+        case checkProtocolAction bad current of
+          Left observed -> do
+            assert (observed == expected)
+              (label <> " double-refusal diagnostic: " <> show observed)
+            pure contexts
+          Right _ -> Left (label <> " unexpectedly committed a terminal Close")
+      pairedRefusal label clientBad clientErr serverBad serverErr = do
+        afterClient <- refuseWithoutCommit (label <> " client") clientProcess
+          clientBad clientErr progressed
+        afterServer <- refuseWithoutCommit (label <> " server") serverProcess
+          serverBad serverErr afterClient
+        firstServer <- refuseWithoutCommit (label <> " server-first") serverProcess
+          serverBad serverErr progressed
+        secondClient <- refuseWithoutCommit (label <> " client-second") clientProcess
+          clientBad clientErr firstServer
+        assert (afterServer == progressed && secondClient == progressed)
+          (label <> " reordered refusals changed a peer or borrowed spectator")
+        clientRetry <- closeOne clientProcess clientNext clientRole afterServer
+        fullyRetried <- closeOne serverProcess serverNext serverRole clientRetry
+        serverRetry <- closeOne serverProcess serverNext serverRole secondClient
+        reversedRetry <- closeOne clientProcess clientNext clientRole serverRetry
+        assert (fullyRetried == directFinal && reversedRetry == directFinal)
+          (label <> " pair refusal then valid retries differ from direct closes")
+        finalServer <- maybe (Left "double refusal lost final server") Right
+          (Map.lookup serverProcess fullyRetried)
+        assert (affineBindings (protocolResources finalServer) == affineBindings loaned
+             && sharedLoans (protocolResources finalServer) == sharedLoans loaned)
+          (label <> " double-refusal retry changed borrowed affine owner/loan")
+  pairedRefusal "instance/role"
+    (ProtocolCloseRequest clientNext foreignRevision clientRole done)
+    (ProtocolInstanceMismatch clientNext foreignRevision revision)
+    (ProtocolCloseRequest serverNext revision foreignRole done)
+    (ProtocolRoleMismatch serverNext foreignRole serverRole)
+  pairedRefusal "outcome/instance"
+    (ProtocolCloseRequest clientNext revision clientRole wrongOutcome)
+    (ProtocolSessionError (CloseOutcomeMismatch done wrongOutcome))
+    (ProtocolCloseRequest serverNext foreignRevision serverRole done)
+    (ProtocolInstanceMismatch serverNext foreignRevision revision)
   clientFinal <- maybe (Left "retry omitted final client context") Right
     (Map.lookup clientProcess directFinal)
   serverFinal <- maybe (Left "retry omitted final server context") Right

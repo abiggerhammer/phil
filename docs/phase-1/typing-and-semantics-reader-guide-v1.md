@@ -260,6 +260,8 @@ The bounded [FSEM-02 source Ping two-process nominal refusal](formal-semantics-s
 
 The bounded [FSEM-02 source Ping terminal Close refusal/retry trace](formal-semantics-source-ping-close-refusal-retry-fsem02-v1.md) tests exact native nominal/head errors and two-process peer-state preservation through subsequent valid terminal closes, with an explicit conditional Rocq failed-trial/commuting-retry result. Rejected trials do not create a successor; no rollback, external authority or universal implementation refinement is claimed.
 
+The bounded [FSEM-02 paired Ping Close refusals](formal-semantics-source-ping-double-refusal-retry-fsem02-v1.md) exercise client/server failure in both orders, exact native diagnostics, unmodified borrowed resource contexts, and eventual valid Close order equality. Separate conditional Rocq lemmas exclude committed actions from the refusal case; this is not rollback or universal refinement.
+
 ## 6. Architectures, occurrence identity, and root selection
 
 The source differentiates:
