@@ -99,7 +99,7 @@ Proof.
   destruct
     (phase1_surface_normalize_generic_requirement_type_values entries)
     as [actual |] eqn:Hentries; try discriminate Hnormalize.
-  inversion Hnormalize; subst refined.
+  inversion Hnormalize; subst.
   cbn.
   rewrite
     (phase1_surface_normalize_generic_requirement_type_values_round_trip
@@ -142,7 +142,7 @@ Proof.
     destruct
       (phase1_surface_normalize_generic_requirements_type_spine requirements)
       as [actual |] eqn:Hrequirements; try discriminate Hnormalize.
-    inversion Hnormalize; subst refined.
+    inversion Hnormalize; subst.
     cbn.
     rewrite
       (phase1_surface_normalize_generic_requirements_type_spine_round_trip
