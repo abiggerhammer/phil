@@ -248,6 +248,8 @@ The bounded [FSEM-02 source-offer nominal instance/role rejection bridge](formal
 
 The bounded [FSEM-02 source-derived Ping nominal Send/Receive gates](formal-semantics-ping-nominal-origin-gates-fsem02-v1.md) check complete-source Ping endpoints against production Core instance/role mismatches with exact failure classes on both sides and matching positive controls. Conditional Rocq local-step lemmas preserve the external nominal authority premise; they are not general source-to-Rocq refinement.
 
+The bounded [FSEM-02 source Ping terminal nominal Close gate](formal-semantics-ping-terminal-nominal-gates-fsem02-v1.md) checks actual post-Send/Receive End successors against exact instance/role mismatch refusals and no-successor terminal consumption. Separate Rocq lemmas are conditional on external nominal authority and do not prove global refinement.
+
 ## 6. Architectures, occurrence identity, and root selection
 
 The source differentiates:
