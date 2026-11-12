@@ -279,10 +279,11 @@ Proof.
         as [raw |] eqn:Hraw; simpl in Hbase; try discriminate Hbase.
       destruct (phase1_surface_normalize_generic_requirements_type_spine raw)
         as [typed |] eqn:Htyped; simpl in Hbase; try discriminate Hbase.
-      destruct
-        (phase1_surface_normalize_generic_requirements_proposition_spine typed)
-        as [actual |] eqn:Hactual; simpl in Hbase; try discriminate Hbase.
-      inversion Hbase; subst.
+      unfold phase1_surface_normalize_optional_generic_requirements_type,
+        phase1_surface_normalize_optional_generic_requirements_proposition.
+      rewrite Htyped.
+      cbn [phase1_surface_normalize_optional_generic_requirements_proposition].
+      rewrite Hbase.
       reflexivity.
     }
     assert (Hnormalize :
