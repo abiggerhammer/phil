@@ -1,0 +1,118 @@
+name: Phase 1 P11 Provisional Candidate Evidence (No Publication)
+
+# Audit-only: no tag, release, credentials, or production release trigger.
+on:
+  pull_request:
+    paths:
+      - '.github/workflows/phase1-p11-candidate-evidence.yml'
+      - 'scripts/ci/audit-p11-candidate-delta.py'
+      - 'scripts/ci/audit-p11-candidate-stage.sh'
+      - 'audit/p11-provisional-candidate-handoff-2026-11-12.md'
+
+permissions:
+  contents: read
+
+jobs:
+  full-pinned-delta:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          path: audit-tools
+      - uses: actions/checkout@v4
+        with:
+          path: pinned-source
+          ref: 13808408f9de0f67cefd6fa744f87d81a2d22fbb
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Complete historical-to-pinned source delta and adversarial controls
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 audit-tools/scripts/ci/audit-p11-candidate-delta.py --self-test
+          python3 audit-tools/scripts/ci/audit-p11-candidate-delta.py \
+            --repo pinned-source --out "$RUNNER_TEMP/p11-candidate-delta" \
+            | tee "$RUNNER_TEMP/p11-candidate-delta.log"
+          test -s "$RUNNER_TEMP/p11-candidate-delta/p11-candidate-delta-summary.json"
+          grep -q '^P11_FINAL_RELEASE_BYTES=ABSENT;' "$RUNNER_TEMP/p11-candidate-delta.log"
+      - name: Preserve COMPLETE source tree diff, NUL inventories, classifications and SHA
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: p11-pinned-source-delta-13808408f9de
+          path: |
+            ${{ runner.temp }}/p11-candidate-delta/
+            ${{ runner.temp }}/p11-candidate-delta.log
+          if-no-files-found: warn
+          retention-days: 30
+
+  provisional-linux-assets:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 75
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          path: audit-tools
+      - uses: actions/checkout@v4
+        with:
+          path: pinned-source
+          ref: 13808408f9de0f67cefd6fa744f87d81a2d22fbb
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: haskell-actions/setup@v2
+        with:
+          ghc-version: '9.6.7'
+          cabal-version: 'latest'
+      - name: Build and smoke unsigned Linux Phil/Steve staging bytes from pinned tree
+        shell: bash
+        run: |
+          set -euo pipefail
+          cd pinned-source
+          bash ../audit-tools/scripts/ci/audit-p11-candidate-stage.sh linux \
+            "$RUNNER_TEMP/p11-candidate-linux" | tee "$RUNNER_TEMP/p11-candidate-linux-run.log"
+      - name: Preserve exact Linux bytes and provenance (NOT a published release)
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: p11-source-13808408f9de-linux-unsigned-structural
+          path: |
+            ${{ runner.temp }}/p11-candidate-linux/
+            ${{ runner.temp }}/p11-candidate-linux-run.log
+          if-no-files-found: warn
+          retention-days: 30
+
+  provisional-darwin-assets:
+    runs-on: macos-26
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          path: audit-tools
+      - uses: actions/checkout@v4
+        with:
+          path: pinned-source
+          ref: 13808408f9de0f67cefd6fa744f87d81a2d22fbb
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: haskell-actions/setup@v2
+        with:
+          ghc-version: '9.6.7'
+          cabal-version: 'latest'
+      - name: Attempt native Apple Silicon UNsigned candidate staging
+        shell: bash
+        run: |
+          set -euo pipefail
+          cd pinned-source
+          bash ../audit-tools/scripts/ci/audit-p11-candidate-stage.sh darwin \
+            "$RUNNER_TEMP/p11-candidate-darwin" | tee "$RUNNER_TEMP/p11-candidate-darwin-run.log"
+      - name: Preserve exact Darwin unsigned bytes and missing notarization disclosure
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: p11-source-13808408f9de-darwin-unsigned-structural
+          path: |
+            ${{ runner.temp }}/p11-candidate-darwin/
+            ${{ runner.temp }}/p11-candidate-darwin-run.log
+          if-no-files-found: warn
+          retention-days: 30
