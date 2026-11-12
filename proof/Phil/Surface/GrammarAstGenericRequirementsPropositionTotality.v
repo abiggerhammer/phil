@@ -166,7 +166,8 @@ Proof.
       Hentry_body eq_refl entries eq_refl)
     as [refined_entries Hrefined_entries].
   exists {| phase1_generic_requirements_proposition_spine_entries := refined_entries |}.
-  cbn.
+  unfold phase1_surface_normalize_generic_requirements_proposition_spine.
+  cbn [phase1_generic_requirements_type_spine_entries].
   rewrite Hrefined_entries.
   reflexivity.
 Qed.
