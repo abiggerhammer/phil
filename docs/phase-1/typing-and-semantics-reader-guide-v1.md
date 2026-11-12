@@ -243,6 +243,9 @@ The bounded [FSEM-02 checked source choice branch outcome separation](formal-sem
 
 The bounded [FSEM-02 checked-source offer successor freshness and borrowed-spectator frame](formal-semantics-offer-successor-freshness-fsem02-v1.md) tests both source-covered labels against all three occupied successor structural modes and predecessor-name alias, preserving exact negative constructors, and checks complete state restoration after independently authorized End closure of each choice with an unrelated active affine loan. Rocq proves conditional extensional occupied-name failure and independent owner/loan framing; source-derived authority and global refinement remain open.
 
+The bounded [FSEM-02 source-offer nominal instance/role rejection bridge](formal-semantics-offer-nominal-origin-gates-fsem02-v1.md) tests the real source replay under equal local Offer heads but independently mismatched live protocol identity and role, retaining exact native failure constructors and both positive label controls. Rocq proves a conditional external-identity gate model; it does not infer nominal authorization or general implementation refinement.
+
+
 ## 6. Architectures, occurrence identity, and root selection
 
 The source differentiates:
