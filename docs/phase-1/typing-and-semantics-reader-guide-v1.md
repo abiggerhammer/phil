@@ -252,6 +252,8 @@ The bounded [FSEM-02 source Ping terminal nominal Close gate](formal-semantics-p
 
 The bounded [FSEM-02 source Ping successor freshness and borrowed-affine frame](formal-semantics-ping-successor-freshness-fsem02-v1.md) checks accepted and minimally rejected source witnesses against actual Core Send/Receive continuations, exact collision/stale errors, and preservation of unrelated borrowed affine state. Rocq provides conditional extensional resource lemmas, not a universal native refinement.
 
+The bounded [FSEM-02 source Ping joint successor/atomicity evidence](formal-semantics-source-ping-joint-atomicity-fsem02-v1.md) checks an actual two-process native rendezvous against peer-side collisions: a failing peer cannot commit the sender's otherwise valid continuation. Both source-resolved predecessor/successor identities and a borrowed-affine spectator are checked; Rocq composes a conditional atomic pair without proving implementation refinement.
+
 ## 6. Architectures, occurrence identity, and root selection
 
 The source differentiates:
