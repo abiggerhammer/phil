@@ -65,7 +65,8 @@ def main() -> None:
         raise RuntimeError(f"expected pinned container ROCQ_VERSION=9.2.0, got {pinned!r}")
     if not re.search(r"(?<![\d.])9\.2(?:\.0)?(?![\d.])", info):
         raise RuntimeError("Rocq 9.2.0 (CLI 9.2) required; refusing other toolchain")
-    source_sha = subprocess.run(["git", "rev-parse", "--verify", "HEAD"],
+    source_sha = subprocess.run(["git", "-c", f"safe.directory={Path.cwd()}",
+                                 "rev-parse", "--verify", "HEAD"],
                                 check=True, capture_output=True, text=True).stdout.strip()
     if not re.fullmatch(r"[0-9a-f]{40}", source_sha):
         raise RuntimeError(f"invalid checked-out source SHA: {source_sha!r}")
