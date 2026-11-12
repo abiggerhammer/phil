@@ -83,7 +83,7 @@ crossLLVM original other = do
       (realFixtureStage original) foreignLLVM conventionalTrust
 
 package :: RealManifestFixture -> Either String CertifiedReleasePackage
-package fixture = valid fixture >>= right . buildCertifiedReleasePackage (realFixtureLedger fixture)
+package fixture = valid fixture >>= right . buildStructuralReleasePackage (realFixtureLedger fixture)
 
 packageIdentity :: RealManifestFixture -> RealManifestFixture -> Check
 packageIdentity upload steve = do
@@ -109,7 +109,7 @@ foreignLedger original other = do
       actual = deriveManifestId ledger manifest
   ensure (actual /= expected) "foreign ledger did not change this manifest's derivation"
   exact (ReleasePackageManifestLedgerMismatch expected actual) $
-    buildCertifiedReleasePackage ledger release
+    buildStructuralReleasePackage ledger release
 
 wrongProfile :: RealManifestFixture -> Check
 wrongProfile fixture = do
@@ -145,7 +145,7 @@ repeatedPackage :: RealManifestFixture -> Check
 repeatedPackage fixture = do
   a <- package fixture
   b <- package fixture
-  ensure (a == b && renderCertifiedReleasePackage a == renderCertifiedReleasePackage b)
+  ensure (a == b && renderStructuralReleasePackage a == renderStructuralReleasePackage b)
     "same exact release inputs did not produce the same package"
 
 main :: IO ()
@@ -184,7 +184,7 @@ writeExpected out (name,fixture) = do
   release <- either fail pure (valid fixture)
   metadata <- either fail pure (package fixture)
   TIO.writeFile (out </> (name <> ".ll")) (llvmArtifactText (certifiedReleaseLLVMArtifact release))
-  TIO.writeFile (out </> (name <> ".release-package")) (renderCertifiedReleasePackage metadata)
+  TIO.writeFile (out </> (name <> ".release-package")) (renderStructuralReleasePackage metadata)
   writeFile (out </> (name <> ".identities.txt")) (unlines
     [ "manifest=" <> show (manifestId (certifiedReleaseManifest release))
     , "systems=" <> show (manifestImplementationDigest (certifiedReleaseManifest release))

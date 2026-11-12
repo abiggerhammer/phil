@@ -1,6 +1,8 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+# Historical emitters below replay structural-only INT-005 data, not the sealed
+# checked-architecture producer-to-final-origin acceptance path.
 OUT_DIR="dist/int005-certified-release"
 rm -rf "$OUT_DIR"
 mkdir -p "$OUT_DIR"
@@ -39,3 +41,19 @@ sha256sum \
   "$OUT_DIR/upload.release-package" \
   "$OUT_DIR/steve.ll" \
   "$OUT_DIR/steve.release-package"
+
+# An independently minted structural CertifiedReleaseArtifact cannot enter
+# the public final-origin release-package builder; require an opaque-type
+# compiler error, rather than counting a dependency/network error as rejection.
+negative_log="$(mktemp)"
+trap 'rm -f "$negative_log"' EXIT
+if cabal exec -- ghc -fno-code -isrc -itest -Wall -Werror test/Phase1INT005FinalOriginPackageTypeNegative.hs >"$negative_log" 2>&1; then
+  echo 'FAIL: legacy CertifiedReleaseArtifact entered final-origin package API' >&2
+  exit 1
+fi
+grep -q 'AcceptedVerifiedFinalOrigin' "$negative_log" || {
+  cat "$negative_log" >&2
+  echo 'FAIL: did not reject opaque final-origin type' >&2
+  exit 1
+}
+echo 'PASS: final-origin package API rejects legacy release artifact'

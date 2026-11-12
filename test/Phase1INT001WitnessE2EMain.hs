@@ -5,6 +5,7 @@ module Main (main) where
 import qualified Data.Map.Strict as Map
 import qualified Data.Set as Set
 import Data.Text (Text)
+import qualified Data.Text as Text
 import qualified Data.Text.IO as TextIO
 import Phil.Compiler.SourceArchitecture
 import Phil.Compiler.SourceBundle
@@ -66,6 +67,7 @@ import Phil.Systems.Phase1Stage
   )
 import Phil.Assurance.Types
   ( ArtifactIdentity (..)
+  , AssuranceManifest (..)
   , ArtifactRef (..)
   , AssuranceLedger
   , Digest
@@ -126,6 +128,13 @@ import Phil.Verification.SourceManifestBinding
   , sourceManifestBindingManifest
   , sourceManifestBindingSourceAssurance
   )
+import Phil.Verification.ReleasePackage
+  ( buildCertifiedReleasePackage
+  , renderCertifiedReleasePackage
+  , verifiedOriginPackageStructural
+  , certifiedReleasePackageManifestId
+  , certifiedReleasePackageLLVMTargetDigest
+  )
 import Phil.Verification.VerifiedFinalOriginProduction
   ( VerifiedFinalOriginProduction
   , VerifiedFinalOriginError (..)
@@ -168,6 +177,12 @@ main = do
         (p7SteveReplay stevePut steveGet)
     , test "P7 wrong K/source/manifest/stage/release/LLVM/trust are rejected"
         (p7Adversarial uploadClient uploadServer stevePut steveGet)
+    , test "P7 Upload origin package requires sealed source/release acceptance"
+        (p7OriginPackageReplay (verifiedUploadProduction uploadClient uploadServer)
+          uploadProviderCallExpectations uploadStageClosureBundle)
+    , test "P7 Steve origin package requires sealed source/release acceptance"
+        (p7OriginPackageReplay (verifiedSteveProduction stevePut steveGet)
+          steveProviderCallExpectations steveStageClosureBundle)
     ]
   if and results then pure () else exitFailure
 
@@ -768,6 +783,38 @@ makeP7Binding source descriptor stage coreDigest = do
   binding <- mapLeft show (closeSourceManifestBindingForInstance
     source descriptor bundle policy context emptyLedger selection)
   pure (binding, context)
+
+-- The actual package consumer accepts only the P2/P6/P7-sealed final event.
+-- Direct entry with a legacy release is a separate compile-negative control.
+p7OriginPackageReplay
+  :: Either String VerifiedSourceSystemsProduction
+  -> ProviderCallExpectationMap
+  -> Either String StageClosureBundle -> Either String ()
+p7OriginPackageReplay productionResult expectations templateResult = do
+  production <- productionResult
+  template <- templateResult
+  fixture <- makeP7Fixture production expectations template
+  let seal = p7Production fixture
+      release = verifiedFinalOriginRelease seal
+  accepted <- mapLeft show (acceptVerifiedFinalOrigin seal
+    (verifiedFinalOriginSourceBinding seal)
+    (verifiedFinalOriginSourceArtifact seal) release)
+  package <- mapLeft show (buildCertifiedReleasePackage (p7Ledger fixture) accepted)
+  let structural = verifiedOriginPackageStructural package
+      rendered = renderCertifiedReleasePackage package
+      occurrence = verifiedSourceSystemsArchitectureIdentity production
+      key = unInstanceKey (identityInstanceKey occurrence)
+  assert (certifiedReleasePackageManifestId structural
+      == manifestId (certifiedReleaseManifest release))
+    "verified package lost independently accepted manifest"
+  assert (certifiedReleasePackageLLVMTargetDigest structural
+      == llvmContractTargetDigest (llvmArtifactContract (p7LLVM fixture)))
+    "verified package lost accepted LLVM target"
+  assert (Text.isInfixOf ("verified-origin\tinstance-key=" <> key) rendered)
+    "verified package renderer lost exact checked K"
+  assert (Text.isInfixOf "instance-revision=" rendered
+    && Text.isInfixOf "package-id=" rendered)
+    "verified package renderer lost checked I and package identity"
 
 -- Each negative is rejected by the mandatory P7 accepting consumer; earlier
 -- structural constructors alone never return the stronger accepted-origin type.

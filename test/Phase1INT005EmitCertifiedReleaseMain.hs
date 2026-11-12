@@ -30,6 +30,8 @@ main = do
       hPutStrLn stderr "usage: Phase1INT005EmitCertifiedReleaseMain.hs <upload|steve>"
       exitFailure
 
+-- Historical *structural-only* LLVM/release fixture. It is NOT sealed P2/P6/P7
+-- occurrence provenance and cannot mint a final-origin release package.
 emitCertified :: String -> Either String RealManifestFixture -> IO ()
 emitCertified label fixtureResult = case fixtureResult of
   Left detail -> failWith (label <> " real manifest fixture failed: " <> detail)

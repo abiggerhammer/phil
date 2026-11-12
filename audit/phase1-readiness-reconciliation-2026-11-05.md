@@ -1067,3 +1067,37 @@ TCB/claim-narrowing decision, the required #1584 final-authority claim is
 **P6 #1729, already merged:** exact tested head `a8c18bea9027aa5a2bf399c113a77289298ba632`, 100/100 workflows successful, 205 successful checks and only the documented trusted PR-only `publish` skip; protected merge #43033077209 successful, merge `74fec3c50ff9f0724ba8810744ab8203b884ca90` at 13:52:45 UTC. `VerifiedStageClosureProduction` reconstructs both arms of the complete selected StageClosure from the same opaque P2 event and validates source-produced base equality. Executed Upload/Steve whole-stage positive tests and Steve-configuration-with-Upload negative, plus abstract Rocq retention and same-revision/different-K model/assumption queries. It does **not** authenticate an independently selected complete CertifiedRelease.
 
 **Pending P7, third budgeted implementation/proof PR:** no P7 checked result is credited here. The P7 final-origin typed consumer must be checked and actually merged before its evidence is eligible for a further append-only reconciliation. Existing 244 normative cases (236 Exit, 8 Profile), historical independent audit, declared Phase 1 TCB and strict GHC/LLVM/Rocq policies are unchanged. P8/P9/P10/P11 remain separately unresolved. `FinalArtifactCertified` unproved, independent audit freeze **NOT YET**.
+
+
+## Executed P7 final-origin evidence — #1730 (2026-11-12 reconciliation)
+
+**Previously merged, not this follow-up:** [#1730](https://github.com/abiggerhammer/phil/pull/1730)
+at exact tested head `1bd59b4a53308ab842225e83801298af43a065f9`
+passed **103/103** exact-head workflow runs and **209/209** completed
+checks (**208 SUCCESS**, one documented trusted, nonrequired, PR-only
+INT-011 release `publish` SKIP conditioned on a main push).
+[Protected merge-intent #43062709216](https://github.com/abiggerhammer/phil/actions/runs/43062709216)
+succeeded, merging as `5074ce438260856d4afd91271265f157100d20a1`
+at 2026-11-11 16:53:35 UTC. No direct merge.
+
+The constructor-private P7 `VerifiedFinalOriginProduction` is derived from
+the rechecked ordinary Upload/Steve P2 source/Core K/I producer and P6
+whole StageClosure, exact source-derived descriptor and independently accepted
+complete source-manifest binding, complete selected VER-010 application artifact
+and INT-005 release, including LLVM and declared trust. Only whole-object
+acceptance of that event mints `AcceptedVerifiedFinalOrigin`. Executed
+Upload/Steve positive replay and wrong K (same I), source/manifest,
+stage, release, LLVM/target and declared trust substitution negatives are
+bounded native evidence. Conditional Rocq equality and `Print Assumptions`
+are not complete native-to-Rocq authority.
+
+**Only this already merged P7 result is credited here.** The downstream
+consumer-migration follow-up's tests and merge must be accounted separately
+after execution. Conformance Matrix: one **supplemental P7 evidence row
+pending independent spreadsheet write/readback**, never a modification of
+the original 244 normative cases (236 Exit, eight Profile).
+Legacy structural consumers are not promoted into origin authority.
+P8 representation, P9 predecessor/evidence/erasure/discharge,
+P10 FixedFinalAuthorityAdapter/`FinalArtifactCertified`, and
+P11 independent public bytes/pinned delta remain open.
+**Independent Phase 1 freeze: NOT YET.**

@@ -4,6 +4,8 @@ module Phil.Verification.ReleasePackage
   ( ReleasePackageRevision (..)
   , certifiedReleasePackageRevisionV1
   , CertifiedReleasePackage
+  , VerifiedOriginReleasePackage
+  , verifiedOriginPackageStructural
   , certifiedReleasePackageId
   , certifiedReleasePackageManifestId
   , certifiedReleasePackageLoweringLedgerRoot
@@ -14,6 +16,8 @@ module Phil.Verification.ReleasePackage
   , ReleasePackageError (..)
   , buildCertifiedReleasePackage
   , renderCertifiedReleasePackage
+  , buildStructuralReleasePackage
+  , renderStructuralReleasePackage
   ) where
 
 import qualified Data.Map.Strict as Map
@@ -34,6 +38,15 @@ import Phil.Assurance.Types
   , RevisionId (..)
   , deriveManifestId
   , digestText
+  )
+import Phil.Core.Static (ArchitectureInstanceIdentity (..), InstanceKey (..), InstanceRevision (..))
+import qualified Phil.Compiler.SourceSystems as Source
+import qualified Phil.Verification.VerifiedStageClosureProduction as StageProduction
+import Phil.Verification.VerifiedFinalOriginProduction
+  ( AcceptedVerifiedFinalOrigin
+  , acceptedVerifiedFinalOriginProduction
+  , verifiedFinalOriginRelease
+  , verifiedFinalOriginStageProduction
   )
 import Phil.LLVM.IR
   ( LLVMArtifact (..)
@@ -102,11 +115,13 @@ data ReleasePackageError
   | ReleasePackageMissingAssuranceUse AssuranceUseId
   deriving (Eq, Show)
 
-buildCertifiedReleasePackage
+-- | The weaker structural INT-005 release sidecar checks the manifest/ledger,
+-- not the occurrence that actually produced the selected final stage.
+buildStructuralReleasePackage
   :: AssuranceLedger
   -> CertifiedReleaseArtifact
   -> Either ReleasePackageError CertifiedReleasePackage
-buildCertifiedReleasePackage ledger release = do
+buildStructuralReleasePackage ledger release = do
   let manifest = certifiedReleaseManifest release
       expectedManifestId = manifestId manifest
       actualManifestId = deriveManifestId ledger manifest
@@ -157,11 +172,46 @@ buildCertifiedReleasePackage ledger release = do
       Nothing -> Left (ReleasePackageMissingAssuranceUse key)
       Just use -> Right (key, use)
 
-renderCertifiedReleasePackage :: CertifiedReleasePackage -> Text
-renderCertifiedReleasePackage package = Text.unlines
+renderStructuralReleasePackage :: CertifiedReleasePackage -> Text
+renderStructuralReleasePackage package = Text.unlines
   [ recordLine "package" [("id", unDigest (certifiedReleasePackageId package))]
   , certifiedReleasePackageBody package
   ]
+
+-- | Opaque final-origin-granting package; a structural release cannot mint it.
+data VerifiedOriginReleasePackage = VerifiedOriginReleasePackage
+  AcceptedVerifiedFinalOrigin CertifiedReleasePackage
+  deriving (Eq, Show)
+
+verifiedOriginPackageStructural :: VerifiedOriginReleasePackage -> CertifiedReleasePackage
+verifiedOriginPackageStructural (VerifiedOriginReleasePackage _ package) = package
+
+-- | Only the sealed P2/P6/P7 accepting capability may enter this boundary.
+-- The historic weaker formatter remains available explicitly as structural.
+buildCertifiedReleasePackage
+  :: AssuranceLedger
+  -> AcceptedVerifiedFinalOrigin
+  -> Either ReleasePackageError VerifiedOriginReleasePackage
+buildCertifiedReleasePackage ledger accepted = do
+  package <- buildStructuralReleasePackage ledger
+    (verifiedFinalOriginRelease (acceptedVerifiedFinalOriginProduction accepted))
+  pure (VerifiedOriginReleasePackage accepted package)
+
+-- | K/I and package ID are retained together with the sealed native event.
+-- This is not a cryptographic signature or independent public-byte proof.
+renderCertifiedReleasePackage :: VerifiedOriginReleasePackage -> Text
+renderCertifiedReleasePackage (VerifiedOriginReleasePackage accepted package) =
+  let production = acceptedVerifiedFinalOriginProduction accepted
+      stageProduction = verifiedFinalOriginStageProduction production
+      sourceProduction = StageProduction.verifiedStageClosureSourceProduction stageProduction
+      occurrence = Source.verifiedSourceSystemsArchitectureIdentity sourceProduction
+  in Text.unlines
+      [ recordLine "verified-origin"
+          [ ("instance-key", unInstanceKey (identityInstanceKey occurrence))
+          , ("instance-revision", unInstanceRevision (identityInstanceRevision occurrence))
+          , ("package-id", unDigest (certifiedReleasePackageId package))
+          ]
+      ] <> renderStructuralReleasePackage package
 
 renderBody
   :: CertifiedReleaseArtifact

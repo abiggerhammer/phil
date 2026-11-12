@@ -83,7 +83,7 @@ emitPackage result = do
   fixture <- requireFixture "requested witness" result
   release <- requireRelease "requested witness" fixture
   package <- requirePackage "requested witness" fixture release
-  TextIO.putStr (renderCertifiedReleasePackage package)
+  TextIO.putStr (renderStructuralReleasePackage package)
 
 requireFixture :: String -> Either String RealManifestFixture -> IO RealManifestFixture
 requireFixture label result = case result of
@@ -105,7 +105,7 @@ requirePackage
   -> CertifiedReleaseArtifact
   -> IO CertifiedReleasePackage
 requirePackage label fixture release =
-  case buildCertifiedReleasePackage (realFixtureLedger fixture) release of
+  case buildStructuralReleasePackage (realFixtureLedger fixture) release of
     Left err -> do
       putStrLn ("FAIL: INT-005 " <> label <> " release package -- " <> show err)
       exitFailure
@@ -146,7 +146,7 @@ packageMatches fixture release package = and
   where
     manifest = certifiedReleaseManifest release
     llvm = certifiedReleaseLLVMArtifact release
-    rendered = renderCertifiedReleasePackage package
+    rendered = renderStructuralReleasePackage package
 
 deterministic
   :: RealManifestFixture
@@ -154,18 +154,18 @@ deterministic
   -> CertifiedReleasePackage
   -> Bool
 deterministic fixture release expected =
-  case buildCertifiedReleasePackage (realFixtureLedger fixture) release of
+  case buildStructuralReleasePackage (realFixtureLedger fixture) release of
     Left _ -> False
     Right actual ->
       certifiedReleasePackageId actual == certifiedReleasePackageId expected
-        && renderCertifiedReleasePackage actual == renderCertifiedReleasePackage expected
+        && renderStructuralReleasePackage actual == renderStructuralReleasePackage expected
 
 foreignLedgerRejected
   :: RealManifestFixture
   -> CertifiedReleaseArtifact
   -> Bool
 foreignLedgerRejected foreignFixture release =
-  case buildCertifiedReleasePackage (realFixtureLedger foreignFixture) release of
+  case buildStructuralReleasePackage (realFixtureLedger foreignFixture) release of
     Left (ReleasePackageManifestLedgerMismatch _ _) -> True
     Left (ReleasePackageMissingEvidence _) -> True
     Left (ReleasePackageMissingAssuranceUse _) -> True
