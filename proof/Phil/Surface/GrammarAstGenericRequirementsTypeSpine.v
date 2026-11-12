@@ -98,10 +98,9 @@ Proof.
   unfold phase1_surface_normalize_generic_requirements_type_spine in Hnormalize.
   destruct
     (phase1_surface_normalize_generic_requirement_type_values entries)
-    as [actual |] eqn:Hentries; try discriminate Hnormalize.
+    as [actual |] eqn:Hentries;
+    rewrite Hentries in Hnormalize; try discriminate Hnormalize.
   cbn in Hnormalize.
-  let T := type of Hnormalize in idtac "DEBUG Hnormalize:" T.
-  match goal with |- ?G => idtac "DEBUG goal:" G end.
   injection Hnormalize as Hrefined.
   subst refined.
   cbn.
@@ -145,8 +144,11 @@ Proof.
   - cbn in Hnormalize.
     destruct
       (phase1_surface_normalize_generic_requirements_type_spine requirements)
-      as [actual |] eqn:Hrequirements; try discriminate Hnormalize.
-    inversion Hnormalize; subst.
+      as [actual |] eqn:Hrequirements;
+      rewrite Hrequirements in Hnormalize; try discriminate Hnormalize.
+    cbn in Hnormalize.
+    injection Hnormalize as Hrefined.
+    subst refined.
     cbn.
     rewrite
       (phase1_surface_normalize_generic_requirements_type_spine_round_trip

@@ -104,7 +104,8 @@ Proof.
   unfold phase1_surface_normalize_generic_requirements_proposition_spine in Hnormalize.
   destruct
     (phase1_surface_normalize_generic_requirement_proposition_values entries)
-    as [actual |] eqn:Hentries; try discriminate Hnormalize.
+    as [actual |] eqn:Hentries;
+    rewrite Hentries in Hnormalize; try discriminate Hnormalize.
   cbn in Hnormalize.
   injection Hnormalize as Hrefined.
   subst refined.
@@ -152,8 +153,11 @@ Proof.
     destruct
       (phase1_surface_normalize_generic_requirements_proposition_spine
         requirements)
-      as [actual |] eqn:Hrequirements; try discriminate Hnormalize.
-    inversion Hnormalize; subst.
+      as [actual |] eqn:Hrequirements;
+      rewrite Hrequirements in Hnormalize; try discriminate Hnormalize.
+    cbn in Hnormalize.
+    injection Hnormalize as Hrefined.
+    subst refined.
     cbn.
     rewrite
       (phase1_surface_normalize_generic_requirements_proposition_spine_round_trip
