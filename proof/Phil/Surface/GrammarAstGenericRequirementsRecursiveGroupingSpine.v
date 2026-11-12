@@ -1,4 +1,4 @@
-From Stdlib Require Import Lists.List.
+From Stdlib Require Import Lists.List Strings.String.
 
 From Phil.Surface Require Import
   GrammarDerivation
@@ -6,6 +6,7 @@ From Phil.Surface Require Import
   GrammarAstGenericRequirementRecursiveGroupingSpine.
 
 Import ListNotations.
+Open Scope string_scope.
 
 (*
   PHIL-SURFACE-GRAMMAR-CORR-001 G3: lift canonical recursive grouping
