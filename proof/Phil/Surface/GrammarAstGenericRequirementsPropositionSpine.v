@@ -110,6 +110,8 @@ Proof.
   cbn in Hnormalize.
   injection Hnormalize as Hrefined.
   subst refined.
+  unfold phase1_surface_generic_requirements_proposition_spine_tree,
+    phase1_surface_generic_requirements_type_spine_tree.
   cbn.
   rewrite
     (phase1_surface_normalize_generic_requirement_proposition_values_round_trip
@@ -159,6 +161,8 @@ Proof.
     cbn in Hnormalize.
     injection Hnormalize as Hrefined.
     subst refined.
+    unfold phase1_surface_optional_generic_requirements_proposition_tree,
+      phase1_surface_optional_generic_requirements_type_tree.
     cbn.
     rewrite
       (phase1_surface_normalize_generic_requirements_proposition_spine_round_trip

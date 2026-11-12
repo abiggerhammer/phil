@@ -104,8 +104,9 @@ Proof.
   cbn in Hnormalize.
   injection Hnormalize as Hrefined.
   subst refined.
+  unfold phase1_surface_generic_requirements_type_spine_tree,
+    phase1_surface_generic_requirements_spine_tree.
   cbn.
-  match goal with |- ?G => idtac "DEBUG list wrapper goal:" G end.
   rewrite
     (phase1_surface_normalize_generic_requirement_type_values_round_trip
       entries actual Hentries).
@@ -151,6 +152,8 @@ Proof.
     cbn in Hnormalize.
     injection Hnormalize as Hrefined.
     subst refined.
+    unfold phase1_surface_optional_generic_requirements_type_tree,
+      phase1_surface_optional_generic_requirements_tree.
     cbn.
     rewrite
       (phase1_surface_normalize_generic_requirements_type_spine_round_trip
