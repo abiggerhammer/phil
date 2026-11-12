@@ -43,7 +43,7 @@ main = do
   args <- getArgs
   case args of
     [] -> runChecks release package
-    ["emit-package"] -> TextIO.putStr (renderCertifiedReleasePackage package)
+    ["emit-package"] -> TextIO.putStr (renderStructuralReleasePackage package)
     ["emit-llvm"] -> TextIO.putStr
       (llvmArtifactText (certifiedReleaseLLVMArtifact release))
     _ -> do
@@ -69,7 +69,7 @@ requirePackage
   -> CertifiedReleaseArtifact
   -> IO CertifiedReleasePackage
 requirePackage fixture release =
-  case buildCertifiedReleasePackage (realFixtureLedger fixture) release of
+  case buildStructuralReleasePackage (realFixtureLedger fixture) release of
     Left err -> do
       putStrLn ("FAIL: TARGET-AARCH64-APPLE-DARWIN release package -- " <> show err)
       exitFailure
@@ -80,7 +80,7 @@ runChecks release package = do
   let profile = certifiedReleaseProfile release
       llvm = certifiedReleaseLLVMArtifact release
       llvmModule = llvmArtifactModule llvm
-      rendered = renderCertifiedReleasePackage package
+      rendered = renderStructuralReleasePackage package
       targetBoundary = Map.lookup
         (ReleaseTrustBoundaryId "target-assumptions")
         (certifiedReleaseTrustBoundaries release)

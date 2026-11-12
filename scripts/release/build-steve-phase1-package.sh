@@ -62,7 +62,7 @@ cp LICENSE "$stage/LICENSE"
   echo 'Phil Steve 0.1 Phase-1 trust boundary'
   echo
   echo 'The authoritative machine-readable records are in share/phil-steve/steve.release-package.'
-  echo 'The records below are copied verbatim from that certified release package.'
+  echo 'The following records come from a structural INT-005 envelope, NOT checked occurrence-origin attestation.'
   echo
   grep '^tcb[[:space:]]' "$stage/share/phil-steve/steve.release-package"
 } > "$stage/TCB.txt"
@@ -72,7 +72,7 @@ cat > "$stage/README.md" <<'EOF'
 
 This package contains the Phase-1 Steve content-addressed store command, the
 ordinary `philc` checker/compiler executable, the canonical Phil Steve source,
-and the certified release-package/TCB records used to build this artifact.
+and structural INT-005 release-package/TCB records; no checked K/I producer-origin claim.
 
 ## What is trusted
 
@@ -129,7 +129,7 @@ replace an existing output file.
 - `bin/philc` — ordinary Phil checker/compiler executable shipped with Steve.
 - `smoke-test.sh` — package-only external-use smoke.
 - `share/phil-steve/source/` — canonical `StevePut`, `SteveGet`, and CLI Phil source.
-- `share/phil-steve/steve.release-package` — certified machine-readable release/TCB record.
+- `share/phil-steve/steve.release-package` — structural-only release/TCB record; not sealed P2/P6/P7 origin.
 - `share/phil-steve/docs/provider-put-get.md` — provider-path tutorial.
 - `SHA256SUMS` — checksums for every packaged file other than the checksum file itself.
 
