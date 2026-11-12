@@ -41,6 +41,8 @@ main = do
         (sourcePingJointSuccessorAtomicity accepted)
     , test "FSEM-02 source Ping joint nominal instance/role fail-closed peer"
         (sourcePingJointNominalRefusal accepted)
+    , test "FSEM-02 source Ping joint terminal Close orders agree and reject stale replay"
+        (sourcePingJointTerminalCloseDiamond accepted)
     , test "FSEM-02 source stale close rejects with exact binder mismatch"
         (sourceStaleCloseRejected stale)
     , test "FSEM-02 mismatched session head rejects with precise action error"
@@ -671,6 +673,118 @@ sourcePingJointNominalRefusal source = do
       assert (process == clientProcess && name == clientOld)
         "stale nominal joint replay lost original predecessor identity"
     other -> Left ("stale joint nominal replay unexpectedly progressed: " <> show other)
+
+
+-- After a successful real two-process Ping rendezvous the source-derived
+-- End endpoints may be closed in either order. This is commuting LOCAL
+-- closure of distinct process contexts, not an invented atomic close or
+-- a claim that source text itself grants process/disposal authority.
+sourcePingJointTerminalCloseDiamond :: Text.Text -> Either String ()
+sourcePingJointTerminalCloseDiamond source = do
+  plans <- sourcePlans source
+  (network, clientProcess, serverProcess) <- sourcePingJointNetwork
+  let revision = sourceProtocolInstance plans
+      client = sourceClientPlan plans
+      server = sourceServerPlan plans
+      clientOld = grammarV1ResolvedBinderCoreName (checkedComponentSendEndpoint client)
+      clientNext = grammarV1ResolvedBinderCoreName (checkedComponentSendSuccessor client)
+      serverOld = grammarV1ResolvedBinderCoreName (checkedComponentReceiveEndpoint server)
+      serverNext = grammarV1ResolvedBinderCoreName (checkedComponentReceiveSuccessor server)
+      spectator = Name "fsem02.ping.close.diamond.borrowed"
+      clientSide = ProcessRendezvousSide clientProcess clientOld clientNext revision clientRole
+      serverSide = ProcessRendezvousSide serverProcess serverOld serverNext revision serverRole
+      request = JointProcessRendezvous (SendReceiveRendezvous clientSide serverSide)
+      runJoint = checkProcessCommunication (sourceBinaryInstance plans) network
+      closeOne process endpoint role contexts = do
+        current <- maybe (Left "missing Ping close process") Right (Map.lookup process contexts)
+        closed <- mapLeft show $
+          checkProtocolAction (ProtocolCloseRequest endpoint revision role done) current
+        assert (checkedProtocolPredecessor closed
+                  == ProtocolEndpointBinding endpoint revision role (End done)
+             && checkedProtocolSuccessor closed == Nothing)
+          "Ping terminal close did not consume exact source successor without replacement"
+        let next = checkedProtocolContext closed
+        assert (Map.notMember endpoint (protocolEndpoints next)
+             && Map.notMember endpoint (linearBindings (protocolResources next)))
+          "Ping terminal close retained endpoint metadata or linear ownership"
+        pure (Map.insert process next contexts)
+  assert (sourceServerHead plans == dualSession (sourceClientHead plans)
+       && clientOld /= clientNext && serverOld /= serverNext)
+    "Ping close-diamond source heads or endpoint identities are inconsistent"
+  rawClient <- mapLeft show $
+    insertProtocolEndpoint clientOld revision clientRole
+      (sourceClientHead plans) emptyProtocolContext
+  rawServer <- mapLeft show $
+    insertProtocolEndpoint serverOld revision serverRole
+      (sourceServerHead plans) emptyProtocolContext
+  framed <- mapLeft show $
+    insertBinding Affine spectator (TyUInt 8) (protocolResources rawServer)
+  loaned <- mapLeft show $ startSharedLoan spectator framed
+  let before = Map.fromList
+        [(clientProcess, rawClient),
+         (serverProcess, rawServer { protocolResources = loaned })]
+  progressed <- mapLeft show $ runJoint before request
+  clientEnd <- maybe (Left "joint Ping omitted client End context") Right
+    (Map.lookup clientProcess progressed)
+  serverEnd <- maybe (Left "joint Ping omitted server End context") Right
+    (Map.lookup serverProcess progressed)
+  assert (Map.lookup clientNext (protocolEndpoints clientEnd)
+            == Just (ProtocolEndpointBinding clientNext revision clientRole (End done))
+       && Map.lookup serverNext (protocolEndpoints serverEnd)
+            == Just (ProtocolEndpointBinding serverNext revision serverRole (End done)))
+    "joint Ping did not establish both terminal heads before close"
+
+  clientFirst <- closeOne clientProcess clientNext clientRole progressed
+  forward <- closeOne serverProcess serverNext serverRole clientFirst
+  serverFirst <- closeOne serverProcess serverNext serverRole progressed
+  reverse <- closeOne clientProcess clientNext clientRole serverFirst
+  assert (forward == reverse
+       && Map.keysSet forward == Map.keysSet before
+       && Map.lookup serverProcess clientFirst == Just serverEnd
+       && Map.lookup clientProcess serverFirst == Just clientEnd)
+    "independent source Ping Close orders changed the peer or final state"
+  serverFinal <- maybe (Left "joint close omitted framed server") Right
+    (Map.lookup serverProcess forward)
+  assert (affineBindings (protocolResources serverFinal) == affineBindings loaned
+       && sharedLoans (protocolResources serverFinal) == sharedLoans loaned
+       && unrestrictedBindings (protocolResources serverFinal)
+            == unrestrictedBindings loaned
+       && Map.null (protocolEndpoints serverFinal)
+       && Map.null (protocolEndpoints
+            (maybe emptyProtocolContext id (Map.lookup clientProcess forward))))
+    "Ping joint close lost spectator loan, or retained terminal endpoints"
+
+  case checkProtocolAction
+      (ProtocolCloseRequest clientNext revision clientRole (Outcome "Wrong"))
+      clientEnd of
+    Left (ProtocolSessionError (CloseOutcomeMismatch expected actual)) ->
+      assert (expected == done && actual == Outcome "Wrong")
+        "wrong Close outcome lost exact expected/actual values"
+    other -> Left ("wrong Ping joint terminal outcome was accepted: " <> show other)
+  let foreignRole = ProtocolRoleKey "ForeignCloseRole"
+  case checkProtocolAction
+      (ProtocolCloseRequest serverNext revision foreignRole done) serverEnd of
+    Left (ProtocolRoleMismatch name expected actual) ->
+      assert (name == serverNext && expected == foreignRole && actual == serverRole)
+        "wrong server Close role lost exact nominal identity"
+    other -> Left ("wrong nominal Ping server Close was accepted: " <> show other)
+  clientFinal <- maybe (Left "joint close omitted final client") Right
+    (Map.lookup clientProcess forward)
+  case checkProtocolAction
+      (ProtocolCloseRequest clientNext revision clientRole done) clientFinal of
+    Left (ProtocolEndpointUnknown name) ->
+      assert (name == clientNext) "stale client terminal replay lost source name"
+    other -> Left ("stale client terminal Close was accepted: " <> show other)
+  case checkProtocolAction
+      (ProtocolCloseRequest serverNext revision serverRole done) serverFinal of
+    Left (ProtocolEndpointUnknown name) ->
+      assert (name == serverNext) "stale server terminal replay lost source name"
+    other -> Left ("stale server terminal Close was accepted: " <> show other)
+  case runJoint forward request of
+    Left (RendezvousEndpointNotOwnedByProcess process stale) ->
+      assert (process == clientProcess && stale == clientOld)
+        "post-close rendezvous replay lost consumed predecessor"
+    other -> Left ("post-close stale Ping rendezvous progressed: " <> show other)
 
 sourceStaleCloseRejected :: Text.Text -> Either String ()
 sourceStaleCloseRejected source = do

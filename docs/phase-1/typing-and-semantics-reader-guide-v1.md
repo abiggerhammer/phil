@@ -31,6 +31,8 @@ There are several layers of authority; they must not be conflated.
 → the specific proof and implementation correspondence for any claim you want
 to challenge.
 
+The [non-normative FSEM-02 source Ping joint terminal-close diamond](formal-semantics-source-ping-joint-close-diamond-fsem02-v1.md) records two local Close orders after a real joint Send/Receive, exact stale/wrong-terminal rejection, conditional Rocq proofs, and explicit external process/nominal authority premises. It is not an atomic Close or source-interpreter claim.
+
 ## Worked Phase 1 rule families (companion worksheet)
 
 For three paired accepted/expected-rejected examples and explicitly
