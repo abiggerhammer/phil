@@ -1,0 +1,52 @@
+name: Phase 1 P11 Public Browser Asset Byte Audit
+
+on:
+  pull_request:
+    paths:
+      - '.github/workflows/phase1-p11-public-byte-audit.yml'
+      - 'scripts/release/audit-p11-public-bytes.py'
+      - 'scripts/release/test-p11-public-bytes.py'
+      - 'audit/p11-release-byte-audit-2026-11-12.md'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  download-and-verify-public-bytes:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Run preserved-byte verifier and adversarial regressions
+        run: |
+          set -euo pipefail
+          python3 -m py_compile \
+            scripts/release/compose-phil-phase1-release-bundle.py \
+            scripts/release/audit-p11-public-bytes.py \
+            scripts/release/test-p11-public-bytes.py
+          python3 scripts/release/test-phase1-release-bundle-verifier.py
+          python3 scripts/release/test-p11-public-bytes.py
+
+      - name: Download all 15 published browser assets and compute SHA-256
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 scripts/release/audit-p11-public-bytes.py \
+            --download-dir "$RUNNER_TEMP/phil-p11-public-bytes" \
+            --evidence "$RUNNER_TEMP/phil-p11-evidence.json" \
+            | tee "$RUNNER_TEMP/phil-p11-log.txt"
+          grep -Fxq \
+            'P11_HISTORICAL_BYTES_VERIFIED=YES; INDEPENDENT_SIGNOFF=PENDING; FINAL_CANDIDATE=UNPINNED' \
+            "$RUNNER_TEMP/phil-p11-log.txt"
+
+      - name: Preserve exact checked execution evidence (not auditor signoff)
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: phase1-p11-public-byte-audit-log
+          path: |
+            ${{ runner.temp }}/phil-p11-evidence.json
+            ${{ runner.temp }}/phil-p11-log.txt
+          if-no-files-found: warn
