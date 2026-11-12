@@ -64,6 +64,12 @@ case "$platform" in
     fi
     clang_bin="$(brew --prefix llvm@18)/bin/clang"
     clang_target=aarch64-apple-darwin
+    # The unchanged Phil Darwin distribution builder pins macOS 11.
+    # Build Cabal dependencies against that same floor from the outset;
+    # otherwise the prebuild uses the runner's macOS 26 deployment version
+    # and the package-builder relink crosses inconsistent object targets.
+    export MACOSX_DEPLOYMENT_TARGET=11.0
+    echo "macosx_deployment_target=$MACOSX_DEPLOYMENT_TARGET" >> "$out/toolchain.txt"
     ;;
 esac
 "$clang_bin" --version > "$out/clang-version.txt"
@@ -83,7 +89,9 @@ echo "P11_STAGE=phil-$platform"
 if [[ "$platform" = linux ]]; then
   bash scripts/release/build-phil-phase1-package.sh "$out" > "$out/phil-build.log"
 else
-  bash scripts/release/build-phil-phase1-darwin-package.sh "$out" > "$out/phil-build.log"
+  # On an unsigned audit-only runner, preserve the exact failing builder
+  # command if the deployment-floor or linker check still rejects staging.
+  bash -x scripts/release/build-phil-phase1-darwin-package.sh "$out" > "$out/phil-build.log"
 fi
 echo "P11_STAGE=steve-$platform"
 if [[ "$platform" = linux ]]; then
