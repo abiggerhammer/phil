@@ -55,7 +55,7 @@ Proof.
         phase1_surface_normalize_generic_requirement_recursive_grouping_spine_round_trip.
       exact Hrequirement.
     + eapply IH.
-      exact Hrest.
+      reflexivity.
 Qed.
 
 Record Phase1SurfaceGenericRequirementsRecursiveGroupingSpine : Type := {

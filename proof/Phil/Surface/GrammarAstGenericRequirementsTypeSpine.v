@@ -52,7 +52,7 @@ Proof.
     + eapply phase1_surface_normalize_generic_requirement_type_spine_round_trip.
       exact Hrequirement.
     + eapply IH.
-      exact Hrest.
+      reflexivity.
 Qed.
 
 Record Phase1SurfaceGenericRequirementsTypeSpine : Type := {
