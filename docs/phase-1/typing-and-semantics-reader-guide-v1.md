@@ -264,6 +264,8 @@ The bounded [FSEM-02 paired Ping Close refusals](formal-semantics-source-ping-do
 
 The bounded [FSEM-02 Ping half-closed peer refusal/retry](formal-semantics-source-ping-half-close-stale-peer-fsem02-v1.md) tests mixed committed/failed Close interleavings after source-derived rendezvous: an already-retired local endpoint cannot be replayed; rejection on the remaining live peer does not roll back the first close; eventual valid peer Close reaches the direct terminal map with the borrowed spectator intact. Conditional Rocq lemmas retain external nominal and scheduling premises, not universal source-to-proof refinement.
 
+The bounded [FSEM-02 committed Ping half-Close nominal peer refusal](formal-semantics-source-ping-half-close-nominal-peer-retry-fsem02-v1.md) verifies native wrong-instance/wrong-role and stale-lookup precedence after either committed local Close, exact unchanged peer/loan framing and eventual admitted completion. Rocq supplies conditional two-gate refusal lemmas; payload transfer and global refinement remain open.
+
 ## 6. Architectures, occurrence identity, and root selection
 
 The source differentiates:
