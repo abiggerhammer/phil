@@ -1,0 +1,142 @@
+From Stdlib Require Import Strings.String.
+From Phil.Core Require Import
+  Syntax Context SessionStep FSEM02ProtocolHeadProgression
+  FSEM02PingSuccessorFreshness.
+
+(* NON-NORMATIVE FSEM-02.  Two admitted local Ping heads, source-derived
+   occurrence names and nominal/process authority are externally checked
+   premises.  An option-valued pair has no one-sided successful outcome.
+   This is not a refinement of native ProcessRendezvous. *)
+
+Definition fsem02PingJointResources
+  (senderHead receiverHead : Session)
+  (senderOld senderNext receiverOld receiverNext : Name)
+  (senderBefore receiverBefore : ResourceContext)
+  : option (ResourceContext * ResourceContext) :=
+  match fsem02Progression FSEM02Send senderHead
+          senderOld senderNext senderBefore,
+        fsem02Progression FSEM02Receive receiverHead
+          receiverOld receiverNext receiverBefore with
+  | StepSucceeded senderAfter, StepSucceeded receiverAfter =>
+      Some (senderAfter, receiverAfter)
+  | _, _ => None
+  end.
+
+Theorem fsem02PingJointRejectsFailedSender :
+  forall senderHead receiverHead senderOld senderNext receiverOld receiverNext
+         senderBefore receiverBefore,
+    fsem02Progression FSEM02Send senderHead
+      senderOld senderNext senderBefore = StepFailed ->
+    fsem02PingJointResources senderHead receiverHead
+      senderOld senderNext receiverOld receiverNext
+      senderBefore receiverBefore = None.
+Proof.
+  intros senderHead receiverHead senderOld senderNext receiverOld receiverNext
+    senderBefore receiverBefore Hfailed.
+  unfold fsem02PingJointResources.
+  rewrite Hfailed.
+  reflexivity.
+Qed.
+
+Theorem fsem02PingJointRejectsFailedReceiver :
+  forall senderHead receiverHead senderOld senderNext receiverOld receiverNext
+         senderBefore receiverBefore,
+    fsem02Progression FSEM02Receive receiverHead
+      receiverOld receiverNext receiverBefore = StepFailed ->
+    fsem02PingJointResources senderHead receiverHead
+      senderOld senderNext receiverOld receiverNext
+      senderBefore receiverBefore = None.
+Proof.
+  intros senderHead receiverHead senderOld senderNext receiverOld receiverNext
+    senderBefore receiverBefore Hfailed.
+  unfold fsem02PingJointResources.
+  rewrite Hfailed.
+  destruct (fsem02Progression FSEM02Send senderHead
+    senderOld senderNext senderBefore); reflexivity.
+Qed.
+
+Theorem fsem02PingJointSuccessProjectsBothSteps :
+  forall senderHead receiverHead senderOld senderNext receiverOld receiverNext
+         senderBefore receiverBefore senderAfter receiverAfter,
+    fsem02PingJointResources senderHead receiverHead
+      senderOld senderNext receiverOld receiverNext senderBefore receiverBefore
+      = Some (senderAfter, receiverAfter) ->
+    fsem02Progression FSEM02Send senderHead
+      senderOld senderNext senderBefore = StepSucceeded senderAfter /\
+    fsem02Progression FSEM02Receive receiverHead
+      receiverOld receiverNext receiverBefore = StepSucceeded receiverAfter.
+Proof.
+  intros senderHead receiverHead senderOld senderNext receiverOld receiverNext
+    senderBefore receiverBefore senderAfter receiverAfter Hjoint.
+  unfold fsem02PingJointResources in Hjoint.
+  destruct (fsem02Progression FSEM02Send senderHead
+    senderOld senderNext senderBefore) as [| actualSender] eqn:Hsender;
+    try discriminate.
+  destruct (fsem02Progression FSEM02Receive receiverHead
+    receiverOld receiverNext receiverBefore) as [| actualReceiver] eqn:Hreceiver;
+    try discriminate.
+  inversion Hjoint; subst.
+  split; congruence.
+Qed.
+
+Theorem fsem02PingJointSuccessConsumesBothAndTypesSuccessors :
+  forall senderBinder receiverBinder senderTy receiverTy
+         senderCont receiverCont senderOld senderNext receiverOld receiverNext
+         senderBefore receiverBefore senderAfter receiverAfter,
+    fsem02PingJointResources
+      (Send senderBinder senderTy senderCont)
+      (Receive receiverBinder receiverTy receiverCont)
+      senderOld senderNext receiverOld receiverNext senderBefore receiverBefore
+      = Some (senderAfter, receiverAfter) ->
+    linearBindings senderAfter senderOld = None /\
+    linearBindings senderAfter senderNext = Some (endpointType senderCont) /\
+    linearBindings receiverAfter receiverOld = None /\
+    linearBindings receiverAfter receiverNext = Some (endpointType receiverCont).
+Proof.
+  intros senderBinder receiverBinder senderTy receiverTy senderCont receiverCont
+    senderOld senderNext receiverOld receiverNext
+    senderBefore receiverBefore senderAfter receiverAfter Hjoint.
+  apply fsem02PingJointSuccessProjectsBothSteps in Hjoint.
+  destruct Hjoint as [Hsender Hreceiver].
+  pose proof (continuing_head_exact_predecessor_and_successor
+    FSEM02Send (Send senderBinder senderTy senderCont)
+    senderOld senderNext senderBefore senderAfter senderCont
+    eq_refl Hsender) as HsenderExact.
+  pose proof (continuing_head_exact_predecessor_and_successor
+    FSEM02Receive (Receive receiverBinder receiverTy receiverCont)
+    receiverOld receiverNext receiverBefore receiverAfter receiverCont
+    eq_refl Hreceiver) as HreceiverExact.
+  destruct HsenderExact as [_ [_ [HsenderGone [HsenderNext _]]]].
+  destruct HreceiverExact as [_ [_ [HreceiverGone [HreceiverNext _]]]].
+  repeat split; assumption.
+Qed.
+
+Theorem fsem02PingJointSuccessFramesBothAffineAndLoans :
+  forall senderBinder receiverBinder senderTy receiverTy
+         senderCont receiverCont senderOld senderNext receiverOld receiverNext
+         senderBefore receiverBefore senderAfter receiverAfter,
+    fsem02PingJointResources
+      (Send senderBinder senderTy senderCont)
+      (Receive receiverBinder receiverTy receiverCont)
+      senderOld senderNext receiverOld receiverNext senderBefore receiverBefore
+      = Some (senderAfter, receiverAfter) ->
+    affineBindings senderAfter = affineBindings senderBefore /\
+    sharedLoans senderAfter = sharedLoans senderBefore /\
+    affineBindings receiverAfter = affineBindings receiverBefore /\
+    sharedLoans receiverAfter = sharedLoans receiverBefore.
+Proof.
+  intros senderBinder receiverBinder senderTy receiverTy senderCont receiverCont
+    senderOld senderNext receiverOld receiverNext
+    senderBefore receiverBefore senderAfter receiverAfter Hjoint.
+  apply fsem02PingJointSuccessProjectsBothSteps in Hjoint.
+  destruct Hjoint as [Hsender Hreceiver].
+  pose proof (fsem02PingContinuationPreservesAffineAndLoans
+    FSEM02Send (Send senderBinder senderTy senderCont)
+    senderOld senderNext senderBefore senderAfter senderCont
+    eq_refl Hsender) as [HsenderAffine HsenderLoans].
+  pose proof (fsem02PingContinuationPreservesAffineAndLoans
+    FSEM02Receive (Receive receiverBinder receiverTy receiverCont)
+    receiverOld receiverNext receiverBefore receiverAfter receiverCont
+    eq_refl Hreceiver) as [HreceiverAffine HreceiverLoans].
+  repeat split; assumption.
+Qed.

@@ -7,14 +7,16 @@ module Main (main) where
 import qualified Data.Map.Strict as Map
 import qualified Data.Text as Text
 import qualified Data.Text.IO as TextIO
+import Phil.Core.Process
+import Phil.Core.ProcessRendezvous
 import Phil.Core.Context
   ( CheckError (..), ResourceContext (..), insertBinding, startSharedLoan )
 import Phil.Core.Generic (strictGenericInstantiationPolicy)
 import Phil.Core.Protocol
 import Phil.Core.Protocol.Family
 import Phil.Core.Session
-  ( SessionAction (..), SessionError (..), SessionStep (..) )
-import Phil.Core.Static (DeclarationKey (..), InterfaceRevision (..))
+  ( SessionAction (..), SessionError (..), SessionStep (..), dualSession )
+import Phil.Core.Static
 import Phil.Core.Syntax (Branch (..), Mode (..), Name (..), Outcome (..), Session (..), Ty (..))
 import Phil.Surface.GrammarV1.BinderScope (GrammarV1ResolvedBinder (..))
 import Phil.Surface.GrammarV1.ComponentReceiveClose
@@ -35,6 +37,8 @@ main = do
         (sourcePingCloseNominalGates accepted)
     , test "FSEM-02 source Ping successor freshness and borrowed spectator frame"
         (sourcePingSuccessorResourceFreshness accepted)
+    , test "FSEM-02 source Ping joint successor freshness and atomic peer refusal"
+        (sourcePingJointSuccessorAtomicity accepted)
     , test "FSEM-02 source stale close rejects with exact binder mismatch"
         (sourceStaleCloseRejected stale)
     , test "FSEM-02 mismatched session head rejects with precise action error"
@@ -55,7 +59,8 @@ test label result =
     Left detail -> putStrLn ("FAIL: " <> label <> " -- " <> detail) >> pure False
 
 data SourcePlans = SourcePlans
-  { sourceClientPlan :: GrammarV1CheckedComponentSendClose
+  { sourceBinaryInstance :: BinaryProtocolInstance
+  , sourceClientPlan :: GrammarV1CheckedComponentSendClose
   , sourceServerPlan :: GrammarV1CheckedComponentReceiveClose
   , sourceProtocolInstance :: ProtocolInstanceRevision
   , sourceClientHead :: Session
@@ -95,7 +100,8 @@ sourcePlans source = do
     Just (Right checked) -> Right checked
     other -> Left ("source server receive/close body was not checked: " <> show other)
   Right SourcePlans
-    { sourceClientPlan = clientPlan
+    { sourceBinaryInstance = instanceValue
+    , sourceClientPlan = clientPlan
     , sourceServerPlan = serverPlan
     , sourceProtocolInstance = binaryProtocolInstanceRevision instanceValue
     , sourceClientHead = protocolProjectionSession clientProjection
@@ -410,6 +416,145 @@ sourcePingCloseNominalGates source = do
         Left (ProtocolEndpointUnknown name) ->
           assert (name == next) "stale Close rejection lost exact binder"
         other -> Left ("stale Close reused consumed endpoint: " <> show other)
+
+
+-- The parsed Ping sides supply the actual source-resolved predecessor and
+-- successor occurrences and independently checked projected local heads.
+-- The active process population is a separate, explicitly admitted test
+-- premise; no source syntax manufactures architectural authority.
+sourcePingJointSuccessorAtomicity :: Text.Text -> Either String ()
+sourcePingJointSuccessorAtomicity source = do
+  plans <- sourcePlans source
+  (network, clientProcess, serverProcess) <- sourcePingJointNetwork
+  let revision = sourceProtocolInstance plans
+      client = sourceClientPlan plans
+      server = sourceServerPlan plans
+      clientOld = grammarV1ResolvedBinderCoreName (checkedComponentSendEndpoint client)
+      clientNext = grammarV1ResolvedBinderCoreName (checkedComponentSendSuccessor client)
+      serverOld = grammarV1ResolvedBinderCoreName (checkedComponentReceiveEndpoint server)
+      serverNext = grammarV1ResolvedBinderCoreName (checkedComponentReceiveSuccessor server)
+      spectator = Name "fsem02.joint.borrowed.server"
+      clientSide = ProcessRendezvousSide clientProcess clientOld clientNext revision clientRole
+      serverSide = ProcessRendezvousSide serverProcess serverOld serverNext revision serverRole
+      request = JointProcessRendezvous (SendReceiveRendezvous clientSide serverSide)
+      runJoint = checkProcessCommunication (sourceBinaryInstance plans) network
+  assert (sourceServerHead plans == dualSession (sourceClientHead plans))
+    "source-projected Ping heads are not dual"
+  assert (clientOld /= clientNext && serverOld /= serverNext
+       && spectator /= clientOld && spectator /= clientNext
+       && spectator /= serverOld && spectator /= serverNext)
+    "source Ping endpoint occurrence unexpectedly aliases"
+  rawClient <- mapLeft show $ insertProtocolEndpoint
+    clientOld revision clientRole (sourceClientHead plans) emptyProtocolContext
+  rawServer <- mapLeft show $ insertProtocolEndpoint
+    serverOld revision serverRole (sourceServerHead plans) emptyProtocolContext
+  withSpectator <- mapLeft show $
+    insertBinding Affine spectator (TyUInt 8) (protocolResources rawServer)
+  withLoan <- mapLeft show $ startSharedLoan spectator withSpectator
+  let serverBefore = rawServer { protocolResources = withLoan }
+      before = Map.fromList [(clientProcess, rawClient), (serverProcess, serverBefore)]
+  -- A peer failure does not produce a one-sided successful context: the
+  -- actual Core ProcessRendezvous checker returns an Either for the pair.
+  mapM_ (rejectJointCollision runJoint request before clientProcess rawClient clientNext)
+    [Unrestricted, Affine, Linear]
+  mapM_ (rejectJointCollision runJoint request before serverProcess serverBefore serverNext)
+    [Unrestricted, Affine, Linear]
+  let ghost = ProtocolEndpointBinding serverNext revision serverRole (End done)
+      badServer = serverBefore
+        { protocolEndpoints = Map.insert serverNext ghost (protocolEndpoints serverBefore) }
+  case runJoint (Map.insert serverProcess badServer before) request of
+    Left (RendezvousProtocolError process (ProtocolEndpointMetadataConflict name)) ->
+      assert (process == serverProcess && name == serverNext)
+        "joint metadata-only collision lost peer process or successor name"
+    other -> Left ("joint peer metadata collision incorrectly progressed: " <> show other)
+  after <- mapLeft show $ runJoint before request
+  clientAfter <- maybe (Left "joint success omitted client") Right (Map.lookup clientProcess after)
+  serverAfter <- maybe (Left "joint success omitted server") Right (Map.lookup serverProcess after)
+  assert
+    (Map.keysSet after == Map.keysSet before
+     && Map.notMember clientOld (protocolEndpoints clientAfter)
+     && Map.notMember serverOld (protocolEndpoints serverAfter)
+     && Map.lookup clientNext (protocolEndpoints clientAfter)
+       == Just (ProtocolEndpointBinding clientNext revision clientRole (End done))
+     && Map.lookup serverNext (protocolEndpoints serverAfter)
+       == Just (ProtocolEndpointBinding serverNext revision serverRole (End done))
+     && Map.lookup clientNext (linearBindings (protocolResources clientAfter))
+       == Just (TyEndpoint (End done))
+     && Map.lookup serverNext (linearBindings (protocolResources serverAfter))
+       == Just (TyEndpoint (End done))
+     && Map.notMember clientOld (linearBindings (protocolResources clientAfter))
+     && Map.notMember serverOld (linearBindings (protocolResources serverAfter)))
+    "joint source Ping did not consume both predecessors and type both exact successors"
+  assert
+    (affineBindings (protocolResources serverAfter) == affineBindings withLoan
+     && sharedLoans (protocolResources serverAfter) == sharedLoans withLoan
+     && unrestrictedBindings (protocolResources serverAfter)
+       == unrestrictedBindings withLoan)
+    "joint transition changed borrowed server spectator or active loan"
+  case runJoint after request of
+    Left (RendezvousEndpointNotOwnedByProcess process stale) ->
+      assert (process == clientProcess && stale == clientOld)
+        "stale joint replay lost exact source client occurrence"
+    other -> Left ("joint source Ping stale predecessor was reused: " <> show other)
+  repeated <- mapLeft show $ runJoint before request
+  assert (repeated == after && Map.lookup serverProcess before == Just serverBefore)
+    "failed peer-side trials mutated the original joint source context"
+
+rejectJointCollision
+  :: (Map.Map ProcessKey ProtocolContext -> ProcessCommunicationAttempt
+      -> Either ProcessRendezvousError (Map.Map ProcessKey ProtocolContext))
+  -> ProcessCommunicationAttempt -> Map.Map ProcessKey ProtocolContext
+  -> ProcessKey -> ProtocolContext -> Name -> Mode -> Either String ()
+rejectJointCollision runJoint request before process context successor mode = do
+  occupied <- mapLeft show $
+    insertBinding mode successor (TyUInt 8) (protocolResources context)
+  let bad = Map.insert process (context { protocolResources = occupied }) before
+  case runJoint bad request of
+    Left (RendezvousProtocolError actualProcess
+      (ProtocolSessionError (SessionResourceError (DuplicateBinding name)))) ->
+      assert (actualProcess == process && name == successor)
+        "joint collision diagnostic lost exact process or source successor"
+    other -> Left ("joint " <> show mode <> " collision yielded wrong result: " <> show other)
+
+sourcePingJointNetwork :: Either String (ProcessNetwork, ProcessKey, ProcessKey)
+sourcePingJointNetwork = do
+  let root = InstanceKey "fsem02.ping.joint.root"
+      clientSlot = OccurrenceSlotKey "client"
+      serverSlot = OccurrenceSlotKey "server"
+      leaf name = ArchitectureNodeSpec
+        { architectureNodeDeclaration = sourcePingJointDeclaration name
+        , architectureNodeStaticBindings = Map.empty
+        , architectureNodeRequirements = []
+        , architectureNodeChildren = []
+        , architectureNodeReferences = []
+        }
+      spec = ArchitectureNodeSpec
+        { architectureNodeDeclaration = sourcePingJointDeclaration "root"
+        , architectureNodeStaticBindings = Map.empty
+        , architectureNodeRequirements = []
+        , architectureNodeChildren =
+            [ ArchitectureChildSpec clientSlot (leaf "ClientWorker")
+            , ArchitectureChildSpec serverSlot (leaf "ServerWorker") ]
+        , architectureNodeReferences = []
+        }
+      clientSite = ProcessDeclarationSite
+        (ProcessSiteKey "fsem02.ping.joint.client") (scopedInstanceKey root clientSlot)
+      serverSite = ProcessDeclarationSite
+        (ProcessSiteKey "fsem02.ping.joint.server") (scopedInstanceKey root serverSlot)
+  graph <- mapLeft show $ instantiateArchitecture root spec
+  network0 <- mapLeft show $ elaborateProcessNetwork graph [clientSite, serverSite]
+  network <- mapLeft show $ activateRootProcesses network0
+  let revision = identityInstanceRevision (processNetworkRoot network)
+  pure (network, deriveProcessKey revision (processSiteKey clientSite),
+        deriveProcessKey revision (processSiteKey serverSite))
+
+sourcePingJointDeclaration :: Text.Text -> DeclarationIdentity
+sourcePingJointDeclaration name = deriveDeclarationIdentity DeclarationDescriptor
+  { declarationPresentation = DeclarationPresentation name []
+  , declarationKey = DeclarationKey ("fsem02.ping.joint." <> name)
+  , declarationInterfaceSemantics = SemanticAtom "fsem02.joint.external.interface"
+  , declarationDefinitionSemantics = SemanticAtom "fsem02.joint.external.definition"
+  }
 
 sourceStaleCloseRejected :: Text.Text -> Either String ()
 sourceStaleCloseRejected source = do
