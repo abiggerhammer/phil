@@ -96,12 +96,12 @@ Theorem phase1_surface_normalize_generic_requirements_type_spine_round_trip :
 Proof.
   intros [entries] refined Hnormalize.
   unfold phase1_surface_normalize_generic_requirements_type_spine in Hnormalize.
+  cbn [phase1_generic_requirements_spine_entries] in Hnormalize.
   destruct
     (phase1_surface_normalize_generic_requirement_type_values entries)
     as [actual |] eqn:Hentries;
     try rewrite Hentries in Hnormalize; try discriminate Hnormalize.
   cbn in Hnormalize.
-  let T := type of Hnormalize in idtac "DEBUG after guarded rewrite:" T.
   injection Hnormalize as Hrefined.
   subst refined.
   cbn.

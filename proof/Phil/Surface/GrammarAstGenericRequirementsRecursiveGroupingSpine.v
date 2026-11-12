@@ -102,6 +102,7 @@ Theorem
 Proof.
   intros [entries] refined Hnormalize.
   unfold phase1_surface_normalize_generic_requirements_recursive_grouping_spine in Hnormalize.
+  cbn [phase1_generic_requirements_proposition_spine_entries] in Hnormalize.
   destruct
     (phase1_surface_normalize_generic_requirement_recursive_grouping_values entries)
     as [actual |] eqn:Hentries;
