@@ -57,8 +57,14 @@ def main() -> None:
                              capture_output=True)
     info = (version.stdout + version.stderr).strip()
     print(f"Compiler: {info}", flush=True)
-    if not re.search(r"(?<!\d)9\.2\.0(?!\d)", info):
-        raise RuntimeError("Rocq 9.2.0 required; refusing unverified toolchain")
+    # The pinned 9.2.0 image advertises ROCQ_VERSION=9.2.0 but its
+    # CLI prints "The Rocq Prover, version 9.2". Accept that exact
+    # shortened presentation; do not mistake 9.2.1 or 9.20 for it.
+    pinned = os.environ.get("ROCQ_VERSION")
+    if pinned is not None and pinned != "9.2.0":
+        raise RuntimeError(f"unexpected container ROCQ_VERSION={pinned!r}")
+    if not re.search(r"(?<![\d.])9\.2(?:\.0)?(?![\d.])", info):
+        raise RuntimeError("Rocq 9.2.0 (CLI 9.2) required; refusing other toolchain")
     lines = WORKFLOW.read_text(encoding="utf-8").splitlines()
     for name in STEPS:
         print(f"CI-exact preflight: {name}", flush=True)
