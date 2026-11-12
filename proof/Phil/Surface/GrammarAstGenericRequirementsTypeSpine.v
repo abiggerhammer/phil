@@ -1,10 +1,12 @@
-From Stdlib Require Import Lists.List.
+From Stdlib Require Import Lists.List Strings.String.
 
 From Phil.Surface Require Import
+  GrammarDerivation
   GrammarAstGenericRequirementsSpine
   GrammarAstGenericRequirementTypeSpine.
 
 Import ListNotations.
+Open Scope string_scope.
 
 (*
   Lift the generic-requirement type refinement through generic_requirements and
@@ -52,7 +54,7 @@ Proof.
     + eapply phase1_surface_normalize_generic_requirement_type_spine_round_trip.
       exact Hrequirement.
     + eapply IH.
-      exact Hrest.
+      reflexivity.
 Qed.
 
 Record Phase1SurfaceGenericRequirementsTypeSpine : Type := {
@@ -93,11 +95,17 @@ Theorem phase1_surface_normalize_generic_requirements_type_spine_round_trip :
       phase1_surface_generic_requirements_spine_tree requirements.
 Proof.
   intros [entries] refined Hnormalize.
-  cbn in Hnormalize.
+  unfold phase1_surface_normalize_generic_requirements_type_spine in Hnormalize.
+  cbn [phase1_generic_requirements_spine_entries] in Hnormalize.
   destruct
     (phase1_surface_normalize_generic_requirement_type_values entries)
-    as [actual |] eqn:Hentries; try discriminate Hnormalize.
-  inversion Hnormalize; subst refined.
+    as [actual |] eqn:Hentries;
+    try rewrite Hentries in Hnormalize; try discriminate Hnormalize.
+  cbn in Hnormalize.
+  injection Hnormalize as Hrefined.
+  subst refined.
+  unfold phase1_surface_generic_requirements_type_spine_tree,
+    phase1_surface_generic_requirements_spine_tree.
   cbn.
   rewrite
     (phase1_surface_normalize_generic_requirement_type_values_round_trip
@@ -139,8 +147,13 @@ Proof.
   - cbn in Hnormalize.
     destruct
       (phase1_surface_normalize_generic_requirements_type_spine requirements)
-      as [actual |] eqn:Hrequirements; try discriminate Hnormalize.
-    inversion Hnormalize; subst refined.
+      as [actual |] eqn:Hrequirements;
+      try rewrite Hrequirements in Hnormalize; try discriminate Hnormalize.
+    cbn in Hnormalize.
+    injection Hnormalize as Hrefined.
+    subst refined.
+    unfold phase1_surface_optional_generic_requirements_type_tree,
+      phase1_surface_optional_generic_requirements_tree.
     cbn.
     rewrite
       (phase1_surface_normalize_generic_requirements_type_spine_round_trip
