@@ -120,6 +120,8 @@ archives=( "$out"/*.tar.gz "$out"/*.zip )
 test "${#archives[@]}" -eq 2
 : > "$out/components.sha256"
 : > "$out/stage-smoke.log"
+: > "$out/stage-smoke-status.tsv"
+p11_checkpoint_rejected=0
 consumer="$(mktemp -d "${RUNNER_TEMP:-/tmp}/p11-stage-consumer.XXXXXX")"
 trap 'rm -rf "$consumer"' EXIT
 
@@ -137,7 +139,32 @@ for archive in "${archives[@]}"; do
   stage_dir="$consumer/$root/$root"
   test -x "$stage_dir/smoke-test.sh"
   echo "SMOKE $filename" | tee -a "$out/stage-smoke.log"
-  (cd "$stage_dir" && ./smoke-test.sh) | tee -a "$out/stage-smoke.log"
+  if [[ "$platform" = darwin && "$filename" = phil-0.1.0-phase1-aarch64-apple-darwin.zip &&
+        ! -e "$stage_dir/share/phil/phil.release-package" &&
+        ! -e "$stage_dir/share/phil/phase1-handoff-manifest-v1.tsv" ]]; then
+    # The immutable source checkpoint's historical unsigned Darwin builder
+    # installs the NEW smoke script but does NOT emit these two now-required
+    # assurance files. Execute and preserve the actual negative, rather than
+    # modifying the pinned builder or pretending this is a passing candidate.
+    if (cd "$stage_dir" && ./smoke-test.sh) >> "$out/stage-smoke.log" 2>&1; then
+      echo "P11 ERROR: legacy Darwin smoke unexpectedly passed despite absent mandatory files" >&2
+      exit 1
+    fi
+    printf '%s\tREJECTED\tmissing-release-package-and-handoff-manifest\n' "$filename" \
+      >> "$out/stage-smoke-status.tsv"
+    echo "P11 CHECKPOINT REJECTED: historical Darwin Phil builder omits required release package and handoff manifest; native bundled smoke fails" \
+      | tee -a "$out/stage-smoke.log"
+    # Test the independently built executable only as a LIMITED diagnostic,
+    # not a substitute for the failed full package smoke or provenance gate.
+    (cd "$stage_dir" && ./bin/philc emit-llvm --target aarch64-apple-darwin \
+      share/phil/examples/return-unit.phil) > "$out/phil-darwin-executable-diagnostic.ll"
+    grep -Fq 'target triple = "aarch64-apple-darwin"' \
+      "$out/phil-darwin-executable-diagnostic.ll"
+    p11_checkpoint_rejected=1
+  else
+    (cd "$stage_dir" && ./smoke-test.sh) | tee -a "$out/stage-smoke.log"
+    printf '%s\tPASS\tfull-native-smoke\n' "$filename" >> "$out/stage-smoke-status.tsv"
+  fi
   for component in bin/philc bin/steve SHA256SUMS TCB.txt \
     share/phil/phil.release-package share/phil-steve/steve.release-package \
     share/phil/BUILD-INFO; do
@@ -171,6 +198,14 @@ rm "$bad"
     printf '%s  %s\n' "$(hash256 "$out/$file")" "$file" >> files.sha256
   done
 )
+if [[ "$p11_checkpoint_rejected" -eq 1 ]]; then
+  echo "P11_CHECKPOINT_REVIEW=REJECTED; REASON=PINNED_DARWIN_BUILDER_SMOKE_CONTRACT_MISMATCH" \
+    | tee "$out/checkpoint-review-status.txt"
+  echo "::warning::P11 source checkpoint REJECTED for final candidate: Darwin Phil native smoke fails because pinned builder lacks required assurance files. This job succeeded ONLY as an evidence collector."
+else
+  echo "P11_CHECKPOINT_REVIEW=PROVISIONAL; FULL_STAGED_SMOKES=PASS" \
+    | tee "$out/checkpoint-review-status.txt"
+fi
 echo "P11_STAGED_ARCHIVES=2; PIN=$PIN; TARGET=$platform"
 cat "$out/files.sha256"
 echo "P11_STAGE_PROVENANCE=STRUCTURAL_ONLY; DIAGNOSTIC_OBJECT_NOT_SHIPPED=YES"

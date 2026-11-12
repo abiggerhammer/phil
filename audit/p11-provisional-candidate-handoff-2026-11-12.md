@@ -167,3 +167,12 @@ candidate browser URLs today.
 Independent release signature and final delta: PENDING.
 `FinalArtifactCertified`: UNPROVED. Independent Phase 1 freeze: NOT YET.**
 Issue #1584 stays OPEN. Original 244 normative conformance cases are unchanged.
+
+
+## Exact-head Darwin checkpoint rejection (audit evidence, not a release repair)
+
+The audit-only Darwin staging run at [#43171097571](https://github.com/abiggerhammer/phil/actions/runs/43171097571) built unsigned Phil and Steve archives from the **unchanged** source checkpoint. The extracted Steve archive passed its package smoke. The extracted Phil ZIP passed its file checksums but its bundled `smoke-test.sh` exited unsuccessfully. The pinned `build-phil-phase1-darwin-package.sh` omits `share/phil/phil.release-package` and `share/phil/phase1-handoff-manifest-v1.tsv`, both required by the *same pinned source's* bundled `smoke-phil-phase1-package.sh`. That is a specific producer/consumer mismatch in the source checkpoint, not a Mac deployment-target mystery or a valid candidate release.
+
+The audit staging collector must **run and record** this known negative, distinguish it from a passing smoke in `stage-smoke-status.tsv`, and mark `P11_CHECKPOINT_REVIEW=REJECTED` while still preserving actual built bytes, hashes and LLVM/object diagnostics for human examination. Its limited direct `philc emit-llvm` diagnostic does **not** repair the failed full smoke or establish the P7-to-executable byte chain. Any other unexpected build/smoke failure still fails the job. **No production builder, trust boundary or provisional source SHA may be altered under this authorization.** The maintainer must decide whether to nominate a new source checkpoint in a separately authorized tranche.
+
+**Do not treat a green audit-*collection* workflow as green final-candidate certification.** Darwin native full-package smoke: **FAIL**; source checkpoint acceptance for final release: **REJECTED / requires maintainer decision**. Apple Developer-ID signing, notarization, public candidate bytes, independent signoff and Phase 1 freeze remain **PENDING / NOT YET**.
