@@ -139,7 +139,7 @@ jobs:
       - name: Verify exact PR state and merge
         shell: bash
         env:
-          GH_TOKEN: ${{ github.token }}
+          GH_TOKEN: ${{ secrets.HAMSTER_PR_TOKEN }}
           GH_REPO: ${{ github.repository }}
           LANE: ${{ steps.intent.outputs.lane }}
           PR_NUMBER: ${{ steps.intent.outputs.pr }}
