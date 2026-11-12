@@ -268,9 +268,18 @@ Proof.
     {
       rewrite Hsome.
       unfold phase1_surface_normalize_optional_generic_requirements_proposition_tree,
+        phase1_surface_normalize_optional_generic_requirements_type_tree,
         phase1_surface_normalize_optional_generic_requirements,
         phase1_surface_expect_optional.
-      cbn.
+      cbn [phase1_surface_expect_optional].
+      unfold phase1_surface_normalize_generic_requirements_proposition_tree,
+        phase1_surface_normalize_generic_requirements_type_tree in Hbase.
+      destruct (phase1_surface_normalize_generic_requirements_spine body)
+        as [raw |] eqn:Hraw; simpl in Hbase; try discriminate Hbase.
+      destruct (phase1_surface_normalize_generic_requirements_type_spine raw)
+        as [typed |] eqn:Htyped; simpl in Hbase; try discriminate Hbase.
+      cbn [phase1_surface_normalize_optional_generic_requirements_type
+           phase1_surface_normalize_optional_generic_requirements_proposition].
       rewrite Hbase.
       reflexivity.
     }
