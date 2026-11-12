@@ -105,6 +105,7 @@ Proof.
   injection Hnormalize as Hrefined.
   subst refined.
   cbn.
+  match goal with |- ?G => idtac "DEBUG list wrapper goal:" G end.
   rewrite
     (phase1_surface_normalize_generic_requirement_type_values_round_trip
       entries actual Hentries).
