@@ -31,18 +31,18 @@ Lemma
         phase1_surface_normalize_generic_requirement_proposition_values
           requirements = Some refined.
 Proof.
-  intros path body input rest trees Hderive Hbody_shape.
-  subst body.
+  intros path body input rest trees Hderive.
   induction Hderive as
     [path body input
     |path body input middle rest tree trees
        Hitem Hprogress Hrest IHrest];
-    intros requirements Htrees.
+    intros Hbody_shape requirements Htrees.
   - destruct requirements as [|requirement requirements]; cbn in Htrees.
     + exists [].
       reflexivity.
     + discriminate Htrees.
-  - destruct requirements as [|requirement requirements]; cbn in Htrees;
+  - subst body.
+    destruct requirements as [|requirement requirements]; cbn in Htrees;
       try discriminate Htrees.
     inversion Htrees; subst tree trees.
     destruct
@@ -51,7 +51,7 @@ Proof.
         (descend path AtRepetitionBody)
         input middle Hitem)
       as [refined Hrefined].
-    destruct (IHrest requirements eq_refl)
+    destruct (IHrest eq_refl requirements eq_refl)
       as [refined_rest Hrefined_rest].
     exists (refined :: refined_rest).
     cbn.
