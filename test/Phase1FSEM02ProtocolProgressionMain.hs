@@ -7,14 +7,15 @@ module Main (main) where
 import qualified Data.Map.Strict as Map
 import qualified Data.Text as Text
 import qualified Data.Text.IO as TextIO
-import Phil.Core.Context (ResourceContext (..))
+import Phil.Core.Context
+  ( CheckError (..), ResourceContext (..), insertBinding, startSharedLoan )
 import Phil.Core.Generic (strictGenericInstantiationPolicy)
 import Phil.Core.Protocol
 import Phil.Core.Protocol.Family
 import Phil.Core.Session
   ( SessionAction (..), SessionError (..), SessionStep (..) )
 import Phil.Core.Static (DeclarationKey (..), InterfaceRevision (..))
-import Phil.Core.Syntax (Branch (..), Name (..), Outcome (..), Session (..), Ty (..))
+import Phil.Core.Syntax (Branch (..), Mode (..), Name (..), Outcome (..), Session (..), Ty (..))
 import Phil.Surface.GrammarV1.BinderScope (GrammarV1ResolvedBinder (..))
 import Phil.Surface.GrammarV1.ComponentReceiveClose
 import Phil.Surface.GrammarV1.ComponentSendClose
@@ -32,6 +33,8 @@ main = do
         (checkedSourcePingSteps accepted)
     , test "FSEM-02 source Ping terminal Close requires exact nominal instance/role"
         (sourcePingCloseNominalGates accepted)
+    , test "FSEM-02 source Ping successor freshness and borrowed spectator frame"
+        (sourcePingSuccessorResourceFreshness accepted)
     , test "FSEM-02 source stale close rejects with exact binder mismatch"
         (sourceStaleCloseRejected stale)
     , test "FSEM-02 mismatched session head rejects with precise action error"
@@ -243,6 +246,94 @@ nominalSourcePingRejected source = do
               && Map.member next (protocolEndpoints after))
         "nominal refusal or matching replay corrupted endpoint ownership"
 
+
+
+-- A real source-derived Ping successor cannot shadow any of Γ/A/Δ, even
+-- though only the predecessor is a protocol endpoint. Separately check the
+-- metadata collision that is invisible to the structural resource maps.
+-- Nominal instance, projection, and role are explicit admitted inputs.
+sourcePingSuccessorResourceFreshness :: Text.Text -> Either String ()
+sourcePingSuccessorResourceFreshness source = do
+  plans <- sourcePlans source
+  let client = sourceClientPlan plans
+      server = sourceServerPlan plans
+      revision = sourceProtocolInstance plans
+      clientOld = grammarV1ResolvedBinderCoreName (checkedComponentSendEndpoint client)
+      clientNext = grammarV1ResolvedBinderCoreName (checkedComponentSendSuccessor client)
+      serverOld = grammarV1ResolvedBinderCoreName (checkedComponentReceiveEndpoint server)
+      serverNext = grammarV1ResolvedBinderCoreName (checkedComponentReceiveSuccessor server)
+  checkSide revision clientRole clientOld clientNext
+    (sourceClientHead plans) ProtocolSendRequest
+  checkSide revision serverRole serverOld serverNext
+    (sourceServerHead plans) ProtocolReceiveRequest
+  where
+    checkSide
+      :: ProtocolInstanceRevision -> ProtocolRoleKey -> Name -> Name
+      -> Session
+      -> (Name -> Name -> ProtocolInstanceRevision
+          -> ProtocolRoleKey -> ProtocolActionRequest)
+      -> Either String ()
+    checkSide revision role old next headSession mkRequest = do
+      let spectator = Name "fsem02.ping.borrowed.affine.spectator"
+          request = mkRequest old next revision role
+      assert (old /= next && spectator /= old && spectator /= next)
+        "source identities unexpectedly alias borrowed spectator or successor"
+      raw <- mapLeft show $
+        insertProtocolEndpoint old revision role headSession emptyProtocolContext
+      withSpectator <- mapLeft show $
+        insertBinding Affine spectator (TyUInt 8) (protocolResources raw)
+      withLoan <- mapLeft show $ startSharedLoan spectator withSpectator
+      let initial = raw { protocolResources = withLoan }
+      assert (Map.lookup spectator (affineBindings withLoan) == Just (TyUInt 8))
+        "source spectator was not an affine owner"
+      mapM_ (occupiedStructural initial request next) [Unrestricted, Affine, Linear]
+
+      let fabricated = ProtocolEndpointBinding next revision role (End done)
+          metadataCollision = initial
+            { protocolEndpoints = Map.insert next fabricated (protocolEndpoints initial) }
+      case checkProtocolAction request metadataCollision of
+        Left (ProtocolEndpointMetadataConflict name) ->
+          assert (name == next) "metadata-only collision lost successor name"
+        other -> Left ("occupied metadata successor accepted: " <> show other)
+
+      case checkProtocolAction (mkRequest old old revision role) initial of
+        Left (ProtocolSessionError (SuccessorReusesEndpointName name)) ->
+          assert (name == old) "same-name successor rejection lost predecessor"
+        other -> Left ("source predecessor reused as successor: " <> show other)
+
+      stepped <- mapLeft show $ checkProtocolAction request initial
+      exactSuccessor old next revision role stepped
+      let after = checkedProtocolContext stepped
+          afterResources = protocolResources after
+      assert (affineBindings afterResources == affineBindings withLoan
+           && unrestrictedBindings afterResources == unrestrictedBindings withLoan
+           && sharedLoans afterResources == sharedLoans withLoan
+           && Map.member spectator (affineBindings afterResources))
+        "send/receive changed unrelated borrowed affine owner, loan or Γ"
+      case checkProtocolAction request after of
+        Left (ProtocolEndpointUnknown name) ->
+          assert (name == old) "stale source Ping predecessor lost occurrence"
+        other -> Left ("consumed source Ping predecessor reused: " <> show other)
+
+      closed <- mapLeft show $ checkProtocolAction
+        (ProtocolCloseRequest next revision role done) after
+      let afterClose = protocolResources (checkedProtocolContext closed)
+      assert (affineBindings afterClose == affineBindings withLoan
+           && sharedLoans afterClose == sharedLoans withLoan
+           && Map.notMember next (linearBindings afterClose))
+        "terminal Close changed borrowed spectator or retained successor"
+
+    occupiedStructural
+      :: ProtocolContext -> ProtocolActionRequest -> Name -> Mode -> Either String ()
+    occupiedStructural initial request next mode = do
+      occupied <- mapLeft show $
+        insertBinding mode next (TyUInt 8) (protocolResources initial)
+      let conflicting = initial { protocolResources = occupied }
+      case checkProtocolAction request conflicting of
+        Left (ProtocolSessionError (SessionResourceError (DuplicateBinding name))) ->
+          assert (name == next) "structural collision error lost successor identity"
+        other -> Left ("occupied " <> show mode <> " successor accepted or misdiagnosed: "
+                   <> show other)
 
 -- Complete parsed Ping controls, with independently supplied live nominal
 -- metadata. Refusal never provides a successful successor or close result.

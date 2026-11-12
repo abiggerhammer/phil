@@ -250,6 +250,8 @@ The bounded [FSEM-02 source-derived Ping nominal Send/Receive gates](formal-sema
 
 The bounded [FSEM-02 source Ping terminal nominal Close gate](formal-semantics-ping-terminal-nominal-gates-fsem02-v1.md) checks actual post-Send/Receive End successors against exact instance/role mismatch refusals and no-successor terminal consumption. Separate Rocq lemmas are conditional on external nominal authority and do not prove global refinement.
 
+The bounded [FSEM-02 source Ping successor freshness and borrowed-affine frame](formal-semantics-ping-successor-freshness-fsem02-v1.md) checks accepted and minimally rejected source witnesses against actual Core Send/Receive continuations, exact collision/stale errors, and preservation of unrelated borrowed affine state. Rocq provides conditional extensional resource lemmas, not a universal native refinement.
+
 ## 6. Architectures, occurrence identity, and root selection
 
 The source differentiates:
