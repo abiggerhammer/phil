@@ -108,47 +108,67 @@ Proof.
         ])
       Hbody)
     as [trees [Hsequence_tree Hitems]].
-  inversion Hsequence_tree; subst trees.
-  repeat match goal with
-  | Hseq : DerivesSequence phase1_surface_rules _ _ (_ :: _) _ _ _ |- _ =>
-      inversion Hseq; subst; clear Hseq
-  end.
-  match goal with
-  | Hnil : DerivesSequence phase1_surface_rules _ _ [] _ _ _ |- _ =>
-      inversion Hnil; subst; clear Hnil
-  end.
-  match goal with
-  | Hrepeat : Derives phase1_surface_rules _
+  destruct
+    (derives_sequence_cons_exposes_head_exact
+      phase1_surface_rules
+      (descend path (AtNonterminal "generic_requirements")) 0
+      (ELiteral "requires")
+      [ ELiteral "{";
+        ERepetition (ENonterminal "generic_requirement");
+        ELiteral "}" ]
+      input rest trees Hitems)
+    as [after_requires [requires_tree [tail1_trees
+      [Htrees [Hrequires Htail1]]]]].
+  destruct
+    (derives_sequence_cons_exposes_head_exact
+      phase1_surface_rules
+      (descend path (AtNonterminal "generic_requirements")) 1
+      (ELiteral "{")
+      [ ERepetition (ENonterminal "generic_requirement");
+        ELiteral "}" ]
+      after_requires rest tail1_trees Htail1)
+    as [after_open [open_tree [tail2_trees
+      [Htail1_trees [Hopen Htail2]]]]].
+  destruct
+    (derives_sequence_cons_exposes_head_exact
+      phase1_surface_rules
+      (descend path (AtNonterminal "generic_requirements")) 2
       (ERepetition (ENonterminal "generic_requirement"))
+      [ ELiteral "}" ]
+      after_open rest tail2_trees Htail2)
+    as [after_entries [entries_tree [tail3_trees
+      [Htail2_trees [Hentries Htail3]]]]].
+  destruct
+    (derives_sequence_cons_exposes_head_exact
+      phase1_surface_rules
+      (descend path (AtNonterminal "generic_requirements")) 3
+      (ELiteral "}") []
+      after_entries rest tail3_trees Htail3)
+    as [after_close [close_tree [nil_trees
+      [Htail3_trees [Hclose Hnil]]]]].
+  rewrite Htrees, Htail1_trees, Htail2_trees, Htail3_trees
+    in Hsequence_tree.
+  inversion Hnil; subst nil_trees.
+  inversion Hsequence_tree; subst.
+  destruct
+    (phase1_surface_repetition_derivation_exposes
+      _ (ENonterminal "generic_requirement")
+      _ _ (PTRepetition (map phase1_surface_generic_requirement_type_spine_tree entries))
+      Hentries)
+    as [entry_trees [Hentry_tree Hentry_body]].
+  inversion Hentry_tree; subst entry_trees.
+  destruct
+    (phase1_surface_normalize_generic_requirement_proposition_values_total_from_spine_repetition
+      _
+      (ENonterminal "generic_requirement")
       _ _
-      (PTRepetition
-        (map phase1_surface_generic_requirement_type_spine_tree entries)) |- _ =>
-      destruct
-        (phase1_surface_repetition_derivation_exposes
-          _
-          (ENonterminal "generic_requirement")
-          _ _
-          (PTRepetition
-            (map phase1_surface_generic_requirement_type_spine_tree entries))
-          Hrepeat)
-        as [entry_trees [Hentry_tree Hentry_body]];
-      inversion Hentry_tree; subst entry_trees;
-      destruct
-        (phase1_surface_normalize_generic_requirement_proposition_values_total_from_spine_repetition
-          _
-          (ENonterminal "generic_requirement")
-          _ _
-          (map phase1_surface_generic_requirement_type_spine_tree entries)
-          Hentry_body eq_refl
-          entries eq_refl)
-        as [refined_entries Hrefined_entries];
-      exists
-        {| phase1_generic_requirements_proposition_spine_entries :=
-             refined_entries |};
-      cbn;
-      rewrite Hrefined_entries;
-      reflexivity
-  end.
+      (map phase1_surface_generic_requirement_type_spine_tree entries)
+      Hentry_body eq_refl entries eq_refl)
+    as [refined_entries Hrefined_entries].
+  exists {| phase1_generic_requirements_proposition_spine_entries := refined_entries |}.
+  cbn.
+  rewrite Hrefined_entries.
+  reflexivity.
 Qed.
 
 Theorem
