@@ -737,8 +737,8 @@ sourcePingJointTerminalCloseDiamond source = do
   clientFirst <- closeOne clientProcess clientNext clientRole progressed
   forward <- closeOne serverProcess serverNext serverRole clientFirst
   serverFirst <- closeOne serverProcess serverNext serverRole progressed
-  reverse <- closeOne clientProcess clientNext clientRole serverFirst
-  assert (forward == reverse
+  serverThenClient <- closeOne clientProcess clientNext clientRole serverFirst
+  assert (forward == serverThenClient
        && Map.keysSet forward == Map.keysSet before
        && Map.lookup serverProcess clientFirst == Just serverEnd
        && Map.lookup clientProcess serverFirst == Just clientEnd)
