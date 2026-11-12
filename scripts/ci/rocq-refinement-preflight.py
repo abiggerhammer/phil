@@ -61,10 +61,18 @@ def main() -> None:
     # CLI prints "The Rocq Prover, version 9.2". Accept that exact
     # shortened presentation; do not mistake 9.2.1 or 9.20 for it.
     pinned = os.environ.get("ROCQ_VERSION")
-    if pinned is not None and pinned != "9.2.0":
-        raise RuntimeError(f"unexpected container ROCQ_VERSION={pinned!r}")
+    if pinned != "9.2.0":
+        raise RuntimeError(f"expected pinned container ROCQ_VERSION=9.2.0, got {pinned!r}")
     if not re.search(r"(?<![\d.])9\.2(?:\.0)?(?![\d.])", info):
         raise RuntimeError("Rocq 9.2.0 (CLI 9.2) required; refusing other toolchain")
+    source_sha = subprocess.run(["git", "rev-parse", "--verify", "HEAD"],
+                                check=True, capture_output=True, text=True).stdout.strip()
+    if not re.fullmatch(r"[0-9a-f]{40}", source_sha):
+        raise RuntimeError(f"invalid checked-out source SHA: {source_sha!r}")
+    expected_sha = os.environ.get("GITHUB_SHA")
+    if expected_sha is not None and expected_sha != source_sha:
+        raise RuntimeError(f"Actions/source SHA mismatch: {expected_sha} != {source_sha}")
+    print(f"Source SHA: {source_sha}", flush=True)
     lines = WORKFLOW.read_text(encoding="utf-8").splitlines()
     for name in STEPS:
         print(f"CI-exact preflight: {name}", flush=True)
