@@ -90,7 +90,7 @@ Proof.
   destruct (fsem02Progression (FSEM02Close outcome) clientHead
     clientEndpoint clientEndpoint clientBefore) as [|actual] eqn:Hactual;
     try discriminate.
-  inversion Hstep; subst. exact Hactual.
+  inversion Hstep; subst; reflexivity.
 Qed.
 
 Theorem fsem02PingServerSuccessFramesPeer :
@@ -107,7 +107,7 @@ Proof.
   destruct (fsem02Progression (FSEM02Close outcome) serverHead
     serverEndpoint serverEndpoint serverBefore) as [|actual] eqn:Hactual;
     try discriminate.
-  inversion Hstep; subst. exact Hactual.
+  inversion Hstep; subst; reflexivity.
 Qed.
 
 Definition fsem02PingClientRetryAfterRefusal
