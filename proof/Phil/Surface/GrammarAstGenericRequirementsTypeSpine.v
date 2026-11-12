@@ -99,8 +99,9 @@ Proof.
   destruct
     (phase1_surface_normalize_generic_requirement_type_values entries)
     as [actual |] eqn:Hentries;
-    rewrite Hentries in Hnormalize; try discriminate Hnormalize.
+    try rewrite Hentries in Hnormalize; try discriminate Hnormalize.
   cbn in Hnormalize.
+  let T := type of Hnormalize in idtac "DEBUG after guarded rewrite:" T.
   injection Hnormalize as Hrefined.
   subst refined.
   cbn.
@@ -145,7 +146,7 @@ Proof.
     destruct
       (phase1_surface_normalize_generic_requirements_type_spine requirements)
       as [actual |] eqn:Hrequirements;
-      rewrite Hrequirements in Hnormalize; try discriminate Hnormalize.
+      try rewrite Hrequirements in Hnormalize; try discriminate Hnormalize.
     cbn in Hnormalize.
     injection Hnormalize as Hrefined.
     subst refined.

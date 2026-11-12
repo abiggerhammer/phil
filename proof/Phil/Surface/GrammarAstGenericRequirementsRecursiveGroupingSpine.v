@@ -105,7 +105,7 @@ Proof.
   destruct
     (phase1_surface_normalize_generic_requirement_recursive_grouping_values entries)
     as [actual |] eqn:Hentries;
-    rewrite Hentries in Hnormalize; try discriminate Hnormalize.
+    try rewrite Hentries in Hnormalize; try discriminate Hnormalize.
   cbn in Hnormalize.
   injection Hnormalize as Hrefined.
   subst refined.
@@ -154,7 +154,7 @@ Proof.
       (phase1_surface_normalize_generic_requirements_recursive_grouping_spine
         requirements)
       as [actual |] eqn:Hrequirements;
-      rewrite Hrequirements in Hnormalize; try discriminate Hnormalize.
+      try rewrite Hrequirements in Hnormalize; try discriminate Hnormalize.
     cbn in Hnormalize.
     injection Hnormalize as Hrefined.
     subst refined.
