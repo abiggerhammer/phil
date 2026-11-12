@@ -58,6 +58,25 @@ Review classifications overlap intentionally:
 independent approval of proof discharge, trust completeness or semantic equivalence.
 Auditors must inspect all relevant changed files and not infer safety from a label.
 
+## First actually executed untruncated-delta receipt (source-only)
+
+The first CI invocation at [Actions run #43164528303](https://github.com/abiggerhammer/phil/actions/runs/43164528303)
+executed the complete detached-checkpoint inventory, not a 300-file compare:
+
+| Baseline | All commits | Full changed records | SHA-256 of raw NUL inventory |
+| --- | ---: | ---: | --- |
+| Phil `a9f2c745...` | 1,326 | **1,301** | `23a9b2de0be4597a9dda79dc8654d0191e7018b187bb2fc9806c821064620524` |
+| Steve `e7421fd...` | 2,426 | **1,922** | `1dbea12ec190a8655d0b8a73fa36110fb84c21bcf57ead2462dc0bfa0efaa9ef` |
+
+Complete summary JSON SHA-256:
+`8215b8febbb77d81051b3d19bdad33ca416a0c6f7d7bf8b682ef209ed58e96de`.
+The [source-only artifact #13918898723](https://github.com/abiggerhammer/phil/actions/runs/43164528303/artifacts/13918898723)
+contains both binary patches, full path/status inventories and exact commit ledgers.
+It is CI-produced source evidence, **not independent auditor signoff**.
+The other jobs in that first execution were still assessing staged bytes; any
+failure there does not convert absent archives into verified candidate output.
+A repaired-head rerun must also satisfy exact-head CI before merge.
+
 ## Nonpublishing candidate staging — attempted/observed bytes
 
 Two isolated Actions runner jobs use the same detached source pin, with

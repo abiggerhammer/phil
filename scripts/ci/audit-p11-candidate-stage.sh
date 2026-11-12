@@ -69,6 +69,12 @@ esac
 "$clang_bin" --version > "$out/clang-version.txt"
 "$clang_bin" --version | head -n 1 | grep -Eq '18[.]'
 
+# The audit-tools checkout is distinct from the pinned source checkout.
+# haskell-actions/setup ran cabal update outside the source directory; on Linux
+# the repository selects a separate named Hackage index. Refresh that EXACT
+# index here, under the frozen candidate, before resolving dependencies.
+bash scripts/ci/cabal-update-retry.sh
+
 # Native package builders perform their own compile, manifests and checksum
 # production; their historical names are not candidate release tag names.
 cabal build all --enable-tests --ghc-options=-Werror
