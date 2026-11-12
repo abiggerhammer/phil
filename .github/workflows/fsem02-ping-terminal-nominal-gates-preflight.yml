@@ -19,7 +19,7 @@ on:
       - '.github/workflows/fsem02-ping-terminal-nominal-gates-preflight.yml'
 
 concurrency:
-  group: fsem02-source-ping-nominal-${{ github.ref }}
+  group: fsem02-ping-terminal-nominal-${{ github.ref }}
   cancel-in-progress: true
 
 permissions:
