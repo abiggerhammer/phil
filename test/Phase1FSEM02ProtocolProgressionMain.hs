@@ -43,7 +43,7 @@ main = do
         (sourcePingJointNominalRefusal accepted)
     , test "FSEM-02 source Ping joint terminal Close orders agree and reject stale replay"
         (sourcePingJointTerminalCloseDiamond accepted)
-    , test "FSEM-02 source Ping refused/committed close interleavings preserve live peer and exact retry"
+    , test "FSEM-02 source Ping half-Close peer nominal refusal keeps committed state and valid retry"
         (sourcePingJointCloseRefusalRetry accepted)
     , test "FSEM-02 source stale close rejects with exact binder mismatch"
         (sourceStaleCloseRejected stale)
@@ -957,6 +957,23 @@ sourcePingJointCloseRefusalRetry source = do
              && Map.lookup peerEndpoint (protocolEndpoints peerState)
                  == Just (ProtocolEndpointBinding peerEndpoint revision peerRole (End done)))
           (label <> " committed Close unexpectedly removed the live peer")
+        -- With a committed opposite Close, nominal instance/role failure
+        -- must not disturb the still-live End peer. Instance precedence
+        -- wins when both names are wrong; no failed request yields a step.
+        let rejectNominalPeer name attemptedClose expected =
+              case checkProtocolAction attemptedClose peerState of
+                Left observed -> assert (observed == expected)
+                  (label <> " " <> name <> " changed diagnostic: " <> show observed)
+                Right _ -> Left (label <> " " <> name <> " advanced an inadmissible peer")
+        rejectNominalPeer "foreign-instance"
+          (ProtocolCloseRequest peerEndpoint foreignRevision peerRole done)
+          (ProtocolInstanceMismatch peerEndpoint foreignRevision revision)
+        rejectNominalPeer "foreign-role"
+          (ProtocolCloseRequest peerEndpoint revision foreignRole done)
+          (ProtocolRoleMismatch peerEndpoint foreignRole peerRole)
+        rejectNominalPeer "both-foreign-instance-first"
+          (ProtocolCloseRequest peerEndpoint foreignRevision foreignRole done)
+          (ProtocolInstanceMismatch peerEndpoint foreignRevision revision)
         -- A refused peer Close has no CheckedProtocolStep to commit. The
         -- half-closed map remains the observable state for the valid retry.
         case checkProtocolAction
@@ -976,6 +993,16 @@ sourcePingJointCloseRefusalRetry source = do
             other -> Left (label <> " stale committed close unexpectedly advanced: "
                            <> show other))
           [retiredEndpoint, retiredOld]
+        -- The absent predecessor check precedes even two invalid nominal
+        -- fields: a retired endpoint never becomes live through a bad grant.
+        case checkProtocolAction
+            (ProtocolCloseRequest retiredEndpoint foreignRevision foreignRole done)
+            retiredState of
+          Left (ProtocolEndpointUnknown actual) ->
+            assert (actual == retiredEndpoint)
+              (label <> " stale endpoint did not take lookup precedence")
+          other -> Left (label <> " stale nominal replay unexpectedly advanced: "
+                         <> show other)
         assert (Map.lookup retired halfClosed == Just retiredState
              && Map.lookup peer halfClosed == Just peerState)
           (label <> " refused interleaving changed the committed prestate")
