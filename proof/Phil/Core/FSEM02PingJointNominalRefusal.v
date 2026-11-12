@@ -1,6 +1,7 @@
 From Stdlib Require Import Strings.String.
 From Phil.Core Require Import
-  Syntax Context SessionStep FSEM02PingJointAtomicity.
+  Syntax Context SessionStep FSEM02ProtocolHeadProgression
+  FSEM02PingJointAtomicity.
 
 (* NON-NORMATIVE: these four boolean nominal gates are externally checked
    premises, never inferred as source-syntax authority.  This conditional
