@@ -15,7 +15,7 @@ follow-up (1/1)**. It does not reset that budget. Issue #1584 remains OPEN.
 | `test/Phase1INT005EmitCertifiedReleaseMain.hs` → `scripts/ci/phase1-int-005-native-release-smoke.sh` | Old independent witness → `certifyConventionalFixture` → LLVM | **Structural LLVM replay only**; cannot authenticate checked occurrence K. Explicit weaker-source comment. |
 | `test/Phase1TargetAArch64AppleDarwinReleasePackageMain.hs` | Independently certified Darwin target/trust fixture | **Structural only**: retains cross-target checks, weaker package builder/renderer. |
 | `audit/upload-artifact-package/ReleaseAssociationReview.hs` | Historical fixed-witness/cross-stage and LLVM/ledger checks | **Structural-only audit**: retains all historical rejection cases on weaker API. |
-| `scripts/release/build-steve-phase1-package.sh` → `steve.release-package` / `TCB.txt` | Public packaged structural INT-005 sidecar from old fixture | **Residual publication path, explicitly narrowed**: metadata and TCB are structural, not P7 source occurrence provenance; generated README/TCB disclosure adjusted. Do **not** silently upgrade unrelated packaged runtime bytes. |
+| `scripts/release/build-steve-phase1-package.sh` → `steve.release-package` / `TCB.txt` | Public packaged structural INT-005 sidecar from old fixture | **Residual publication path, unchanged**: the public script emits a separate conventional INT-005 structural `steve.release-package` and `TCB.txt`, not a sealed P7 checked-K/I origin certificate. The existing use of “certified” describes structural INT-005 closure, not verified occurrence provenance. Public-byte migration remains separately owned. |
 | `Phil.Handoff.Phase1AssuranceClosure.derivePhase1ResidualTCB` / INT-007 | `CertifiedReleaseArtifact` → manifest/TCB roundtrip | **Structural-only** declared TCB and independent manifest parsing; does not mint stronger authority. |
 | `certifyReleaseArtifact`, `bindNativeFinalAuthority`, `bindProducedFinalAuthority`, `closeNativeFinalInstanceCorrespondence` | Separately callable structural accepted-object consistency and coordinate projections | **Structural-only**, return neither `AcceptedVerifiedFinalOrigin` nor strong package; preserve independent bounded tests. Do not interpret as checked source producer. |
 | `scripts/release/build-phil-phase1-package.sh` / INT-011 `DistributionRelease` | Public `philc` compiler bytes, handoff manifest, archive digests, declared distribution TCB | **Different distribution/byte authority**, NOT the P7 Upload/Steve occurrence; independent P11 work; no false conversion to P7. |
@@ -44,7 +44,12 @@ compiled runtime-choice LLVM/object and package builder need the same-event
 proof and an explicit separately authorized release-pipeline migration. A
 single syntactic P7 wrapper would be false authority. This PR closes the
 higher-priority named final-origin API bypass but does not discharge that
-published-byte obligation.
+published-byte obligation. The historical Steve public README/TCB wording
+remains unchanged: its “certified” adjective denotes the standalone structural
+INT-005 envelope, not P2/P6/P7 origin provenance. The protected merge workflow
+admits only the trusted INT-011 PR-only `publish` skip: changing the separate
+Steve release script triggers a distinct non-whitelisted `publish` skip. This
+single follow-up does not change release policy or weaken its protection.
 
 ## Evidence and independent gates
 
