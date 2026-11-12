@@ -81,8 +81,9 @@ Proof.
     clientBefore serverBefore Hfailed.
   unfold fsem02PingClientThenServerClose.
   destruct (fsem02Progression (FSEM02Close outcome) clientHead
-    clientEndpoint clientEndpoint clientBefore);
-    now rewrite Hfailed.
+    clientEndpoint clientEndpoint clientBefore).
+  - reflexivity.
+  - now rewrite Hfailed.
 Qed.
 
 Theorem fsem02PingJointCloseSuccessProjectsBoth :
