@@ -262,6 +262,8 @@ The bounded [FSEM-02 source Ping terminal Close refusal/retry trace](formal-sema
 
 The bounded [FSEM-02 paired Ping Close refusals](formal-semantics-source-ping-double-refusal-retry-fsem02-v1.md) exercise client/server failure in both orders, exact native diagnostics, unmodified borrowed resource contexts, and eventual valid Close order equality. Separate conditional Rocq lemmas exclude committed actions from the refusal case; this is not rollback or universal refinement.
 
+The bounded [FSEM-02 Ping half-closed peer refusal/retry](formal-semantics-source-ping-half-close-stale-peer-fsem02-v1.md) tests mixed committed/failed Close interleavings after source-derived rendezvous: an already-retired local endpoint cannot be replayed; rejection on the remaining live peer does not roll back the first close; eventual valid peer Close reaches the direct terminal map with the borrowed spectator intact. Conditional Rocq lemmas retain external nominal and scheduling premises, not universal source-to-proof refinement.
+
 ## 6. Architectures, occurrence identity, and root selection
 
 The source differentiates:

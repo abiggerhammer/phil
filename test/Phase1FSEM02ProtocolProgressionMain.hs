@@ -43,7 +43,7 @@ main = do
         (sourcePingJointNominalRefusal accepted)
     , test "FSEM-02 source Ping joint terminal Close orders agree and reject stale replay"
         (sourcePingJointTerminalCloseDiamond accepted)
-    , test "FSEM-02 source Ping rejected close leaves peers available for exact valid retry"
+    , test "FSEM-02 source Ping refused/committed close interleavings preserve live peer and exact retry"
         (sourcePingJointCloseRefusalRetry accepted)
     , test "FSEM-02 source stale close rejects with exact binder mismatch"
         (sourceStaleCloseRejected stale)
@@ -940,6 +940,60 @@ sourcePingJointCloseRefusalRetry source = do
     (ProtocolSessionError (CloseOutcomeMismatch done wrongOutcome))
     (ProtocolCloseRequest serverNext foreignRevision serverRole done)
     (ProtocolInstanceMismatch serverNext foreignRevision revision)
+
+  -- Mixed terminal outcome: one participant has ALREADY committed Close.
+  -- A wrong-outcome attempt on the still-live peer is refused, with no
+  -- rollback of the committed close and no loss of the borrow/loan frame.
+  -- The retired participant cannot replay either its End successor or its
+  -- already consumed source predecessor. Both close orders are exercised.
+  let checkHalfClosed label halfClosed retired retiredEndpoint retiredOld
+                      retiredRole peer peerEndpoint peerRole = do
+        retiredState <- maybe (Left (label <> " missing retired process")) Right
+          (Map.lookup retired halfClosed)
+        peerState <- maybe (Left (label <> " missing live peer")) Right
+          (Map.lookup peer halfClosed)
+        assert (Map.notMember retiredEndpoint (protocolEndpoints retiredState)
+             && Map.notMember retiredOld (protocolEndpoints retiredState)
+             && Map.lookup peerEndpoint (protocolEndpoints peerState)
+                 == Just (ProtocolEndpointBinding peerEndpoint revision peerRole (End done)))
+          (label <> " committed Close unexpectedly removed the live peer")
+        -- A refused peer Close has no CheckedProtocolStep to commit. The
+        -- half-closed map remains the observable state for the valid retry.
+        case checkProtocolAction
+            (ProtocolCloseRequest peerEndpoint revision peerRole wrongOutcome)
+            peerState of
+          Left (ProtocolSessionError (CloseOutcomeMismatch expected actual)) ->
+            assert (expected == done && actual == wrongOutcome)
+              (label <> " failed peer Close lost exact outcome diagnostic")
+          other -> Left (label <> " wrong-outcome peer Close: " <> show other)
+        mapM_ (\staleEndpoint ->
+          case checkProtocolAction
+              (ProtocolCloseRequest staleEndpoint revision retiredRole done)
+              retiredState of
+            Left (ProtocolEndpointUnknown actual) ->
+              assert (actual == staleEndpoint)
+                (label <> " stale committed close replay lost endpoint identity")
+            other -> Left (label <> " stale committed close unexpectedly advanced: "
+                           <> show other))
+          [retiredEndpoint, retiredOld]
+        assert (Map.lookup retired halfClosed == Just retiredState
+             && Map.lookup peer halfClosed == Just peerState)
+          (label <> " refused interleaving changed the committed prestate")
+        afterRetry <- closeOne peer peerEndpoint peerRole halfClosed
+        assert (afterRetry == directFinal)
+          (label <> " refused peer retry rolled back first close or changed terminal map")
+        finalServer <- maybe (Left (label <> " missing terminal server")) Right
+          (Map.lookup serverProcess afterRetry)
+        assert (affineBindings (protocolResources finalServer) == affineBindings loaned
+             && sharedLoans (protocolResources finalServer) == sharedLoans loaned
+             && Map.null (protocolEndpoints finalServer))
+          (label <> " half-close/retry lost borrowed spectator or live peer endpoint")
+  checkHalfClosed "client-committed/server-refused" directClient
+    clientProcess clientNext clientOld clientRole
+    serverProcess serverNext serverRole
+  checkHalfClosed "server-committed/client-refused" reverseServer
+    serverProcess serverNext serverOld serverRole
+    clientProcess clientNext clientRole
   clientFinal <- maybe (Left "retry omitted final client context") Right
     (Map.lookup clientProcess directFinal)
   serverFinal <- maybe (Left "retry omitted final server context") Right
