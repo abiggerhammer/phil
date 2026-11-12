@@ -95,11 +95,13 @@ Theorem phase1_surface_normalize_generic_requirements_type_spine_round_trip :
       phase1_surface_generic_requirements_spine_tree requirements.
 Proof.
   intros [entries] refined Hnormalize.
-  cbn in Hnormalize.
+  unfold phase1_surface_normalize_generic_requirements_type_spine in Hnormalize.
   destruct
     (phase1_surface_normalize_generic_requirement_type_values entries)
     as [actual |] eqn:Hentries; try discriminate Hnormalize.
-  inversion Hnormalize; subst.
+  cbn in Hnormalize.
+  injection Hnormalize as Hrefined.
+  subst refined.
   cbn.
   rewrite
     (phase1_surface_normalize_generic_requirement_type_values_round_trip

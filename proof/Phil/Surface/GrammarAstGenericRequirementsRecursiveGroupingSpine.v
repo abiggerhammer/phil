@@ -101,11 +101,13 @@ Theorem
       phase1_surface_generic_requirements_proposition_spine_tree requirements.
 Proof.
   intros [entries] refined Hnormalize.
-  cbn in Hnormalize.
+  unfold phase1_surface_normalize_generic_requirements_recursive_grouping_spine in Hnormalize.
   destruct
     (phase1_surface_normalize_generic_requirement_recursive_grouping_values entries)
     as [actual |] eqn:Hentries; try discriminate Hnormalize.
-  inversion Hnormalize; subst.
+  cbn in Hnormalize.
+  injection Hnormalize as Hrefined.
+  subst refined.
   cbn.
   rewrite
     (phase1_surface_normalize_generic_requirement_recursive_grouping_values_round_trip
