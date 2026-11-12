@@ -172,11 +172,13 @@ jobs:
             echo "PR #$PR_NUMBER lacks native lane label lane: $LANE" >&2
             exit 1
           fi
+          echo "MERGE-DIAGNOSTIC: PR metadata and native label passed"
 
           checks_json="$(
             gh api --paginate -H 'Accept: application/vnd.github+json' "repos/$GH_REPO/commits/$EXPECTED_HEAD/check-runs?per_page=100" \
               | jq -s '{total_count: (.[0].total_count // 0), check_runs: [.[].check_runs[]]}'
           )"
+          echo "MERGE-DIAGNOSTIC: check-run API access passed"
           total="$(jq -r '.total_count' <<<"$checks_json")"
           returned="$(jq -r '.check_runs | length' <<<"$checks_json")"
 
@@ -253,6 +255,7 @@ jobs:
             echo "Allowed: only INT-011 publish skipped on this exact PR head."
           fi
 
+          echo "MERGE-DIAGNOSTIC: check census and skip provenance passed"
           main_sha="$(gh api "repos/$GH_REPO/branches/main" --jq '.commit.sha')"
 
           if [ "$base_sha" != "$main_sha" ]; then
@@ -270,6 +273,7 @@ jobs:
             fi
           fi
 
+          echo "MERGE-DIAGNOSTIC: no-overlap gate passed; invoking merge PUT"
           result="$(gh api --method PUT "repos/$GH_REPO/pulls/$PR_NUMBER/merge" \
             -f sha="$EXPECTED_HEAD" \
             -f merge_method=merge)"
