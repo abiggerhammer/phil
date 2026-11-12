@@ -246,6 +246,8 @@ The bounded [FSEM-02 checked-source offer successor freshness and borrowed-spect
 The bounded [FSEM-02 source-offer nominal instance/role rejection bridge](formal-semantics-offer-nominal-origin-gates-fsem02-v1.md) tests the real source replay under equal local Offer heads but independently mismatched live protocol identity and role, retaining exact native failure constructors and both positive label controls. Rocq proves a conditional external-identity gate model; it does not infer nominal authorization or general implementation refinement.
 
 
+The bounded [FSEM-02 source-derived Ping nominal Send/Receive gates](formal-semantics-ping-nominal-origin-gates-fsem02-v1.md) check complete-source Ping endpoints against production Core instance/role mismatches with exact failure classes on both sides and matching positive controls. Conditional Rocq local-step lemmas preserve the external nominal authority premise; they are not general source-to-Rocq refinement.
+
 ## 6. Architectures, occurrence identity, and root selection
 
 The source differentiates:

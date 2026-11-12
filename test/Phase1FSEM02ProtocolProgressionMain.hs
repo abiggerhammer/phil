@@ -34,6 +34,8 @@ main = do
         (sourceStaleCloseRejected stale)
     , test "FSEM-02 mismatched session head rejects with precise action error"
         (wrongSessionHeadRejected accepted)
+    , test "source-derived Ping Send/Receive require exact nominal instance and role"
+        (nominalSourcePingRejected accepted)
     , test "FSEM-02 Core offer selects exact successor, rejects absent label"
         offerHeadAndMissingLabel
     , test "FSEM-02 Core terminal wrong outcome and same-name successor reject exactly"
@@ -177,6 +179,67 @@ exactSuccessor old next instanceRevision role checked = do
   assert (Map.lookup next (linearBindings (protocolResources context))
        == Just (TyEndpoint (End done)))
     "successor Core resource binding disagreed with projected continuation"
+
+
+-- Source-checked Ping binders and independently admitted projected heads
+-- cannot derive protocol nominal authority from matching local Session text.
+-- Both sides run mismatches and matching controls on original immutable states.
+nominalSourcePingRejected :: Text.Text -> Either String ()
+nominalSourcePingRejected source = do
+  plans <- sourcePlans source
+  let client = sourceClientPlan plans
+      server = sourceServerPlan plans
+      clientOld = grammarV1ResolvedBinderCoreName (checkedComponentSendEndpoint client)
+      clientNext = grammarV1ResolvedBinderCoreName (checkedComponentSendSuccessor client)
+      serverOld = grammarV1ResolvedBinderCoreName (checkedComponentReceiveEndpoint server)
+      serverNext = grammarV1ResolvedBinderCoreName (checkedComponentReceiveSuccessor server)
+      revision = sourceProtocolInstance plans
+      foreignRevision = ProtocolInstanceRevision "fsem02.foreign.ping.revision"
+      foreignRole = ProtocolRoleKey "WrongPingRole"
+  checkSide revision foreignRevision foreignRole clientOld clientNext
+    clientRole (sourceClientHead plans) ProtocolSendRequest
+  checkSide revision foreignRevision foreignRole serverOld serverNext
+    serverRole (sourceServerHead plans) ProtocolReceiveRequest
+  where
+    checkSide :: ProtocolInstanceRevision -> ProtocolInstanceRevision
+              -> ProtocolRoleKey -> Name -> Name -> ProtocolRoleKey
+              -> Session
+              -> (Name -> Name -> ProtocolInstanceRevision
+                  -> ProtocolRoleKey -> ProtocolActionRequest)
+              -> Either String ()
+    checkSide revision foreignRevision foreignRole old next role headSession mkRequest = do
+      wrongInstance <- mapLeft show $
+        insertProtocolEndpoint old foreignRevision role headSession emptyProtocolContext
+      wrongRole <- mapLeft show $
+        insertProtocolEndpoint old revision foreignRole headSession emptyProtocolContext
+      bothWrong <- mapLeft show $
+        insertProtocolEndpoint old foreignRevision foreignRole headSession emptyProtocolContext
+      matching <- mapLeft show $
+        insertProtocolEndpoint old revision role headSession emptyProtocolContext
+      let request = mkRequest old next revision role
+      case checkProtocolAction request wrongInstance of
+        Left (ProtocolInstanceMismatch name expected actual) ->
+          assert (name == old && expected == revision && actual == foreignRevision)
+            "Ping foreign instance error lost source endpoint or revision"
+        other -> Left ("Ping foreign instance not rejected exactly: " <> show other)
+      case checkProtocolAction request wrongRole of
+        Left (ProtocolRoleMismatch name expected actual) ->
+          assert (name == old && expected == role && actual == foreignRole)
+            "Ping foreign role error lost source endpoint or role"
+        other -> Left ("Ping foreign role not rejected exactly: " <> show other)
+      case checkProtocolAction request bothWrong of
+        Left (ProtocolInstanceMismatch name expected actual) ->
+          assert (name == old && expected == revision && actual == foreignRevision)
+            "Ping double mismatch did not prioritize nominal instance identity"
+        other -> Left ("Ping double mismatch not rejected exactly: " <> show other)
+      accepted <- mapLeft show $ checkProtocolAction request matching
+      exactSuccessor old next revision role accepted
+      let after = checkedProtocolContext accepted
+      assert (Map.member old (protocolEndpoints matching)
+              && Map.notMember next (protocolEndpoints matching)
+              && Map.notMember old (protocolEndpoints after)
+              && Map.member next (protocolEndpoints after))
+        "nominal refusal or matching replay corrupted endpoint ownership"
 
 sourceStaleCloseRejected :: Text.Text -> Either String ()
 sourceStaleCloseRejected source = do
