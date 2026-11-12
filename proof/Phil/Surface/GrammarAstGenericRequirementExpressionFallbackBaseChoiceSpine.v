@@ -1,6 +1,9 @@
 From Stdlib Require Import Lists.List Strings.String.
 
 From Phil.Surface Require Import
+  GrammarDerivation
+  GrammarAstPropositionSpine
+  GrammarAstStaticTypeArgumentCarrierSpine
   GrammarAstGenericRequirementExpressionOuterSpine
   GrammarAstEffectSetExpressionFallbackBaseChoiceSpine.
 
@@ -264,11 +267,16 @@ Proof.
         effects)
       as [actual |] eqn:Heffects; try discriminate Hnormalize.
     inversion Hnormalize; subst refined.
-    cbn.
-    rewrite
-      (phase1_surface_normalize_effect_set_expression_fallback_base_choice_spine_round_trip
-        effects actual Heffects).
-    reflexivity.
+    exact
+      (f_equal
+        (fun child_tree =>
+          PTNonterminal "generic_requirement"
+            (PTAlternative 6
+              (PTSequence
+                [ PTLiteral "effects"; name_tree; PTLiteral "within";
+                  child_tree; PTLiteral ";" ])))
+        (phase1_surface_normalize_effect_set_expression_fallback_base_choice_spine_round_trip
+          effects actual Heffects)).
   - inversion Hnormalize; subst refined. reflexivity.
   - inversion Hnormalize; subst refined. reflexivity.
   - inversion Hnormalize; subst refined. reflexivity.

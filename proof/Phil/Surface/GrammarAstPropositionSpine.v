@@ -1,7 +1,9 @@
 From Stdlib Require Import Lists.List Strings.String.
 
 From Phil.Surface Require Import
-  GrammarAstSessionSpine
+  GrammarDerivation
+  GrammarAstSourceHeader
+  GrammarAstTopLevelSpine
   GrammarAstGenericRequirementsSpine.
 
 Import ListNotations.
@@ -363,7 +365,7 @@ Proof.
     + eapply phase1_surface_normalize_proposition_and_suffix_round_trip.
       exact Hproposition.
     + eapply IH.
-      exact Hrest.
+      reflexivity.
 Qed.
 
 Record Phase1SurfacePropositionAndSpine : Type := {
@@ -434,11 +436,11 @@ Proof.
     "proposition_and" tree body Hnode).
   rewrite (phase1_surface_expect_sequence_round_trip body items Hsequence).
   rewrite (phase1_surface_exact2_round_trip items first_tree rest_tree Hitems).
-  rewrite (phase1_surface_normalize_proposition_not_spine_round_trip
+  rewrite <- (phase1_surface_normalize_proposition_not_spine_round_trip
     first_tree first Hfirst).
   rewrite (phase1_surface_expect_repetition_round_trip
     rest_tree rest_trees Hrepetition).
-  rewrite (phase1_surface_normalize_proposition_and_suffixes_round_trip
+  rewrite <- (phase1_surface_normalize_proposition_and_suffixes_round_trip
     rest_trees rest Hrest).
   reflexivity.
 Qed.
@@ -525,7 +527,7 @@ Proof.
     + eapply phase1_surface_normalize_proposition_or_suffix_round_trip.
       exact Hproposition.
     + eapply IH.
-      exact Hrest.
+      reflexivity.
 Qed.
 
 Record Phase1SurfacePropositionOrSpine : Type := {
@@ -596,11 +598,11 @@ Proof.
     "proposition_or" tree body Hnode).
   rewrite (phase1_surface_expect_sequence_round_trip body items Hsequence).
   rewrite (phase1_surface_exact2_round_trip items first_tree rest_tree Hitems).
-  rewrite (phase1_surface_normalize_proposition_and_spine_round_trip
+  rewrite <- (phase1_surface_normalize_proposition_and_spine_round_trip
     first_tree first Hfirst).
   rewrite (phase1_surface_expect_repetition_round_trip
     rest_tree rest_trees Hrepetition).
-  rewrite (phase1_surface_normalize_proposition_or_suffixes_round_trip
+  rewrite <- (phase1_surface_normalize_proposition_or_suffixes_round_trip
     rest_trees rest Hrest).
   reflexivity.
 Qed.
@@ -640,6 +642,7 @@ Proof.
     as [proposition_or |] eqn:Hor; try discriminate Hnormalize.
   inversion Hnormalize; subst proposition.
   unfold phase1_surface_proposition_spine_tree.
+  cbn [phase1_proposition_spine_or].
   rewrite (phase1_surface_expect_nonterminal_round_trip
     "proposition" tree body Hnode).
   rewrite (phase1_surface_normalize_proposition_or_spine_round_trip

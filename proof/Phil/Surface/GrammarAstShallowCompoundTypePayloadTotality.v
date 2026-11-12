@@ -1,6 +1,13 @@
 From Stdlib Require Import Lists.List Strings.String.
 
 From Phil.Surface Require Import
+  GrammarDerivation
+  GrammarAstSourceHeader
+  GrammarAstTopLevelSpine
+  GrammarAstTypeSpine
+  GrammarAstTypeTotality
+  GrammarAstPrimitiveTypePayloadSpine
+  GrammarDeterminacySimpleResolverSoundness
   GrammarAstShallowCompoundTypePayloadSpine
   GrammarAstPrimitiveTypePayloadTotality.
 
@@ -56,24 +63,34 @@ Proof.
       ]
       input rest tree Hderive)
     as [trees [Htree Hitems]].
-  repeat match goal with
-  | Hseq : DerivesSequence phase1_surface_rules _ _ (_ :: _) _ _ _ |- _ =>
-      inversion Hseq; subst; clear Hseq
-  end.
-  match goal with
-  | Hnil : DerivesSequence phase1_surface_rules _ _ [] _ _ _ |- _ =>
-      inversion Hnil; subst; clear Hnil
-  end.
-  match goal with
-  | Hkeyword : Derives phase1_surface_rules _
-      (ELiteral "Bytes") _ _ ?keyword_tree,
-    Hoptional : Derives phase1_surface_rules _
+  destruct
+    (derives_sequence_cons_exposes_head_exact
+      phase1_surface_rules path 0
+      (ELiteral "Bytes")
+      [ EOptional
+          (ESequence
+            [ ELiteral "[";
+              ENonterminal "expression";
+              ELiteral "]"
+            ])
+      ]
+      input rest trees Hitems)
+    as [middle [keyword_tree [tail_trees
+      [Htrees [Hkeyword Htail]]]]].
+  destruct
+    (derives_sequence_cons_exposes_head_exact
+      phase1_surface_rules path 1
       (EOptional
         (ESequence
           [ ELiteral "[";
             ENonterminal "expression";
             ELiteral "]"
-          ])) _ _ ?optional_tree |- _ =>
+          ]))
+      [] middle rest tail_trees Htail)
+    as [final [optional_tree [end_trees
+      [Htail_trees [Hoptional Hend]]]]].
+  inversion Hend; subst end_trees.
+  rewrite Htrees, Htail_trees in Htree.
       destruct
         (literal_derivation_is_exact
           phase1_surface_rules _ "Bytes" _ _ keyword_tree Hkeyword)
@@ -97,7 +114,6 @@ Proof.
             phase1_surface_expect_literal,
             phase1_surface_expect_optional;
           cbn;
-          rewrite String.eqb_refl;
           reflexivity
         | exists None;
           split;
@@ -113,59 +129,68 @@ Proof.
             ]
             _ _ index_tree Hindex)
           as [index_trees [Hindex_tree Hindex_items]];
-        repeat match goal with
-        | Hseq : DerivesSequence phase1_surface_rules _ _ (_ :: _) _ _ _ |- _ =>
-            inversion Hseq; subst; clear Hseq
-        end;
-        match goal with
-        | Hnil : DerivesSequence phase1_surface_rules _ _ [] _ _ _ |- _ =>
-            inversion Hnil; subst; clear Hnil
-        end;
-        match goal with
-        | Hopen : Derives phase1_surface_rules _
-            (ELiteral "[") _ _ ?open_tree,
-          Hexpression : Derives phase1_surface_rules _
-            (ENonterminal "expression") _ _ ?expression_tree,
-          Hclose : Derives phase1_surface_rules _
-            (ELiteral "]") _ _ ?close_tree |- _ =>
-            destruct
-              (literal_derivation_is_exact
-                phase1_surface_rules _ "[" _ _ open_tree Hopen)
-              as [open_tail [_ [_ Hopen_tree]]];
-            destruct
-              (literal_derivation_is_exact
-                phase1_surface_rules _ "]" _ _ close_tree Hclose)
-              as [close_tail [_ [_ Hclose_tree]]];
-            destruct
-              (derives_nonterminal_exposes_body
-                phase1_surface_rules _ "expression"
-                _ _ expression_tree Hexpression)
-              as [expression_body
-                  [expression_subtree
-                   [Hexpression_lookup
-                    [Hexpression_tree Hexpression_body]]]];
-            assert (Hnormalize :
-              phase1_surface_normalize_bytes_payload tree =
-                Some (Some expression_tree));
-            [ rewrite Htree, Hkeyword_tree, Hsome, Hindex_tree,
-                Hopen_tree, Hexpression_tree, Hclose_tree;
-              unfold phase1_surface_normalize_bytes_payload,
-                phase1_surface_expect_sequence,
-                phase1_surface_exact2,
-                phase1_surface_expect_literal,
-                phase1_surface_expect_optional,
-                phase1_surface_exact3,
-                phase1_surface_expect_nonterminal;
-              cbn;
-              repeat rewrite String.eqb_refl;
-              reflexivity
-            | exists (Some expression_tree);
-              split;
-              [ exact Hnormalize
-              | eapply phase1_surface_normalize_bytes_payload_round_trip;
-                exact Hnormalize ] ]
-        end ]
-  end.
+        destruct
+          (derives_sequence_cons_exposes_head_exact
+            phase1_surface_rules _ 0
+            (ELiteral "[")
+            [ ENonterminal "expression"; ELiteral "]" ]
+            _ _ index_trees Hindex_items)
+          as [open_middle [open_tree [index_tail
+            [Hindex_trees [Hopen Hindex_tail]]]]];
+        destruct
+          (derives_sequence_cons_exposes_head_exact
+            phase1_surface_rules _ 1
+            (ENonterminal "expression")
+            [ ELiteral "]" ]
+            _ _ index_tail Hindex_tail)
+          as [close_middle [expression_tree [last_tail
+            [Hindex_tail_trees [Hexpression Hlast]]]]];
+        destruct
+          (derives_sequence_cons_exposes_head_exact
+            phase1_surface_rules _ 2
+            (ELiteral "]") []
+            _ _ last_tail Hlast)
+          as [index_final [close_tree [end_trees
+            [Hlast_trees [Hclose Hend_index]]]]];
+        inversion Hend_index; subst end_trees;
+        rewrite Hindex_trees, Hindex_tail_trees, Hlast_trees
+          in Hindex_tree;
+        destruct
+          (literal_derivation_is_exact
+            phase1_surface_rules _ "[" _ _ open_tree Hopen)
+          as [open_tail [_ [_ Hopen_tree]]];
+        destruct
+          (literal_derivation_is_exact
+            phase1_surface_rules _ "]" _ _ close_tree Hclose)
+          as [close_tail [_ [_ Hclose_tree]]];
+        destruct
+          (derives_nonterminal_exposes_body
+            phase1_surface_rules _ "expression"
+            _ _ expression_tree Hexpression)
+          as [expression_body
+              [expression_subtree
+               [Hexpression_lookup
+                [Hexpression_tree Hexpression_body]]]];
+        assert (Hnormalize :
+          phase1_surface_normalize_bytes_payload tree =
+            Some (Some expression_tree));
+        [ rewrite Htree, Hkeyword_tree, Hsome, Hindex_tree,
+            Hopen_tree, Hexpression_tree, Hclose_tree;
+          unfold phase1_surface_normalize_bytes_payload,
+            phase1_surface_expect_sequence,
+            phase1_surface_exact2,
+            phase1_surface_expect_literal,
+            phase1_surface_expect_optional,
+            phase1_surface_exact3,
+            phase1_surface_expect_nonterminal;
+          cbn;
+          repeat rewrite String.eqb_refl;
+          reflexivity
+        | exists (Some expression_tree);
+          split;
+          [ exact Hnormalize
+          | eapply phase1_surface_normalize_bytes_payload_round_trip;
+            exact Hnormalize ] ] ].
 Qed.
 
 Lemma phase1_surface_normalize_bracketed_child_payload_total_from_derivation :
@@ -194,57 +219,74 @@ Proof.
       ]
       input rest tree Hderive)
     as [trees [Htree Hitems]].
-  repeat match goal with
-  | Hseq : DerivesSequence phase1_surface_rules _ _ (_ :: _) _ _ _ |- _ =>
-      inversion Hseq; subst; clear Hseq
-  end.
-  match goal with
-  | Hnil : DerivesSequence phase1_surface_rules _ _ [] _ _ _ |- _ =>
-      inversion Hnil; subst; clear Hnil
-  end.
-  match goal with
-  | Hkeyword : Derives phase1_surface_rules _
-      (ELiteral keyword) _ _ ?keyword_tree,
-    Hopen : Derives phase1_surface_rules _
-      (ELiteral "[") _ _ ?open_tree,
-    Hchild : Derives phase1_surface_rules _
-      (ENonterminal child_name) _ _ ?child_tree,
-    Hclose : Derives phase1_surface_rules _
-      (ELiteral "]") _ _ ?close_tree |- _ =>
-      destruct
-        (literal_derivation_is_exact
-          phase1_surface_rules _ keyword _ _ keyword_tree Hkeyword)
-        as [keyword_tail [_ [_ Hkeyword_tree]]];
-      destruct
-        (literal_derivation_is_exact
-          phase1_surface_rules _ "[" _ _ open_tree Hopen)
-        as [open_tail [_ [_ Hopen_tree]]];
-      destruct
-        (literal_derivation_is_exact
-          phase1_surface_rules _ "]" _ _ close_tree Hclose)
-        as [close_tail [_ [_ Hclose_tree]]];
-      destruct
-        (derives_nonterminal_exposes_body
-          phase1_surface_rules _ child_name _ _ child_tree Hchild)
-        as [child_body [child_subtree [Hchild_lookup [Hchild_tree Hchild_body]]]];
-      assert (Hnormalize :
-        phase1_surface_normalize_bracketed_child_payload
-          keyword child_name tree = Some child_tree);
-      [ rewrite Htree, Hkeyword_tree, Hopen_tree, Hchild_tree, Hclose_tree;
-        unfold phase1_surface_normalize_bracketed_child_payload,
-          phase1_surface_expect_sequence,
-          phase1_surface_exact4,
-          phase1_surface_expect_literal,
-          phase1_surface_expect_nonterminal;
-        cbn;
-        repeat rewrite String.eqb_refl;
-        reflexivity
-      | exists child_tree;
-        split;
-        [ exact Hnormalize
-        | eapply phase1_surface_normalize_bracketed_child_payload_round_trip;
-          exact Hnormalize ] ]
-  end.
+  destruct
+    (derives_sequence_cons_exposes_head_exact
+      phase1_surface_rules path 0
+      (ELiteral keyword)
+      [ ELiteral "["; ENonterminal child_name; ELiteral "]" ]
+      input rest trees Hitems)
+    as [keyword_middle [keyword_tree [keyword_tail_trees
+      [Htrees [Hkeyword Hkeyword_tail]]]]].
+  destruct
+    (derives_sequence_cons_exposes_head_exact
+      phase1_surface_rules path 1
+      (ELiteral "[")
+      [ ENonterminal child_name; ELiteral "]" ]
+      keyword_middle rest keyword_tail_trees Hkeyword_tail)
+    as [open_middle [open_tree [open_tail_trees
+      [Hkeyword_tail_trees [Hopen Hopen_tail]]]]].
+  destruct
+    (derives_sequence_cons_exposes_head_exact
+      phase1_surface_rules path 2
+      (ENonterminal child_name) [ ELiteral "]" ]
+      open_middle rest open_tail_trees Hopen_tail)
+    as [child_middle [child_tree [child_tail_trees
+      [Hopen_tail_trees [Hchild Hchild_tail]]]]].
+  destruct
+    (derives_sequence_cons_exposes_head_exact
+      phase1_surface_rules path 3
+      (ELiteral "]") []
+      child_middle rest child_tail_trees Hchild_tail)
+    as [close_middle [close_tree [end_trees
+      [Hchild_tail_trees [Hclose Hend]]]]].
+  inversion Hend; subst end_trees.
+  rewrite Htrees, Hkeyword_tail_trees, Hopen_tail_trees,
+    Hchild_tail_trees in Htree.
+  destruct
+    (literal_derivation_is_exact
+      phase1_surface_rules _ keyword _ _ keyword_tree Hkeyword)
+    as [keyword_tail [_ [_ Hkeyword_tree]]].
+  destruct
+    (literal_derivation_is_exact
+      phase1_surface_rules _ "[" _ _ open_tree Hopen)
+    as [open_tail [_ [_ Hopen_tree]]].
+  destruct
+    (literal_derivation_is_exact
+      phase1_surface_rules _ "]" _ _ close_tree Hclose)
+    as [close_tail [_ [_ Hclose_tree]]].
+  destruct
+    (derives_nonterminal_exposes_body
+      phase1_surface_rules _ child_name _ _ child_tree Hchild)
+    as [child_body [child_subtree [Hchild_lookup [Hchild_tree Hchild_body]]]].
+  assert (Hnormalize :
+    phase1_surface_normalize_bracketed_child_payload
+      keyword child_name tree = Some child_tree).
+  {
+    rewrite Htree, Hkeyword_tree, Hopen_tree, Hchild_tree, Hclose_tree.
+    unfold phase1_surface_normalize_bracketed_child_payload,
+      phase1_surface_expect_sequence,
+      phase1_surface_exact4,
+      phase1_surface_expect_literal,
+      phase1_surface_expect_nonterminal.
+    cbn.
+    repeat rewrite String.eqb_refl.
+    reflexivity.
+  }
+  exists child_tree.
+  split.
+  - exact Hnormalize.
+  - eapply phase1_surface_normalize_bracketed_child_payload_round_trip.
+    exact Hnormalize.
 Qed.
 
 Lemma phase1_surface_normalize_validated_payload_total_from_derivation :
@@ -272,97 +314,135 @@ Proof.
       ]
       input rest tree Hderive)
     as [trees [Htree Hitems]].
-  repeat match goal with
-  | Hseq : DerivesSequence phase1_surface_rules _ _ (_ :: _) _ _ _ |- _ =>
-      inversion Hseq; subst; clear Hseq
-  end.
-  match goal with
-  | Hnil : DerivesSequence phase1_surface_rules _ _ [] _ _ _ |- _ =>
-      inversion Hnil; subst; clear Hnil
-  end.
-  match goal with
-  | Hkeyword : Derives phase1_surface_rules _
-      (ELiteral "Validated") _ _ ?keyword_tree,
-    Hopen : Derives phase1_surface_rules _
-      (ELiteral "[") _ _ ?open_tree,
-    Hreference : Derives phase1_surface_rules _
-      (ENonterminal "static_reference") _ _ ?reference_tree,
-    Hfirst_comma : Derives phase1_surface_rules _
-      (ELiteral ",") _ _ ?first_comma_tree,
-    Hfirst_expression : Derives phase1_surface_rules _
-      (ENonterminal "expression") _ _ ?first_expression_tree,
-    Hsecond_comma : Derives phase1_surface_rules _
-      (ELiteral ",") _ _ ?second_comma_tree,
-    Hsecond_expression : Derives phase1_surface_rules _
-      (ENonterminal "expression") _ _ ?second_expression_tree,
-    Hclose : Derives phase1_surface_rules _
-      (ELiteral "]") _ _ ?close_tree |- _ =>
-      destruct
-        (literal_derivation_is_exact
-          phase1_surface_rules _ "Validated" _ _ keyword_tree Hkeyword)
-        as [keyword_tail [_ [_ Hkeyword_tree]]];
-      destruct
-        (literal_derivation_is_exact
-          phase1_surface_rules _ "[" _ _ open_tree Hopen)
-        as [open_tail [_ [_ Hopen_tree]]];
-      destruct
-        (literal_derivation_is_exact
-          phase1_surface_rules _ "," _ _ first_comma_tree Hfirst_comma)
-        as [first_comma_tail [_ [_ Hfirst_comma_tree]]];
-      destruct
-        (literal_derivation_is_exact
-          phase1_surface_rules _ "," _ _ second_comma_tree Hsecond_comma)
-        as [second_comma_tail [_ [_ Hsecond_comma_tree]]];
-      destruct
-        (literal_derivation_is_exact
-          phase1_surface_rules _ "]" _ _ close_tree Hclose)
-        as [close_tail [_ [_ Hclose_tree]]];
-      destruct
-        (derives_nonterminal_exposes_body
-          phase1_surface_rules _ "static_reference"
-          _ _ reference_tree Hreference)
-        as [reference_body
-            [reference_subtree
-             [Hreference_lookup [Hreference_tree Hreference_body]]]];
-      destruct
-        (derives_nonterminal_exposes_body
-          phase1_surface_rules _ "expression"
-          _ _ first_expression_tree Hfirst_expression)
-        as [first_expression_body
-            [first_expression_subtree
-             [Hfirst_expression_lookup
-              [Hfirst_expression_tree Hfirst_expression_body]]]];
-      destruct
-        (derives_nonterminal_exposes_body
-          phase1_surface_rules _ "expression"
-          _ _ second_expression_tree Hsecond_expression)
-        as [second_expression_body
-            [second_expression_subtree
-             [Hsecond_expression_lookup
-              [Hsecond_expression_tree Hsecond_expression_body]]]];
-      let payload := constr:(
-        {| phase1_validated_payload_reference := reference_tree;
-           phase1_validated_payload_first_expression := first_expression_tree;
-           phase1_validated_payload_second_expression := second_expression_tree |}) in
-      assert (Hnormalize :
-        phase1_surface_normalize_validated_payload tree = Some payload);
-      [ rewrite Htree, Hkeyword_tree, Hopen_tree, Hreference_tree,
-          Hfirst_comma_tree, Hfirst_expression_tree,
-          Hsecond_comma_tree, Hsecond_expression_tree, Hclose_tree;
-        unfold phase1_surface_normalize_validated_payload,
-          phase1_surface_expect_sequence,
-          phase1_surface_shallow_exact8,
-          phase1_surface_expect_literal,
-          phase1_surface_expect_nonterminal;
-        cbn;
-        repeat rewrite String.eqb_refl;
-        reflexivity
-      | exists payload;
-        split;
-        [ exact Hnormalize
-        | eapply phase1_surface_normalize_validated_payload_round_trip;
-          exact Hnormalize ] ]
-  end.
+  destruct
+    (derives_sequence_cons_exposes_head_exact
+      phase1_surface_rules path 0
+      (ELiteral "Validated") [ ELiteral "["; ENonterminal "static_reference"; ELiteral ","; ENonterminal "expression"; ELiteral ","; ENonterminal "expression"; ELiteral "]" ]
+      input rest trees Hitems)
+    as [keyword_middle [keyword_tree [keyword_tail_trees
+      [Htrees [Hkeyword Hkeyword_tail]]]]].
+  destruct
+    (derives_sequence_cons_exposes_head_exact
+      phase1_surface_rules path 1
+      (ELiteral "[") [ ENonterminal "static_reference"; ELiteral ","; ENonterminal "expression"; ELiteral ","; ENonterminal "expression"; ELiteral "]" ]
+      keyword_middle rest keyword_tail_trees Hkeyword_tail)
+    as [open_middle [open_tree [open_tail_trees
+      [Hkeyword_tail_trees [Hopen Hopen_tail]]]]].
+  destruct
+    (derives_sequence_cons_exposes_head_exact
+      phase1_surface_rules path 2
+      (ENonterminal "static_reference") [ ELiteral ","; ENonterminal "expression"; ELiteral ","; ENonterminal "expression"; ELiteral "]" ]
+      open_middle rest open_tail_trees Hopen_tail)
+    as [reference_middle [reference_tree [reference_tail_trees
+      [Hopen_tail_trees [Hreference Hreference_tail]]]]].
+  destruct
+    (derives_sequence_cons_exposes_head_exact
+      phase1_surface_rules path 3
+      (ELiteral ",") [ ENonterminal "expression"; ELiteral ","; ENonterminal "expression"; ELiteral "]" ]
+      reference_middle rest reference_tail_trees Hreference_tail)
+    as [first_comma_middle [first_comma_tree [first_comma_tail_trees
+      [Hreference_tail_trees [Hfirst_comma Hfirst_comma_tail]]]]].
+  destruct
+    (derives_sequence_cons_exposes_head_exact
+      phase1_surface_rules path 4
+      (ENonterminal "expression") [ ELiteral ","; ENonterminal "expression"; ELiteral "]" ]
+      first_comma_middle rest first_comma_tail_trees Hfirst_comma_tail)
+    as [first_expression_middle [first_expression_tree [first_expression_tail_trees
+      [Hfirst_comma_tail_trees [Hfirst_expression Hfirst_expression_tail]]]]].
+  destruct
+    (derives_sequence_cons_exposes_head_exact
+      phase1_surface_rules path 5
+      (ELiteral ",") [ ENonterminal "expression"; ELiteral "]" ]
+      first_expression_middle rest first_expression_tail_trees Hfirst_expression_tail)
+    as [second_comma_middle [second_comma_tree [second_comma_tail_trees
+      [Hfirst_expression_tail_trees [Hsecond_comma Hsecond_comma_tail]]]]].
+  destruct
+    (derives_sequence_cons_exposes_head_exact
+      phase1_surface_rules path 6
+      (ENonterminal "expression") [ ELiteral "]" ]
+      second_comma_middle rest second_comma_tail_trees Hsecond_comma_tail)
+    as [second_expression_middle [second_expression_tree [second_expression_tail_trees
+      [Hsecond_comma_tail_trees [Hsecond_expression Hsecond_expression_tail]]]]].
+  destruct
+    (derives_sequence_cons_exposes_head_exact
+      phase1_surface_rules path 7
+      (ELiteral "]") []
+      second_expression_middle rest second_expression_tail_trees Hsecond_expression_tail)
+    as [close_middle [close_tree [end_trees
+      [Hsecond_expression_tail_trees [Hclose Hend]]]]].
+  inversion Hend; subst end_trees.
+  rewrite Htrees, Hkeyword_tail_trees, Hopen_tail_trees,
+    Hreference_tail_trees, Hfirst_comma_tail_trees,
+    Hfirst_expression_tail_trees, Hsecond_comma_tail_trees,
+    Hsecond_expression_tail_trees in Htree.
+  destruct
+    (literal_derivation_is_exact
+      phase1_surface_rules _ "Validated" _ _ keyword_tree Hkeyword)
+    as [keyword_tail [_ [_ Hkeyword_tree]]].
+  destruct
+    (literal_derivation_is_exact
+      phase1_surface_rules _ "[" _ _ open_tree Hopen)
+    as [open_tail [_ [_ Hopen_tree]]].
+  destruct
+    (literal_derivation_is_exact
+      phase1_surface_rules _ "," _ _ first_comma_tree Hfirst_comma)
+    as [first_comma_tail [_ [_ Hfirst_comma_tree]]].
+  destruct
+    (literal_derivation_is_exact
+      phase1_surface_rules _ "," _ _ second_comma_tree Hsecond_comma)
+    as [second_comma_tail [_ [_ Hsecond_comma_tree]]].
+  destruct
+    (literal_derivation_is_exact
+      phase1_surface_rules _ "]" _ _ close_tree Hclose)
+    as [close_tail [_ [_ Hclose_tree]]].
+  destruct
+    (derives_nonterminal_exposes_body
+      phase1_surface_rules _ "static_reference"
+      _ _ reference_tree Hreference)
+    as [reference_body
+        [reference_subtree
+         [Hreference_lookup [Hreference_tree Hreference_body]]]].
+  destruct
+    (derives_nonterminal_exposes_body
+      phase1_surface_rules _ "expression"
+      _ _ first_expression_tree Hfirst_expression)
+    as [first_expression_body
+        [first_expression_subtree
+         [Hfirst_expression_lookup
+          [Hfirst_expression_tree Hfirst_expression_body]]]].
+  destruct
+    (derives_nonterminal_exposes_body
+      phase1_surface_rules _ "expression"
+      _ _ second_expression_tree Hsecond_expression)
+    as [second_expression_body
+        [second_expression_subtree
+         [Hsecond_expression_lookup
+          [Hsecond_expression_tree Hsecond_expression_body]]]].
+  pose (payload :=
+    {| phase1_validated_payload_reference := reference_tree;
+       phase1_validated_payload_first_expression := first_expression_tree;
+       phase1_validated_payload_second_expression := second_expression_tree |}).
+  assert (Hnormalize :
+    phase1_surface_normalize_validated_payload tree = Some payload).
+  {
+    unfold payload.
+    rewrite Htree, Hkeyword_tree, Hopen_tree, Hreference_tree,
+      Hfirst_comma_tree, Hfirst_expression_tree,
+      Hsecond_comma_tree, Hsecond_expression_tree, Hclose_tree.
+    unfold phase1_surface_normalize_validated_payload,
+      phase1_surface_expect_sequence,
+      phase1_surface_shallow_exact8,
+      phase1_surface_expect_literal,
+      phase1_surface_expect_nonterminal.
+    cbn.
+    repeat rewrite String.eqb_refl.
+    reflexivity.
+  }
+  exists payload.
+  split.
+  - exact Hnormalize.
+  - eapply phase1_surface_normalize_validated_payload_round_trip.
+    exact Hnormalize.
 Qed.
 
 Lemma phase1_surface_normalize_shallow_compound_nonreference_total_from_derivation :
@@ -400,68 +480,68 @@ Proof.
     [| | | |spelling |spelling |float_value |tag selected].
   - exists type_value, Phase1PrimitiveUnitType,
       (Phase1ShallowPriorNonreferenceType Phase1PrimitiveUnitType).
-    repeat split; try assumption; try reflexivity.
-    cbn. exact Hprimitive_tree.
+    repeat split; try assumption; try reflexivity;
+    try (cbn; exact Hprimitive_tree).
   - exists type_value, Phase1PrimitiveBoolType,
       (Phase1ShallowPriorNonreferenceType Phase1PrimitiveBoolType).
-    repeat split; try assumption; try reflexivity.
-    cbn. exact Hprimitive_tree.
+    repeat split; try assumption; try reflexivity;
+    try (cbn; exact Hprimitive_tree).
   - exists type_value, Phase1PrimitiveCharType,
       (Phase1ShallowPriorNonreferenceType Phase1PrimitiveCharType).
-    repeat split; try assumption; try reflexivity.
-    cbn. exact Hprimitive_tree.
+    repeat split; try assumption; try reflexivity;
+    try (cbn; exact Hprimitive_tree).
   - exists type_value, Phase1PrimitiveStringType,
       (Phase1ShallowPriorNonreferenceType Phase1PrimitiveStringType).
-    repeat split; try assumption; try reflexivity.
-    cbn. exact Hprimitive_tree.
+    repeat split; try assumption; try reflexivity;
+    try (cbn; exact Hprimitive_tree).
   - exists type_value, (Phase1PrimitiveUintType spelling),
       (Phase1ShallowPriorNonreferenceType (Phase1PrimitiveUintType spelling)).
-    repeat split; try assumption; try reflexivity.
-    cbn. exact Hprimitive_tree.
+    repeat split; try assumption; try reflexivity;
+    try (cbn; exact Hprimitive_tree).
   - exists type_value, (Phase1PrimitiveSintType spelling),
       (Phase1ShallowPriorNonreferenceType (Phase1PrimitiveSintType spelling)).
-    repeat split; try assumption; try reflexivity.
-    cbn. exact Hprimitive_tree.
+    repeat split; try assumption; try reflexivity;
+    try (cbn; exact Hprimitive_tree).
   - exists type_value, (Phase1PrimitiveFloatType float_value),
       (Phase1ShallowPriorNonreferenceType (Phase1PrimitiveFloatType float_value)).
-    repeat split; try assumption; try reflexivity.
-    cbn. exact Hprimitive_tree.
+    repeat split; try assumption; try reflexivity;
+    try (cbn; exact Hprimitive_tree).
   - destruct tag.
     + exists type_value,
         (Phase1OpaqueNonreferenceType Phase1UnitType selected),
         (Phase1ShallowOpaqueNonreferenceType Phase1UnitType selected).
-      repeat split; try assumption; try reflexivity.
-      cbn. exact Hprimitive_tree.
+      repeat split; try assumption; try reflexivity;
+      try (cbn; exact Hprimitive_tree).
     + exists type_value,
         (Phase1OpaqueNonreferenceType Phase1BoolType selected),
         (Phase1ShallowOpaqueNonreferenceType Phase1BoolType selected).
-      repeat split; try assumption; try reflexivity.
-      cbn. exact Hprimitive_tree.
+      repeat split; try assumption; try reflexivity;
+      try (cbn; exact Hprimitive_tree).
     + exists type_value,
         (Phase1OpaqueNonreferenceType Phase1CharType selected),
         (Phase1ShallowOpaqueNonreferenceType Phase1CharType selected).
-      repeat split; try assumption; try reflexivity.
-      cbn. exact Hprimitive_tree.
+      repeat split; try assumption; try reflexivity;
+      try (cbn; exact Hprimitive_tree).
     + exists type_value,
         (Phase1OpaqueNonreferenceType Phase1StringType selected),
         (Phase1ShallowOpaqueNonreferenceType Phase1StringType selected).
-      repeat split; try assumption; try reflexivity.
-      cbn. exact Hprimitive_tree.
+      repeat split; try assumption; try reflexivity;
+      try (cbn; exact Hprimitive_tree).
     + exists type_value,
         (Phase1OpaqueNonreferenceType Phase1UintType selected),
         (Phase1ShallowOpaqueNonreferenceType Phase1UintType selected).
-      repeat split; try assumption; try reflexivity.
-      cbn. exact Hprimitive_tree.
+      repeat split; try assumption; try reflexivity;
+      try (cbn; exact Hprimitive_tree).
     + exists type_value,
         (Phase1OpaqueNonreferenceType Phase1SintType selected),
         (Phase1ShallowOpaqueNonreferenceType Phase1SintType selected).
-      repeat split; try assumption; try reflexivity.
-      cbn. exact Hprimitive_tree.
+      repeat split; try assumption; try reflexivity;
+      try (cbn; exact Hprimitive_tree).
     + exists type_value,
         (Phase1OpaqueNonreferenceType Phase1FloatType selected),
         (Phase1ShallowOpaqueNonreferenceType Phase1FloatType selected).
-      repeat split; try assumption; try reflexivity.
-      cbn. exact Hprimitive_tree.
+      repeat split; try assumption; try reflexivity;
+      try (cbn; exact Hprimitive_tree).
     + assert (Hshape :
         PTNonterminal "nonreference_type_expression"
           (PTAlternative 7 selected) =
@@ -472,13 +552,16 @@ Proof.
         - exact Hprimitive_tree.
         - rewrite Htree, Hsubtree. reflexivity.
       }
-      inversion Hshape; subst.
+      inversion Hshape; subst index branch_tree.
       cbn in Hnth.
       inversion Hnth; subst item.
       change
-        (Derives phase1_surface_rules _
+        (Derives phase1_surface_rules
+          (descend
+            (descend path (AtNonterminal "nonreference_type_expression"))
+            (AtAlternative 7))
           phase1_surface_bytes_payload_expression_for_totality
-          _ _ selected) in Hbranch.
+          input rest selected) in Hbranch.
       destruct
         (phase1_surface_normalize_bytes_payload_total_from_derivation
           _ _ _ selected Hbranch)
@@ -509,7 +592,7 @@ Proof.
         - exact Hprimitive_tree.
         - rewrite Htree, Hsubtree. reflexivity.
       }
-      inversion Hshape; subst.
+      inversion Hshape; subst index branch_tree.
       cbn in Hnth.
       inversion Hnth; subst item.
       destruct
@@ -542,7 +625,7 @@ Proof.
         - exact Hprimitive_tree.
         - rewrite Htree, Hsubtree. reflexivity.
       }
-      inversion Hshape; subst.
+      inversion Hshape; subst index branch_tree.
       cbn in Hnth.
       inversion Hnth; subst item.
       destruct
@@ -575,13 +658,16 @@ Proof.
         - exact Hprimitive_tree.
         - rewrite Htree, Hsubtree. reflexivity.
       }
-      inversion Hshape; subst.
+      inversion Hshape; subst index branch_tree.
       cbn in Hnth.
       inversion Hnth; subst item.
       change
-        (Derives phase1_surface_rules _
+        (Derives phase1_surface_rules
+          (descend
+            (descend path (AtNonterminal "nonreference_type_expression"))
+            (AtAlternative 10))
           phase1_surface_validated_payload_expression_for_totality
-          _ _ selected) in Hbranch.
+          input rest selected) in Hbranch.
       destruct
         (phase1_surface_normalize_validated_payload_total_from_derivation
           _ _ _ selected Hbranch)
@@ -605,13 +691,13 @@ Proof.
     + exists type_value,
         (Phase1OpaqueNonreferenceType Phase1RefinementType selected),
         (Phase1ShallowOpaqueNonreferenceType Phase1RefinementType selected).
-      repeat split; try assumption; try reflexivity.
-      cbn. exact Hprimitive_tree.
+      repeat split; try assumption; try reflexivity;
+      try (cbn; exact Hprimitive_tree).
     + exists type_value,
         (Phase1OpaqueNonreferenceType Phase1TupleType selected),
         (Phase1ShallowOpaqueNonreferenceType Phase1TupleType selected).
-      repeat split; try assumption; try reflexivity.
-      cbn. exact Hprimitive_tree.
+      repeat split; try assumption; try reflexivity;
+      try (cbn; exact Hprimitive_tree).
 Qed.
 
 Theorem phase1_surface_normalize_shallow_compound_type_tree_total_from_derivation :
@@ -647,9 +733,9 @@ Proof.
         input rest selected Hselected)
       as [type_value [primitive [refined
           [Houter [Hprimitive [Hshallow Hround]]]]]].
-    let outer_type := constr:(Phase1NonreferenceTypeSpine type_value) in
-    let primitive_type := constr:(Phase1PrimitiveNonreferenceTypeSpine primitive) in
-    let result := constr:(Phase1ShallowCompoundNonreferenceTypeSpine refined) in
+    pose (outer_type := Phase1NonreferenceTypeSpine type_value).
+    pose (primitive_type := Phase1PrimitiveNonreferenceTypeSpine primitive).
+    pose (result := Phase1ShallowCompoundNonreferenceTypeSpine refined).
     assert (Htype :
       phase1_surface_normalize_type_spine tree = Some outer_type).
     {
@@ -658,7 +744,6 @@ Proof.
         phase1_surface_expect_nonterminal,
         phase1_surface_expect_alternative.
       cbn.
-      rewrite String.eqb_refl.
       rewrite Houter.
       reflexivity.
     }
@@ -688,9 +773,9 @@ Proof.
   - destruct index as [|index].
     + cbn in Hnth.
       inversion Hnth; subst item.
-      let outer_type := constr:(Phase1NamedTypeSpine selected) in
-      let primitive_type := constr:(Phase1PrimitiveNamedTypeSpine selected) in
-      let result := constr:(Phase1ShallowCompoundNamedTypeSpine selected) in
+      pose (outer_type := Phase1NamedTypeSpine selected).
+      pose (primitive_type := Phase1PrimitiveNamedTypeSpine selected).
+      pose (result := Phase1ShallowCompoundNamedTypeSpine selected).
       assert (Htype :
         phase1_surface_normalize_type_spine tree = Some outer_type).
       {
@@ -699,7 +784,6 @@ Proof.
           phase1_surface_expect_nonterminal,
           phase1_surface_expect_alternative.
         cbn.
-        rewrite String.eqb_refl.
         reflexivity.
       }
       assert (Hprimitive_type :
@@ -721,6 +805,5 @@ Proof.
       * exact Hresult.
       * eapply phase1_surface_normalize_shallow_compound_type_tree_round_trip.
         exact Hresult.
-    + cbn in Hnth.
-      discriminate Hnth.
+    + destruct index; cbn in Hnth; discriminate Hnth.
 Qed.

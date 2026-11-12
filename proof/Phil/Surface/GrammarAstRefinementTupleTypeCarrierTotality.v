@@ -1,6 +1,14 @@
 From Stdlib Require Import Lists.List Strings.String.
 
 From Phil.Surface Require Import
+  GrammarDerivation
+  GrammarDeterminacySimpleResolverSoundness
+  GrammarAstTypeSpine
+  GrammarAstTopLevelSpine
+  GrammarAstPrimitiveTypePayloadSpine
+  GrammarAstShallowCompoundTypePayloadSpine
+  GrammarAstShallowCompoundTypePayloadTotality
+  GrammarAstRefinementTupleTypePayloadSpine
   GrammarAstRefinementTupleTypePayloadTotality
   GrammarAstTypeTotality.
 
@@ -48,89 +56,90 @@ Proof.
     |tag selected].
   - exists type_value, primitive,
       (Phase1ShallowPriorNonreferenceType prior),
-      (Phase1RefinementTuplePriorNonreferenceType prior).
+      (Phase1RefinementTuplePriorNonreferenceType
+        (Phase1ShallowPriorNonreferenceType prior)).
     repeat split; try assumption; try reflexivity.
-    cbn. exact Hshallow_tree.
+    all: cbn; exact Hshallow_tree.
   - exists type_value, primitive,
       (Phase1ShallowBytesType index_expression),
       (Phase1RefinementTuplePriorNonreferenceType
         (Phase1ShallowBytesType index_expression)).
     repeat split; try assumption; try reflexivity.
-    cbn. exact Hshallow_tree.
+    all: cbn; exact Hshallow_tree.
   - exists type_value, primitive,
       (Phase1ShallowFrameType reference_tree),
       (Phase1RefinementTuplePriorNonreferenceType
         (Phase1ShallowFrameType reference_tree)).
     repeat split; try assumption; try reflexivity.
-    cbn. exact Hshallow_tree.
+    all: cbn; exact Hshallow_tree.
   - exists type_value, primitive,
       (Phase1ShallowProofType proposition_tree),
       (Phase1RefinementTuplePriorNonreferenceType
         (Phase1ShallowProofType proposition_tree)).
     repeat split; try assumption; try reflexivity.
-    cbn. exact Hshallow_tree.
+    all: cbn; exact Hshallow_tree.
   - exists type_value, primitive,
       (Phase1ShallowValidatedType payload),
       (Phase1RefinementTuplePriorNonreferenceType
         (Phase1ShallowValidatedType payload)).
     repeat split; try assumption; try reflexivity.
-    cbn. exact Hshallow_tree.
+    all: cbn; exact Hshallow_tree.
   - destruct tag.
     + exists type_value, primitive,
         (Phase1ShallowOpaqueNonreferenceType Phase1UnitType selected),
         (Phase1RefinementTupleOpaqueNonreferenceType Phase1UnitType selected).
       repeat split; try assumption; try reflexivity.
-      cbn. exact Hshallow_tree.
+      all: cbn; exact Hshallow_tree.
     + exists type_value, primitive,
         (Phase1ShallowOpaqueNonreferenceType Phase1BoolType selected),
         (Phase1RefinementTupleOpaqueNonreferenceType Phase1BoolType selected).
       repeat split; try assumption; try reflexivity.
-      cbn. exact Hshallow_tree.
+      all: cbn; exact Hshallow_tree.
     + exists type_value, primitive,
         (Phase1ShallowOpaqueNonreferenceType Phase1CharType selected),
         (Phase1RefinementTupleOpaqueNonreferenceType Phase1CharType selected).
       repeat split; try assumption; try reflexivity.
-      cbn. exact Hshallow_tree.
+      all: cbn; exact Hshallow_tree.
     + exists type_value, primitive,
         (Phase1ShallowOpaqueNonreferenceType Phase1StringType selected),
         (Phase1RefinementTupleOpaqueNonreferenceType Phase1StringType selected).
       repeat split; try assumption; try reflexivity.
-      cbn. exact Hshallow_tree.
+      all: cbn; exact Hshallow_tree.
     + exists type_value, primitive,
         (Phase1ShallowOpaqueNonreferenceType Phase1UintType selected),
         (Phase1RefinementTupleOpaqueNonreferenceType Phase1UintType selected).
       repeat split; try assumption; try reflexivity.
-      cbn. exact Hshallow_tree.
+      all: cbn; exact Hshallow_tree.
     + exists type_value, primitive,
         (Phase1ShallowOpaqueNonreferenceType Phase1SintType selected),
         (Phase1RefinementTupleOpaqueNonreferenceType Phase1SintType selected).
       repeat split; try assumption; try reflexivity.
-      cbn. exact Hshallow_tree.
+      all: cbn; exact Hshallow_tree.
     + exists type_value, primitive,
         (Phase1ShallowOpaqueNonreferenceType Phase1FloatType selected),
         (Phase1RefinementTupleOpaqueNonreferenceType Phase1FloatType selected).
       repeat split; try assumption; try reflexivity.
-      cbn. exact Hshallow_tree.
+      all: cbn; exact Hshallow_tree.
     + exists type_value, primitive,
         (Phase1ShallowOpaqueNonreferenceType Phase1BytesType selected),
         (Phase1RefinementTupleOpaqueNonreferenceType Phase1BytesType selected).
       repeat split; try assumption; try reflexivity.
-      cbn. exact Hshallow_tree.
+      all: cbn; exact Hshallow_tree.
     + exists type_value, primitive,
         (Phase1ShallowOpaqueNonreferenceType Phase1FrameType selected),
         (Phase1RefinementTupleOpaqueNonreferenceType Phase1FrameType selected).
       repeat split; try assumption; try reflexivity.
-      cbn. exact Hshallow_tree.
+      all: cbn; exact Hshallow_tree.
     + exists type_value, primitive,
         (Phase1ShallowOpaqueNonreferenceType Phase1ProofType selected),
         (Phase1RefinementTupleOpaqueNonreferenceType Phase1ProofType selected).
       repeat split; try assumption; try reflexivity.
-      cbn. exact Hshallow_tree.
+      all: cbn; exact Hshallow_tree.
     + exists type_value, primitive,
         (Phase1ShallowOpaqueNonreferenceType Phase1ValidatedType selected),
         (Phase1RefinementTupleOpaqueNonreferenceType Phase1ValidatedType selected).
       repeat split; try assumption; try reflexivity.
-      cbn. exact Hshallow_tree.
+      all: cbn; exact Hshallow_tree.
     + assert (Hshape :
         PTNonterminal "nonreference_type_expression"
           (PTAlternative 11 selected) =
@@ -141,7 +150,7 @@ Proof.
         - exact Hshallow_tree.
         - rewrite Htree, Hsubtree. reflexivity.
       }
-      inversion Hshape; subst.
+      inversion Hshape; subst index branch_tree.
       cbn in Hnth.
       inversion Hnth; subst item.
       destruct
@@ -174,7 +183,7 @@ Proof.
         - exact Hshallow_tree.
         - rewrite Htree, Hsubtree. reflexivity.
       }
-      inversion Hshape; subst.
+      inversion Hshape; subst index branch_tree.
       cbn in Hnth.
       inversion Hnth; subst item.
       destruct
@@ -232,10 +241,10 @@ Proof.
         input rest selected Hselected)
       as [type_value [primitive [shallow [refined
           [Houter [Hprimitive [Hshallow [Hrefine Hround]]]]]]]].
-    let outer_type := constr:(Phase1NonreferenceTypeSpine type_value) in
-    let primitive_type := constr:(Phase1PrimitiveNonreferenceTypeSpine primitive) in
-    let shallow_type := constr:(Phase1ShallowCompoundNonreferenceTypeSpine shallow) in
-    let result := constr:(Phase1RefinementTupleNonreferenceTypeSpine refined) in
+    pose (outer_type := Phase1NonreferenceTypeSpine type_value).
+    pose (primitive_type := Phase1PrimitiveNonreferenceTypeSpine primitive).
+    pose (shallow_type := Phase1ShallowCompoundNonreferenceTypeSpine shallow).
+    pose (result := Phase1RefinementTupleNonreferenceTypeSpine refined).
     assert (Htype :
       phase1_surface_normalize_type_spine tree = Some outer_type).
     {
@@ -244,7 +253,6 @@ Proof.
         phase1_surface_expect_nonterminal,
         phase1_surface_expect_alternative.
       cbn.
-      rewrite String.eqb_refl.
       rewrite Houter.
       reflexivity.
     }
@@ -283,10 +291,10 @@ Proof.
   - destruct index as [|index].
     + cbn in Hnth.
       inversion Hnth; subst item.
-      let outer_type := constr:(Phase1NamedTypeSpine selected) in
-      let primitive_type := constr:(Phase1PrimitiveNamedTypeSpine selected) in
-      let shallow_type := constr:(Phase1ShallowCompoundNamedTypeSpine selected) in
-      let result := constr:(Phase1RefinementTupleNamedTypeSpine selected) in
+      pose (outer_type := Phase1NamedTypeSpine selected).
+      pose (primitive_type := Phase1PrimitiveNamedTypeSpine selected).
+      pose (shallow_type := Phase1ShallowCompoundNamedTypeSpine selected).
+      pose (result := Phase1RefinementTupleNamedTypeSpine selected).
       assert (Htype :
         phase1_surface_normalize_type_spine tree = Some outer_type).
       {
@@ -295,7 +303,6 @@ Proof.
           phase1_surface_expect_nonterminal,
           phase1_surface_expect_alternative.
         cbn.
-        rewrite String.eqb_refl.
         reflexivity.
       }
       assert (Hprimitive_type :
@@ -324,6 +331,5 @@ Proof.
       * exact Hresult.
       * eapply phase1_surface_normalize_refinement_tuple_type_tree_round_trip.
         exact Hresult.
-    + cbn in Hnth.
-      discriminate Hnth.
+    + destruct index; cbn in Hnth; discriminate Hnth.
 Qed.

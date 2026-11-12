@@ -1,7 +1,13 @@
 From Stdlib Require Import Lists.List Strings.String.
 
 From Phil.Surface Require Import
+  GrammarDerivation
+  GrammarAstSourceHeader
+  GrammarAstTopLevelSpine
+  GrammarAstGenericRequirementsSpine
   GrammarAstGenericRequirementPropositionSpine
+  GrammarAstPropositionSpine
+  GrammarAstStaticTypeArgumentCarrierSpine
   GrammarAstEffectSetTermArgumentsSpine.
 
 Import ListNotations.
@@ -56,8 +62,8 @@ Proof.
   destruct (phase1_surface_expect_sequence tree)
     as [items |] eqn:Hsequence; try discriminate Hnormalize.
   destruct (phase1_surface_exact5 items)
-    as [[[[keyword_tree actual_name_tree] within_tree] effects_tree]
-          terminator_tree |]
+    as [[[[[keyword_tree actual_name_tree] within_tree] effects_tree]
+          terminator_tree] |]
       eqn:Hitems; try discriminate Hnormalize.
   destruct (phase1_surface_expect_literal "effects" keyword_tree)
     as [[] |] eqn:Hkeyword; try discriminate Hnormalize.
@@ -291,7 +297,7 @@ Proof.
       try discriminate Hnormalize.
     inversion Hnormalize; subst refined.
     cbn.
-    rewrite
+    rewrite <-
       (phase1_surface_normalize_effects_requirement_payload_round_trip
         selected name_tree effects Heffects).
     reflexivity.

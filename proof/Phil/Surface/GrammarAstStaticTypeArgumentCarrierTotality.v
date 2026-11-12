@@ -1,9 +1,26 @@
 From Stdlib Require Import Lists.List Strings.String.
 
 From Phil.Surface Require Import
+  GrammarDerivation
+  GrammarAstSourceHeader
+  GrammarAstTopLevelSpine
+  GrammarAstSourceHeaderTotality
+  GrammarAstGenericRequirementsSpine
+  GrammarAstGenericRequirementsTotality
+  GrammarAstTypeSpine
+  GrammarAstPrimitiveTypePayloadSpine
+  GrammarAstShallowCompoundTypePayloadSpine
+  GrammarAstRefinementTupleTypePayloadSpine
+  GrammarAstTypeTotality
+  GrammarAstRefinementTupleTypeCarrierTotality
+  GrammarDeterminacySimpleResolverSoundness
   GrammarAstStaticTypeArgumentCarrierSpine
+  GrammarAstStaticReferenceSpine
+  GrammarAstStaticReferenceTotality
+  GrammarAstStaticTypeArgumentPayloadSpine
+  GrammarAstStaticArgumentsSpine
   GrammarAstStaticTypeArgumentPayloadTotality
-  GrammarAstStaticArgumentsCarrierTotality.
+  GrammarAstStaticArgumentsTotality.
 
 Import ListNotations.
 Open Scope string_scope.
@@ -59,19 +76,15 @@ Proof.
       ]
       input rest tree Hderive)
     as [trees [Htree Hitems]].
-  repeat match goal with
-  | Hseq : DerivesSequence phase1_surface_rules _ _ (_ :: _) _ _ _ |- _ =>
-      inversion Hseq; subst; clear Hseq
-  end.
-  match goal with
-  | Hnil : DerivesSequence phase1_surface_rules _ _ [] _ _ _ |- _ =>
-      inversion Hnil; subst; clear Hnil
-  end.
-  match goal with
-  | Hcomma : Derives phase1_surface_rules _
-      (ELiteral ",") _ _ ?comma_tree,
-    Hargument : Derives phase1_surface_rules _
-      (ENonterminal "static_argument") _ _ ?argument_tree |- _ =>
+  revert Htree.
+  inversion Hitems as
+    [| path0 index0 item0 items0 input0 middle0 rest0
+       comma_tree tail1 Hcomma Htail1]; subst.
+  inversion Htail1 as
+    [| path1 index1 item1 items1 input1 middle1 rest1
+       argument_tree nil_trees Hargument Hnil]; subst.
+  inversion Hnil; subst.
+  intros Htree.
       destruct
         (literal_derivation_is_exact
           phase1_surface_rules _ "," _ _ comma_tree Hcomma)
@@ -97,8 +110,7 @@ Proof.
           [ exact Hrefined
           | unfold phase1_surface_static_type_argument_suffix_tree;
             rewrite Htree, Hcomma_tree, Hrefined_tree;
-            reflexivity ] ] ]
-  end.
+            reflexivity ] ] ].
 Qed.
 
 Lemma phase1_surface_normalize_static_type_argument_suffixes_layers_total_from_repetition :
@@ -155,20 +167,15 @@ Proof.
       ]
       input rest tree Hderive)
     as [trees [Htree Hitems]].
-  repeat match goal with
-  | Hseq : DerivesSequence phase1_surface_rules _ _ (_ :: _) _ _ _ |- _ =>
-      inversion Hseq; subst; clear Hseq
-  end.
-  match goal with
-  | Hnil : DerivesSequence phase1_surface_rules _ _ [] _ _ _ |- _ =>
-      inversion Hnil; subst; clear Hnil
-  end.
-  match goal with
-  | Hfirst : Derives phase1_surface_rules _
-      (ENonterminal "static_argument") _ _ ?first_tree,
-    Hrest : Derives phase1_surface_rules _
-      (ERepetition phase1_surface_static_argument_suffix_expression_for_totality)
-      _ _ ?rest_tree |- _ =>
+  revert Htree.
+  inversion Hitems as
+    [| path0 index0 item0 items0 input0 middle0 rest0
+       first_tree tail1 Hfirst Htail1]; subst.
+  inversion Htail1 as
+    [| path1 index1 item1 items1 input1 middle1 rest1
+       rest_tree nil_trees Hrest Hnil]; subst.
+  inversion Hnil; subst.
+  intros Htree.
       destruct
         (phase1_surface_normalize_static_type_argument_layers_total_from_derivation
           _ _ _ first_tree Hfirst)
@@ -203,7 +210,9 @@ Proof.
       | assert (Hrefined :
           phase1_surface_normalize_static_type_argument_list_spine base =
             Some refined);
-        [ cbn;
+        [ unfold phase1_surface_normalize_static_type_argument_list_spine;
+          cbn [phase1_static_argument_list_spine_first
+            phase1_static_argument_list_spine_rest];
           rewrite Hrefined_first, Hrefined_rest;
           reflexivity
         | exists base, refined;
@@ -216,8 +225,7 @@ Proof.
                   phase1_surface_normalize_static_type_argument_list_spine_round_trip;
                 exact Hrefined
               | eapply phase1_surface_normalize_static_argument_list_spine_round_trip;
-                exact Hbase ] ] ] ] ]
-  end.
+                exact Hbase ] ] ] ] ].
 Qed.
 
 Lemma phase1_surface_normalize_optional_static_type_argument_list_layers_total_from_derivation :
@@ -308,22 +316,18 @@ Proof.
       ]
       input rest subtree Hbody)
     as [trees [Hsubtree Hitems]].
-  repeat match goal with
-  | Hseq : DerivesSequence phase1_surface_rules _ _ (_ :: _) _ _ _ |- _ =>
-      inversion Hseq; subst; clear Hseq
-  end.
-  match goal with
-  | Hnil : DerivesSequence phase1_surface_rules _ _ [] _ _ _ |- _ =>
-      inversion Hnil; subst; clear Hnil
-  end.
-  match goal with
-  | Hopen : Derives phase1_surface_rules _
-      (ELiteral "[") _ _ ?open_tree,
-    Harguments : Derives phase1_surface_rules _
-      phase1_surface_optional_static_argument_list_expression_for_totality
-      _ _ ?arguments_tree,
-    Hclose : Derives phase1_surface_rules _
-      (ELiteral "]") _ _ ?close_tree |- _ =>
+  revert Htree Hsubtree.
+  inversion Hitems as
+    [| path0 index0 item0 items0 input0 middle0 rest0
+       open_tree tail1 Hopen Htail1]; subst.
+  inversion Htail1 as
+    [| path1 index1 item1 items1 input1 middle1 rest1
+       arguments_tree tail2 Harguments Htail2]; subst.
+  inversion Htail2 as
+    [| path2 index2 item2 items2 input2 middle2 rest2
+       close_tree nil_trees Hclose Hnil]; subst.
+  inversion Hnil; subst.
+  intros Htree Hsubtree.
       destruct
         (literal_derivation_is_exact
           phase1_surface_rules _ "[" _ _ open_tree Hopen)
@@ -355,7 +359,8 @@ Proof.
         reflexivity
       | assert (Hrefined :
           phase1_surface_normalize_static_type_arguments_spine base = Some refined);
-        [ cbn;
+        [ unfold phase1_surface_normalize_static_type_arguments_spine;
+          cbn [phase1_static_arguments_spine_items];
           rewrite Hrefined_items;
           reflexivity
         | exists base, refined;
@@ -368,8 +373,7 @@ Proof.
                   phase1_surface_normalize_static_type_arguments_spine_round_trip;
                 exact Hrefined
               | eapply phase1_surface_normalize_static_arguments_spine_round_trip;
-                exact Hbase ] ] ] ] ]
-  end.
+                exact Hbase ] ] ] ] ].
 Qed.
 
 Lemma phase1_surface_normalize_static_type_arguments_reference_layers_total_from_derivation :
@@ -400,6 +404,7 @@ Proof.
       ]
       input rest subtree Hbody)
     as [trees [Hsubtree Hitems]].
+  revert Htree Hsubtree.
   inversion Hitems as
     [| path0 index0 item0 items0 input0 middle0 rest0
        name_tree tail1 Hname Htail1]; subst.
@@ -407,6 +412,7 @@ Proof.
     [| path1 index1 item1 items1 input1 middle1 rest1
        arguments_tree nil_trees Harguments Hnil]; subst.
   inversion Hnil; subst.
+  intros Htree Hsubtree.
   destruct
     (phase1_surface_normalize_qualified_name_total_from_derivation
       _ _ _ name_tree Hname)
@@ -417,15 +423,15 @@ Proof.
       (ENonterminal "static_arguments")
       _ _ arguments_tree Harguments)
     as [[_ Hnone] | [arguments_body [Hsome Harguments_body]]].
-  - let base := constr:(
+  - pose (base :=
       {| phase1_static_reference_spine_name := name;
-         phase1_static_reference_spine_arguments := None |}) in
-    let middle := constr:(
+         phase1_static_reference_spine_arguments := None |}).
+    pose (middle :=
       {| phase1_static_arguments_reference_spine_name := name;
-         phase1_static_arguments_reference_spine_arguments := None |}) in
-    let refined := constr:(
+         phase1_static_arguments_reference_spine_arguments := None |}).
+    pose (refined :=
       {| phase1_static_type_arguments_reference_spine_name := name;
-         phase1_static_type_arguments_reference_spine_arguments := None |}) in
+         phase1_static_type_arguments_reference_spine_arguments := None |}).
     assert (Hbase :
       phase1_surface_normalize_static_reference_spine tree = Some base).
     {
@@ -437,7 +443,7 @@ Proof.
         phase1_surface_normalize_optional_static_arguments,
         phase1_surface_expect_optional.
       cbn.
-      rewrite String.eqb_refl.
+      repeat rewrite String.eqb_refl.
       rewrite Hname_normalize.
       reflexivity.
     }
@@ -470,17 +476,17 @@ Proof.
         _ _ _ arguments_body Harguments_body)
       as [base_arguments [refined_arguments
           [Hbase_arguments [Hrefined_arguments Harguments_round_trip]]]].
-    let base := constr:(
+    pose (base :=
       {| phase1_static_reference_spine_name := name;
-         phase1_static_reference_spine_arguments := Some arguments_body |}) in
-    let middle := constr:(
+         phase1_static_reference_spine_arguments := Some arguments_body |}).
+    pose (middle :=
       {| phase1_static_arguments_reference_spine_name := name;
          phase1_static_arguments_reference_spine_arguments :=
-           Some base_arguments |}) in
-    let refined := constr:(
+           Some base_arguments |}).
+    pose (refined :=
       {| phase1_static_type_arguments_reference_spine_name := name;
          phase1_static_type_arguments_reference_spine_arguments :=
-           Some refined_arguments |}) in
+           Some refined_arguments |}).
     assert (Hbase :
       phase1_surface_normalize_static_reference_spine tree = Some base).
     {
@@ -492,7 +498,7 @@ Proof.
         phase1_surface_normalize_optional_static_arguments,
         phase1_surface_expect_optional.
       cbn.
-      rewrite String.eqb_refl.
+      repeat rewrite String.eqb_refl.
       rewrite Hname_normalize.
       unfold phase1_surface_validate_named_node in Hvalidate |- *.
       rewrite Hvalidate.
@@ -562,13 +568,13 @@ Proof.
         input rest selected Hselected)
       as [type_value [primitive [shallow [nonreference
           [Houter [Hprimitive [Hshallow [Hrefine Hround]]]]]]]].
-    let outer_type := constr:(Phase1NonreferenceTypeSpine type_value) in
-    let primitive_type := constr:(Phase1PrimitiveNonreferenceTypeSpine primitive) in
-    let shallow_type := constr:(Phase1ShallowCompoundNonreferenceTypeSpine shallow) in
-    let refinement_type := constr:(Phase1RefinementTupleNonreferenceTypeSpine nonreference) in
-    let static_reference_type := constr:(Phase1StaticReferenceNonreferenceType nonreference) in
-    let static_arguments_type := constr:(Phase1StaticArgumentsNonreferenceType nonreference) in
-    let result := constr:(Phase1StaticTypeArgumentsNonreferenceType nonreference) in
+    pose (outer_type := Phase1NonreferenceTypeSpine type_value).
+    pose (primitive_type := Phase1PrimitiveNonreferenceTypeSpine primitive).
+    pose (shallow_type := Phase1ShallowCompoundNonreferenceTypeSpine shallow).
+    pose (refinement_type := Phase1RefinementTupleNonreferenceTypeSpine nonreference).
+    pose (static_reference_type := Phase1StaticReferenceNonreferenceType nonreference).
+    pose (static_arguments_type := Phase1StaticArgumentsNonreferenceType nonreference).
+    pose (result := Phase1StaticTypeArgumentsNonreferenceType nonreference).
     assert (Htype :
       phase1_surface_normalize_type_spine tree = Some outer_type).
     {
@@ -577,7 +583,7 @@ Proof.
         phase1_surface_expect_nonterminal,
         phase1_surface_expect_alternative.
       cbn.
-      rewrite String.eqb_refl.
+      repeat rewrite String.eqb_refl.
       rewrite Houter.
       reflexivity.
     }
@@ -665,16 +671,16 @@ Proof.
         unfold phase1_surface_normalize_named_type_spine,
           phase1_surface_expect_nonterminal.
         cbn.
-        rewrite String.eqb_refl.
+        repeat rewrite String.eqb_refl.
         exact Hbase_reference.
       }
-      let outer_type := constr:(Phase1NamedTypeSpine selected) in
-      let primitive_type := constr:(Phase1PrimitiveNamedTypeSpine selected) in
-      let shallow_type := constr:(Phase1ShallowCompoundNamedTypeSpine selected) in
-      let refinement_type := constr:(Phase1RefinementTupleNamedTypeSpine selected) in
-      let static_reference_type := constr:(Phase1StaticReferenceNamedType base_reference) in
-      let static_arguments_type := constr:(Phase1StaticArgumentsNamedType middle_reference) in
-      let result := constr:(Phase1StaticTypeArgumentsNamedType refined_reference) in
+      pose (outer_type := Phase1NamedTypeSpine selected).
+      pose (primitive_type := Phase1PrimitiveNamedTypeSpine selected).
+      pose (shallow_type := Phase1ShallowCompoundNamedTypeSpine selected).
+      pose (refinement_type := Phase1RefinementTupleNamedTypeSpine selected).
+      pose (static_reference_type := Phase1StaticReferenceNamedType base_reference).
+      pose (static_arguments_type := Phase1StaticArgumentsNamedType middle_reference).
+      pose (result := Phase1StaticTypeArgumentsNamedType refined_reference).
       assert (Htype :
         phase1_surface_normalize_type_spine tree = Some outer_type).
       {
@@ -683,7 +689,7 @@ Proof.
           phase1_surface_expect_nonterminal,
           phase1_surface_expect_alternative.
         cbn.
-        rewrite String.eqb_refl.
+        repeat rewrite String.eqb_refl.
         reflexivity.
       }
       assert (Hprimitive_type :
@@ -743,5 +749,5 @@ Proof.
       * eapply phase1_surface_normalize_static_type_arguments_type_tree_round_trip.
         exact Hresult.
     + cbn in Hnth.
-      discriminate Hnth.
+      destruct index; cbn in Hnth; discriminate Hnth.
 Qed.

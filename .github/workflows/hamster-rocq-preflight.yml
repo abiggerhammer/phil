@@ -1,0 +1,25 @@
+name: Hamster Rocq 9.2 prepublication preflight
+
+on:
+  push:
+    branches:
+      - 'hamster/rocq-preflight/**'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  full-source-spine-preflight:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    container:
+      image: rocq/rocq-prover:9.2.0
+      options: --user root
+    steps:
+      - uses: actions/checkout@v4
+      - name: Replay exact CI proof targets, warnings and assumptions
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 scripts/ci/rocq-refinement-preflight.py

@@ -1,6 +1,10 @@
 From Stdlib Require Import Lists.List Strings.String.
 
 From Phil.Surface Require Import
+  GrammarDerivation
+  GrammarAstStaticArgumentsSpine
+  GrammarAstSourceHeader
+  GrammarAstRefinementTupleTypePayloadSpine
   GrammarAstStaticTypeArgumentPayloadSpine.
 
 Import ListNotations.
@@ -54,7 +58,7 @@ Proof.
     + eapply phase1_surface_normalize_static_type_argument_spine_round_trip.
       exact Hargument.
     + eapply IH.
-      exact Hrest.
+      reflexivity.
 Qed.
 
 Theorem
@@ -84,7 +88,7 @@ Proof.
           argument actual Hargument).
       reflexivity.
     + eapply IH.
-      exact Hrest.
+      reflexivity.
 Qed.
 
 Record Phase1SurfaceStaticTypeArgumentListSpine : Type := {
@@ -128,20 +132,29 @@ Theorem phase1_surface_normalize_static_type_argument_list_spine_round_trip :
       phase1_surface_static_argument_list_spine_tree arguments.
 Proof.
   intros [first rest] refined Hnormalize.
-  cbn in Hnormalize.
+  unfold phase1_surface_normalize_static_type_argument_list_spine in Hnormalize.
+  cbn [phase1_static_argument_list_spine_first
+    phase1_static_argument_list_spine_rest] in Hnormalize.
   destruct (phase1_surface_normalize_static_type_argument_spine first)
     as [actual_first |] eqn:Hfirst; try discriminate Hnormalize.
   destruct (phase1_surface_normalize_static_type_argument_values rest)
     as [actual_rest |] eqn:Hrest; try discriminate Hnormalize.
+  cbn in Hnormalize.
   inversion Hnormalize; subst refined.
-  cbn.
-  rewrite
-    (phase1_surface_normalize_static_type_argument_spine_round_trip
-      first actual_first Hfirst).
-  rewrite
-    (phase1_surface_normalize_static_type_argument_suffix_values_round_trip
-      rest actual_rest Hrest).
-  reflexivity.
+  unfold phase1_surface_static_type_argument_list_spine_tree,
+    phase1_surface_static_argument_list_spine_tree.
+  cbn [phase1_static_type_argument_list_spine_first
+    phase1_static_type_argument_list_spine_rest
+    phase1_static_argument_list_spine_first
+    phase1_static_argument_list_spine_rest].
+  exact
+    (f_equal2
+      (fun first_tree suffix_trees =>
+        PTSequence [first_tree; PTRepetition suffix_trees])
+      (phase1_surface_normalize_static_type_argument_spine_round_trip
+        first actual_first Hfirst)
+      (phase1_surface_normalize_static_type_argument_suffix_values_round_trip
+        rest actual_rest Hrest)).
 Qed.
 
 Definition phase1_surface_optional_static_type_argument_list_tree
@@ -224,15 +237,23 @@ Theorem phase1_surface_normalize_static_type_arguments_spine_round_trip :
       phase1_surface_static_arguments_spine_tree arguments.
 Proof.
   intros [items] refined Hnormalize.
-  cbn in Hnormalize.
+  unfold phase1_surface_normalize_static_type_arguments_spine in Hnormalize.
+  cbn [phase1_static_arguments_spine_items] in Hnormalize.
   destruct (phase1_surface_normalize_optional_static_type_argument_list items)
     as [actual |] eqn:Hitems; try discriminate Hnormalize.
+  cbn in Hnormalize.
   inversion Hnormalize; subst refined.
-  cbn.
-  rewrite
-    (phase1_surface_normalize_optional_static_type_argument_list_round_trip
-      items actual Hitems).
-  reflexivity.
+  unfold phase1_surface_static_type_arguments_spine_tree,
+    phase1_surface_static_arguments_spine_tree.
+  cbn [phase1_static_type_arguments_spine_items
+    phase1_static_arguments_spine_items].
+  exact
+    (f_equal
+      (fun child =>
+        PTNonterminal "static_arguments"
+          (PTSequence [PTLiteral "["; child; PTLiteral "]"]))
+      (phase1_surface_normalize_optional_static_type_argument_list_round_trip
+        items actual Hitems)).
 Qed.
 
 Record Phase1SurfaceStaticTypeArgumentsReferenceSpine : Type := {
@@ -289,11 +310,21 @@ Proof.
     destruct (phase1_surface_normalize_static_type_arguments_spine arguments)
       as [actual |] eqn:Harguments; try discriminate Hnormalize.
     inversion Hnormalize; subst refined.
-    cbn.
-    rewrite
-      (phase1_surface_normalize_static_type_arguments_spine_round_trip
-        arguments actual Harguments).
-    reflexivity.
+    unfold phase1_surface_static_type_arguments_reference_spine_tree,
+      phase1_surface_static_arguments_reference_spine_tree.
+    cbn [phase1_static_type_arguments_reference_spine_name
+      phase1_static_type_arguments_reference_spine_arguments
+      phase1_static_arguments_reference_spine_name
+      phase1_static_arguments_reference_spine_arguments].
+    exact
+      (f_equal
+        (fun child =>
+          PTNonterminal "static_reference"
+            (PTSequence
+              [ phase1_surface_qualified_name_tree name;
+                PTOptionalSome child ]))
+        (phase1_surface_normalize_static_type_arguments_spine_round_trip
+          arguments actual Harguments)).
   - inversion Hnormalize; subst refined.
     reflexivity.
 Qed.
