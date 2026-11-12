@@ -26,7 +26,7 @@ permissions:
   contents: read
 
 jobs:
-  strict-haskell-source-freshness:
+  strict-haskell-source-nominal-origin:
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v4
@@ -78,5 +78,5 @@ jobs:
           do
             rocq c -Q proof/Phil Phil "$file"
           done
-          if grep -nE '^[[:space:]]*(Admitted[.]|Axiom[[:space:]]|Parameter[[:space:]])' proof/Phil/Core/FSEM02OfferSuccessorFreshness.v; then exit 1; fi
-          sha256sum proof/Phil/Core/FSEM02OfferSuccessorFreshness.v proof/Phil/Core/FSEM02OfferNominalOriginGates.vo
+          if grep -nE '^[[:space:]]*(Admitted[.]|Axiom[[:space:]]|Parameter[[:space:]])' proof/Phil/Core/FSEM02OfferNominalOriginGates.v; then exit 1; fi
+          sha256sum proof/Phil/Core/FSEM02OfferNominalOriginGates.v proof/Phil/Core/FSEM02OfferNominalOriginGates.vo
