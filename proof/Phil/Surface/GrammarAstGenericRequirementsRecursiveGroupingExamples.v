@@ -52,7 +52,7 @@ Example phase1_generic_requirements_grouping_preserves_order_and_erasure :
   match phase1_surface_normalize_generic_requirements_recursive_grouping_tree
     phase1_generic_requirements_grouping_two_tree with
   | Some refined =>
-      length (phase1_generic_requirements_recursive_grouping_spine_entries refined) = 2 /\
+      List.length (phase1_generic_requirements_recursive_grouping_spine_entries refined) = 2 /\
       phase1_surface_generic_requirements_recursive_grouping_spine_tree refined =
         phase1_generic_requirements_grouping_two_tree
   | None => False
