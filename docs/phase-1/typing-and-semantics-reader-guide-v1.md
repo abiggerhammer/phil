@@ -258,6 +258,8 @@ The bounded [FSEM-02 source Ping joint successor/atomicity evidence](formal-sema
 
 The bounded [FSEM-02 source Ping two-process nominal refusal](formal-semantics-source-ping-joint-nominal-refusal-fsem02-v1.md) exercises native joint Send/Receive under mismatched protocol instances and roles on either peer, exact fail-closed errors, positive typed successors and stale replay; Rocq provides conditional nominal-gated paired steps, not proof of external authority or implementation refinement.
 
+The bounded [FSEM-02 source Ping terminal Close refusal/retry trace](formal-semantics-source-ping-close-refusal-retry-fsem02-v1.md) tests exact native nominal/head errors and two-process peer-state preservation through subsequent valid terminal closes, with an explicit conditional Rocq failed-trial/commuting-retry result. Rejected trials do not create a successor; no rollback, external authority or universal implementation refinement is claimed.
+
 ## 6. Architectures, occurrence identity, and root selection
 
 The source differentiates:

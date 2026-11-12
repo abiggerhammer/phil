@@ -43,6 +43,8 @@ main = do
         (sourcePingJointNominalRefusal accepted)
     , test "FSEM-02 source Ping joint terminal Close orders agree and reject stale replay"
         (sourcePingJointTerminalCloseDiamond accepted)
+    , test "FSEM-02 source Ping rejected close leaves peers available for exact valid retry"
+        (sourcePingJointCloseRefusalRetry accepted)
     , test "FSEM-02 source stale close rejects with exact binder mismatch"
         (sourceStaleCloseRejected stale)
     , test "FSEM-02 mismatched session head rejects with precise action error"
@@ -785,6 +787,130 @@ sourcePingJointTerminalCloseDiamond source = do
       assert (process == clientProcess && stale == clientOld)
         "post-close rendezvous replay lost consumed predecessor"
     other -> Left ("post-close stale Ping rendezvous progressed: " <> show other)
+
+-- A failed local terminal Close is a rejected transition, not a partial
+-- process commit. Replay correct source-derived Closes from the original
+-- two-process state after exact nominal/head errors on either process.
+-- The process population, protocol grants and disposal permission are
+-- independently supplied premises, not inferred from the source spelling.
+sourcePingJointCloseRefusalRetry :: Text.Text -> Either String ()
+sourcePingJointCloseRefusalRetry source = do
+  plans <- sourcePlans source
+  (network, clientProcess, serverProcess) <- sourcePingJointNetwork
+  let revision = sourceProtocolInstance plans
+      client = sourceClientPlan plans
+      server = sourceServerPlan plans
+      clientOld = grammarV1ResolvedBinderCoreName (checkedComponentSendEndpoint client)
+      clientNext = grammarV1ResolvedBinderCoreName (checkedComponentSendSuccessor client)
+      serverOld = grammarV1ResolvedBinderCoreName (checkedComponentReceiveEndpoint server)
+      serverNext = grammarV1ResolvedBinderCoreName (checkedComponentReceiveSuccessor server)
+      spectator = Name "fsem02.ping.close.retry.borrowed"
+      clientSide = ProcessRendezvousSide clientProcess clientOld clientNext revision clientRole
+      serverSide = ProcessRendezvousSide serverProcess serverOld serverNext revision serverRole
+      request = JointProcessRendezvous (SendReceiveRendezvous clientSide serverSide)
+      foreignRevision = ProtocolInstanceRevision "fsem02.ping.close.retry.foreign"
+      foreignRole = ProtocolRoleKey "fsem02.ping.close.retry.foreign.role"
+      wrongOutcome = Outcome "RejectedCloseOutcome"
+      closeOne process endpoint role contexts = do
+        current <- maybe (Left "missing close retry process") Right
+          (Map.lookup process contexts)
+        checked <- mapLeft show $
+          checkProtocolAction (ProtocolCloseRequest endpoint revision role done) current
+        assert (checkedProtocolPredecessor checked
+                  == ProtocolEndpointBinding endpoint revision role (End done)
+               && checkedProtocolSuccessor checked == Nothing)
+          "retry Close consumed wrong predecessor or invented a successor"
+        pure (Map.insert process (checkedProtocolContext checked) contexts)
+  assert (sourceServerHead plans == dualSession (sourceClientHead plans))
+    "source Ping retry heads are not exact duals"
+  rawClient <- mapLeft show $
+    insertProtocolEndpoint clientOld revision clientRole
+      (sourceClientHead plans) emptyProtocolContext
+  rawServer <- mapLeft show $
+    insertProtocolEndpoint serverOld revision serverRole
+      (sourceServerHead plans) emptyProtocolContext
+  framed <- mapLeft show $
+    insertBinding Affine spectator (TyUInt 8) (protocolResources rawServer)
+  loaned <- mapLeft show $ startSharedLoan spectator framed
+  let before = Map.fromList
+        [(clientProcess, rawClient),
+         (serverProcess, rawServer { protocolResources = loaned })]
+  progressed <- mapLeft show $
+    checkProcessCommunication (sourceBinaryInstance plans) network before request
+  clientEnd <- maybe (Left "source Ping missing client terminal after rendezvous") Right
+    (Map.lookup clientProcess progressed)
+  serverEnd <- maybe (Left "source Ping missing server terminal after rendezvous") Right
+    (Map.lookup serverProcess progressed)
+  assert (Map.lookup clientNext (protocolEndpoints clientEnd)
+            == Just (ProtocolEndpointBinding clientNext revision clientRole (End done))
+       && Map.lookup serverNext (protocolEndpoints serverEnd)
+            == Just (ProtocolEndpointBinding serverNext revision serverRole (End done)))
+    "source Ping retry prestate lacks exact typed terminal successors"
+  directClient <- closeOne clientProcess clientNext clientRole progressed
+  directFinal <- closeOne serverProcess serverNext serverRole directClient
+  reverseServer <- closeOne serverProcess serverNext serverRole progressed
+  reverseFinal <- closeOne clientProcess clientNext clientRole reverseServer
+  assert (directFinal == reverseFinal)
+    "direct Ping two-process terminal closure orders disagree"
+  let retry label process endpoint role peer peerEndpoint peerRole bad expected = do
+        current <- maybe (Left "missing failed retry process") Right
+          (Map.lookup process progressed)
+        case checkProtocolAction bad current of
+          Left observed ->
+            assert (observed == expected)
+              (label <> " wrong error: " <> show observed <> " /= " <> show expected)
+          Right _ -> Left (label <> " was incorrectly accepted")
+        -- Failed Either returns no CheckedProtocolStep: the original complete
+        -- process map remains the only successor candidate for retry.
+        repaired <- closeOne process endpoint role progressed
+        assert (Map.lookup peer repaired == Map.lookup peer progressed)
+          (label <> " touched an unrelated process on valid retry")
+        completed <- closeOne peer peerEndpoint peerRole repaired
+        assert (completed == directFinal)
+          (label <> " refusal/retry differs from direct complete terminal state")
+        serverResult <- maybe (Left "retry omitted server context") Right
+          (Map.lookup serverProcess completed)
+        assert (affineBindings (protocolResources serverResult) == affineBindings loaned
+             && sharedLoans (protocolResources serverResult) == sharedLoans loaned
+             && Map.null (protocolEndpoints serverResult))
+          (label <> " did not preserve borrowed spectator or terminal retirement")
+      checkClient = retry "client" clientProcess clientNext clientRole
+                           serverProcess serverNext serverRole
+      checkServer = retry "server" serverProcess serverNext serverRole
+                           clientProcess clientNext clientRole
+  checkClient (ProtocolCloseRequest clientNext foreignRevision clientRole done)
+    (ProtocolInstanceMismatch clientNext foreignRevision revision)
+  checkServer (ProtocolCloseRequest serverNext foreignRevision serverRole done)
+    (ProtocolInstanceMismatch serverNext foreignRevision revision)
+  checkClient (ProtocolCloseRequest clientNext revision foreignRole done)
+    (ProtocolRoleMismatch clientNext foreignRole clientRole)
+  checkServer (ProtocolCloseRequest serverNext revision foreignRole done)
+    (ProtocolRoleMismatch serverNext foreignRole serverRole)
+  checkClient (ProtocolCloseRequest clientNext revision clientRole wrongOutcome)
+    (ProtocolSessionError (CloseOutcomeMismatch done wrongOutcome))
+  checkServer (ProtocolCloseRequest serverNext revision serverRole wrongOutcome)
+    (ProtocolSessionError (CloseOutcomeMismatch done wrongOutcome))
+  -- Even when both nominal fields are wrong, exact instance rejection
+  -- precedes role diagnosis. Neither side consumes the other endpoint.
+  checkClient (ProtocolCloseRequest clientNext foreignRevision foreignRole done)
+    (ProtocolInstanceMismatch clientNext foreignRevision revision)
+  checkServer (ProtocolCloseRequest serverNext foreignRevision foreignRole done)
+    (ProtocolInstanceMismatch serverNext foreignRevision revision)
+  clientFinal <- maybe (Left "retry omitted final client context") Right
+    (Map.lookup clientProcess directFinal)
+  serverFinal <- maybe (Left "retry omitted final server context") Right
+    (Map.lookup serverProcess directFinal)
+  case checkProtocolAction
+      (ProtocolCloseRequest clientNext revision clientRole done) clientFinal of
+    Left (ProtocolEndpointUnknown endpoint) ->
+      assert (endpoint == clientNext) "stale retry client lost original binder"
+    other -> Left ("stale retry client advanced: " <> show other)
+  case checkProtocolAction
+      (ProtocolCloseRequest serverNext revision serverRole done) serverFinal of
+    Left (ProtocolEndpointUnknown endpoint) ->
+      assert (endpoint == serverNext) "stale retry server lost original binder"
+    other -> Left ("stale retry server advanced: " <> show other)
+
 
 sourceStaleCloseRejected :: Text.Text -> Either String ()
 sourceStaleCloseRejected source = do
