@@ -960,8 +960,8 @@ sourcePingJointCloseRefusalRetry source = do
         -- With a committed opposite Close, nominal instance/role failure
         -- must not disturb the still-live End peer. Instance precedence
         -- wins when both names are wrong; no failed request yields a step.
-        let rejectNominalPeer name request expected =
-              case checkProtocolAction request peerState of
+        let rejectNominalPeer name attemptedClose expected =
+              case checkProtocolAction attemptedClose peerState of
                 Left observed -> assert (observed == expected)
                   (label <> " " <> name <> " changed diagnostic: " <> show observed)
                 Right _ -> Left (label <> " " <> name <> " advanced an inadmissible peer")
