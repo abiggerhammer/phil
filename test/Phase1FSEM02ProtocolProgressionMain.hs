@@ -30,6 +30,8 @@ main = do
   results <- sequence
     [ test "FSEM-02 checked whole-source Ping heads progress in exact Core send/receive/close state"
         (checkedSourcePingSteps accepted)
+    , test "FSEM-02 source Ping terminal Close requires exact nominal instance/role"
+        (sourcePingCloseNominalGates accepted)
     , test "FSEM-02 source stale close rejects with exact binder mismatch"
         (sourceStaleCloseRejected stale)
     , test "FSEM-02 mismatched session head rejects with precise action error"
@@ -240,6 +242,83 @@ nominalSourcePingRejected source = do
               && Map.notMember old (protocolEndpoints after)
               && Map.member next (protocolEndpoints after))
         "nominal refusal or matching replay corrupted endpoint ownership"
+
+
+-- Complete parsed Ping controls, with independently supplied live nominal
+-- metadata. Refusal never provides a successful successor or close result.
+sourcePingCloseNominalGates :: Text.Text -> Either String ()
+sourcePingCloseNominalGates source = do
+  plans <- sourcePlans source
+  let client = sourceClientPlan plans
+      server = sourceServerPlan plans
+      revision = sourceProtocolInstance plans
+      foreignRevision = ProtocolInstanceRevision "fsem02.foreign.close.revision"
+      foreignRole = ProtocolRoleKey "ForeignCloseRole"
+      clientOld = grammarV1ResolvedBinderCoreName (checkedComponentSendEndpoint client)
+      clientNext = grammarV1ResolvedBinderCoreName (checkedComponentSendSuccessor client)
+      serverOld = grammarV1ResolvedBinderCoreName (checkedComponentReceiveEndpoint server)
+      serverNext = grammarV1ResolvedBinderCoreName (checkedComponentReceiveSuccessor server)
+  closeSide revision foreignRevision foreignRole clientRole
+    clientOld clientNext (sourceClientHead plans) ProtocolSendRequest
+  closeSide revision foreignRevision foreignRole serverRole
+    serverOld serverNext (sourceServerHead plans) ProtocolReceiveRequest
+  where
+    closeSide
+      :: ProtocolInstanceRevision -> ProtocolInstanceRevision -> ProtocolRoleKey
+      -> ProtocolRoleKey -> Name -> Name -> Session
+      -> (Name -> Name -> ProtocolInstanceRevision
+          -> ProtocolRoleKey -> ProtocolActionRequest)
+      -> Either String ()
+    closeSide revision foreignRevision foreignRole role old next headSession mkRequest = do
+      sourceContext <- mapLeft show $
+        insertProtocolEndpoint old revision role headSession emptyProtocolContext
+      sentOrReceived <- mapLeft show $
+        checkProtocolAction (mkRequest old next revision role) sourceContext
+      exactSuccessor old next revision role sentOrReceived
+      let live = checkedProtocolContext sentOrReceived
+          request = ProtocolCloseRequest next revision role done
+          changeNominal instanceValue roleValue = live
+            { protocolEndpoints = Map.adjust
+                (\endpoint -> endpoint
+                  { protocolEndpointInstance = instanceValue
+                  , protocolEndpointRole = roleValue })
+                next (protocolEndpoints live) }
+          wrongInstance = changeNominal foreignRevision role
+          wrongRole = changeNominal revision foreignRole
+          bothWrong = changeNominal foreignRevision foreignRole
+      assert (Map.lookup next (linearBindings (protocolResources wrongInstance))
+                == Just (TyEndpoint (End done))
+           && Map.member next (protocolEndpoints wrongInstance)
+           && Map.notMember old (protocolEndpoints wrongInstance))
+        "negative Close state must retain the real typed End successor"
+      case checkProtocolAction request wrongInstance of
+        Left (ProtocolInstanceMismatch name expected actual) ->
+          assert (name == next && expected == revision && actual == foreignRevision)
+            "Close wrong-instance diagnostic not exact"
+        other -> Left ("Close foreign instance accepted or wrong error: " <> show other)
+      case checkProtocolAction request wrongRole of
+        Left (ProtocolRoleMismatch name expected actual) ->
+          assert (name == next && expected == role && actual == foreignRole)
+            "Close wrong-role diagnostic not exact"
+        other -> Left ("Close foreign role accepted or wrong error: " <> show other)
+      case checkProtocolAction request bothWrong of
+        Left (ProtocolInstanceMismatch name expected actual) ->
+          assert (name == next && expected == revision && actual == foreignRevision)
+            "Close both-wrong did not prioritize instance mismatch"
+        other -> Left ("Close both-wrong accepted or wrong error: " <> show other)
+      closed <- mapLeft show $ checkProtocolAction request live
+      assert (checkedProtocolPredecessor closed
+              == ProtocolEndpointBinding next revision role (End done))
+        "Close success did not consume the exact source-derived terminal binding"
+      assert (checkedProtocolSuccessor closed == Nothing
+           && Map.notMember next (protocolEndpoints (checkedProtocolContext closed))
+           && Map.notMember next
+                (linearBindings (protocolResources (checkedProtocolContext closed))))
+        "Close success retained linear endpoint or invented a successor"
+      case checkProtocolAction request (checkedProtocolContext closed) of
+        Left (ProtocolEndpointUnknown name) ->
+          assert (name == next) "stale Close rejection lost exact binder"
+        other -> Left ("stale Close reused consumed endpoint: " <> show other)
 
 sourceStaleCloseRejected :: Text.Text -> Either String ()
 sourceStaleCloseRejected source = do
