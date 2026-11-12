@@ -41,6 +41,7 @@ main = do
     , test "Go/Cancel reject occupied successor names in every resource mode" (occupiedSuccessorRejected original)
     , test "Go/Cancel reject successor equal to the source predecessor" (reusedPredecessorRejected original)
     , test "Go/Cancel and authorized End closes preserve a borrowed affine spectator" (borrowedSpectatorFrame original)
+    , test "both source offer labels reject wrong live instance/role identities" (nominalOriginGateRejected original)
     ]
   if and results then pure () else exitFailure
 
@@ -270,6 +271,69 @@ crossBranchIsolation source = do
        && checkedProtocolContext closedGo == emptyProtocolContext)
     "separate authorized End closes did not restore the SAME original empty state"
 
+
+-- The concrete source offer adapter must not infer nominal instance or
+-- role authority from an otherwise matching local Session head. Every one
+-- of these contexts carries the SAME syntactic Offer head and correct
+-- source-rooted occurrence; only the independently supplied nominal
+-- protocol identity differs. Failures return no successful successor.
+nominalOriginGateRejected :: Text.Text -> Either String ()
+nominalOriginGateRejected source = do
+  plan <- sourcePlan source
+  coverage <- checked plan
+  let predecessor = grammarV1ResolvedBinderCoreName
+        (checkedComponentOfferEndpoint coverage)
+      successor = Name "fsem02.nominal.next"
+      revision = binaryProtocolInstanceRevision (planInstance plan)
+      foreignRevision = ProtocolInstanceRevision "fsem02.foreign.revision"
+      foreignRole = ProtocolRoleKey "Client"
+  wrongInstance <- mapLeft show $
+    insertProtocolEndpoint predecessor foreignRevision serverRole
+      expectedHead emptyProtocolContext
+  wrongRole <- mapLeft show $
+    insertProtocolEndpoint predecessor revision foreignRole
+      expectedHead emptyProtocolContext
+  bothWrong <- mapLeft show $
+    insertProtocolEndpoint predecessor foreignRevision foreignRole
+      expectedHead emptyProtocolContext
+  correct <- initial plan predecessor expectedHead
+  mapM_ (checkLabel plan predecessor successor revision foreignRevision
+           foreignRole wrongInstance wrongRole bothWrong correct)
+    ["Go", "Cancel"]
+  where
+    checkLabel plan predecessor successor revision foreignRevision foreignRole
+        wrongInstance wrongRole bothWrong correct label = do
+      case replay plan label successor wrongInstance of
+        Left (GrammarV1OfferReplayProtocolError
+                (ProtocolInstanceMismatch name expected actual)) ->
+          assert (name == predecessor && expected == revision
+                  && actual == foreignRevision)
+            "foreign protocol instance rejection lost nominal identities"
+        other -> Left ("source offer accepted foreign nominal instance for "
+                       <> show label <> ": " <> show other)
+      case replay plan label successor wrongRole of
+        Left (GrammarV1OfferReplayProtocolError
+                (ProtocolRoleMismatch name expected actual)) ->
+          assert (name == predecessor && expected == serverRole
+                  && actual == foreignRole)
+            "foreign protocol role rejection lost nominal identities"
+        other -> Left ("source offer accepted foreign nominal role for "
+                       <> show label <> ": " <> show other)
+      case replay plan label successor bothWrong of
+        Left (GrammarV1OfferReplayProtocolError
+                (ProtocolInstanceMismatch name expected actual)) ->
+          assert (name == predecessor && expected == revision
+                  && actual == foreignRevision)
+            "double nominal mismatch did not fail on exact instance identity first"
+        other -> Left ("source offer accepted double nominal mismatch for "
+                       <> show label <> ": " <> show other)
+      accepted <- mapLeft show $ replay plan label successor correct
+      let after = checkedProtocolContext (replayedComponentOfferStep accepted)
+      assert (Map.notMember predecessor (protocolEndpoints after)
+              && Map.member successor (protocolEndpoints after)
+              && Map.notMember predecessor
+                   (linearBindings (protocolResources after)))
+        "matching nominal instance and role did not consume predecessor"
 
 -- A successor name occupied by ANY structural-mode owner is not fresh.
 -- These are independently executed source-covered choices, not manual
