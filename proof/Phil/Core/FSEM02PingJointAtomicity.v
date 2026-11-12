@@ -76,7 +76,7 @@ Proof.
     receiverOld receiverNext receiverBefore) as [| actualReceiver] eqn:Hreceiver;
     try discriminate.
   inversion Hjoint; subst.
-  split; assumption.
+  split; congruence.
 Qed.
 
 Theorem fsem02PingJointSuccessConsumesBothAndTypesSuccessors :
