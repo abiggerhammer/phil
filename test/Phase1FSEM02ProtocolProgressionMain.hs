@@ -39,6 +39,8 @@ main = do
         (sourcePingSuccessorResourceFreshness accepted)
     , test "FSEM-02 source Ping joint successor freshness and atomic peer refusal"
         (sourcePingJointSuccessorAtomicity accepted)
+    , test "FSEM-02 source Ping joint nominal instance/role fail-closed peer"
+        (sourcePingJointNominalRefusal accepted)
     , test "FSEM-02 source stale close rejects with exact binder mismatch"
         (sourceStaleCloseRejected stale)
     , test "FSEM-02 mismatched session head rejects with precise action error"
@@ -555,6 +557,120 @@ sourcePingJointDeclaration name = deriveDeclarationIdentity DeclarationDescripto
   , declarationInterfaceSemantics = SemanticAtom "fsem02.joint.external.interface"
   , declarationDefinitionSemantics = SemanticAtom "fsem02.joint.external.definition"
   }
+
+
+-- A joint Core transition must refuse either peer's nominal metadata,
+-- even if the other side is source-checked and locally ready.  The active
+-- network and role/instance grants are externally supplied premises.
+sourcePingJointNominalRefusal :: Text.Text -> Either String ()
+sourcePingJointNominalRefusal source = do
+  plans <- sourcePlans source
+  (network, clientProcess, serverProcess) <- sourcePingJointNetwork
+  let revision = sourceProtocolInstance plans
+      client = sourceClientPlan plans
+      server = sourceServerPlan plans
+      clientOld = grammarV1ResolvedBinderCoreName (checkedComponentSendEndpoint client)
+      clientNext = grammarV1ResolvedBinderCoreName (checkedComponentSendSuccessor client)
+      serverOld = grammarV1ResolvedBinderCoreName (checkedComponentReceiveEndpoint server)
+      serverNext = grammarV1ResolvedBinderCoreName (checkedComponentReceiveSuccessor server)
+      foreignRevision = ProtocolInstanceRevision "fsem02.joint.nominal.foreign"
+      foreignRole = ProtocolRoleKey "Unassigned"
+      spectator = Name "fsem02.joint.nominal.borrowed"
+      clientSide = ProcessRendezvousSide clientProcess clientOld clientNext revision clientRole
+      serverSide = ProcessRendezvousSide serverProcess serverOld serverNext revision serverRole
+      attempt left right = JointProcessRendezvous (SendReceiveRendezvous left right)
+      runJoint = checkProcessCommunication (sourceBinaryInstance plans) network
+      good = attempt clientSide serverSide
+      rejectInstance label process contexts request =
+        case runJoint contexts request of
+          Left (RendezvousProtocolInstanceMismatch actualProcess expected actual) ->
+            assert (actualProcess == process && expected == revision
+                    && actual == foreignRevision)
+              (label <> ": instance mismatch lost exact process or revision")
+          other -> Left (label <> ": expected exact joint instance rejection: " <> show other)
+      rejectRole label process expectedRole actualRole contexts request =
+        case runJoint contexts request of
+          Left (RendezvousProtocolRoleMismatch actualProcess expected actual) ->
+            assert (actualProcess == process && expected == expectedRole
+                    && actual == actualRole)
+              (label <> ": role mismatch lost exact process or roles")
+          other -> Left (label <> ": expected exact joint role rejection: " <> show other)
+  assert (sourceServerHead plans == dualSession (sourceClientHead plans))
+    "source Ping joint nominal heads are not dual"
+  rawClient <- mapLeft show $ insertProtocolEndpoint
+    clientOld revision clientRole (sourceClientHead plans) emptyProtocolContext
+  rawServer <- mapLeft show $ insertProtocolEndpoint
+    serverOld revision serverRole (sourceServerHead plans) emptyProtocolContext
+  framed <- mapLeft show $
+    insertBinding Affine spectator (TyUInt 8) (protocolResources rawServer)
+  borrowed <- mapLeft show $ startSharedLoan spectator framed
+  let serverBefore = rawServer { protocolResources = borrowed }
+      before = Map.fromList [(clientProcess, rawClient), (serverProcess, serverBefore)]
+  assert (foreignRevision /= revision && foreignRole /= clientRole
+          && foreignRole /= serverRole && clientOld /= clientNext
+          && serverOld /= serverNext && spectator /= serverOld)
+    "joint nominal test identities unexpectedly alias"
+
+  rejectInstance "client requested instance" clientProcess before $
+    attempt (clientSide { rendezvousInstance = foreignRevision }) serverSide
+  rejectInstance "server requested instance" serverProcess before $
+    attempt clientSide (serverSide { rendezvousInstance = foreignRevision })
+  foreignClient <- mapLeft show $ insertProtocolEndpoint
+    clientOld foreignRevision clientRole (sourceClientHead plans) emptyProtocolContext
+  foreignServer <- mapLeft show $ insertProtocolEndpoint
+    serverOld foreignRevision serverRole (sourceServerHead plans) emptyProtocolContext
+  rejectInstance "client stored instance" clientProcess
+    (Map.insert clientProcess foreignClient before) good
+  rejectInstance "server stored instance" serverProcess
+    (Map.insert serverProcess foreignServer before) good
+
+  rejectRole "client requested role" clientProcess foreignRole clientRole before $
+    attempt (clientSide { rendezvousRole = foreignRole }) serverSide
+  rejectRole "server requested role" serverProcess foreignRole serverRole before $
+    attempt clientSide (serverSide { rendezvousRole = foreignRole })
+  foreignClientRole <- mapLeft show $ insertProtocolEndpoint
+    clientOld revision foreignRole (sourceClientHead plans) emptyProtocolContext
+  foreignServerRole <- mapLeft show $ insertProtocolEndpoint
+    serverOld revision foreignRole (sourceServerHead plans) emptyProtocolContext
+  rejectRole "client stored role" clientProcess clientRole foreignRole
+    (Map.insert clientProcess foreignClientRole before) good
+  rejectRole "server stored role" serverProcess serverRole foreignRole
+    (Map.insert serverProcess foreignServerRole before) good
+
+  -- Instance mismatch is diagnostic-first when both nominal fields differ.
+  bothWrong <- mapLeft show $ insertProtocolEndpoint
+    serverOld foreignRevision foreignRole (sourceServerHead plans) emptyProtocolContext
+  let badPeer = Map.insert serverProcess bothWrong before
+  rejectInstance "peer instance-before-role" serverProcess badPeer good
+  assert (Map.lookup clientProcess badPeer == Just rawClient
+          && runJoint badPeer good == runJoint badPeer good)
+    "joint rejected peer unexpectedly changed client state"
+
+  after <- mapLeft show $ runJoint before good
+  clientAfter <- maybe (Left "nominal success omitted client") Right
+    (Map.lookup clientProcess after)
+  serverAfter <- maybe (Left "nominal success omitted server") Right
+    (Map.lookup serverProcess after)
+  assert
+    (Map.keysSet after == Map.keysSet before
+     && Map.notMember clientOld (protocolEndpoints clientAfter)
+     && Map.notMember serverOld (protocolEndpoints serverAfter)
+     && Map.lookup clientNext (protocolEndpoints clientAfter)
+       == Just (ProtocolEndpointBinding clientNext revision clientRole (End done))
+     && Map.lookup serverNext (protocolEndpoints serverAfter)
+       == Just (ProtocolEndpointBinding serverNext revision serverRole (End done))
+     && Map.lookup clientNext (linearBindings (protocolResources clientAfter))
+       == Just (TyEndpoint (End done))
+     && Map.lookup serverNext (linearBindings (protocolResources serverAfter))
+       == Just (TyEndpoint (End done))
+     && affineBindings (protocolResources serverAfter) == affineBindings borrowed
+     && sharedLoans (protocolResources serverAfter) == sharedLoans borrowed)
+    "joint matching nominal identity lost typed successors or loan frame"
+  case runJoint after good of
+    Left (RendezvousEndpointNotOwnedByProcess process name) ->
+      assert (process == clientProcess && name == clientOld)
+        "stale nominal joint replay lost original predecessor identity"
+    other -> Left ("stale joint nominal replay unexpectedly progressed: " <> show other)
 
 sourceStaleCloseRejected :: Text.Text -> Either String ()
 sourceStaleCloseRejected source = do
