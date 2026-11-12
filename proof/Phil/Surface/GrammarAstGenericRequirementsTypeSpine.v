@@ -100,6 +100,8 @@ Proof.
     (phase1_surface_normalize_generic_requirement_type_values entries)
     as [actual |] eqn:Hentries; try discriminate Hnormalize.
   cbn in Hnormalize.
+  let T := type of Hnormalize in idtac "DEBUG Hnormalize:" T.
+  match goal with |- ?G => idtac "DEBUG goal:" G end.
   injection Hnormalize as Hrefined.
   subst refined.
   cbn.
