@@ -254,6 +254,8 @@ The bounded [FSEM-02 source Ping successor freshness and borrowed-affine frame](
 
 The bounded [FSEM-02 source Ping joint successor/atomicity evidence](formal-semantics-source-ping-joint-atomicity-fsem02-v1.md) checks an actual two-process native rendezvous against peer-side collisions: a failing peer cannot commit the sender's otherwise valid continuation. Both source-resolved predecessor/successor identities and a borrowed-affine spectator are checked; Rocq composes a conditional atomic pair without proving implementation refinement.
 
+The bounded [FSEM-02 source Ping two-process nominal refusal](formal-semantics-source-ping-joint-nominal-refusal-fsem02-v1.md) exercises native joint Send/Receive under mismatched protocol instances and roles on either peer, exact fail-closed errors, positive typed successors and stale replay; Rocq provides conditional nominal-gated paired steps, not proof of external authority or implementation refinement.
+
 ## 6. Architectures, occurrence identity, and root selection
 
 The source differentiates:
