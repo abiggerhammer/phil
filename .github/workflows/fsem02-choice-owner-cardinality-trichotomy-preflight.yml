@@ -9,17 +9,17 @@ on:
       - 'proof/Phil/Core/FSEM02ChoiceOwnerCardinalityTrichotomy.v'
       - 'docs/phase-1/formal-semantics-choice-owner-cardinality-trichotomy-fsem02-v1.md'
       - 'docs/phase-1/typing-and-semantics-reader-guide-v1.md'
-      - '.github/workflows/fsem02-choice-complete-ambiguity-preflight.yml'
+      - '.github/workflows/fsem02-choice-owner-cardinality-trichotomy-preflight.yml'
   pull_request:
     paths:
       - 'test/Phase1FSEM02SourceJointChoiceMain.hs'
       - 'proof/Phil/Core/FSEM02ChoiceOwnerCardinalityTrichotomy.v'
       - 'docs/phase-1/formal-semantics-choice-owner-cardinality-trichotomy-fsem02-v1.md'
       - 'docs/phase-1/typing-and-semantics-reader-guide-v1.md'
-      - '.github/workflows/fsem02-choice-complete-ambiguity-preflight.yml'
+      - '.github/workflows/fsem02-choice-owner-cardinality-trichotomy-preflight.yml'
 
 concurrency:
-  group: fsem02-choice-complete-ambiguity-${{ github.ref }}
+  group: fsem02-choice-owner-cardinality-trichotomy-${{ github.ref }}
   cancel-in-progress: true
 
 permissions:
