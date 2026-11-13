@@ -105,6 +105,11 @@ main = do
     , test "Cancel source-choice ambiguous live End occurrence preserves valid close diamond"
         (choiceTerminalAmbiguousOwnerRefusal cancel offer "Cancel" (Outcome "Cancel")
         )
+    , test "Go source-choice near-miss End owners never create false ambiguity"
+        (do choiceTerminalNearMissOwnerFilter go offer "Go" (Outcome "Done")
+            choiceTypedPrefixWrongBody go offer wrongBody)
+    , test "Cancel source-choice near-miss owners preserve terminal Close diamond"
+        (choiceTerminalNearMissOwnerFilter cancel offer "Cancel" (Outcome "Cancel"))
     , test "Go source choice unknown/inactive End process gates precede endpoint and nominal checks"
         (do choiceTerminalActivationGate go offer "Go" (Outcome "Done")
             choiceTypedPrefixWrongBody go offer wrongBody)
@@ -1346,6 +1351,90 @@ choiceTerminalAmbiguousOwnerRefusal client server label outcome = do
             (communicationRestrictedOwners clientFinished)
           == Map.lookup spectatorOccurrence owners)
     "ambiguous owner refusal or duplicate cleanup altered authorized End diamond"
+
+-- A near-miss owner entry is not an exact duplicate unless both its
+-- process and endpoint name match. This is an adversarial Core observation,
+-- not a source-authorized occurrence. Both terminal End orders must succeed
+-- while preserving unrelated aliases, the affine spectator and stale errors.
+choiceTerminalNearMissOwnerFilter
+  :: Text -> Text -> Text -> Outcome -> Either String ()
+choiceTerminalNearMissOwnerFilter client server label outcome = do
+  fx <- fixture client server
+  diamond <- mapLeft show $ choiceCloseDiamond fx label outcome outcome
+  let ready = statefulChoiceSuccessor
+        (statefulChoiceClientCloseSourceReplay
+          (statefulChoiceExplicitPeerCloseClient
+            (choiceCloseDiamondForward diamond)))
+      owners = communicationRestrictedOwners
+      revision = binaryProtocolInstanceRevision (fxInstance fx)
+      fabricated = Name "fsem02.nearmiss.unrelated.terminal"
+      baseline = choiceCloseDiamondReverse diamond
+      nearMisses =
+        [ ("foreign process / Client End",
+            (fxServerProcess fx, fxClientNext fx))
+        , ("Client process / peer End",
+            (fxClientProcess fx, serverNext))
+        , ("foreign process / unrelated End",
+            (fxServerProcess fx, fabricated))
+        ]
+      inject pair state = state
+        { communicationRestrictedOwners =
+            Map.insert duplicateOccurrence pair (owners state) }
+      clean state = state
+        { communicationRestrictedOwners =
+            Map.delete duplicateOccurrence (owners state) }
+      probe state process endpoint role =
+        closeProcessEndpointState (fxNetwork fx) state process endpoint
+          revision role outcome
+      closeClient state =
+        probe state (fxClientProcess fx) (fxClientNext fx) clientRole
+      closePeer state =
+        probe state (fxServerProcess fx) serverNext serverRole
+      stale state process endpoint role =
+        case probe state process endpoint role of
+          Left (EndpointClosureOccurrenceUnknown actualProcess actualEndpoint) ->
+            assert (actualProcess == process && actualEndpoint == endpoint)
+              "near-miss owner changed exact stale-predecessor rejection"
+          other -> Left ("stale predecessor reappeared under near-miss alias: "
+                        <> show other)
+      checkNear (description, aliasPair) = do
+        let injected = inject aliasPair ready
+        assert (Map.lookup duplicateOccurrence (owners injected) == Just aliasPair
+             && clean injected == ready)
+          (description <> ": injected alias did not frame ready state")
+        stale injected (fxClientProcess fx) (fxClientOld fx) clientRole
+        stale injected (fxServerProcess fx) (fxServerOld fx) serverRole
+        clientFirst <- mapLeft show $ closeClient injected
+        peerFirst <- mapLeft show $ closePeer injected
+        assert (Map.lookup duplicateOccurrence (owners clientFirst)
+                  == Just aliasPair
+             && Map.lookup duplicateOccurrence (owners peerFirst)
+                  == Just aliasPair)
+          (description <> ": first End consumed a nonmatching alias")
+        clientThenPeer <- mapLeft show $ closePeer clientFirst
+        peerThenClient <- mapLeft show $ closeClient peerFirst
+        stale clientThenPeer (fxClientProcess fx) (fxClientOld fx) clientRole
+        stale peerThenClient (fxServerProcess fx) (fxServerOld fx) serverRole
+        assert (clientThenPeer == peerThenClient
+             && clean clientThenPeer == baseline
+             && Map.lookup duplicateOccurrence (owners clientThenPeer)
+                  == Just aliasPair
+             && Map.lookup clientOccurrence (owners clientThenPeer) == Nothing
+             && Map.lookup serverOccurrence (owners clientThenPeer) == Nothing
+             && Map.lookup spectatorOccurrence (owners clientThenPeer)
+                  == Map.lookup spectatorOccurrence (owners ready))
+          (description <> ": false ambiguity or End diamond/frame divergence")
+  assert (Map.notMember duplicateOccurrence (owners ready)
+       && fxClientProcess fx /= fxServerProcess fx
+       && fxClientNext fx /= serverNext
+       && fabricated /= fxClientNext fx
+       && fabricated /= serverNext
+       && Map.lookup clientOccurrence (owners ready)
+            == Just (fxClientProcess fx, fxClientNext fx)
+       && Map.lookup serverOccurrence (owners ready)
+            == Just (fxServerProcess fx, serverNext))
+    "checked source-choice ready state lacks distinct terminal End owners"
+  mapM_ checkNear nearMisses
 
 -- Adversarial population observation: NOT a source-derived deactivation step.
 -- Unknown or inactive processes must reject before endpoint/nominal checking,
