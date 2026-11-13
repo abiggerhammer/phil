@@ -205,14 +205,18 @@ Theorem
       phase1_surface_generic_params_spine_tree parameters.
 Proof.
   intros [first rest] refined Hnormalize.
-  cbn in Hnormalize.
+  unfold phase1_surface_normalize_generic_params_kind_type_spine in Hnormalize.
+  cbn [phase1_generic_params_spine_first
+       phase1_generic_params_spine_rest] in Hnormalize.
   destruct
     (phase1_surface_normalize_generic_param_kind_type_spine first)
     as [actual_first |] eqn:Hfirst; try discriminate Hnormalize.
   destruct
     (phase1_surface_normalize_generic_param_kind_type_values rest)
     as [actual_rest |] eqn:Hrest; try discriminate Hnormalize.
-  inversion Hnormalize; subst.
+  injection Hnormalize as Hrefined.
+  symmetry in Hrefined.
+  subst refined.
   unfold phase1_surface_generic_params_kind_type_spine_tree,
     phase1_surface_generic_params_spine_tree.
   cbn [phase1_generic_params_kind_type_spine_first
