@@ -99,6 +99,11 @@ main = do
             choiceTypedPrefixWrongBody go offer wrongBody)
     , test "Cancel source-choice wrong terminal End names preserve both authorized Close orders"
         (choiceWrongLocalEndNameRefusal cancel offer "Cancel" (Outcome "Cancel"))
+    , test "Go source choice unknown/inactive End process gates precede endpoint and nominal checks"
+        (do choiceTerminalActivationGate go offer "Go" (Outcome "Done")
+            choiceTypedPrefixWrongBody go offer wrongBody)
+    , test "Cancel source choice unknown/inactive terminal End exact errors"
+        (choiceTerminalActivationGate cancel offer "Cancel" (Outcome "Cancel"))
     , test "diamond rejects wrong externally authorized peer outcome precisely" (choiceCloseDiamondBadPeer go offer)
     , test "diamond rejects wrong source Client close outcome precisely" (choiceCloseDiamondBadClient go offer)
     , test "diamond rejects minimally malformed source offer before both orders" (choiceCloseDiamondWrongBody go offer wrongBody)
@@ -1243,6 +1248,90 @@ choiceWrongLocalEndNameRefusal client server label outcome = do
        && Map.lookup spectatorOccurrence (owners clientThenPeer)
             == Map.lookup spectatorOccurrence (owners ready))
     "wrong-name refusal changed full terminal diamond or borrowed affine frame"
+
+-- Adversarial population observation: NOT a source-derived deactivation step.
+-- Unknown or inactive processes must reject before endpoint/nominal checking,
+-- even where a previously checked source-choice End context is still present.
+choiceTerminalActivationGate
+  :: Text -> Text -> Text -> Outcome -> Either String ()
+choiceTerminalActivationGate client server label outcome = do
+  fx <- fixture client server
+  diamond <- mapLeft show $ choiceCloseDiamond fx label outcome outcome
+  let ready = statefulChoiceSuccessor
+        (statefulChoiceClientCloseSourceReplay
+          (statefulChoiceExplicitPeerCloseClient
+            (choiceCloseDiamondForward diamond)))
+      revision = binaryProtocolInstanceRevision (fxInstance fx)
+      foreignRevision = ProtocolInstanceRevision "fsem02.activation.foreign"
+      foreignRole = ProtocolRoleKey "ForeignActivationRole"
+      unknownProcess = ProcessKey "fsem02.activation.unknown.process"
+      fabricatedName = Name "fsem02.activation.unknown.endpoint"
+      network = fxNetwork fx
+      population = processNetworkPopulation network
+      inactiveNetwork process =
+        network { processNetworkPopulation = Map.adjust
+          (\occ -> occ { processOccurrenceActivation = NotActivated })
+          process population }
+      attempt net state process endpoint suppliedRevision suppliedRole =
+        closeProcessEndpointState net state process endpoint
+          suppliedRevision suppliedRole outcome
+      probes =
+        [ (fxClientNext fx, revision, clientRole)
+        , (serverNext, foreignRevision, foreignRole)
+        , (fabricatedName, foreignRevision, foreignRole)
+        ]
+      expectUnknown side state (endpoint, suppliedRevision, suppliedRole) =
+        case attempt network state unknownProcess endpoint
+            suppliedRevision suppliedRole of
+          Left (EndpointClosureUnknownProcess actual) ->
+            assert (actual == unknownProcess)
+              (side <> ": unknown process diagnostic lost exact key")
+          other -> Left (side <> ": unknown process close not refused first: "
+                         <> show other)
+      expectInactive side state process
+          (endpoint, suppliedRevision, suppliedRole) =
+        case attempt (inactiveNetwork process) state process endpoint
+            suppliedRevision suppliedRole of
+          Left (EndpointClosureProcessNotActive actual NotActivated) ->
+            assert (actual == process)
+              (side <> ": inactive process diagnostic lost exact key")
+          other -> Left (side <> ": inactive process close not refused first: "
+                         <> show other)
+      closeClient state = attempt network state (fxClientProcess fx)
+        (fxClientNext fx) revision clientRole
+      closePeer state = attempt network state (fxServerProcess fx)
+        serverNext revision serverRole
+  assert (Map.notMember unknownProcess population
+       && Map.member (fxClientProcess fx) population
+       && Map.member (fxServerProcess fx) population
+       && fxClientProcess fx /= fxServerProcess fx)
+    "adversarial process key aliases actual source-derived population"
+  clientFirst <- mapLeft show (closeClient ready)
+  peerFirst <- mapLeft show (closePeer ready)
+  clientThenPeer <- mapLeft show (closePeer clientFirst)
+  peerThenClient <- mapLeft show (closeClient peerFirst)
+  let states =
+        [ ("both successors live", ready)
+        , ("Client End retired", clientFirst)
+        , ("Server End retired", peerFirst)
+        , ("Client/Server fully retired", clientThenPeer)
+        , ("Server/Client fully retired", peerThenClient)
+        ]
+  mapM_ (\(side, state) -> do
+    mapM_ (expectUnknown side state) probes
+    mapM_ (expectInactive side state (fxClientProcess fx)) probes
+    mapM_ (expectInactive side state (fxServerProcess fx)) probes) states
+  assert (clientThenPeer == peerThenClient
+       && clientThenPeer == choiceCloseDiamondReverse diamond
+       && Map.lookup clientOccurrence
+            (communicationRestrictedOwners clientThenPeer) == Nothing
+       && Map.lookup serverOccurrence
+            (communicationRestrictedOwners clientThenPeer) == Nothing
+       && Map.lookup spectatorOccurrence
+            (communicationRestrictedOwners clientThenPeer)
+          == Map.lookup spectatorOccurrence
+               (communicationRestrictedOwners ready))
+    "process-gate refusal changed valid End diamond or affine spectator"
 
 -- Once BOTH separately authorized End operations have committed, no original
 -- parsed source choice and no retired terminal endpoint may be reactivated,
