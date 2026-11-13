@@ -130,6 +130,11 @@ main = do
             choiceTypedPrefixWrongBody go offer wrongBody)
     , test "Cancel source choice unknown/inactive terminal End exact errors"
         (choiceTerminalActivationGate cancel offer "Cancel" (Outcome "Cancel"))
+    , test "Go source-choice absent protocol context outranks owner cardinality and nominal checks"
+        (do choiceTerminalMissingContextPrecedence go offer "Go" (Outcome "Done")
+            choiceTypedPrefixWrongBody go offer wrongBody)
+    , test "Cancel source-choice absent protocol context preserves peer-first frame and exact recovery"
+        (choiceTerminalMissingContextPrecedence cancel offer "Cancel" (Outcome "Cancel"))
     , test "diamond rejects wrong externally authorized peer outcome precisely" (choiceCloseDiamondBadPeer go offer)
     , test "diamond rejects wrong source Client close outcome precisely" (choiceCloseDiamondBadClient go offer)
     , test "diamond rejects minimally malformed source offer before both orders" (choiceCloseDiamondWrongBody go offer wrongBody)
@@ -2292,3 +2297,114 @@ choiceTerminalOwnerCardinalityTrichotomy client server label outcome = do
        && all (\(key, _) -> Map.notMember key (owners ready)) near)
     "checked source-derived owner baseline conflicts with cardinality population"
   mapM_ runCardinality [0..6]
+
+
+-- FSEM-02: the production End gate checks an active process and an existing
+-- protocol context before examining exact owner cardinality or nominal claims.
+-- Removing the context and changing the owner map are adversarial Core probes,
+-- not source-authorized protocol transitions or permission to recreate one.
+choiceTerminalMissingContextPrecedence
+  :: Text -> Text -> Text -> Outcome -> Either String ()
+choiceTerminalMissingContextPrecedence client server label outcome = do
+  fx <- fixture client server
+  diamond <- mapLeft show $ choiceCloseDiamond fx label outcome outcome
+  let ready = statefulChoiceSuccessor
+        (statefulChoiceClientCloseSourceReplay
+          (statefulChoiceExplicitPeerCloseClient
+            (choiceCloseDiamondForward diamond)))
+      network = fxNetwork fx
+      clientProcess = fxClientProcess fx
+      clientEnd = fxClientNext fx
+      target = (clientProcess, clientEnd)
+      owners = communicationRestrictedOwners
+      revision = binaryProtocolInstanceRevision (fxInstance fx)
+      badRevision = ProtocolInstanceRevision "fsem02.missing-context.foreign"
+      badRole = ProtocolRoleKey "MissingContextForeignRole"
+      duplicateKey = ActivationOccurrenceKey "fsem02.missing-context.duplicate"
+      withDuplicate = ready
+        { communicationRestrictedOwners =
+            Map.insert duplicateKey target (owners ready) }
+      withoutOwner = ready
+        { communicationRestrictedOwners =
+            Map.delete clientOccurrence (owners ready) }
+      variants =
+        [ ("zero", 0, withoutOwner)
+        , ("one", 1, ready)
+        , ("two", 2, withDuplicate) ]
+      noContext state = state
+        { communicationProtocolContexts =
+            Map.delete clientProcess (communicationProtocolContexts state) }
+      withContext checked state = state
+        { communicationProtocolContexts =
+            Map.insert clientProcess checked (communicationProtocolContexts state) }
+      matching state = Map.keys (Map.filter (== target) (owners state))
+      attempt state suppliedRevision suppliedRole =
+        closeProcessEndpointState network state clientProcess clientEnd
+          suppliedRevision suppliedRole outcome
+      closeClient state = attempt state revision clientRole
+      closePeer state =
+        closeProcessEndpointState network state (fxServerProcess fx)
+          serverNext revision serverRole outcome
+      expectNoContext side state =
+        case attempt state badRevision badRole of
+          Left (EndpointClosureMissingProtocolContext actual) ->
+            assert (actual == clientProcess)
+              (side <> ": missing-context diagnostic changed process identity")
+          other ->
+            Left (side <> ": missing context failed to precede owners/nominal: "
+                  <> show other)
+      expectOtherGate side count state =
+        case (count, attempt state badRevision badRole) of
+          (0, Left (EndpointClosureOccurrenceUnknown p n)) ->
+            assert (p == clientProcess && n == clientEnd)
+              (side <> ": restored zero-owner refusal changed")
+          (1, Left (EndpointClosureProtocolError p
+                 (ProtocolInstanceMismatch n supplied actual))) ->
+            assert (p == clientProcess && n == clientEnd
+                 && supplied == badRevision && actual == revision)
+              (side <> ": restored nominal mismatch was not exact")
+          (_, Left (EndpointClosureOccurrenceAmbiguous p n keys))
+            | count >= 2 ->
+                assert (p == clientProcess && n == clientEnd
+                     && keys == matching state)
+                  (side <> ": restored ambiguity did not report all owners")
+          (_, other) -> Left (side <> ": wrong restored gate: " <> show other)
+  case Map.lookup clientProcess (communicationProtocolContexts ready) of
+    Nothing -> Left "source-derived End context unexpectedly absent"
+    Just checked -> do
+      assert (Map.lookup clientOccurrence (owners ready) == Just target
+           && Map.notMember duplicateKey (owners ready)
+           && clientProcess /= fxServerProcess fx)
+        "missing-context fixture does not have exact independent owners"
+      mapM_ (\(side, count, state) -> do
+        let absent = noContext state
+        assert (length (matching state) == count
+             && owners absent == owners state
+             && Map.notMember clientProcess
+                  (communicationProtocolContexts absent))
+          (side <> ": context-only mutation changed native owner cardinality")
+        expectNoContext (side <> " initial") absent
+        peerFirst <- mapLeft show (closePeer absent)
+        assert (matching peerFirst == matching absent
+             && Map.lookup serverOccurrence (owners peerFirst) == Nothing
+             && Map.notMember clientProcess
+                  (communicationProtocolContexts peerFirst)
+             && Map.lookup spectatorOccurrence (owners peerFirst)
+                  == Map.lookup spectatorOccurrence (owners ready))
+          (side <> ": peer-first close corrupted missing-context owner frame")
+        expectNoContext (side <> " peer-first") peerFirst
+        let restored = withContext checked peerFirst
+        expectOtherGate (side <> " restored/peer-first") count restored
+        expectOtherGate (side <> " original") count state
+        case count of
+          1 -> do
+            clientFirst <- mapLeft show (closeClient state)
+            clientThenPeer <- mapLeft show (closePeer clientFirst)
+            peerThenClient <- mapLeft show (closeClient restored)
+            assert (clientThenPeer == peerThenClient
+                 && clientThenPeer == choiceCloseDiamondReverse diamond
+                 && Map.lookup spectatorOccurrence (owners peerThenClient)
+                     == Map.lookup spectatorOccurrence (owners ready))
+              "restoring exactly the checked source context failed Close diamond"
+          _ -> Right ()
+        ) variants
