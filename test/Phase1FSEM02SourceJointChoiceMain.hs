@@ -84,6 +84,11 @@ main = do
             choiceTypedPrefixWrongBody go offer wrongBody)
     , test "Cancel source-choice stale predecessor replay cannot undo committed End"
         (choiceHalfClosePredecessorReplay cancel offer "Cancel" (Outcome "Cancel"))
+    , test "Go source-choice after both End closes refuses original predecessor and both stale ends"
+        (do choiceFullyClosedNoResurrection go offer "Go" (Outcome "Done")
+            choiceTypedPrefixWrongBody go offer wrongBody)
+    , test "Cancel source-choice after either fully closed End order cannot resurrect owners"
+        (choiceFullyClosedNoResurrection cancel offer "Cancel" (Outcome "Cancel"))
     , test "diamond rejects wrong externally authorized peer outcome precisely" (choiceCloseDiamondBadPeer go offer)
     , test "diamond rejects wrong source Client close outcome precisely" (choiceCloseDiamondBadClient go offer)
     , test "diamond rejects minimally malformed source offer before both orders" (choiceCloseDiamondWrongBody go offer wrongBody)
@@ -1065,6 +1070,83 @@ choiceHalfClosePredecessorReplay client server label outcome = do
        && Map.lookup spectatorOccurrence (owners afterPeerFirst)
             == Map.lookup spectatorOccurrence (owners ready))
     "rejected source replay changed exact final End diamond or resurrected owners"
+
+
+-- Once BOTH separately authorized End operations have committed, no original
+-- parsed source choice and no retired terminal endpoint may be reactivated,
+-- regardless of closure order or hostile nominal inputs. This checks actual
+-- native two-process Core state, not only the finite Rocq owner ledger.
+choiceFullyClosedNoResurrection
+  :: Text -> Text -> Text -> Outcome -> Either String ()
+choiceFullyClosedNoResurrection client server label outcome = do
+  fx <- fixture client server
+  diamond <- mapLeft show $ choiceCloseDiamond fx label outcome outcome
+  let ready = statefulChoiceSuccessor
+        (statefulChoiceClientCloseSourceReplay
+          (statefulChoiceExplicitPeerCloseClient
+            (choiceCloseDiamondForward diamond)))
+      revision = binaryProtocolInstanceRevision (fxInstance fx)
+      foreignRevision = ProtocolInstanceRevision "fsem02.closed.foreign.instance"
+      foreignRole = ProtocolRoleKey "OtherRole"
+      owners = communicationRestrictedOwners
+      contexts = communicationProtocolContexts
+      attempt state process endpoint suppliedRevision suppliedRole =
+        closeProcessEndpointState (fxNetwork fx) state process endpoint
+          suppliedRevision suppliedRole outcome
+      closeClient state =
+        attempt state (fxClientProcess fx) (fxClientNext fx)
+          revision clientRole
+      closePeer state =
+        attempt state (fxServerProcess fx) serverNext
+          revision serverRole
+      staleChoice side closed =
+        case stateful fx label closed of
+          Left (GrammarV1StatefulChoiceSourceError
+            (GrammarV1JointChoiceOfferSourceError
+              (GrammarV1OfferReplayProtocolError
+                (ProtocolEndpointUnknown old)))) ->
+                  assert (old == fxServerOld fx)
+                    (side <> " lost exact consumed source Server predecessor")
+          other -> Left (side <> " resurrected old source choice: " <> show other)
+      staleEnd side closed process endpoint suppliedRevision suppliedRole =
+        case attempt closed process endpoint suppliedRevision suppliedRole of
+          Left (EndpointClosureOccurrenceUnknown actualProcess actualEndpoint) ->
+            assert (actualProcess == process && actualEndpoint == endpoint)
+              (side <> " lost retired endpoint identity or occurrence-first error")
+          other -> Left (side <> " accepted retired terminal End: " <> show other)
+      verifyFinal side closed = do
+        staleChoice side closed
+        staleEnd (side <> " Client") closed
+          (fxClientProcess fx) (fxClientNext fx) revision clientRole
+        staleEnd (side <> " Server") closed
+          (fxServerProcess fx) serverNext revision serverRole
+        staleEnd (side <> " Client foreign nominal") closed
+          (fxClientProcess fx) (fxClientNext fx) foreignRevision foreignRole
+        staleEnd (side <> " Server foreign nominal") closed
+          (fxServerProcess fx) serverNext foreignRevision foreignRole
+        let clientCtx = Map.lookup (fxClientProcess fx) (contexts closed)
+            peerCtx = Map.lookup (fxServerProcess fx) (contexts closed)
+            oldClientRetired = case clientCtx of
+              Just ctx -> Map.notMember (fxClientOld fx) (protocolEndpoints ctx)
+              Nothing -> False
+            oldPeerRetired = case peerCtx of
+              Just ctx -> Map.notMember (fxServerOld fx) (protocolEndpoints ctx)
+              Nothing -> False
+        assert (Map.lookup clientOccurrence (owners closed) == Nothing
+             && Map.lookup serverOccurrence (owners closed) == Nothing
+             && Map.lookup spectatorOccurrence (owners closed)
+                  == Map.lookup spectatorOccurrence (owners ready)
+             && oldClientRetired && oldPeerRetired)
+          (side <> " changed both terminal retirements or borrowed affine frame")
+  clientFirst <- mapLeft show $ closeClient ready
+  afterForward <- mapLeft show $ closePeer clientFirst
+  peerFirst <- mapLeft show $ closePeer ready
+  afterReverse <- mapLeft show $ closeClient peerFirst
+  assert (afterForward == afterReverse
+       && afterReverse == choiceCloseDiamondReverse diamond)
+    "actual complete End orders differed before stale replay"
+  verifyFinal "Client-then-Server" afterForward
+  verifyFinal "Server-then-Client" afterReverse
 
 -- A finite, source-relative choice trace, distinct from restricted
 -- Bytes[8] send/receive. The offer's successor and both terminal outcomes
