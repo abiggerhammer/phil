@@ -58,7 +58,7 @@ Proof.
     + eapply phase1_surface_normalize_field_type_spine_round_trip.
       exact Hfield.
     + eapply IH.
-      exact Hrest.
+      reflexivity.
 Qed.
 
 Theorem phase1_surface_normalize_field_type_suffix_values_round_trip :
@@ -87,7 +87,7 @@ Proof.
           field actual Hfield).
       reflexivity.
     + eapply IH.
-      exact Hrest.
+      reflexivity.
 Qed.
 
 Record Phase1SurfaceFieldTypeListSpine : Type := {

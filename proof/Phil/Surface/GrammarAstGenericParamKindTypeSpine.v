@@ -61,12 +61,19 @@ Proof.
   destruct (phase1_surface_normalize_generic_kind_type_spine kind)
     as [actual |] eqn:Hkind; try discriminate Hnormalize.
   inversion Hnormalize; subst.
-  unfold phase1_surface_generic_param_kind_type_spine_tree,
-    phase1_surface_generic_param_spine_tree.
-  cbn [phase1_generic_param_kind_type_spine_name
-       phase1_generic_param_kind_type_spine_kind
-       phase1_generic_param_spine_name
-       phase1_generic_param_spine_kind].
+  change
+    (PTNonterminal "generic_param"
+      (PTSequence
+        [ phase1_surface_identifier_tree name;
+          PTLiteral ":";
+          phase1_surface_generic_kind_type_spine_tree actual
+        ]) =
+     PTNonterminal "generic_param"
+      (PTSequence
+        [ phase1_surface_identifier_tree name;
+          PTLiteral ":";
+          phase1_surface_generic_kind_spine_tree kind
+        ])).
   rewrite
     (phase1_surface_normalize_generic_kind_type_spine_round_trip
       kind actual Hkind).
