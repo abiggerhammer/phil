@@ -147,6 +147,11 @@ Proof.
             phase1_field_list_spine_first
             phase1_field_list_spine_rest
             phase1_field_list_spine_trailing_comma].
+  match goal with
+  | |- ?lhs = ?rhs =>
+      idtac "PRE-REWRITE FIELD LHS:" lhs;
+      idtac "PRE-REWRITE FIELD RHS:" rhs
+  end.
   rewrite
     (phase1_surface_normalize_field_type_spine_round_trip
       first actual_first Hfirst).

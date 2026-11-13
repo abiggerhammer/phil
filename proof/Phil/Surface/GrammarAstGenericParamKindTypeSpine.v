@@ -67,6 +67,11 @@ Proof.
             phase1_generic_param_kind_type_spine_kind
             phase1_generic_param_spine_name
             phase1_generic_param_spine_kind].
+  match goal with
+  | |- ?lhs = ?rhs =>
+      idtac "PRE-REWRITE GENERIC LHS:" lhs;
+      idtac "PRE-REWRITE GENERIC RHS:" rhs
+  end.
   rewrite
     (phase1_surface_normalize_generic_kind_type_spine_round_trip
       kind actual Hkind).
