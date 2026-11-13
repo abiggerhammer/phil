@@ -138,7 +138,7 @@ Proof.
     as [actual_first |] eqn:Hfirst; try discriminate Hnormalize.
   destruct (phase1_surface_normalize_field_type_values rest)
     as [actual_rest |] eqn:Hrest; try discriminate Hnormalize.
-  inversion Hnormalize; subst refined.
+  inversion Hnormalize; subst.
   cbn.
   rewrite
     (phase1_surface_normalize_field_type_spine_round_trip
