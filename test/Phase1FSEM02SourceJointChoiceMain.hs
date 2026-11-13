@@ -94,6 +94,11 @@ main = do
             choiceTypedPrefixWrongBody go offer wrongBody)
     , test "Cancel source-choice cross-process refusal preserves both Close orders"
         (choiceCrossProcessCloseRefusal cancel offer "Cancel" (Outcome "Cancel"))
+    , test "Go source-choice exact process but wrong live terminal End name refuses without consumption"
+        (do choiceWrongLocalEndNameRefusal go offer "Go" (Outcome "Done")
+            choiceTypedPrefixWrongBody go offer wrongBody)
+    , test "Cancel source-choice wrong terminal End names preserve both authorized Close orders"
+        (choiceWrongLocalEndNameRefusal cancel offer "Cancel" (Outcome "Cancel"))
     , test "diamond rejects wrong externally authorized peer outcome precisely" (choiceCloseDiamondBadPeer go offer)
     , test "diamond rejects wrong source Client close outcome precisely" (choiceCloseDiamondBadClient go offer)
     , test "diamond rejects minimally malformed source offer before both orders" (choiceCloseDiamondWrongBody go offer wrongBody)
@@ -1149,6 +1154,95 @@ choiceCrossProcessCloseRefusal client server label outcome = do
        && Map.lookup spectatorOccurrence (owners afterForward)
             == Map.lookup spectatorOccurrence (owners ready))
     "cross-process refusal changed complete terminal state or borrowed spectator"
+
+-- Endpoint spelling is an independent occurrence gate even when the process
+-- key is the real ACTIVE owner. A live participant cannot substitute the other
+-- participant's terminal name, a consumed predecessor, or a fabricated local
+-- name; wrong nominal values must not mask the occurrence-first refusal.
+-- These checked Go/Cancel source runs still require separate End authority.
+choiceWrongLocalEndNameRefusal
+  :: Text -> Text -> Text -> Outcome -> Either String ()
+choiceWrongLocalEndNameRefusal client server label outcome = do
+  fx <- fixture client server
+  diamond <- mapLeft show $ choiceCloseDiamond fx label outcome outcome
+  let ready = statefulChoiceSuccessor
+        (statefulChoiceClientCloseSourceReplay
+          (statefulChoiceExplicitPeerCloseClient
+            (choiceCloseDiamondForward diamond)))
+      revision = binaryProtocolInstanceRevision (fxInstance fx)
+      foreignRevision = ProtocolInstanceRevision "fsem02.local-name.foreign"
+      foreignRole = ProtocolRoleKey "WrongTerminalRole"
+      fabricated = Name "fsem02.local-name.fabricated.end"
+      owners = communicationRestrictedOwners
+      contexts = communicationProtocolContexts
+      invalidPairs =
+        [ (fxClientProcess fx, serverNext)
+        , (fxClientProcess fx, fxClientOld fx)
+        , (fxClientProcess fx, fabricated)
+        , (fxServerProcess fx, fxClientNext fx)
+        , (fxServerProcess fx, fxServerOld fx)
+        , (fxServerProcess fx, fabricated)
+        ]
+      roleFor process =
+        if process == fxClientProcess fx then clientRole else serverRole
+      attempt state process endpoint suppliedRevision suppliedRole =
+        closeProcessEndpointState (fxNetwork fx) state process endpoint
+          suppliedRevision suppliedRole outcome
+      rightfulClient state =
+        attempt state (fxClientProcess fx) (fxClientNext fx)
+          revision clientRole
+      rightfulPeer state =
+        attempt state (fxServerProcess fx) serverNext
+          revision serverRole
+      rejectName side state process endpoint suppliedRevision suppliedRole =
+        case attempt state process endpoint suppliedRevision suppliedRole of
+          Left (EndpointClosureOccurrenceUnknown actualProcess actualEndpoint) ->
+            assert (actualProcess == process && actualEndpoint == endpoint)
+              (side <> " lost exact process/name occurrence-first rejection")
+          other -> Left
+            (side <> " accepted wrong local terminal endpoint: " <> show other)
+      checkWrong side state = do
+        mapM_ (\(process, endpoint) ->
+          rejectName side state process endpoint revision (roleFor process))
+          invalidPairs
+        mapM_ (\(process, endpoint) ->
+          rejectName side state process endpoint foreignRevision foreignRole)
+          invalidPairs
+  assert (fxClientNext fx /= serverNext
+       && fxClientOld fx /= fxClientNext fx
+       && fxServerOld fx /= serverNext
+       && fabricated /= fxClientNext fx
+       && fabricated /= serverNext)
+    "source-derived terminal and wrong local endpoint identities alias"
+  checkWrong "both successors live" ready
+  assert (Map.lookup clientOccurrence (owners ready)
+            == Just (fxClientProcess fx, fxClientNext fx)
+       && Map.lookup serverOccurrence (owners ready)
+            == Just (fxServerProcess fx, serverNext))
+    "wrong-name attempt changed live exact source-choice successor owners"
+
+  clientFirst <- mapLeft show $ rightfulClient ready
+  checkWrong "Client first" clientFirst
+  assert (Map.lookup (fxServerProcess fx) (contexts clientFirst)
+            == Map.lookup (fxServerProcess fx) (contexts ready))
+    "wrong-name refusal consumed still-live Server context"
+  clientThenPeer <- mapLeft show $ rightfulPeer clientFirst
+  checkWrong "Client then peer" clientThenPeer
+
+  peerFirst <- mapLeft show $ rightfulPeer ready
+  checkWrong "peer first" peerFirst
+  assert (Map.lookup (fxClientProcess fx) (contexts peerFirst)
+            == Map.lookup (fxClientProcess fx) (contexts ready))
+    "wrong-name refusal consumed still-live Client context"
+  peerThenClient <- mapLeft show $ rightfulClient peerFirst
+  checkWrong "peer then Client" peerThenClient
+  assert (clientThenPeer == peerThenClient
+       && clientThenPeer == choiceCloseDiamondReverse diamond
+       && Map.lookup clientOccurrence (owners clientThenPeer) == Nothing
+       && Map.lookup serverOccurrence (owners clientThenPeer) == Nothing
+       && Map.lookup spectatorOccurrence (owners clientThenPeer)
+            == Map.lookup spectatorOccurrence (owners ready))
+    "wrong-name refusal changed full terminal diamond or borrowed affine frame"
 
 -- Once BOTH separately authorized End operations have committed, no original
 -- parsed source choice and no retired terminal endpoint may be reactivated,
