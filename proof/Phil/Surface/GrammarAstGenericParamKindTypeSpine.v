@@ -213,7 +213,12 @@ Proof.
     (phase1_surface_normalize_generic_param_kind_type_values rest)
     as [actual_rest |] eqn:Hrest; try discriminate Hnormalize.
   inversion Hnormalize; subst.
-  cbn.
+  unfold phase1_surface_generic_params_kind_type_spine_tree,
+    phase1_surface_generic_params_spine_tree.
+  cbn [phase1_generic_params_kind_type_spine_first
+       phase1_generic_params_kind_type_spine_rest
+       phase1_generic_params_spine_first
+       phase1_generic_params_spine_rest].
   rewrite
     (phase1_surface_normalize_generic_param_kind_type_spine_round_trip
       first actual_first Hfirst).
