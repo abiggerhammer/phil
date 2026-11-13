@@ -273,6 +273,8 @@ The bounded [FSEM-02 source-choice half-Close nominal peer refusal/retry](formal
 
 The bounded [FSEM-02 consumed source-choice replay across terminal half-Close](formal-semantics-choice-half-close-predecessor-replay-fsem02-v1.md) checks that neither a committed Client End nor a committed Server End permits the *original* parsed Select/Offer to run again. Production replay rejects its exact consumed predecessor without rolling back the closed side; the separately granted peer End still completes. Rocq proves a conditional finite owner-ledger stale-predecessor analogue, not universal source-to-Core or Haskell-to-Rocq refinement.
 
+The bounded [FSEM-02 fully closed source-choice no-resurrection check](formal-semantics-choice-fully-closed-no-resurrection-fsem02-v1.md) extends the one-sided Close replay cases to BOTH terminal Ends completed in either order. The actual native state rejects the old parsed Select/Offer and either retired terminal successor with exact error classes (including stale occurrence ahead of foreign nominal checking), without resurrecting owners or changing the affine spectator. Conditional Rocq finite-ledger facts retain all source/activation/authority premises and do not establish general implementation refinement.
+
 ## 6. Architectures, occurrence identity, and root selection
 
 The source differentiates:
