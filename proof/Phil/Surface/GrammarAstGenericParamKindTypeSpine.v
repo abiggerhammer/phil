@@ -125,7 +125,7 @@ Proof.
         phase1_surface_normalize_generic_param_kind_type_spine_round_trip.
       exact Hparameter.
     + eapply IH.
-      exact Hrest.
+      reflexivity.
 Qed.
 
 Theorem
@@ -157,7 +157,7 @@ Proof.
           parameter actual Hparameter).
       reflexivity.
     + eapply IH.
-      exact Hrest.
+      reflexivity.
 Qed.
 
 Record Phase1SurfaceGenericParamsKindTypeSpine : Type := {
