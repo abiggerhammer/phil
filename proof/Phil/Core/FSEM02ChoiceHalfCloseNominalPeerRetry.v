@@ -121,7 +121,9 @@ Proof.
   split.
   { unfold fsem02ChoiceClientCommittedNominalRefusal.
     now rewrite Hclient. }
-  eapply fsem02ConditionalTerminalCloseDiamond; eauto.
+  exact (fsem02ConditionalTerminalCloseDiamond
+    owners co cp ce po pp pe ac af ap ar
+    Hdistinct Hclient Hretry Hpeer HclientRetry).
 Qed.
 
 Theorem fsem02ChoicePeerFirstNominalRefusalThenClientRetry :
@@ -140,5 +142,7 @@ Proof.
   split.
   { unfold fsem02ChoicePeerCommittedNominalRefusal.
     now rewrite HpeerFirst. }
-  eapply fsem02ConditionalTerminalCloseDiamond; eauto.
+  exact (fsem02ConditionalTerminalCloseDiamond
+    owners co cp ce po pp pe ac af ap ar
+    Hdistinct Hclient HpeerSecond HpeerFirst HclientSecond).
 Qed.
