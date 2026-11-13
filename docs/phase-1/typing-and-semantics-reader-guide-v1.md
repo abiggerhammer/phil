@@ -33,6 +33,8 @@ to challenge.
 
 The [non-normative FSEM-02 source Ping joint terminal-close diamond](formal-semantics-source-ping-joint-close-diamond-fsem02-v1.md) records two local Close orders after a real joint Send/Receive, exact stale/wrong-terminal rejection, conditional Rocq proofs, and explicit external process/nominal authority premises. It is not an atomic Close or source-interpreter claim.
 
+The [non-normative FSEM-02 terminal missing-context precedence witness](formal-semantics-choice-missing-context-gate-fsem02-v1.md) checks production End errors against source-derived Select/Offer successors and a separate conditional Rocq gate model. Context restoration is an explicit test premise, not a source permission or a Haskell-to-Rocq refinement theorem.
+
 ## Worked Phase 1 rule families (companion worksheet)
 
 For three paired accepted/expected-rejected examples and explicitly
