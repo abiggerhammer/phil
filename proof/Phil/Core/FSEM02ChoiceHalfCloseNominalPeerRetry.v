@@ -80,8 +80,6 @@ Proof.
   pose proof (fsem02SelectedClientCloseExactRetirementAndFrame
     owners po pp pe ap Hclose) as [Hgone Hframe].
   unfold fsem02ChoicePeerCommittedNominalRefusal.
-  change (fsem02RetireSelectedClientOwner owners po pp pe = Some ap)
-    in Hclose.
   rewrite Hclose. simpl. auto.
 Qed.
 
