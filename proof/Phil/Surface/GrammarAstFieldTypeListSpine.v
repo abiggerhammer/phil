@@ -133,14 +133,14 @@ Theorem phase1_surface_normalize_field_type_list_spine_round_trip :
       phase1_surface_field_list_spine_tree fields.
 Proof.
   intros [first rest trailing] refined Hnormalize.
-  cbn in Hnormalize.
+  unfold phase1_surface_normalize_field_type_list_spine in Hnormalize.
+  cbn [phase1_field_list_spine_first
+            phase1_field_list_spine_rest
+            phase1_field_list_spine_trailing_comma] in Hnormalize.
   destruct (phase1_surface_normalize_field_type_spine first)
     as [actual_first |] eqn:Hfirst; try discriminate Hnormalize.
   destruct (phase1_surface_normalize_field_type_values rest)
     as [actual_rest |] eqn:Hrest; try discriminate Hnormalize.
-  match type of Hnormalize with
-  | ?h => idtac "HNORMALIZE-FIELD" h
-  end.
   injection Hnormalize as Hrefined.
   symmetry in Hrefined.
   subst refined.

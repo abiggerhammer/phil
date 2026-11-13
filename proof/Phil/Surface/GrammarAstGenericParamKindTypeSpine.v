@@ -57,12 +57,11 @@ Theorem
       phase1_surface_generic_param_spine_tree parameter.
 Proof.
   intros [name kind] refined Hnormalize.
-  cbn in Hnormalize.
+  unfold phase1_surface_normalize_generic_param_kind_type_spine in Hnormalize.
+  cbn [phase1_generic_param_spine_name
+            phase1_generic_param_spine_kind] in Hnormalize.
   destruct (phase1_surface_normalize_generic_kind_type_spine kind)
     as [actual |] eqn:Hkind; try discriminate Hnormalize.
-  match type of Hnormalize with
-  | ?h => idtac "HNORMALIZE-GENERIC" h
-  end.
   injection Hnormalize as Hrefined.
   symmetry in Hrefined.
   subst refined.
