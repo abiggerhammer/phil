@@ -68,6 +68,11 @@ main = do
     , test "externally closed server endpoint cannot close twice" (choiceExplicitPeerTwice go offer)
     , test "Go source choice terminal End closes commute under two external outcomes" (choiceCloseDiamondAccepted go offer "Go" (Outcome "Done"))
     , test "Cancel source choice terminal closes commute and preserve spectators" (choiceCloseDiamondAccepted cancel offer "Cancel" (Outcome "Cancel"))
+    , test "Go choice committed Client/peer half-Close rejects bad peer and retries without rollback"
+        (do choiceHalfClosePeerRefusalRetry go offer "Go" (Outcome "Done")
+            choiceTypedPrefixWrongBody go offer wrongBody)
+    , test "Cancel choice committed Client/peer half-Close preserves Cancel and retries"
+        (choiceHalfClosePeerRefusalRetry cancel offer "Cancel" (Outcome "Cancel"))
     , test "diamond rejects wrong externally authorized peer outcome precisely" (choiceCloseDiamondBadPeer go offer)
     , test "diamond rejects wrong source Client close outcome precisely" (choiceCloseDiamondBadClient go offer)
     , test "diamond rejects minimally malformed source offer before both orders" (choiceCloseDiamondWrongBody go offer wrongBody)
@@ -807,6 +812,83 @@ choiceCloseDiamondPeerDoubleClose client server = do
       assert (process == fxServerProcess fx && endpoint == serverNext)
         "duplicate peer-first close lost its process/endpoint classification"
     other -> Left ("peer-first endpoint was reused: " <> show other)
+
+-- Independently parsed complete Select/Offer source, real activated Core
+-- process state, and explicitly supplied terminal End authorizations. A bad
+-- attempt after the opposite half-Close is checked on the *already committed*
+-- state; it returns no successor or rollback token. Check both Go/Cancel and
+-- both first-closer schedules against the ordinary checked terminal diamond.
+choiceHalfClosePeerRefusalRetry :: Text -> Text -> Text -> Outcome -> Either String ()
+choiceHalfClosePeerRefusalRetry client server label outcome = do
+  fx <- fixture client server
+  diamond <- mapLeft show $ choiceCloseDiamond fx label outcome outcome
+  let forward = choiceCloseDiamondForward diamond
+      ready = statefulChoiceSuccessor
+        (statefulChoiceClientCloseSourceReplay
+          (statefulChoiceExplicitPeerCloseClient forward))
+      revision = binaryProtocolInstanceRevision (fxInstance fx)
+      wrongOutcome =
+        if outcome == Outcome "Done" then Outcome "Cancel" else Outcome "Done"
+      closeClient state selectedOutcome =
+        closeProcessEndpointState (fxNetwork fx) state
+          (fxClientProcess fx) (fxClientNext fx)
+          revision clientRole selectedOutcome
+      closePeer state selectedOutcome =
+        closeProcessEndpointState (fxNetwork fx) state
+          (fxServerProcess fx) serverNext
+          revision serverRole selectedOutcome
+      owners = communicationRestrictedOwners
+      contexts = communicationProtocolContexts
+      rejectOutcome side expectedProcess trial =
+        case trial of
+          Left (EndpointClosureProtocolError actualProcess
+            (ProtocolSessionError (CloseOutcomeMismatch expected actual))) ->
+              assert (actualProcess == expectedProcess
+                   && expected == outcome && actual == wrongOutcome)
+                (side <> " lost precise End outcome or process error")
+          other -> Left (side <> " accepted wrong End outcome: " <> show other)
+      rejectRetired side expectedProcess expectedEndpoint trial =
+        case trial of
+          Left (EndpointClosureOccurrenceUnknown actualProcess actualEndpoint) ->
+            assert (actualProcess == expectedProcess
+                 && actualEndpoint == expectedEndpoint)
+              (side <> " lost exact stale endpoint occurrence")
+          other -> Left (side <> " reused retired endpoint: " <> show other)
+  firstClient <- mapLeft show $ closeClient ready outcome
+  assert (Map.lookup (fxServerProcess fx) (contexts firstClient)
+            == Map.lookup (fxServerProcess fx) (contexts ready)
+       && Map.lookup clientOccurrence (owners firstClient) == Nothing
+       && Map.lookup serverOccurrence (owners firstClient)
+            == Map.lookup serverOccurrence (owners ready)
+       && Map.lookup spectatorOccurrence (owners firstClient)
+            == Map.lookup spectatorOccurrence (owners ready))
+    "Client-first half-Close changed the live peer or borrowed spectator"
+  rejectOutcome "Client-first bad Server End" (fxServerProcess fx)
+    (closePeer firstClient wrongOutcome)
+  rejectRetired "Client-first retired Client" (fxClientProcess fx)
+    (fxClientNext fx) (closeClient firstClient outcome)
+  afterClientFirst <- mapLeft show $ closePeer firstClient outcome
+  firstPeer <- mapLeft show $ closePeer ready outcome
+  assert (Map.lookup (fxClientProcess fx) (contexts firstPeer)
+            == Map.lookup (fxClientProcess fx) (contexts ready)
+       && Map.lookup serverOccurrence (owners firstPeer) == Nothing
+       && Map.lookup clientOccurrence (owners firstPeer)
+            == Map.lookup clientOccurrence (owners ready)
+       && Map.lookup spectatorOccurrence (owners firstPeer)
+            == Map.lookup spectatorOccurrence (owners ready))
+    "Server-first half-Close changed the live client or borrowed spectator"
+  rejectOutcome "Server-first bad Client End" (fxClientProcess fx)
+    (closeClient firstPeer wrongOutcome)
+  rejectRetired "Server-first retired Server" (fxServerProcess fx)
+    serverNext (closePeer firstPeer outcome)
+  afterPeerFirst <- mapLeft show $ closeClient firstPeer outcome
+  assert (afterClientFirst == afterPeerFirst
+       && afterClientFirst == choiceCloseDiamondReverse diamond
+       && Map.lookup clientOccurrence (owners afterClientFirst) == Nothing
+       && Map.lookup serverOccurrence (owners afterClientFirst) == Nothing
+       && Map.lookup spectatorOccurrence (owners afterClientFirst)
+            == Map.lookup spectatorOccurrence (owners ready))
+    "wrong-outcome refusal/retry changed exact two-process final state"
 
 -- A finite, source-relative choice trace, distinct from restricted
 -- Bytes[8] send/receive. The offer's successor and both terminal outcomes

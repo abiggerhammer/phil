@@ -266,6 +266,8 @@ The bounded [FSEM-02 Ping half-closed peer refusal/retry](formal-semantics-sourc
 
 The bounded [FSEM-02 committed Ping half-Close nominal peer refusal](formal-semantics-source-ping-half-close-nominal-peer-retry-fsem02-v1.md) verifies native wrong-instance/wrong-role and stale-lookup precedence after either committed local Close, exact unchanged peer/loan framing and eventual admitted completion. Rocq supplies conditional two-gate refusal lemmas; payload transfer and global refinement remain open.
 
+The bounded [FSEM-02 source choice half-Close refusal and retry](formal-semantics-choice-half-close-peer-refusal-retry-fsem02-v1.md) checks both Go/Done and Cancel/Cancel: either committed Client or Server End survives a wrong-outcome peer refusal, the opposite endpoint remains live, stale replay fails exactly, and valid retry converges to the checked two-process terminal diamond. Conditional Rocq ledgers require externally admitted outcomes and distinct owners, not global Haskell-to-Rocq refinement.
+
 ## 6. Architectures, occurrence identity, and root selection
 
 The source differentiates:
