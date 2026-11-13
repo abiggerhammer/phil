@@ -1,6 +1,6 @@
 From Stdlib Require Import Strings.String Lists.List Bool.Bool.
 From Phil.Core Require Import Syntax FSEM02ChoiceAmbiguousClose
-  FSEM02ChoiceCompleteAmbiguityList.
+  FSEM02ChoiceCompleteAmbiguityList FSEM02SelectedClientClose.
 Import ListNotations.
 
 (* Non-normative FSEM-02: the supplied enumerated key population and
