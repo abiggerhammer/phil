@@ -1,5 +1,6 @@
 From Stdlib Require Import Strings.String Lists.List Bool.Bool.
-From Phil.Core Require Import Syntax FSEM02ChoiceAmbiguousClose.
+From Phil.Core Require Import Syntax FSEM02StatefulSourceChoice
+  FSEM02SelectedClientClose FSEM02ChoiceAmbiguousClose.
 Import ListNotations.
 
 (* Non-normative FSEM-02: these are explicit external gate observations,
