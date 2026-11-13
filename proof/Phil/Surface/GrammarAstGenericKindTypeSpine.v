@@ -248,7 +248,7 @@ Proof.
       as [type_value |] eqn:Htype; try discriminate Hnormalize.
     inversion Hnormalize; subst refined.
     cbn.
-    rewrite
+    rewrite <-
       (phase1_surface_normalize_typed_generic_kind_type_round_trip
         "provider" selected type_value Htype).
     reflexivity.
@@ -258,7 +258,7 @@ Proof.
       as [type_value |] eqn:Htype; try discriminate Hnormalize.
     inversion Hnormalize; subst refined.
     cbn.
-    rewrite
+    rewrite <-
       (phase1_surface_normalize_typed_generic_kind_type_round_trip
         "callable" selected type_value Htype).
     reflexivity.
@@ -268,7 +268,7 @@ Proof.
       as [type_value |] eqn:Htype; try discriminate Hnormalize.
     inversion Hnormalize; subst refined.
     cbn.
-    rewrite
+    rewrite <-
       (phase1_surface_normalize_typed_generic_kind_type_round_trip
         "boundary" selected type_value Htype).
     reflexivity.
@@ -278,7 +278,7 @@ Proof.
       as [type_value |] eqn:Htype; try discriminate Hnormalize.
     inversion Hnormalize; subst refined.
     cbn.
-    rewrite
+    rewrite <-
       (phase1_surface_normalize_typed_generic_kind_type_round_trip
         "architecture" selected type_value Htype).
     reflexivity.
