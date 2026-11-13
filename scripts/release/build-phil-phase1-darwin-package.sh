@@ -38,6 +38,7 @@ otool -l "$stage/bin/philc" | grep -A6 LC_BUILD_VERSION | grep -q 'minos 11.0'
 
 cp docs/tutorials/tour-phase1.md "$stage/share/phil/docs/tour-phase1.md"
 cp docs/phase-1/surface-grammar-v1.md "$stage/share/phil/docs/surface-grammar-v1.md"
+cp handoff/phase1/manifest-v1.tsv "$stage/share/phil/phase1-handoff-manifest-v1.tsv"
 cp examples/run/return-unit.phil "$stage/share/phil/examples/return-unit.phil"
 cp examples/run/scalar-binding-42.phil "$stage/share/phil/examples/scalar-binding-42.phil"
 cat > "$stage/share/phil/examples/rejected.phil" <<'EOF'
@@ -50,41 +51,77 @@ cp scripts/release/smoke-phil-phase1-package.sh "$stage/smoke-test.sh"
 chmod 0755 "$stage/smoke-test.sh"
 
 build_commit="$(git rev-parse HEAD)"
+release_package="$stage/share/phil/phil.release-package"
+
+# Bind the exact UNSIGNED native compiler, source and handoff root to the
+# existing INT-011 Darwin distribution identity. This is structural package
+# evidence, not Developer-ID signing, notarization or a P7 origin certificate.
+cabal -v0 exec -- runghc -isrc -Wall -Werror \
+  app/Phase1INT011DistributionReleaseMain.hs \
+  emit-darwin phil "0.1.0-phase1" "$build_commit" \
+  "$stage/share/phil/phase1-handoff-manifest-v1.tsv" \
+  "$stage/bin/philc" \
+  > "$release_package"
+
+record_field() {
+  local file="$1" tag="$2" key="$3"
+  awk -F '\t' -v wanted_tag="$tag" -v wanted_key="$key" '
+    $1 == wanted_tag {
+      for (i = 2; i <= NF; ++i) {
+        prefix = wanted_key "="
+        if (index($i, prefix) == 1) {
+          print substr($i, length(prefix) + 1)
+          exit
+        }
+      }
+    }
+  ' "$file"
+}
+release_id="$(record_field "$release_package" release id)"
+[[ "$release_id" =~ ^sha256:[0-9a-f]{64}$ ]]
+handoff_sha256="$(shasum -a 256 "$stage/share/phil/phase1-handoff-manifest-v1.tsv" | awk '{print $1}')"
+compiler_sha256="$(shasum -a 256 "$stage/bin/philc" | awk '{print $1}')"
+
 cat > "$stage/share/phil/BUILD-INFO" <<EOF
 package=phil
 version=0.1.0-phase1
 target=$target
 build_commit=$build_commit
+distribution_release_id=$release_id
+handoff_manifest_sha256=sha256:$handoff_sha256
+compiler_sha256=sha256:$compiler_sha256
 archive_format=zip
 macos_deployment_target=$deployment_target
 public_command=philc emit-llvm --target TARGET FILE
-release_status=staging-package-signing-notarization-certification-and-publication-pending
+release_status=unsigned-staging-distribution-identity-checked-signing-notarization-publication-pending
 EOF
 
-cat > "$stage/TCB.txt" <<'EOF'
-Phil 0.1 Phase-1 standalone package trust disclosure
-
-This package is a Phase-1 distribution staging artifact. It does not claim
-Phase-2 independent-compiler assurance.
-
-Trusted boundaries retained in this package:
-- Phil Haskell compiler/checker: first implementation remains trusted until Phase 2.
-- GHC and conventional Apple host linker/runtime used to build the native philc executable.
-- Apple Silicon Darwin ABI and macOS runtime assumptions.
-- LLVM 18.x semantics/tooling remain the declared validation/lowering tool boundary for emitted LLVM IR.
-
-The final browser-downloadable Darwin artifact additionally requires Developer
-ID signing and Apple notarization. Certified-release/manifest binding for the
-standalone Phil release is a later INT-011 slice. This file deliberately does
-not overstate those closures.
-EOF
+# The human disclosure and machine release identity must enumerate the
+# SAME four declared trust roots. Do not maintain independent hand-written lists.
+{
+  echo 'Phil 0.1 Phase-1 standalone package trust disclosure'
+  echo
+  echo 'The authoritative machine-readable distribution record is share/phil/phil.release-package.'
+  echo 'The records below are copied verbatim from that distribution record.'
+  echo
+  grep '^tcb[[:space:]]' "$release_package"
+} > "$stage/TCB.txt"
+test "$(grep -c '^tcb[[:space:]]' "$stage/TCB.txt")" -eq 4
 
 cat > "$stage/README.md" <<'EOF'
 # Phil 0.1 — Phase 1 Apple Silicon macOS package
 
-This package contains the standalone public `philc` executable plus the frozen
-Phase-1 tour, grammar reference, representative accepted/rejected source, trust
-disclosure, and a package-only smoke test.
+This UNSIGNED staging package contains the standalone public `philc` executable,
+the frozen Phase-1 handoff, tour, grammar reference, representative
+accepted/rejected source, distribution identity, declared trust disclosure,
+and a package-only smoke test. No release signature or notarization is claimed.
+
+`share/phil/phil.release-package` binds the exact packaged UNSIGNED `philc`
+bytes to the source commit, target, Phase-1 handoff manifest and TCB.
+`share/phil/BUILD-INFO` repeats that identity and the exact component hashes.
+An archive-level `.release` sidecar separately binds the archive and manifest
+byte hashes to this distribution identity. Neither record establishes
+P7 checked-occurrence provenance for the separately compiled executable.
 
 No repository checkout, GHC, Cabal, or LLVM installation is required to run the
 packaged smoke or to emit LLVM text from the included examples.
@@ -100,9 +137,10 @@ unknown targets.
 
     ./smoke-test.sh
 
-The smoke verifies all packaged checksums, the public target-selection failure
-cases, accepted source lowering with the exact target triple/data layout, scalar
-binding preservation, and rejection of invalid source.
+The smoke verifies all packaged checksums, the distribution-release record,
+source and handoff binding, exact compiler-byte digest, four declared TCB roots,
+public target-selection failures, accepted source lowering with the exact
+target triple/data layout, scalar binding, and rejection of invalid source.
 
 This builder pins the executable deployment floor to macOS 11, the first Apple
 Silicon macOS release. The staging package is intentionally not presented as a
@@ -157,6 +195,18 @@ PY
 (
   cd "$output_dir"
   shasum -a 256 "$archive_name" > "$archive_name.sha256"
+)
+
+# Separately bind downloadable archive bytes to the exact internal unsigned
+# distribution identity and SHA256SUMS. No public release or sign-off occurs.
+release_sidecar="$archive.release"
+cabal -v0 exec -- runghc -isrc -Wall -Werror \
+  app/Phase1INT011DistributionReleaseMain.hs \
+  emit-archive "$release_package" "$archive" "$stage/SHA256SUMS" \
+  > "$release_sidecar"
+(
+  cd "$output_dir"
+  shasum -a 256 "$archive_name.release" > "$archive_name.release.sha256"
 )
 
 printf '%s\n' "$archive"

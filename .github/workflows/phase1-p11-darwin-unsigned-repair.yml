@@ -1,0 +1,197 @@
+name: Phase 1 P11 Corrected Unsigned Darwin Package (No Publication)
+
+# Audit-only source-head staging. Never sign, notarize, upload a release or move a tag.
+on:
+  pull_request:
+    paths:
+      - 'scripts/release/build-phil-phase1-darwin-package.sh'
+      - '.github/workflows/phase1-p11-darwin-unsigned-repair.yml'
+      - 'audit/p11-darwin-unsigned-repair-2026-11-13.md'
+  push:
+    branches: [main]
+    paths:
+      - 'scripts/release/build-phil-phase1-darwin-package.sh'
+      - '.github/workflows/phase1-p11-darwin-unsigned-repair.yml'
+      - 'audit/p11-darwin-unsigned-repair-2026-11-13.md'
+
+permissions:
+  contents: read
+
+jobs:
+  native-linux-unsigned-smokes:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 80
+    steps:
+      - uses: actions/checkout@v4
+      - uses: haskell-actions/setup@v2
+        with:
+          ghc-version: '9.6.7'
+          cabal-version: 'latest'
+      - name: Strict source build and Phil/Steve unsigned Linux archive creation
+        shell: bash
+        run: |
+          set -euo pipefail
+          bash -n scripts/release/build-phil-phase1-darwin-package.sh
+          bash scripts/ci/setup-llvm18.sh
+          bash scripts/ci/cabal-update-retry.sh
+          cabal build all --enable-tests --ghc-options=-Werror
+          out="$RUNNER_TEMP/p11-repair-linux"
+          mkdir -p "$out"
+          bash scripts/release/build-phil-phase1-package.sh "$out" > "$out/phil-build.log"
+          PHIL_STEVE_PACKAGE_VERSION=0.1.1-phase1 \
+            bash scripts/release/build-steve-phase1-package.sh "$out" > "$out/steve-build.log"
+      - name: Independently unpack, verify and smoke both Linux packages
+        shell: bash
+        run: |
+          set -euo pipefail
+          out="$RUNNER_TEMP/p11-repair-linux"
+          phil='phil-0.1.0-phase1-x86_64-linux.tar.gz'
+          steve='phil-steve-0.1.1-phase1-x86_64-linux.tar.gz'
+          (
+            cd "$out"
+            sha256sum -c "$phil.sha256"
+            sha256sum -c "$phil.release.sha256"
+            sha256sum -c "$steve.sha256"
+          )
+          mkdir -p "$out/extracted"
+          tar -xzf "$out/$phil" -C "$out/extracted"
+          tar -xzf "$out/$steve" -C "$out/extracted"
+          (cd "$out/extracted/phil-0.1.0-phase1-x86_64-linux" && \
+            ./smoke-test.sh) | tee "$out/phil-smoke.log"
+          (cd "$out/extracted/phil-steve-0.1.1-phase1-x86_64-linux" && \
+            ./smoke-test.sh) | tee "$out/steve-smoke.log"
+          grep -q '^PASS: packaged Phase-1 Phil public compiler smoke$' "$out/phil-smoke.log"
+          grep -q '^PASS: packaged Phase-1 Steve put/get and corruption smoke$' "$out/steve-smoke.log"
+          (
+            cd "$out"
+            sha256sum "$phil" "$phil.sha256" "$phil.release" "$phil.release.sha256" \
+              "$steve" "$steve.sha256" \
+              "extracted/phil-0.1.0-phase1-x86_64-linux/bin/philc" \
+              "extracted/phil-0.1.0-phase1-x86_64-linux/share/phil/phil.release-package" \
+              "extracted/phil-0.1.0-phase1-x86_64-linux/share/phil/phase1-handoff-manifest-v1.tsv" \
+              "extracted/phil-steve-0.1.1-phase1-x86_64-linux/bin/steve" \
+              > staged-byte-hashes.sha256
+            git -C "$GITHUB_WORKSPACE" rev-parse HEAD > source-head.txt
+            ghc --version > toolchain.txt
+            cabal --version >> toolchain.txt
+            clang-18 --version >> toolchain.txt
+          )
+          echo 'P11_LINUX_UNSIGNED_SMOKES=PASS; P11_RELEASE_CERTIFIED=NO'
+      - name: Retain Linux unsigned staging bytes and source receipts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: p11-corrected-head-linux-unsigned-structural
+          path: |
+            ${{ runner.temp }}/p11-repair-linux/*.tar.gz
+            ${{ runner.temp }}/p11-repair-linux/*.sha256
+            ${{ runner.temp }}/p11-repair-linux/*.release
+            ${{ runner.temp }}/p11-repair-linux/*.log
+            ${{ runner.temp }}/p11-repair-linux/source-head.txt
+            ${{ runner.temp }}/p11-repair-linux/toolchain.txt
+          if-no-files-found: warn
+          retention-days: 30
+
+  native-darwin-unsigned-smokes:
+    runs-on: macos-26
+    timeout-minutes: 95
+    env:
+      # Set before cabal prebuild: do not mix macOS-26 and macOS-11 objects.
+      MACOSX_DEPLOYMENT_TARGET: '11.0'
+    steps:
+      - uses: actions/checkout@v4
+      - uses: haskell-actions/setup@v2
+        with:
+          ghc-version: '9.6.7'
+          cabal-version: 'latest'
+      - name: Strict source build and Phil/Steve UNSIGNED Apple Silicon archives
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(uname -s)" = Darwin
+          test "$(uname -m)" = arm64
+          bash -n scripts/release/build-phil-phase1-darwin-package.sh
+          if ! brew list llvm@18 >/dev/null 2>&1; then brew install llvm@18; fi
+          bash scripts/ci/cabal-update-retry.sh
+          cabal build all --enable-tests --ghc-options=-Werror
+          out="$RUNNER_TEMP/p11-repair-darwin"
+          mkdir -p "$out"
+          bash scripts/release/build-phil-phase1-darwin-package.sh "$out" > "$out/phil-build.log"
+          bash scripts/release/build-steve-phase1-darwin-package.sh "$out" > "$out/steve-build.log"
+      - name: Independently unpack, bind, full-smoke and tamper-test UNSIGNED Darwin bytes
+        shell: bash
+        run: |
+          set -euo pipefail
+          out="$RUNNER_TEMP/p11-repair-darwin"
+          phil='phil-0.1.0-phase1-aarch64-apple-darwin.zip'
+          steve='phil-steve-0.1.0-phase1-aarch64-apple-darwin.tar.gz'
+          (
+            cd "$out"
+            shasum -a 256 -c "$phil.sha256"
+            shasum -a 256 -c "$phil.release.sha256"
+            shasum -a 256 -c "$steve.sha256"
+          )
+          mkdir -p "$out/extracted"
+          unzip -q "$out/$phil" -d "$out/extracted"
+          tar -xzf "$out/$steve" -C "$out/extracted"
+          philroot="$out/extracted/phil-0.1.0-phase1-aarch64-apple-darwin"
+          steveroot="$out/extracted/phil-steve-0.1.0-phase1-aarch64-apple-darwin"
+          test -s "$philroot/share/phil/phil.release-package"
+          test -s "$philroot/share/phil/phase1-handoff-manifest-v1.tsv"
+          test -s "$out/$phil.release"
+          (cd "$philroot" && ./smoke-test.sh) | tee "$out/phil-smoke.log"
+          (cd "$steveroot" && ./smoke-test.sh) | tee "$out/steve-smoke.log"
+          grep -q '^PASS: packaged Phase-1 Phil public compiler smoke$' "$out/phil-smoke.log"
+          grep -q '^PASS: packaged Phase-1 Steve put/get and corruption smoke$' "$out/steve-smoke.log"
+          record_field() {
+            local file="$1" tag="$2" key="$3"
+            awk -F '\t' -v t="$tag" -v k="$key" \
+              '$1==t {for(i=2;i<=NF;i++){p=k"=";if(index($i,p)==1){print substr($i,length(p)+1);exit}}}' "$file"
+          }
+          release_id="$(record_field "$philroot/share/phil/phil.release-package" release id)"
+          bound_id="$(record_field "$out/$phil.release" release id)"
+          bound_sha="$(record_field "$out/$phil.release" archive sha256)"
+          bound_manifest="$(record_field "$out/$phil.release" package-manifest sha256)"
+          test "$release_id" = "$bound_id"
+          test "$bound_sha" = "sha256:$(shasum -a 256 "$out/$phil" | awk '{print $1}')"
+          test "$bound_manifest" = "sha256:$(shasum -a 256 "$philroot/SHA256SUMS" | awk '{print $1}')"
+          # Negative: the unchanged full smoke MUST reject a modified handoff.
+          cp -R "$philroot" "$out/tampered-phil"
+          printf 'tampered\n' >> "$out/tampered-phil/share/phil/phase1-handoff-manifest-v1.tsv"
+          if (cd "$out/tampered-phil" && ./smoke-test.sh) \
+                > "$out/tamper-negative.log" 2>&1; then
+            echo 'P11 ERROR: altered handoff unexpectedly passed native smoke' >&2
+            exit 1
+          fi
+          (
+            cd "$out"
+            shasum -a 256 "$phil" "$phil.sha256" "$phil.release" "$phil.release.sha256" \
+              "$steve" "$steve.sha256" \
+              "extracted/phil-0.1.0-phase1-aarch64-apple-darwin/bin/philc" \
+              "extracted/phil-0.1.0-phase1-aarch64-apple-darwin/share/phil/phil.release-package" \
+              "extracted/phil-0.1.0-phase1-aarch64-apple-darwin/share/phil/phase1-handoff-manifest-v1.tsv" \
+              "extracted/phil-steve-0.1.0-phase1-aarch64-apple-darwin/bin/steve" \
+              > staged-byte-hashes.sha256
+            git -C "$GITHUB_WORKSPACE" rev-parse HEAD > source-head.txt
+            ghc --version > toolchain.txt
+            cabal --version >> toolchain.txt
+            sw_vers >> toolchain.txt
+            clang --version >> toolchain.txt
+            echo "macosx_deployment_target=$MACOSX_DEPLOYMENT_TARGET" >> toolchain.txt
+          )
+          echo 'P11_DARWIN_UNSIGNED_SMOKES=PASS; P11_SIGNED_NOTARIZED=NO; P11_FINAL_CERTIFIED=NO'
+      - name: Retain Darwin UNSIGNED staging bytes and source receipts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: p11-corrected-head-darwin-unsigned-structural
+          path: |
+            ${{ runner.temp }}/p11-repair-darwin/*.tar.gz
+            ${{ runner.temp }}/p11-repair-darwin/*.zip
+            ${{ runner.temp }}/p11-repair-darwin/*.sha256
+            ${{ runner.temp }}/p11-repair-darwin/*.release
+            ${{ runner.temp }}/p11-repair-darwin/*.log
+            ${{ runner.temp }}/p11-repair-darwin/source-head.txt
+            ${{ runner.temp }}/p11-repair-darwin/toolchain.txt
+          if-no-files-found: warn
+          retention-days: 30
