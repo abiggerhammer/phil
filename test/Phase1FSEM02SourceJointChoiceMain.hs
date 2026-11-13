@@ -78,6 +78,12 @@ main = do
             choiceTypedPrefixWrongBody go offer wrongBody)
     , test "Cancel choice committed half-Close refuses nominal peer with exact precedence"
         (choiceHalfCloseNominalPeerRetry cancel offer "Cancel" (Outcome "Cancel"))
+
+    , test "Go source-choice rejected old Select/Offer replay cannot undo either terminal half-Close"
+        (do choiceHalfClosePredecessorReplay go offer "Go" (Outcome "Done")
+            choiceTypedPrefixWrongBody go offer wrongBody)
+    , test "Cancel source-choice stale predecessor replay cannot undo committed End"
+        (choiceHalfClosePredecessorReplay cancel offer "Cancel" (Outcome "Cancel"))
     , test "diamond rejects wrong externally authorized peer outcome precisely" (choiceCloseDiamondBadPeer go offer)
     , test "diamond rejects wrong source Client close outcome precisely" (choiceCloseDiamondBadClient go offer)
     , test "diamond rejects minimally malformed source offer before both orders" (choiceCloseDiamondWrongBody go offer wrongBody)
@@ -984,6 +990,81 @@ choiceHalfCloseNominalPeerRetry client server label outcome = do
        && Map.lookup spectatorOccurrence (owners afterPeerFirst)
             == Map.lookup spectatorOccurrence (owners ready))
     "nominal refusal/retry did not converge to the exact checked End diamond"
+
+
+-- A source-derived Select/Offer step has already consumed both original
+-- predecessors before either terminal Close. A retry of the same complete
+-- source against an already committed *one-sided* state must reject the
+-- original peer predecessor, not rewind the committed End or confer a new
+-- endpoint. The surviving peer still closes using its separate Core grant.
+choiceHalfClosePredecessorReplay
+  :: Text -> Text -> Text -> Outcome -> Either String ()
+choiceHalfClosePredecessorReplay client server label outcome = do
+  fx <- fixture client server
+  diamond <- mapLeft show $ choiceCloseDiamond fx label outcome outcome
+  let ready = statefulChoiceSuccessor
+        (statefulChoiceClientCloseSourceReplay
+          (statefulChoiceExplicitPeerCloseClient
+            (choiceCloseDiamondForward diamond)))
+      revision = binaryProtocolInstanceRevision (fxInstance fx)
+      owners = communicationRestrictedOwners
+      contexts = communicationProtocolContexts
+      closeClient state =
+        closeProcessEndpointState (fxNetwork fx) state
+          (fxClientProcess fx) (fxClientNext fx)
+          revision clientRole outcome
+      closePeer state =
+        closeProcessEndpointState (fxNetwork fx) state
+          (fxServerProcess fx) serverNext
+          revision serverRole outcome
+      rejectOld side committed =
+        case stateful fx label committed of
+          Left (GrammarV1StatefulChoiceSourceError
+            (GrammarV1JointChoiceOfferSourceError
+              (GrammarV1OfferReplayProtocolError
+                (ProtocolEndpointUnknown old)))) ->
+                  assert (old == fxServerOld fx)
+                    (side <> " did not reject the exact consumed source predecessor")
+          other -> Left
+            (side <> " replayed a consumed Select/Offer predecessor: " <> show other)
+  clientFirst <- mapLeft show $ closeClient ready
+  rejectOld "Client-first" clientFirst
+  assert (Map.lookup clientOccurrence (owners clientFirst) == Nothing
+       && Map.lookup serverOccurrence (owners clientFirst)
+            == Map.lookup serverOccurrence (owners ready)
+       && Map.lookup (fxServerProcess fx) (contexts clientFirst)
+            == Map.lookup (fxServerProcess fx) (contexts ready)
+       && Map.lookup spectatorOccurrence (owners clientFirst)
+            == Map.lookup spectatorOccurrence (owners ready))
+    "stale replay after Client End changed peer/owner or borrowed spectator"
+  afterClientFirst <- mapLeft show $ closePeer clientFirst
+
+  peerFirst <- mapLeft show $ closePeer ready
+  rejectOld "Server-first" peerFirst
+  assert (Map.lookup serverOccurrence (owners peerFirst) == Nothing
+       && Map.lookup clientOccurrence (owners peerFirst)
+            == Map.lookup clientOccurrence (owners ready)
+       && Map.lookup (fxClientProcess fx) (contexts peerFirst)
+            == Map.lookup (fxClientProcess fx) (contexts ready)
+       && Map.lookup spectatorOccurrence (owners peerFirst)
+            == Map.lookup spectatorOccurrence (owners ready))
+    "stale replay after Server End changed client/owner or borrowed spectator"
+  afterPeerFirst <- mapLeft show $ closeClient peerFirst
+  let contextsFinal = contexts afterPeerFirst
+      retiredClient = case Map.lookup (fxClientProcess fx) contextsFinal of
+        Just ctx -> Map.notMember (fxClientOld fx) (protocolEndpoints ctx)
+        Nothing -> False
+      retiredPeer = case Map.lookup (fxServerProcess fx) contextsFinal of
+        Just ctx -> Map.notMember (fxServerOld fx) (protocolEndpoints ctx)
+        Nothing -> False
+  assert (afterClientFirst == afterPeerFirst
+       && afterPeerFirst == choiceCloseDiamondReverse diamond
+       && retiredClient && retiredPeer
+       && Map.lookup clientOccurrence (owners afterPeerFirst) == Nothing
+       && Map.lookup serverOccurrence (owners afterPeerFirst) == Nothing
+       && Map.lookup spectatorOccurrence (owners afterPeerFirst)
+            == Map.lookup spectatorOccurrence (owners ready))
+    "rejected source replay changed exact final End diamond or resurrected owners"
 
 -- A finite, source-relative choice trace, distinct from restricted
 -- Bytes[8] send/receive. The offer's successor and both terminal outcomes
