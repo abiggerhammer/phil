@@ -52,7 +52,7 @@ Proof.
     ready po pp peerNext afterPeer co cp next afterReverse
     HpeerDistinct HpeerFirst Hreverse)
     as [HreversePeer [HreverseClient HreverseFrame]].
-  repeat split.
+  repeat (apply conj).
   - apply fsem02AdvanceChoiceOwnersRejectsMissingClient.
     exact HforwardClient.
   - apply fsem02AdvanceChoiceOwnersRejectsMissingClient.
