@@ -60,7 +60,7 @@ Proof.
   cbn in Hnormalize.
   destruct (phase1_surface_normalize_generic_kind_type_spine kind)
     as [actual |] eqn:Hkind; try discriminate Hnormalize.
-  inversion Hnormalize; subst refined.
+  inversion Hnormalize; subst.
   cbn.
   rewrite
     (phase1_surface_normalize_generic_kind_type_spine_round_trip
@@ -101,7 +101,7 @@ Proof.
   intros parameters.
   induction parameters as [|parameter rest IH]; intros refined Hnormalize.
   - cbn in Hnormalize.
-    inversion Hnormalize; subst refined.
+    inversion Hnormalize; subst.
     reflexivity.
   - cbn in Hnormalize.
     destruct
@@ -109,7 +109,7 @@ Proof.
       as [actual |] eqn:Hparameter; try discriminate Hnormalize.
     destruct (phase1_surface_normalize_generic_param_kind_type_values rest)
       as [actual_rest |] eqn:Hrest; try discriminate Hnormalize.
-    inversion Hnormalize; subst refined.
+    inversion Hnormalize; subst.
     cbn.
     f_equal.
     + eapply
@@ -130,7 +130,7 @@ Proof.
   intros parameters.
   induction parameters as [|parameter rest IH]; intros refined Hnormalize.
   - cbn in Hnormalize.
-    inversion Hnormalize; subst refined.
+    inversion Hnormalize; subst.
     reflexivity.
   - cbn in Hnormalize.
     destruct
@@ -138,7 +138,7 @@ Proof.
       as [actual |] eqn:Hparameter; try discriminate Hnormalize.
     destruct (phase1_surface_normalize_generic_param_kind_type_values rest)
       as [actual_rest |] eqn:Hrest; try discriminate Hnormalize.
-    inversion Hnormalize; subst refined.
+    inversion Hnormalize; subst.
     cbn.
     f_equal.
     + unfold phase1_surface_generic_param_kind_type_suffix_tree,
@@ -203,7 +203,7 @@ Proof.
   destruct
     (phase1_surface_normalize_generic_param_kind_type_values rest)
     as [actual_rest |] eqn:Hrest; try discriminate Hnormalize.
-  inversion Hnormalize; subst refined.
+  inversion Hnormalize; subst.
   cbn.
   rewrite
     (phase1_surface_normalize_generic_param_kind_type_spine_round_trip
@@ -247,13 +247,13 @@ Proof.
     destruct
       (phase1_surface_normalize_generic_params_kind_type_spine parameters)
       as [actual |] eqn:Hparameters; try discriminate Hnormalize.
-    inversion Hnormalize; subst refined.
+    inversion Hnormalize; subst.
     cbn.
     rewrite
       (phase1_surface_normalize_generic_params_kind_type_spine_round_trip
         parameters actual Hparameters).
     reflexivity.
-  - inversion Hnormalize; subst refined.
+  - inversion Hnormalize; subst.
     reflexivity.
 Qed.
 
