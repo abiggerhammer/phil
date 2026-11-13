@@ -63,11 +63,10 @@ Proof.
   inversion Hnormalize; subst.
   unfold phase1_surface_generic_param_kind_type_spine_tree,
     phase1_surface_generic_param_spine_tree.
-  cbv beta iota zeta delta
-    [phase1_generic_param_kind_type_spine_name
-     phase1_generic_param_kind_type_spine_kind
-     phase1_generic_param_spine_name
-     phase1_generic_param_spine_kind].
+  cbn only [phase1_generic_param_kind_type_spine_name
+            phase1_generic_param_kind_type_spine_kind
+            phase1_generic_param_spine_name
+            phase1_generic_param_spine_kind].
   rewrite
     (phase1_surface_normalize_generic_kind_type_spine_round_trip
       kind actual Hkind).

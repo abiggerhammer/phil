@@ -141,13 +141,12 @@ Proof.
   inversion Hnormalize; subst.
   unfold phase1_surface_field_type_list_spine_tree,
     phase1_surface_field_list_spine_tree.
-  cbv beta iota zeta delta
-    [phase1_field_type_list_spine_first
-     phase1_field_type_list_spine_rest
-     phase1_field_type_list_spine_trailing_comma
-     phase1_field_list_spine_first
-     phase1_field_list_spine_rest
-     phase1_field_list_spine_trailing_comma].
+  cbn only [phase1_field_type_list_spine_first
+            phase1_field_type_list_spine_rest
+            phase1_field_type_list_spine_trailing_comma
+            phase1_field_list_spine_first
+            phase1_field_list_spine_rest
+            phase1_field_list_spine_trailing_comma].
   rewrite
     (phase1_surface_normalize_field_type_spine_round_trip
       first actual_first Hfirst).
