@@ -36,7 +36,7 @@ Proof.
   - unfold fsem02FiniteClose.
     rewrite (fsem02ExactAndNearMissFilter owners process endpoint
       exact near Hmatch Hmiss).
-    simpl. exact Hretire.
+    simpl. now rewrite Hretire.
   - exact (fsem02SelectedClientCloseExactRetirementAndFrame
       owners exact process endpoint after Hretire).
 Qed.
