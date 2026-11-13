@@ -120,6 +120,11 @@ main = do
             choiceTypedPrefixWrongBody go offer wrongBody)
     , test "Cancel source-choice complete ambiguity list survives peer Close"
         (choiceTerminalCompleteAmbiguityList cancel offer "Cancel" (Outcome "Cancel"))
+    , test "Go source-choice End cardinalities 0,1,2..6 enforce exact ownership gates"
+        (do choiceTerminalOwnerCardinalityTrichotomy go offer "Go" (Outcome "Done")
+            choiceTypedPrefixWrongBody go offer wrongBody)
+    , test "Cancel source-choice End cardinalities preserve peer-first and affine state"
+        (choiceTerminalOwnerCardinalityTrichotomy cancel offer "Cancel" (Outcome "Cancel"))
     , test "Go source choice unknown/inactive End process gates precede endpoint and nominal checks"
         (do choiceTerminalActivationGate go offer "Go" (Outcome "Done")
             choiceTypedPrefixWrongBody go offer wrongBody)
@@ -2173,3 +2178,117 @@ choiceTerminalCompleteAmbiguityList client server label outcome = do
        && all (\(key, pair) -> Map.lookup key (owners clientThenPeer) == Just pair)
            near)
     "precise removal of three extra exact owners failed to restore Close diamond"
+
+
+-- FSEM-02: check all three cardinality branches of the *actual production*
+-- uniqueEndpointOccurrence gate on a source-derived Go/Cancel terminal End.
+-- Removing an owner from the supplied state, adding exact aliases, and
+-- inserting near-misses are adversarial Core inputs, NOT source authority.
+-- A separately authorized End Close succeeds only with exactly one owner.
+choiceTerminalOwnerCardinalityTrichotomy
+  :: Text -> Text -> Text -> Outcome -> Either String ()
+choiceTerminalOwnerCardinalityTrichotomy client server label outcome = do
+  fx <- fixture client server
+  diamond <- mapLeft show $ choiceCloseDiamond fx label outcome outcome
+  let ready = statefulChoiceSuccessor
+        (statefulChoiceClientCloseSourceReplay
+          (statefulChoiceExplicitPeerCloseClient
+            (choiceCloseDiamondForward diamond)))
+      owners = communicationRestrictedOwners
+      revision = binaryProtocolInstanceRevision (fxInstance fx)
+      target = (fxClientProcess fx, fxClientNext fx)
+      exact =
+        (clientOccurrence, target) :
+          [ (ActivationOccurrenceKey ("fsem02.cardinality." <> suffix), target)
+          | suffix <- ["1", "2", "3", "4", "5"] ]
+      near =
+        [ (ActivationOccurrenceKey "fsem02.cardinality.wrong-process",
+             (fxServerProcess fx, fxClientNext fx))
+        , (ActivationOccurrenceKey "fsem02.cardinality.wrong-endpoint",
+             (fxClientProcess fx, serverNext))
+        , (ActivationOccurrenceKey "fsem02.cardinality.other",
+             (fxServerProcess fx, Name "fsem02.cardinality.unrelated"))
+        ]
+      detached = Map.delete clientOccurrence (owners ready)
+      populate n = ready
+        { communicationRestrictedOwners =
+            foldr (uncurry Map.insert)
+              (foldr (uncurry Map.insert) detached near)
+              (take n exact) }
+      candidateKeys state =
+        Map.keys (Map.filter (== target) (owners state))
+      stripNear state = state
+        { communicationRestrictedOwners =
+            foldr Map.delete (owners state) (map fst near) }
+      attempt state suppliedRevision suppliedRole = closeProcessEndpointState
+        (fxNetwork fx) state (fxClientProcess fx) (fxClientNext fx)
+        suppliedRevision suppliedRole outcome
+      peerClose state = closeProcessEndpointState
+        (fxNetwork fx) state (fxServerProcess fx) serverNext
+        revision serverRole outcome
+      foreignRevision = ProtocolInstanceRevision "fsem02.cardinality.foreign"
+      foreignRole = ProtocolRoleKey "WrongCardinalityRole"
+      sameFrame state = Map.lookup spectatorOccurrence (owners state)
+          == Map.lookup spectatorOccurrence (owners ready)
+        && all (\(key, pair) -> Map.lookup key (owners state) == Just pair)
+               near
+      expectUnknown side state =
+        case attempt state foreignRevision foreignRole of
+          Left (EndpointClosureOccurrenceUnknown p n) ->
+            assert (p == fxClientProcess fx && n == fxClientNext fx)
+              (side <> ": empty owner cardinality misclassified")
+          other -> Left (side <> ": zero owner lookup reached nominal gate: "
+                         <> show other)
+      expectAmbiguous side state expected =
+        case attempt state foreignRevision foreignRole of
+          Left (EndpointClosureOccurrenceAmbiguous p n reported) ->
+            assert (p == fxClientProcess fx && n == fxClientNext fx
+                 && reported == expected)
+              (side <> ": full exact candidate list/order changed")
+          other -> Left (side <> ": duplicate owners reached nominal gate: "
+                         <> show other)
+      runCardinality n = do
+        let populated = populate n
+            expected = candidateKeys populated
+            desc = "cardinality " <> show n
+        assert (length expected == n && sameFrame populated
+             && all (\(key, _) -> Map.notMember key (owners ready))
+                    (tail exact))
+          (desc <> ": independently scanned owner count/near misses invalid")
+        peerFirst <- mapLeft show (peerClose populated)
+        assert (sameFrame peerFirst
+             && candidateKeys peerFirst == expected
+             && Map.lookup serverOccurrence (owners peerFirst) == Nothing)
+          (desc <> ": independent peer Close changed target candidate list")
+        case n of
+          0 -> do
+            expectUnknown (desc <> " initial") populated
+            expectUnknown (desc <> " peer-first") peerFirst
+          1 -> do
+            case attempt populated foreignRevision foreignRole of
+              Left (EndpointClosureProtocolError p
+                (ProtocolInstanceMismatch endpoint supplied live)) ->
+                  assert (p == fxClientProcess fx
+                       && endpoint == fxClientNext fx
+                       && supplied == foreignRevision && live == revision)
+                    "unique owner lost precise nominal error"
+              other -> Left ("unique owner did not reach nominal gate: " <> show other)
+            clientFirst <- mapLeft show (attempt populated revision clientRole)
+            endClientFirst <- mapLeft show (peerClose clientFirst)
+            endPeerFirst <- mapLeft show (attempt peerFirst revision clientRole)
+            assert (endClientFirst == endPeerFirst
+                 && stripNear endClientFirst == choiceCloseDiamondReverse diamond
+                 && sameFrame endClientFirst
+                 && candidateKeys endClientFirst == []
+                 && Map.lookup serverOccurrence (owners endClientFirst) == Nothing)
+              "unique owner did not retire exactly once in both End orders"
+            expectUnknown "unique owner retired" endClientFirst
+          _ -> do
+            expectAmbiguous (desc <> " initial") populated expected
+            expectAmbiguous (desc <> " peer-first") peerFirst expected
+  assert (Map.lookup clientOccurrence (owners ready) == Just target
+       && fxClientProcess fx /= fxServerProcess fx
+       && fxClientNext fx /= serverNext
+       && all (\(key, _) -> Map.notMember key (owners ready)) near)
+    "checked source-derived owner baseline conflicts with cardinality population"
+  mapM_ runCardinality [0..6]
