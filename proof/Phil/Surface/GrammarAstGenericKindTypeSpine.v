@@ -1,6 +1,7 @@
 From Stdlib Require Import Strings.String.
 
 From Phil.Surface Require Import
+  GrammarAstSourceHeader
   GrammarAstGenericParamsSpine
   GrammarAstStaticTypeArgumentCarrierSpine.
 
@@ -132,11 +133,36 @@ Definition phase1_surface_normalize_generic_kind_type_spine
   (kind : Phase1SurfaceGenericKindSpine)
   : option Phase1SurfaceGenericKindTypeSpine :=
   match phase1_generic_kind_spine_tag kind with
-  | Phase1TypeGenericKind => Some Phase1GenericTypeKind
-  | Phase1NatGenericKind => Some Phase1GenericNatKind
-  | Phase1SessionGenericKind => Some Phase1GenericSessionKind
-  | Phase1MessageGenericKind => Some Phase1GenericMessageKind
-  | Phase1EffectsGenericKind => Some Phase1GenericEffectsKind
+  | Phase1TypeGenericKind =>
+      match phase1_surface_expect_literal "Type"
+          (phase1_generic_kind_spine_selected_tree kind) with
+      | Some tt => Some Phase1GenericTypeKind
+      | None => None
+      end
+  | Phase1NatGenericKind =>
+      match phase1_surface_expect_literal "Nat"
+          (phase1_generic_kind_spine_selected_tree kind) with
+      | Some tt => Some Phase1GenericNatKind
+      | None => None
+      end
+  | Phase1SessionGenericKind =>
+      match phase1_surface_expect_literal "Session"
+          (phase1_generic_kind_spine_selected_tree kind) with
+      | Some tt => Some Phase1GenericSessionKind
+      | None => None
+      end
+  | Phase1MessageGenericKind =>
+      match phase1_surface_expect_literal "Message"
+          (phase1_generic_kind_spine_selected_tree kind) with
+      | Some tt => Some Phase1GenericMessageKind
+      | None => None
+      end
+  | Phase1EffectsGenericKind =>
+      match phase1_surface_expect_literal "Effects"
+          (phase1_generic_kind_spine_selected_tree kind) with
+      | Some tt => Some Phase1GenericEffectsKind
+      | None => None
+      end
   | Phase1ProviderGenericKind =>
       match
         phase1_surface_normalize_typed_generic_kind_type
@@ -179,18 +205,48 @@ Theorem phase1_surface_normalize_generic_kind_type_spine_round_trip :
 Proof.
   intros [tag selected] refined Hnormalize.
   destruct tag; cbn in Hnormalize.
-  - inversion Hnormalize; subst refined. reflexivity.
-  - inversion Hnormalize; subst refined. reflexivity.
-  - inversion Hnormalize; subst refined. reflexivity.
-  - inversion Hnormalize; subst refined. reflexivity.
-  - inversion Hnormalize; subst refined. reflexivity.
+  - destruct (phase1_surface_expect_literal "Type" selected)
+      as [[] |] eqn:Hliteral; try discriminate Hnormalize.
+    inversion Hnormalize; subst refined.
+    cbn.
+    rewrite (phase1_surface_expect_literal_round_trip
+      "Type" selected Hliteral).
+    reflexivity.
+  - destruct (phase1_surface_expect_literal "Nat" selected)
+      as [[] |] eqn:Hliteral; try discriminate Hnormalize.
+    inversion Hnormalize; subst refined.
+    cbn.
+    rewrite (phase1_surface_expect_literal_round_trip
+      "Nat" selected Hliteral).
+    reflexivity.
+  - destruct (phase1_surface_expect_literal "Session" selected)
+      as [[] |] eqn:Hliteral; try discriminate Hnormalize.
+    inversion Hnormalize; subst refined.
+    cbn.
+    rewrite (phase1_surface_expect_literal_round_trip
+      "Session" selected Hliteral).
+    reflexivity.
+  - destruct (phase1_surface_expect_literal "Message" selected)
+      as [[] |] eqn:Hliteral; try discriminate Hnormalize.
+    inversion Hnormalize; subst refined.
+    cbn.
+    rewrite (phase1_surface_expect_literal_round_trip
+      "Message" selected Hliteral).
+    reflexivity.
+  - destruct (phase1_surface_expect_literal "Effects" selected)
+      as [[] |] eqn:Hliteral; try discriminate Hnormalize.
+    inversion Hnormalize; subst refined.
+    cbn.
+    rewrite (phase1_surface_expect_literal_round_trip
+      "Effects" selected Hliteral).
+    reflexivity.
   - destruct
       (phase1_surface_normalize_typed_generic_kind_type
         "provider" selected)
       as [type_value |] eqn:Htype; try discriminate Hnormalize.
     inversion Hnormalize; subst refined.
     cbn.
-    rewrite
+    rewrite <-
       (phase1_surface_normalize_typed_generic_kind_type_round_trip
         "provider" selected type_value Htype).
     reflexivity.
@@ -200,7 +256,7 @@ Proof.
       as [type_value |] eqn:Htype; try discriminate Hnormalize.
     inversion Hnormalize; subst refined.
     cbn.
-    rewrite
+    rewrite <-
       (phase1_surface_normalize_typed_generic_kind_type_round_trip
         "callable" selected type_value Htype).
     reflexivity.
@@ -210,7 +266,7 @@ Proof.
       as [type_value |] eqn:Htype; try discriminate Hnormalize.
     inversion Hnormalize; subst refined.
     cbn.
-    rewrite
+    rewrite <-
       (phase1_surface_normalize_typed_generic_kind_type_round_trip
         "boundary" selected type_value Htype).
     reflexivity.
@@ -220,7 +276,7 @@ Proof.
       as [type_value |] eqn:Htype; try discriminate Hnormalize.
     inversion Hnormalize; subst refined.
     cbn.
-    rewrite
+    rewrite <-
       (phase1_surface_normalize_typed_generic_kind_type_round_trip
         "architecture" selected type_value Htype).
     reflexivity.
@@ -248,3 +304,52 @@ Proof.
   - eapply phase1_surface_normalize_generic_kind_spine_round_trip.
     exact Hkind.
 Qed.
+
+(* Regression: the second-stage normalizer must preserve all five canonical
+   literal payloads and reject forged tag/selected-tree combinations.
+   Unlike a proof precondition, the check is enforced by the normalizer. *)
+Example phase1_surface_generic_kind_type_all_primitive_literals_accept :
+  phase1_surface_normalize_generic_kind_type_spine
+    {| phase1_generic_kind_spine_tag := Phase1TypeGenericKind;
+       phase1_generic_kind_spine_selected_tree := PTLiteral "Type" |}
+    = Some Phase1GenericTypeKind /\
+  phase1_surface_normalize_generic_kind_type_spine
+    {| phase1_generic_kind_spine_tag := Phase1NatGenericKind;
+       phase1_generic_kind_spine_selected_tree := PTLiteral "Nat" |}
+    = Some Phase1GenericNatKind /\
+  phase1_surface_normalize_generic_kind_type_spine
+    {| phase1_generic_kind_spine_tag := Phase1SessionGenericKind;
+       phase1_generic_kind_spine_selected_tree := PTLiteral "Session" |}
+    = Some Phase1GenericSessionKind /\
+  phase1_surface_normalize_generic_kind_type_spine
+    {| phase1_generic_kind_spine_tag := Phase1MessageGenericKind;
+       phase1_generic_kind_spine_selected_tree := PTLiteral "Message" |}
+    = Some Phase1GenericMessageKind /\
+  phase1_surface_normalize_generic_kind_type_spine
+    {| phase1_generic_kind_spine_tag := Phase1EffectsGenericKind;
+       phase1_generic_kind_spine_selected_tree := PTLiteral "Effects" |}
+    = Some Phase1GenericEffectsKind.
+Proof. repeat split; reflexivity. Qed.
+
+Example phase1_surface_generic_kind_type_all_mismatched_literals_reject :
+  phase1_surface_normalize_generic_kind_type_spine
+    {| phase1_generic_kind_spine_tag := Phase1TypeGenericKind;
+       phase1_generic_kind_spine_selected_tree := PTLiteral "Nat" |}
+    = None /\
+  phase1_surface_normalize_generic_kind_type_spine
+    {| phase1_generic_kind_spine_tag := Phase1NatGenericKind;
+       phase1_generic_kind_spine_selected_tree := PTLiteral "Session" |}
+    = None /\
+  phase1_surface_normalize_generic_kind_type_spine
+    {| phase1_generic_kind_spine_tag := Phase1SessionGenericKind;
+       phase1_generic_kind_spine_selected_tree := PTLiteral "Message" |}
+    = None /\
+  phase1_surface_normalize_generic_kind_type_spine
+    {| phase1_generic_kind_spine_tag := Phase1MessageGenericKind;
+       phase1_generic_kind_spine_selected_tree := PTLiteral "Effects" |}
+    = None /\
+  phase1_surface_normalize_generic_kind_type_spine
+    {| phase1_generic_kind_spine_tag := Phase1EffectsGenericKind;
+       phase1_generic_kind_spine_selected_tree := PTLiteral "Type" |}
+    = None.
+Proof. repeat split; reflexivity. Qed.
