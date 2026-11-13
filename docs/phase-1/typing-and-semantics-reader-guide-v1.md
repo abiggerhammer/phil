@@ -286,6 +286,8 @@ The bounded [FSEM-02 ambiguous terminal End owner refusal](formal-semantics-choi
 
 The bounded [FSEM-02 terminal End near-miss owner filter](formal-semantics-choice-nearmiss-close-fsem02-v1.md) checks that an extra occurrence matching only the process or only the endpoint is **not** treated as a duplicate. Actual Go/Cancel source-derived native Close transitions complete in either order, frame the injected alias and affine spectator, and reject stale predecessors precisely. Conditional finite Rocq proofs retain full native enumeration and terminal authority as premises.
 
+The bounded [FSEM-02 mixed near-miss owner cardinality check](formal-semantics-choice-multialias-cardinality-fsem02-v1.md) combines simultaneous nonmatching owner aliases and an optional true duplicate. Actual source-derived Go/Cancel End tests confirm both Close orders, exact stale errors and preserved affine state; finite Rocq proofs cover arbitrary nonmatching key lists while leaving native owner-map completeness and external authority as premises.
+
 ## 6. Architectures, occurrence identity, and root selection
 
 The source differentiates:
