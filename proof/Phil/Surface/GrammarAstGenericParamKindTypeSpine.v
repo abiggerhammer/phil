@@ -63,7 +63,7 @@ Proof.
   inversion Hnormalize; subst.
   unfold phase1_surface_generic_param_kind_type_spine_tree,
     phase1_surface_generic_param_spine_tree.
-  cbn only [phase1_generic_param_kind_type_spine_name
+  cbn [phase1_generic_param_kind_type_spine_name
             phase1_generic_param_kind_type_spine_kind
             phase1_generic_param_spine_name
             phase1_generic_param_spine_kind].

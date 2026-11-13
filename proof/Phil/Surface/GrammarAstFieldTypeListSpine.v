@@ -141,7 +141,7 @@ Proof.
   inversion Hnormalize; subst.
   unfold phase1_surface_field_type_list_spine_tree,
     phase1_surface_field_list_spine_tree.
-  cbn only [phase1_field_type_list_spine_first
+  cbn [phase1_field_type_list_spine_first
             phase1_field_type_list_spine_rest
             phase1_field_type_list_spine_trailing_comma
             phase1_field_list_spine_first
