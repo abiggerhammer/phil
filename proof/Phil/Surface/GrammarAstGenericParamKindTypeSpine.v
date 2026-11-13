@@ -60,6 +60,9 @@ Proof.
   cbn in Hnormalize.
   destruct (phase1_surface_normalize_generic_kind_type_spine kind)
     as [actual |] eqn:Hkind; try discriminate Hnormalize.
+  match type of Hnormalize with
+  | ?h => idtac "HNORMALIZE-GENERIC" h
+  end.
   injection Hnormalize as Hrefined.
   symmetry in Hrefined.
   subst refined.

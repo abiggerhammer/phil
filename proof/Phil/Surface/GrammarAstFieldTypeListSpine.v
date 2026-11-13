@@ -138,6 +138,9 @@ Proof.
     as [actual_first |] eqn:Hfirst; try discriminate Hnormalize.
   destruct (phase1_surface_normalize_field_type_values rest)
     as [actual_rest |] eqn:Hrest; try discriminate Hnormalize.
+  match type of Hnormalize with
+  | ?h => idtac "HNORMALIZE-FIELD" h
+  end.
   injection Hnormalize as Hrefined.
   symmetry in Hrefined.
   subst refined.
