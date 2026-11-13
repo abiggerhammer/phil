@@ -280,6 +280,8 @@ The bounded [FSEM-02 source-choice cross-process End refusal](formal-semantics-c
 The bounded [FSEM-02 source-choice exact local End-name refusal](formal-semantics-choice-local-end-name-refusal-fsem02-v1.md) complements the distinct-process check: even the rightful *active* process cannot close a peer terminal name, a consumed predecessor or a fabricated endpoint. The actual native occurrence-first rejection wins before nominal checks, both valid Close orders remain available, and a borrowed affine spectator is unchanged; conditional Rocq owner-ledger theorems do not confer external End authority or universal implementation refinement.
 
 
+The bounded [FSEM-02 terminal Close process-activation gate](formal-semantics-choice-activation-close-fsem02-v1.md) checks missing and adversarially inactive process refusals before endpoint and nominal validation, while preserving checked positive Close controls. The conditional finite Rocq population model does not infer architecture or activation authority.
+
 ## 6. Architectures, occurrence identity, and root selection
 
 The source differentiates:
