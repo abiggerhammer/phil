@@ -89,6 +89,11 @@ main = do
             choiceTypedPrefixWrongBody go offer wrongBody)
     , test "Cancel source-choice after either fully closed End order cannot resurrect owners"
         (choiceFullyClosedNoResurrection cancel offer "Cancel" (Outcome "Cancel"))
+    , test "Go source-choice live End cannot be closed under the opposite process key"
+        (do choiceCrossProcessCloseRefusal go offer "Go" (Outcome "Done")
+            choiceTypedPrefixWrongBody go offer wrongBody)
+    , test "Cancel source-choice cross-process refusal preserves both Close orders"
+        (choiceCrossProcessCloseRefusal cancel offer "Cancel" (Outcome "Cancel"))
     , test "diamond rejects wrong externally authorized peer outcome precisely" (choiceCloseDiamondBadPeer go offer)
     , test "diamond rejects wrong source Client close outcome precisely" (choiceCloseDiamondBadClient go offer)
     , test "diamond rejects minimally malformed source offer before both orders" (choiceCloseDiamondWrongBody go offer wrongBody)
@@ -1071,6 +1076,79 @@ choiceHalfClosePredecessorReplay client server label outcome = do
             == Map.lookup spectatorOccurrence (owners ready))
     "rejected source replay changed exact final End diamond or resurrected owners"
 
+
+-- Cross-process identity is an independent authority gate. Even when
+-- each active participant has a valid terminal End, the other participant
+-- cannot close its endpoint under a substituted process key. Test the exact
+-- native occurrence-first error before either End, after one End in each
+-- order, and after both Ends; failed attempts return no successor state.
+-- The complete Go/Cancel source pair is independently parsed by fixture.
+choiceCrossProcessCloseRefusal
+  :: Text -> Text -> Text -> Outcome -> Either String ()
+choiceCrossProcessCloseRefusal client server label outcome = do
+  fx <- fixture client server
+  diamond <- mapLeft show $ choiceCloseDiamond fx label outcome outcome
+  let ready = statefulChoiceSuccessor
+        (statefulChoiceClientCloseSourceReplay
+          (statefulChoiceExplicitPeerCloseClient
+            (choiceCloseDiamondForward diamond)))
+      revision = binaryProtocolInstanceRevision (fxInstance fx)
+      foreignRevision = ProtocolInstanceRevision "fsem02.cross-process.foreign"
+      foreignRole = ProtocolRoleKey "WrongProcessRole"
+      owners = communicationRestrictedOwners
+      contexts = communicationProtocolContexts
+      attempt state process endpoint suppliedRevision suppliedRole =
+        closeProcessEndpointState (fxNetwork fx) state process endpoint
+          suppliedRevision suppliedRole outcome
+      rightfulClient state =
+        attempt state (fxClientProcess fx) (fxClientNext fx)
+          revision clientRole
+      rightfulPeer state =
+        attempt state (fxServerProcess fx) serverNext
+          revision serverRole
+      rejectCross side state process endpoint =
+        case attempt state process endpoint foreignRevision foreignRole of
+          Left (EndpointClosureOccurrenceUnknown actualProcess actualEndpoint) ->
+            assert (actualProcess == process && actualEndpoint == endpoint)
+              (side <> " did not retain exact process/endpoint refusal precedence")
+          other -> Left
+            (side <> " let a different process adopt a terminal owner: " <> show other)
+      checkCross side state = do
+        rejectCross (side <> " Client as peer") state
+          (fxServerProcess fx) (fxClientNext fx)
+        rejectCross (side <> " peer as Client") state
+          (fxClientProcess fx) serverNext
+  assert (fxClientProcess fx /= fxServerProcess fx)
+    "fixture unexpectedly aliases distinct active process identities"
+  checkCross "both live" ready
+  assert (Map.lookup clientOccurrence (owners ready)
+            == Just (fxClientProcess fx, fxClientNext fx)
+       && Map.lookup serverOccurrence (owners ready)
+            == Just (fxServerProcess fx, serverNext))
+    "cross-process refusal changed initial exact endpoint owners"
+
+  clientFirst <- mapLeft show $ rightfulClient ready
+  checkCross "Client committed" clientFirst
+  assert (Map.lookup (fxServerProcess fx) (contexts clientFirst)
+            == Map.lookup (fxServerProcess fx) (contexts ready))
+    "Client-first cross-process refusal disturbed the still-live peer"
+  afterForward <- mapLeft show $ rightfulPeer clientFirst
+  checkCross "Client then peer committed" afterForward
+
+  peerFirst <- mapLeft show $ rightfulPeer ready
+  checkCross "peer committed" peerFirst
+  assert (Map.lookup (fxClientProcess fx) (contexts peerFirst)
+            == Map.lookup (fxClientProcess fx) (contexts ready))
+    "peer-first cross-process refusal disturbed the still-live Client"
+  afterReverse <- mapLeft show $ rightfulClient peerFirst
+  checkCross "peer then Client committed" afterReverse
+  assert (afterForward == afterReverse
+       && afterForward == choiceCloseDiamondReverse diamond
+       && Map.lookup clientOccurrence (owners afterForward) == Nothing
+       && Map.lookup serverOccurrence (owners afterForward) == Nothing
+       && Map.lookup spectatorOccurrence (owners afterForward)
+            == Map.lookup spectatorOccurrence (owners ready))
+    "cross-process refusal changed complete terminal state or borrowed spectator"
 
 -- Once BOTH separately authorized End operations have committed, no original
 -- parsed source choice and no retired terminal endpoint may be reactivated,

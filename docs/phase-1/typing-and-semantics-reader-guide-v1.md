@@ -275,6 +275,8 @@ The bounded [FSEM-02 consumed source-choice replay across terminal half-Close](f
 
 The bounded [FSEM-02 fully closed source-choice no-resurrection check](formal-semantics-choice-fully-closed-no-resurrection-fsem02-v1.md) extends the one-sided Close replay cases to BOTH terminal Ends completed in either order. The actual native state rejects the old parsed Select/Offer and either retired terminal successor with exact error classes (including stale occurrence ahead of foreign nominal checking), without resurrecting owners or changing the affine spectator. Conditional Rocq finite-ledger facts retain all source/activation/authority premises and do not establish general implementation refinement.
 
+The bounded [FSEM-02 source-choice cross-process End refusal](formal-semantics-choice-cross-process-close-fsem02-v1.md) tests that a distinct active process cannot use either live or retired terminal endpoint occurrence, even with foreign nominal inputs, while independently authorized closure in either order remains possible. Conditional Rocq owner-ledger lemmas reflect process/endpoint conjunction; activation, protocol authority, source projection and universal implementation refinement remain outside the proof.
+
 ## 6. Architectures, occurrence identity, and root selection
 
 The source differentiates:
