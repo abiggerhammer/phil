@@ -284,6 +284,8 @@ The bounded [FSEM-02 terminal Close process-activation gate](formal-semantics-ch
 
 The bounded [FSEM-02 ambiguous terminal End owner refusal](formal-semantics-choice-ambiguous-close-fsem02-v1.md) checks an adversarial second live exact owner occurrence for either source-derived participant: native Close returns the precise two-key ambiguity **before** nominal validation, but a separate unique peer can still Close. Removing only the injected duplicate restores both authorized Close orders and the affine spectator. Conditional finite Rocq candidate-list proofs keep completeness of the native owner enumeration and external protocol authority explicit.
 
+The bounded [FSEM-02 terminal End near-miss owner filter](formal-semantics-choice-nearmiss-close-fsem02-v1.md) checks that an extra occurrence matching only the process or only the endpoint is **not** treated as a duplicate. Actual Go/Cancel source-derived native Close transitions complete in either order, frame the injected alias and affine spectator, and reject stale predecessors precisely. Conditional finite Rocq proofs retain full native enumeration and terminal authority as premises.
+
 ## 6. Architectures, occurrence identity, and root selection
 
 The source differentiates:
