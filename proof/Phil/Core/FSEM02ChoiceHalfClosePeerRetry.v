@@ -57,8 +57,8 @@ Proof.
     Hdistinct Hclient Hpeer HpeerFirst HclientSecond) as Hdiamond.
   repeat split.
   - reflexivity.
-  - change (fsem02RetireExplicitPeerEnd ac po pp pe = Some af).
-    exact Hpeer.
+  - unfold fsem02ChoiceTrialPeerAfterClient.
+    now rewrite Hpeer.
   - exact Hgone.
   - exact HpeerLive.
   - intros spectator Hother. apply Hframe. exact Hother.
@@ -99,8 +99,8 @@ Proof.
     Hdistinct Hclient Hpeer HpeerFirst HclientSecond) as Hdiamond.
   repeat split.
   - reflexivity.
-  - change (fsem02RetireSelectedClientOwner ap co cp ce = Some ar).
-    exact HclientSecond.
+  - unfold fsem02ChoiceTrialClientAfterPeer.
+    now rewrite HclientSecond.
   - exact Hgone.
   - exact HclientLive.
   - intros spectator Hother. apply Hframe. exact Hother.
