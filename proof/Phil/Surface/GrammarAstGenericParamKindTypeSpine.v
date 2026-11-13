@@ -60,18 +60,15 @@ Proof.
   cbn in Hnormalize.
   destruct (phase1_surface_normalize_generic_kind_type_spine kind)
     as [actual |] eqn:Hkind; try discriminate Hnormalize.
-  inversion Hnormalize; subst.
+  injection Hnormalize as Hrefined.
+  symmetry in Hrefined.
+  subst refined.
   unfold phase1_surface_generic_param_kind_type_spine_tree,
     phase1_surface_generic_param_spine_tree.
   cbn [phase1_generic_param_kind_type_spine_name
             phase1_generic_param_kind_type_spine_kind
             phase1_generic_param_spine_name
             phase1_generic_param_spine_kind].
-  match goal with
-  | |- ?lhs = ?rhs =>
-      idtac "PRE-REWRITE GENERIC LHS:" lhs;
-      idtac "PRE-REWRITE GENERIC RHS:" rhs
-  end.
   rewrite
     (phase1_surface_normalize_generic_kind_type_spine_round_trip
       kind actual Hkind).

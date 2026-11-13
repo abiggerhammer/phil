@@ -138,7 +138,9 @@ Proof.
     as [actual_first |] eqn:Hfirst; try discriminate Hnormalize.
   destruct (phase1_surface_normalize_field_type_values rest)
     as [actual_rest |] eqn:Hrest; try discriminate Hnormalize.
-  inversion Hnormalize; subst.
+  injection Hnormalize as Hrefined.
+  symmetry in Hrefined.
+  subst refined.
   unfold phase1_surface_field_type_list_spine_tree,
     phase1_surface_field_list_spine_tree.
   cbn [phase1_field_type_list_spine_first
@@ -147,11 +149,6 @@ Proof.
             phase1_field_list_spine_first
             phase1_field_list_spine_rest
             phase1_field_list_spine_trailing_comma].
-  match goal with
-  | |- ?lhs = ?rhs =>
-      idtac "PRE-REWRITE FIELD LHS:" lhs;
-      idtac "PRE-REWRITE FIELD RHS:" rhs
-  end.
   rewrite
     (phase1_surface_normalize_field_type_spine_round_trip
       first actual_first Hfirst).
