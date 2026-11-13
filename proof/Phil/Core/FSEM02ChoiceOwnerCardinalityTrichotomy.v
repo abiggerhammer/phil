@@ -83,17 +83,17 @@ Proof.
   intros owners process endpoint population.
   destruct (filter (fsem02IsMatchingOwner owners process endpoint) population)
     as [| first remaining] eqn:Hmatches.
-  - left. split; [exact Hmatches|].
+  - left. split; [reflexivity|].
     now apply fsem02ZeroMatchingEndOwnersHasNoSuccessor.
   - destruct remaining as [| second rest].
-    + right. left. exists first. split; [exact Hmatches|].
+    + right. left. exists first. split; [reflexivity|].
       unfold fsem02FiniteClose. rewrite Hmatches.
       destruct (fsem02RetireSelectedClientOwner owners first process endpoint)
         as [after|] eqn:Hretire.
       * right. now exists after.
       * now left.
     + right. right. exists first, second, rest.
-      split; [exact Hmatches|].
+      split; [reflexivity|].
       unfold fsem02FiniteClose.
       now rewrite Hmatches.
 Qed.
