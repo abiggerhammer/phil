@@ -5,6 +5,7 @@ From Phil.Surface Require Import
   GrammarDeterminacySimpleResolverSoundness
   GrammarAstFieldTypeSpine
   GrammarAstRecordFieldsSpine
+  GrammarAstGenericRequirementsTotality
   GrammarAstRecordFieldsTotality
   GrammarAstStaticTypeArgumentCarrierTotality
   GrammarAstSourceHeaderTotality.
