@@ -110,6 +110,11 @@ main = do
             choiceTypedPrefixWrongBody go offer wrongBody)
     , test "Cancel source-choice near-miss owners preserve terminal Close diamond"
         (choiceTerminalNearMissOwnerFilter cancel offer "Cancel" (Outcome "Cancel"))
+    , test "Go source-choice mixed owner cardinality and exact duplicate ahead of nominal checks"
+        (do choiceTerminalMultiAliasCardinality go offer "Go" (Outcome "Done")
+            choiceTypedPrefixWrongBody go offer wrongBody)
+    , test "Cancel source-choice mixed End aliases preserve both valid Close orders"
+        (choiceTerminalMultiAliasCardinality cancel offer "Cancel" (Outcome "Cancel"))
     , test "Go source choice unknown/inactive End process gates precede endpoint and nominal checks"
         (do choiceTerminalActivationGate go offer "Go" (Outcome "Done")
             choiceTypedPrefixWrongBody go offer wrongBody)
@@ -1435,6 +1440,120 @@ choiceTerminalNearMissOwnerFilter client server label outcome = do
             == Just (fxServerProcess fx, serverNext))
     "checked source-choice ready state lacks distinct terminal End owners"
   mapM_ checkNear nearMisses
+
+
+-- Checked source choice plus multiple simultaneous adversarial Core owner
+-- near misses. Neither aliases nor their removal are source authority.
+choiceTerminalMultiAliasCardinality
+  :: Text -> Text -> Text -> Outcome -> Either String ()
+choiceTerminalMultiAliasCardinality client server label outcome = do
+  fx <- fixture client server
+  diamond <- mapLeft show $ choiceCloseDiamond fx label outcome outcome
+  let ready = statefulChoiceSuccessor
+        (statefulChoiceClientCloseSourceReplay
+          (statefulChoiceExplicitPeerCloseClient
+            (choiceCloseDiamondForward diamond)))
+      owners = communicationRestrictedOwners
+      revision = binaryProtocolInstanceRevision (fxInstance fx)
+      fabricated = Name "fsem02.multi.unrelated.terminal"
+      nearAliases =
+        [ (ActivationOccurrenceKey "fsem02.multi.foreign-process",
+            (fxServerProcess fx, fxClientNext fx))
+        , (ActivationOccurrenceKey "fsem02.multi.foreign-end",
+            (fxClientProcess fx, serverNext))
+        , (ActivationOccurrenceKey "fsem02.multi.unrelated",
+            (fxServerProcess fx, fabricated))
+        ]
+      exactAlias =
+        (ActivationOccurrenceKey "fsem02.multi.exact",
+          (fxClientProcess fx, fxClientNext fx))
+      nearKeys = map fst nearAliases
+      inject entries state = state
+        { communicationRestrictedOwners =
+            foldr (uncurry Map.insert) (owners state) entries }
+      remove keys state = state
+        { communicationRestrictedOwners =
+            foldr Map.delete (owners state) keys }
+      clean = remove nearKeys
+      baseline = choiceCloseDiamondReverse diamond
+      attempt state process endpoint rev role result =
+        closeProcessEndpointState (fxNetwork fx) state process endpoint
+          rev role result
+      closeClient state = attempt state (fxClientProcess fx)
+        (fxClientNext fx) revision clientRole outcome
+      closePeer state = attempt state (fxServerProcess fx)
+        serverNext revision serverRole outcome
+      stale state process endpoint role =
+        case attempt state process endpoint revision role outcome of
+          Left (EndpointClosureOccurrenceUnknown actualProcess actualEndpoint) ->
+            assert (actualProcess == process && actualEndpoint == endpoint)
+              "mixed near-miss changed exact stale-predecessor rejection"
+          other -> Left ("mixed near-miss resurrected predecessor: " <> show other)
+      aliasesFramed state =
+        all (\(key, pair) -> Map.lookup key (owners state) == Just pair)
+          nearAliases
+      runDiamond description mixed = do
+        stale mixed (fxClientProcess fx) (fxClientOld fx) clientRole
+        stale mixed (fxServerProcess fx) (fxServerOld fx) serverRole
+        clientFirst <- mapLeft show (closeClient mixed)
+        peerFirst <- mapLeft show (closePeer mixed)
+        assert (aliasesFramed clientFirst && aliasesFramed peerFirst)
+          (description <> ": first Close changed nonmatching owner")
+        clientThenPeer <- mapLeft show (closePeer clientFirst)
+        peerThenClient <- mapLeft show (closeClient peerFirst)
+        stale clientThenPeer (fxClientProcess fx) (fxClientOld fx) clientRole
+        stale peerThenClient (fxServerProcess fx) (fxServerOld fx) serverRole
+        assert (clientThenPeer == peerThenClient
+             && clean clientThenPeer == baseline
+             && aliasesFramed clientThenPeer
+             && Map.lookup clientOccurrence (owners clientThenPeer) == Nothing
+             && Map.lookup serverOccurrence (owners clientThenPeer) == Nothing
+             && Map.lookup spectatorOccurrence (owners clientThenPeer)
+                  == Map.lookup spectatorOccurrence (owners ready))
+          (description <> ": exact Close diamond or affine frame diverged")
+      foreignRevision = ProtocolInstanceRevision "fsem02.multi.foreign"
+      foreignRole = ProtocolRoleKey "MultiForeignRole"
+      badOutcome = Outcome "fsem02.multi.invalid"
+      ambiguous state =
+        case attempt state (fxClientProcess fx) (fxClientNext fx)
+          foreignRevision foreignRole badOutcome of
+          Left (EndpointClosureOccurrenceAmbiguous p n keys) ->
+            assert (p == fxClientProcess fx
+                 && n == fxClientNext fx
+                 && length keys == 2
+                 && elem clientOccurrence keys
+                 && elem (fst exactAlias) keys)
+              "exact duplicate amid near-misses was not refused first"
+          other -> Left ("exact duplicate reached nominal gate: " <> show other)
+  assert (fxClientProcess fx /= fxServerProcess fx
+       && fxClientNext fx /= serverNext
+       && fabricated /= fxClientNext fx
+       && fabricated /= serverNext
+       && all (\key -> Map.notMember key (owners ready))
+            (fst exactAlias : nearKeys)
+       && Map.lookup clientOccurrence (owners ready)
+            == Just (fxClientProcess fx, fxClientNext fx)
+       && Map.lookup serverOccurrence (owners ready)
+            == Just (fxServerProcess fx, serverNext))
+    "checked choice does not have distinct ready owner population"
+  let forward = inject nearAliases ready
+      backward = inject (reverse nearAliases) ready
+  assert (forward == backward && clean forward == ready)
+    "Map insertion order changed supplied near-miss Core state"
+  runDiamond "forward near-miss insertion" forward
+  runDiamond "reversed near-miss insertion" backward
+  let withExactDuplicate = inject (exactAlias : nearAliases) ready
+  ambiguous withExactDuplicate
+  peerClosed <- mapLeft show (closePeer withExactDuplicate)
+  ambiguous peerClosed
+  assert (aliasesFramed peerClosed
+       && Map.lookup (fst exactAlias) (owners peerClosed)
+            == Just (snd exactAlias))
+    "independent peer Close modified exact ambiguous owner"
+  let restored = remove [fst exactAlias] withExactDuplicate
+  assert (restored == forward)
+    "removing exactly the duplicate changed unrelated owner aliases"
+  runDiamond "exact duplicate removed with all near-misses kept" restored
 
 -- Adversarial population observation: NOT a source-derived deactivation step.
 -- Unknown or inactive processes must reject before endpoint/nominal checking,
