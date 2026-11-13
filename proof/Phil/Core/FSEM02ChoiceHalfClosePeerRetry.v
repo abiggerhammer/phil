@@ -55,14 +55,17 @@ Proof.
   pose proof (fsem02ConditionalTerminalCloseDiamond
     owners co cp ce po pp pe ac af ap ar
     Hdistinct Hclient Hpeer HpeerFirst HclientSecond) as Hdiamond.
-  repeat split.
-  - reflexivity.
-  - unfold fsem02ChoiceTrialPeerAfterClient.
-    now rewrite Hpeer.
-  - exact Hgone.
-  - exact HpeerLive.
-  - intros spectator Hother. apply Hframe. exact Hother.
-  - exact Hdiamond.
+  split.
+  { reflexivity. }
+  split.
+  { unfold fsem02ChoiceTrialPeerAfterClient. now rewrite Hpeer. }
+  split.
+  { exact Hgone. }
+  split.
+  { exact HpeerLive. }
+  split.
+  { intros spectator Hother. apply Hframe. exact Hother. }
+  exact Hdiamond.
 Qed.
 
 Theorem fsem02ChoicePeerFirstRefusedClientThenValidRetry :
@@ -97,12 +100,15 @@ Proof.
   pose proof (fsem02ConditionalTerminalCloseDiamond
     owners co cp ce po pp pe ac af ap ar
     Hdistinct Hclient Hpeer HpeerFirst HclientSecond) as Hdiamond.
-  repeat split.
-  - reflexivity.
-  - unfold fsem02ChoiceTrialClientAfterPeer.
-    now rewrite HclientSecond.
-  - exact Hgone.
-  - exact HclientLive.
-  - intros spectator Hother. apply Hframe. exact Hother.
-  - exact Hdiamond.
+  split.
+  { reflexivity. }
+  split.
+  { unfold fsem02ChoiceTrialClientAfterPeer. now rewrite HclientSecond. }
+  split.
+  { exact Hgone. }
+  split.
+  { exact HclientLive. }
+  split.
+  { intros spectator Hother. apply Hframe. exact Hother. }
+  exact Hdiamond.
 Qed.
