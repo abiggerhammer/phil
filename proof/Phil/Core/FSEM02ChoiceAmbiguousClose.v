@@ -1,5 +1,6 @@
 From Stdlib Require Import Strings.String Lists.List Bool.Bool.
-From Phil.Core Require Import Syntax FSEM02SelectedClientClose.
+From Phil.Core Require Import Syntax FSEM02StatefulSourceChoice
+  FSEM02SelectedClientClose.
 Import ListNotations.
 
 (* FSEM-02, non-normative finite-key projection of the native End owner
