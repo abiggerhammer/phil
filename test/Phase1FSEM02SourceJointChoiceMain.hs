@@ -115,6 +115,11 @@ main = do
             choiceTypedPrefixWrongBody go offer wrongBody)
     , test "Cancel source-choice mixed End aliases preserve both valid Close orders"
         (choiceTerminalMultiAliasCardinality cancel offer "Cancel" (Outcome "Cancel"))
+    , test "Go source-choice four exact End owners report every owner before nominal checks"
+        (do choiceTerminalCompleteAmbiguityList go offer "Go" (Outcome "Done")
+            choiceTypedPrefixWrongBody go offer wrongBody)
+    , test "Cancel source-choice complete ambiguity list survives peer Close"
+        (choiceTerminalCompleteAmbiguityList cancel offer "Cancel" (Outcome "Cancel"))
     , test "Go source choice unknown/inactive End process gates precede endpoint and nominal checks"
         (do choiceTerminalActivationGate go offer "Go" (Outcome "Done")
             choiceTypedPrefixWrongBody go offer wrongBody)
@@ -2074,3 +2079,97 @@ assert ok detail = if ok then Right () else Left detail
 
 mapLeft :: (a -> b) -> Either a c -> Either b c
 mapLeft f = either (Left . f) Right
+
+-- FSEM-02: exact native ambiguity observation for 4 simultaneously live
+-- matching owner keys, interleaved with unrelated keys. Aliases are
+-- adversarial Core inputs, NOT new source syntax or an authority grant.
+choiceTerminalCompleteAmbiguityList
+  :: Text -> Text -> Text -> Outcome -> Either String ()
+choiceTerminalCompleteAmbiguityList client server label outcome = do
+  fx <- fixture client server
+  diamond <- mapLeft show $ choiceCloseDiamond fx label outcome outcome
+  let ready = statefulChoiceSuccessor
+        (statefulChoiceClientCloseSourceReplay
+          (statefulChoiceExplicitPeerCloseClient
+            (choiceCloseDiamondForward diamond)))
+      owners = communicationRestrictedOwners
+      revision = binaryProtocolInstanceRevision (fxInstance fx)
+      target = (fxClientProcess fx, fxClientNext fx)
+      extraExact =
+        [ (ActivationOccurrenceKey "fsem02.all-exact.1", target)
+        , (ActivationOccurrenceKey "fsem02.all-exact.2", target)
+        , (ActivationOccurrenceKey "fsem02.all-exact.3", target)
+        ]
+      near =
+        [ (ActivationOccurrenceKey "fsem02.all-exact.foreign-process",
+            (fxServerProcess fx, fxClientNext fx))
+        , (ActivationOccurrenceKey "fsem02.all-exact.foreign-end",
+            (fxClientProcess fx, serverNext))
+        , (ActivationOccurrenceKey "fsem02.all-exact.unrelated",
+            (fxServerProcess fx, Name "fsem02.all-exact.unrelated.end"))
+        ]
+      entries = [near !! 0, extraExact !! 0, near !! 1,
+                 extraExact !! 1, near !! 2, extraExact !! 2]
+      add items state = state
+        { communicationRestrictedOwners =
+            foldr (uncurry Map.insert) (owners state) items }
+      dropKeys keys state = state
+        { communicationRestrictedOwners =
+            foldr Map.delete (owners state) keys }
+      expectedKeys state = Map.keys (Map.filter (== target) (owners state))
+      expectAll description state = do
+        let full = expectedKeys state
+            foreignRevision = ProtocolInstanceRevision "fsem02.all-exact.foreign"
+            foreignRole = ProtocolRoleKey "AllExactForeign"
+            foreignOutcome = Outcome "fsem02.all-exact.foreign"
+        assert (length full == 4
+             && elem clientOccurrence full
+             && all (\(key, _) -> elem key full) extraExact)
+          (description <> ": native matching population incomplete")
+        case closeProcessEndpointState (fxNetwork fx) state
+          (fxClientProcess fx) (fxClientNext fx)
+          foreignRevision foreignRole foreignOutcome of
+          Left (EndpointClosureOccurrenceAmbiguous p n actual) ->
+            assert (p == fxClientProcess fx
+                 && n == fxClientNext fx
+                 && actual == full)
+              (description <> ": ambiguity did not preserve complete sorted matching list")
+          other -> Left (description <> ": reached nominal/success path: " <> show other)
+      closeClient state = closeProcessEndpointState (fxNetwork fx) state
+        (fxClientProcess fx) (fxClientNext fx) revision clientRole outcome
+      closePeer state = closeProcessEndpointState (fxNetwork fx) state
+        (fxServerProcess fx) serverNext revision serverRole outcome
+      allExtraKeys = map fst extraExact
+      baseline = choiceCloseDiamondReverse diamond
+  assert (fxClientProcess fx /= fxServerProcess fx
+       && fxClientNext fx /= serverNext
+       && Map.lookup clientOccurrence (owners ready) == Just target
+       && all (\(key, _) -> Map.notMember key (owners ready)) (entries))
+    "checked source-derived ready state conflicts with adversarial owner keys"
+  let populated = add entries ready
+      reversed = add (reverse entries) ready
+      nearOnly = add near ready
+  assert (populated == reversed && dropKeys allExtraKeys populated == nearOnly)
+    "owner Map insertion order or exact-only cleanup changed near-miss state"
+  expectAll "four exact matching owners" populated
+  expectAll "reverse-inserted exact matching owners" reversed
+  peerClosed <- mapLeft show (closePeer populated)
+  expectAll "independent peer End retired" peerClosed
+  assert (Map.lookup serverOccurrence (owners peerClosed) == Nothing
+       && Map.lookup spectatorOccurrence (owners peerClosed)
+            == Map.lookup spectatorOccurrence (owners ready)
+       && all (\(key, pair) -> Map.lookup key (owners peerClosed) == Just pair)
+           entries)
+    "peer terminal Close changed a matching alias or borrowed spectator"
+  let cleaned = dropKeys allExtraKeys populated
+  clientFirst <- mapLeft show (closeClient cleaned)
+  peerFirst <- mapLeft show (closePeer cleaned)
+  clientThenPeer <- mapLeft show (closePeer clientFirst)
+  peerThenClient <- mapLeft show (closeClient peerFirst)
+  assert (clientThenPeer == peerThenClient
+       && dropKeys (map fst near) clientThenPeer == baseline
+       && Map.lookup clientOccurrence (owners clientThenPeer) == Nothing
+       && Map.lookup serverOccurrence (owners clientThenPeer) == Nothing
+       && all (\(key, pair) -> Map.lookup key (owners clientThenPeer) == Just pair)
+           near)
+    "precise removal of three extra exact owners failed to restore Close diamond"
