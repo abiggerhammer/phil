@@ -289,6 +289,7 @@ The bounded [FSEM-02 terminal End near-miss owner filter](formal-semantics-choic
 The bounded [FSEM-02 mixed near-miss owner cardinality check](formal-semantics-choice-multialias-cardinality-fsem02-v1.md) combines simultaneous nonmatching owner aliases and an optional true duplicate. Actual source-derived Go/Cancel End tests confirm both Close orders, exact stale errors and preserved affine state; finite Rocq proofs cover arbitrary nonmatching key lists while leaving native owner-map completeness and external authority as premises.
 
 The bounded [FSEM-02 complete owner ambiguity list](formal-semantics-choice-complete-ambiguity-list-fsem02-v1.md) tests that four simultaneous exact terminal owners are **all** reported in the production ambiguity error, across arbitrary insertion order and an independent peer Close. A conditional Rocq finite-population theorem retains the full exact-match list without retirement; native map-enumeration completeness and external authority remain premises.
+The bounded [FSEM-02 terminal End owner-cardinality trichotomy](formal-semantics-choice-owner-cardinality-trichotomy-fsem02-v1.md) executes zero, one and 2–6 exact native owner occurrences after source-derived Go/Cancel choice, tests exact refusal precedence and authorized two-order closure, and proves conditional Rocq finite classification. It does not derive nominal authority or universal Haskell-to-Rocq enumeration fidelity.
 
 ## 6. Architectures, occurrence identity, and root selection
 
