@@ -1,0 +1,86 @@
+name: FSEM-02 Complete End Ambiguity List Early Preflight
+
+on:
+  push:
+    branches:
+      - formal-semantics/fsem02-choice-complete-ambiguity-list
+    paths:
+      - 'test/Phase1FSEM02SourceJointChoiceMain.hs'
+      - 'proof/Phil/Core/FSEM02ChoiceCompleteAmbiguityList.v'
+      - 'docs/phase-1/formal-semantics-choice-complete-ambiguity-list-fsem02-v1.md'
+      - 'docs/phase-1/typing-and-semantics-reader-guide-v1.md'
+      - '.github/workflows/fsem02-choice-complete-ambiguity-preflight.yml'
+  pull_request:
+    paths:
+      - 'test/Phase1FSEM02SourceJointChoiceMain.hs'
+      - 'proof/Phil/Core/FSEM02ChoiceCompleteAmbiguityList.v'
+      - 'docs/phase-1/formal-semantics-choice-complete-ambiguity-list-fsem02-v1.md'
+      - 'docs/phase-1/typing-and-semantics-reader-guide-v1.md'
+      - '.github/workflows/fsem02-choice-complete-ambiguity-preflight.yml'
+
+concurrency:
+  group: fsem02-choice-complete-ambiguity-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  strict-haskell-source-choice-complete-ambiguity:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: haskell-actions/setup@v2
+        with:
+          ghc-version: '9.6.7'
+          cabal-version: 'latest'
+          cabal-update: false
+      - run: bash scripts/ci/cabal-update-retry.sh
+      - run: cabal build lib:phil-core --ghc-options=-Werror
+      - name: Accepted/rejected source, all exact owner keys and peer Close frame
+        run: |
+          set -euo pipefail
+          cabal exec -- ghc -isrc -Wall -Werror -fno-code test/Phase1FSEM02SourceJointChoiceMain.hs
+          cabal exec -- runghc -isrc -Wall -Werror test/Phase1FSEM02SourceJointChoiceMain.hs
+          sha256sum test/Phase1FSEM02SourceJointChoiceMain.hs test/fixtures/fsem02-source-offer-replay-v1/wrong-body.phil
+
+  rocq:
+    runs-on: ubuntu-24.04
+    container:
+      image: rocq/rocq-prover:9.2.0
+      options: --user root
+    steps:
+      - uses: actions/checkout@v4
+      - name: Complete End owner candidate-list fidelity and exact refusal
+        shell: bash
+        run: |
+          set -euo pipefail
+          export PATH="/home/rocq/.opam/${COMPILER}/bin:$PATH"
+          for file in \
+            proof/Phil/Core/Syntax.v \
+            proof/Phil/Core/Context.v \
+            proof/Phil/Core/ContextJoin.v \
+            proof/Phil/Core/ProcessJoin.v \
+            proof/Phil/Core/ProcessTerminal.v \
+            proof/Phil/Core/ArchitectureIdentity.v \
+            proof/Phil/Core/ArchitectureInstantiation.v \
+            proof/Phil/Core/ProviderReplacementQualification.v \
+            proof/Phil/Core/ArchitectureRealization.v \
+            proof/Phil/Systems/FactDisposition.v \
+            proof/Phil/Assurance/ValidityScope.v \
+            proof/Phil/Core/SystemsStageClosure.v \
+            proof/Phil/Core/SystemsGenericLowering.v \
+            proof/Phil/Core/ConcurrencySemantics.v \
+            proof/Phil/Core/SessionStep.v \
+            proof/Phil/Core/FSEM02ProtocolHeadProgression.v \
+            proof/Phil/Core/FSEM02JointSourceChoice.v \
+            proof/Phil/Core/FSEM02StatefulSourceChoice.v \
+            proof/Phil/Core/FSEM02SelectedClientClose.v \
+            proof/Phil/Core/FSEM02ChoiceAmbiguousClose.v \
+            proof/Phil/Core/FSEM02ChoiceNearMissClose.v \
+            proof/Phil/Core/FSEM02ChoiceCompleteAmbiguityList.v
+          do
+            rocq c -Q proof/Phil Phil "$file"
+          done
+          if grep -nE '^[[:space:]]*(Admitted[.]|Axiom[[:space:]]|Parameter[[:space:]])' proof/Phil/Core/FSEM02ChoiceCompleteAmbiguityList.v; then exit 1; fi
+          sha256sum proof/Phil/Core/FSEM02ChoiceMultiAliasCardinality.v proof/Phil/Core/FSEM02ChoiceCompleteAmbiguityList.vo
