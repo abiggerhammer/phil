@@ -132,6 +132,8 @@ Proof.
       phase1_surface_normalize_generic_kind_type_spine base = Some refined).
     {
       unfold base, refined.
+      cbn.
+      rewrite Hvalidate.
       reflexivity.
     }
     assert (Hnormalize :
@@ -151,6 +153,8 @@ Proof.
       phase1_surface_normalize_generic_kind_type_spine base = Some refined).
     {
       unfold base, refined.
+      cbn.
+      rewrite Hvalidate.
       reflexivity.
     }
     assert (Hnormalize :
@@ -170,6 +174,8 @@ Proof.
       phase1_surface_normalize_generic_kind_type_spine base = Some refined).
     {
       unfold base, refined.
+      cbn.
+      rewrite Hvalidate.
       reflexivity.
     }
     assert (Hnormalize :
@@ -189,6 +195,8 @@ Proof.
       phase1_surface_normalize_generic_kind_type_spine base = Some refined).
     {
       unfold base, refined.
+      cbn.
+      rewrite Hvalidate.
       reflexivity.
     }
     assert (Hnormalize :
@@ -208,6 +216,8 @@ Proof.
       phase1_surface_normalize_generic_kind_type_spine base = Some refined).
     {
       unfold base, refined.
+      cbn.
+      rewrite Hvalidate.
       reflexivity.
     }
     assert (Hnormalize :
