@@ -73,6 +73,11 @@ main = do
             choiceTypedPrefixWrongBody go offer wrongBody)
     , test "Cancel choice committed Client/peer half-Close preserves Cancel and retries"
         (choiceHalfClosePeerRefusalRetry cancel offer "Cancel" (Outcome "Cancel"))
+    , test "Go choice committed half-Close refuses foreign instance and role before retry"
+        (do choiceHalfCloseNominalPeerRetry go offer "Go" (Outcome "Done")
+            choiceTypedPrefixWrongBody go offer wrongBody)
+    , test "Cancel choice committed half-Close refuses nominal peer with exact precedence"
+        (choiceHalfCloseNominalPeerRetry cancel offer "Cancel" (Outcome "Cancel"))
     , test "diamond rejects wrong externally authorized peer outcome precisely" (choiceCloseDiamondBadPeer go offer)
     , test "diamond rejects wrong source Client close outcome precisely" (choiceCloseDiamondBadClient go offer)
     , test "diamond rejects minimally malformed source offer before both orders" (choiceCloseDiamondWrongBody go offer wrongBody)
@@ -889,6 +894,96 @@ choiceHalfClosePeerRefusalRetry client server label outcome = do
        && Map.lookup spectatorOccurrence (owners afterClientFirst)
             == Map.lookup spectatorOccurrence (owners ready))
     "wrong-outcome refusal/retry changed exact two-process final state"
+
+-- FSEM-02: challenge *externally presented* nominal instance and role after
+-- one of the source-checked Select/Offer participants has committed End Close.
+-- Check both orders and both complete source choices. Rejections return no
+-- successor; the state used for the authorized retry is the exact committed
+-- state, not a rebuilt/rolled-back one.
+choiceHalfCloseNominalPeerRetry :: Text -> Text -> Text -> Outcome -> Either String ()
+choiceHalfCloseNominalPeerRetry client server label outcome = do
+  fx <- fixture client server
+  diamond <- mapLeft show $ choiceCloseDiamond fx label outcome outcome
+  let forward = choiceCloseDiamondForward diamond
+      ready = statefulChoiceSuccessor
+        (statefulChoiceClientCloseSourceReplay
+          (statefulChoiceExplicitPeerCloseClient forward))
+      revision = binaryProtocolInstanceRevision (fxInstance fx)
+      foreignRevision = ProtocolInstanceRevision "fsem02.foreign.choice.instance"
+      foreignRole = ProtocolRoleKey "OtherRole"
+      owners = communicationRestrictedOwners
+      contexts = communicationProtocolContexts
+      attempt process endpoint state suppliedRevision suppliedRole =
+        closeProcessEndpointState (fxNetwork fx) state process endpoint
+          suppliedRevision suppliedRole outcome
+      clientAttempt = attempt (fxClientProcess fx) (fxClientNext fx)
+      peerAttempt = attempt (fxServerProcess fx) serverNext
+      nominalCases side process endpoint committed trial =
+        case trial of
+          Left (EndpointClosureProtocolError actualProcess
+            (ProtocolInstanceMismatch actualEndpoint expected actual)) ->
+              assert (actualProcess == process && actualEndpoint == endpoint
+                   && expected == foreignRevision && actual == revision)
+                (side <> " lost exact instance mismatch or instance-first precedence")
+          other -> Left (side <> " did not reject foreign instance: " <> show other)
+      wrongRole side process endpoint trial =
+        case trial of
+          Left (EndpointClosureProtocolError actualProcess
+            (ProtocolRoleMismatch actualEndpoint expected actual)) ->
+              assert (actualProcess == process && actualEndpoint == endpoint
+                   && expected == foreignRole
+                   && actual == (if process == fxClientProcess fx then clientRole else serverRole))
+                (side <> " lost exact nominal role diagnostic")
+          other -> Left (side <> " did not reject foreign role: " <> show other)
+      stale side process endpoint trial =
+        case trial of
+          Left (EndpointClosureOccurrenceUnknown actualProcess actualEndpoint) ->
+            assert (actualProcess == process && actualEndpoint == endpoint)
+              (side <> " lost retired occurrence precedence")
+          other -> Left (side <> " accepted stale endpoint: " <> show other)
+      checkNominal side process endpoint committed role attemptClose = do
+        nominalCases side process endpoint committed
+          (attemptClose committed foreignRevision role)
+        wrongRole side process endpoint
+          (attemptClose committed revision foreignRole)
+        nominalCases (side <> " both-wrong") process endpoint committed
+          (attemptClose committed foreignRevision foreignRole)
+  clientFirst <- mapLeft show $ clientAttempt ready revision clientRole
+  assert (Map.lookup clientOccurrence (owners clientFirst) == Nothing
+       && Map.lookup serverOccurrence (owners clientFirst)
+            == Map.lookup serverOccurrence (owners ready)
+       && Map.lookup (fxServerProcess fx) (contexts clientFirst)
+            == Map.lookup (fxServerProcess fx) (contexts ready)
+       && Map.lookup spectatorOccurrence (owners clientFirst)
+            == Map.lookup spectatorOccurrence (owners ready))
+    "client-first nominal trial changed live peer or borrowed spectator"
+  checkNominal "client-first peer" (fxServerProcess fx) serverNext
+    clientFirst serverRole peerAttempt
+  stale "client-first retired client" (fxClientProcess fx) (fxClientNext fx)
+    (clientAttempt clientFirst foreignRevision foreignRole)
+  afterClientFirst <- mapLeft show $ peerAttempt clientFirst revision serverRole
+
+  peerFirst <- mapLeft show $ peerAttempt ready revision serverRole
+  assert (Map.lookup serverOccurrence (owners peerFirst) == Nothing
+       && Map.lookup clientOccurrence (owners peerFirst)
+            == Map.lookup clientOccurrence (owners ready)
+       && Map.lookup (fxClientProcess fx) (contexts peerFirst)
+            == Map.lookup (fxClientProcess fx) (contexts ready)
+       && Map.lookup spectatorOccurrence (owners peerFirst)
+            == Map.lookup spectatorOccurrence (owners ready))
+    "peer-first nominal trial changed live client or borrowed spectator"
+  checkNominal "peer-first client" (fxClientProcess fx) (fxClientNext fx)
+    peerFirst clientRole clientAttempt
+  stale "peer-first retired peer" (fxServerProcess fx) serverNext
+    (peerAttempt peerFirst foreignRevision foreignRole)
+  afterPeerFirst <- mapLeft show $ clientAttempt peerFirst revision clientRole
+  assert (afterClientFirst == afterPeerFirst
+       && afterClientFirst == choiceCloseDiamondReverse diamond
+       && Map.lookup clientOccurrence (owners afterPeerFirst) == Nothing
+       && Map.lookup serverOccurrence (owners afterPeerFirst) == Nothing
+       && Map.lookup spectatorOccurrence (owners afterPeerFirst)
+            == Map.lookup spectatorOccurrence (owners ready))
+    "nominal refusal/retry did not converge to the exact checked End diamond"
 
 -- A finite, source-relative choice trace, distinct from restricted
 -- Bytes[8] send/receive. The offer's successor and both terminal outcomes
