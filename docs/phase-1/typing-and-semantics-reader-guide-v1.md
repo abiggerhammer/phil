@@ -282,6 +282,8 @@ The bounded [FSEM-02 source-choice exact local End-name refusal](formal-semantic
 
 The bounded [FSEM-02 terminal Close process-activation gate](formal-semantics-choice-activation-close-fsem02-v1.md) checks missing and adversarially inactive process refusals before endpoint and nominal validation, while preserving checked positive Close controls. The conditional finite Rocq population model does not infer architecture or activation authority.
 
+The bounded [FSEM-02 ambiguous terminal End owner refusal](formal-semantics-choice-ambiguous-close-fsem02-v1.md) checks an adversarial second live exact owner occurrence for either source-derived participant: native Close returns the precise two-key ambiguity **before** nominal validation, but a separate unique peer can still Close. Removing only the injected duplicate restores both authorized Close orders and the affine spectator. Conditional finite Rocq candidate-list proofs keep completeness of the native owner enumeration and external protocol authority explicit.
+
 ## 6. Architectures, occurrence identity, and root selection
 
 The source differentiates:

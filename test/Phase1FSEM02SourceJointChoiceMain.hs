@@ -99,6 +99,12 @@ main = do
             choiceTypedPrefixWrongBody go offer wrongBody)
     , test "Cancel source-choice wrong terminal End names preserve both authorized Close orders"
         (choiceWrongLocalEndNameRefusal cancel offer "Cancel" (Outcome "Cancel"))
+    , test "Go source-choice duplicate live End occurrence refuses ambiguous owner before nominal checks"
+        (do choiceTerminalAmbiguousOwnerRefusal go offer "Go" (Outcome "Done")
+            choiceTypedPrefixWrongBody go offer wrongBody)
+    , test "Cancel source-choice ambiguous live End occurrence preserves valid close diamond"
+        (choiceTerminalAmbiguousOwnerRefusal cancel offer "Cancel" (Outcome "Cancel")
+        )
     , test "Go source choice unknown/inactive End process gates precede endpoint and nominal checks"
         (do choiceTerminalActivationGate go offer "Go" (Outcome "Done")
             choiceTypedPrefixWrongBody go offer wrongBody)
@@ -1248,6 +1254,98 @@ choiceWrongLocalEndNameRefusal client server label outcome = do
        && Map.lookup spectatorOccurrence (owners clientThenPeer)
             == Map.lookup spectatorOccurrence (owners ready))
     "wrong-name refusal changed full terminal diamond or borrowed affine frame"
+
+-- This deliberately injects a duplicate exact activation-owner occurrence
+-- AFTER checked source progression; it is NOT a source-authorized alias.
+-- Native End must refuse ambiguity before checking role/revision/outcome.
+-- The other participant may close, and dropping ONLY the injected alias
+-- restores the same authorized two-order terminal state and affine frame.
+choiceTerminalAmbiguousOwnerRefusal
+  :: Text -> Text -> Text -> Outcome -> Either String ()
+choiceTerminalAmbiguousOwnerRefusal client server label outcome = do
+  fx <- fixture client server
+  diamond <- mapLeft show $ choiceCloseDiamond fx label outcome outcome
+  let ready = statefulChoiceSuccessor
+        (statefulChoiceClientCloseSourceReplay
+          (statefulChoiceExplicitPeerCloseClient
+            (choiceCloseDiamondForward diamond)))
+      owners = communicationRestrictedOwners ready
+      revision = binaryProtocolInstanceRevision (fxInstance fx)
+      foreignRevision = ProtocolInstanceRevision "fsem02.ambiguous.foreign"
+      foreignRole = ProtocolRoleKey "AmbiguousForeignRole"
+      badOutcome = Outcome "fsem02.ambiguous.unexpected"
+      inject process endpoint state = state
+        { communicationRestrictedOwners =
+            Map.insert duplicateOccurrence (process, endpoint)
+              (communicationRestrictedOwners state) }
+      clean state = state
+        { communicationRestrictedOwners =
+            Map.delete duplicateOccurrence (communicationRestrictedOwners state) }
+      clientAlias = inject (fxClientProcess fx) (fxClientNext fx) ready
+      peerAlias = inject (fxServerProcess fx) serverNext ready
+      probe state process endpoint suppliedRevision suppliedRole suppliedOutcome =
+        closeProcessEndpointState (fxNetwork fx) state process endpoint
+          suppliedRevision suppliedRole suppliedOutcome
+      expectAmbiguous description state process endpoint exactOccurrence
+          (suppliedRevision, suppliedRole, suppliedOutcome) =
+        case probe state process endpoint suppliedRevision suppliedRole
+               suppliedOutcome of
+          Left (EndpointClosureOccurrenceAmbiguous observedProcess
+            observedEndpoint occurrences) ->
+              assert (observedProcess == process
+                   && observedEndpoint == endpoint
+                   && length occurrences == 2
+                   && exactOccurrence `elem` occurrences
+                   && duplicateOccurrence `elem` occurrences)
+                (description <> ": ambiguous End lost exact two occurrence keys")
+          other -> Left (description <> ": ambiguous End not refused first: "
+                        <> show other)
+      clientProbes =
+        [ (revision, clientRole, outcome)
+        , (foreignRevision, foreignRole, badOutcome)
+        ]
+      peerProbes =
+        [ (revision, serverRole, outcome)
+        , (foreignRevision, foreignRole, badOutcome)
+        ]
+      closeClient state = probe state (fxClientProcess fx) (fxClientNext fx)
+        revision clientRole outcome
+      closePeer state = probe state (fxServerProcess fx) serverNext
+        revision serverRole outcome
+  assert (Map.notMember duplicateOccurrence owners
+       && Map.lookup clientOccurrence owners
+          == Just (fxClientProcess fx, fxClientNext fx)
+       && Map.lookup serverOccurrence owners
+          == Just (fxServerProcess fx, serverNext)
+       && Map.lookup spectatorOccurrence owners
+          == Just (fxClientProcess fx, spectatorName))
+    "checked source-choice owner population cannot support alias test"
+  mapM_ (expectAmbiguous "Client duplicate before End" clientAlias
+    (fxClientProcess fx) (fxClientNext fx) clientOccurrence) clientProbes
+  mapM_ (expectAmbiguous "Server duplicate before End" peerAlias
+    (fxServerProcess fx) serverNext serverOccurrence) peerProbes
+  peerWhileClientAmbiguous <- mapLeft show $ closePeer clientAlias
+  clientWhilePeerAmbiguous <- mapLeft show $ closeClient peerAlias
+  mapM_ (expectAmbiguous "Client duplicate after Server End"
+    peerWhileClientAmbiguous (fxClientProcess fx) (fxClientNext fx)
+    clientOccurrence) clientProbes
+  mapM_ (expectAmbiguous "Server duplicate after Client End"
+    clientWhilePeerAmbiguous (fxServerProcess fx) serverNext
+    serverOccurrence) peerProbes
+  assert (clean clientAlias == ready && clean peerAlias == ready)
+    "removing the exact adversarial duplicate changed checked ready state"
+  clientFinished <- mapLeft show $ closeClient (clean peerWhileClientAmbiguous)
+  peerFinished <- mapLeft show $ closePeer (clean clientWhilePeerAmbiguous)
+  assert (clientFinished == peerFinished
+       && clientFinished == choiceCloseDiamondReverse diamond
+       && Map.lookup clientOccurrence
+            (communicationRestrictedOwners clientFinished) == Nothing
+       && Map.lookup serverOccurrence
+            (communicationRestrictedOwners clientFinished) == Nothing
+       && Map.lookup spectatorOccurrence
+            (communicationRestrictedOwners clientFinished)
+          == Map.lookup spectatorOccurrence owners)
+    "ambiguous owner refusal or duplicate cleanup altered authorized End diamond"
 
 -- Adversarial population observation: NOT a source-derived deactivation step.
 -- Unknown or inactive processes must reject before endpoint/nominal checking,
