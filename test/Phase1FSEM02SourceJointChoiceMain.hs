@@ -918,7 +918,7 @@ choiceHalfCloseNominalPeerRetry client server label outcome = do
           suppliedRevision suppliedRole outcome
       clientAttempt = attempt (fxClientProcess fx) (fxClientNext fx)
       peerAttempt = attempt (fxServerProcess fx) serverNext
-      nominalCases side process endpoint committed trial =
+      nominalCases side process endpoint trial =
         case trial of
           Left (EndpointClosureProtocolError actualProcess
             (ProtocolInstanceMismatch actualEndpoint expected actual)) ->
@@ -942,11 +942,11 @@ choiceHalfCloseNominalPeerRetry client server label outcome = do
               (side <> " lost retired occurrence precedence")
           other -> Left (side <> " accepted stale endpoint: " <> show other)
       checkNominal side process endpoint committed role attemptClose = do
-        nominalCases side process endpoint committed
+        nominalCases side process endpoint
           (attemptClose committed foreignRevision role)
         wrongRole side process endpoint
           (attemptClose committed revision foreignRole)
-        nominalCases (side <> " both-wrong") process endpoint committed
+        nominalCases (side <> " both-wrong") process endpoint
           (attemptClose committed foreignRevision foreignRole)
   clientFirst <- mapLeft show $ clientAttempt ready revision clientRole
   assert (Map.lookup clientOccurrence (owners clientFirst) == Nothing
