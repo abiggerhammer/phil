@@ -42,9 +42,10 @@ Proof.
     apply andb_true_iff in H as [Hhead Htail].
     constructor.
     + intro Hin.
-      apply forallb_forall in Hhead.
-      specialize (Hhead key Hin).
-      rewrite p8_c2_bytes_ltb_irrefl in Hhead.
+      pose proof
+        (proj1 (@forallb_forall (list nat) (p8_c2_bytes_ltb key) tail)
+          Hhead key Hin) as Hbad.
+      rewrite p8_c2_bytes_ltb_irrefl in Hbad.
       discriminate.
     + apply IH. exact Htail.
 Qed.
