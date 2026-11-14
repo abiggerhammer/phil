@@ -1,0 +1,60 @@
+name: Phase 1 P8-C2 Recursive Canonical Order
+
+on:
+  pull_request:
+    paths:
+      - 'proof/Phil/Verification/P8RecursiveCanonicalOrderModel.v'
+      - 'test/P8RecursiveCanonicalOrderMain.hs'
+      - 'docs/phase-1/p8-c2-recursive-canonical-order-boundary-v1.md'
+      - '.github/workflows/phase1-p8-c2-recursive-order.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'proof/Phil/Verification/P8RecursiveCanonicalOrderModel.v'
+      - 'test/P8RecursiveCanonicalOrderMain.hs'
+      - 'docs/phase-1/p8-c2-recursive-canonical-order-boundary-v1.md'
+      - '.github/workflows/phase1-p8-c2-recursive-order.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  native-canonical-order-differential:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: haskell-actions/setup@v2
+        with:
+          ghc-version: '9.6.7'
+          cabal-version: 'latest'
+      - name: Strict full Haskell build
+        run: cabal build all --enable-tests --ghc-options=-Werror
+      - name: Strict C2 native typecheck
+        run: cabal exec -- ghc -isrc -itest -Wall -Werror -fno-code test/P8RecursiveCanonicalOrderMain.hs
+      - name: Execute actual native Ord and canonical byte negatives
+        run: cabal exec -- runghc -isrc -Wall -Werror test/P8RecursiveCanonicalOrderMain.hs
+      - name: Preserve C1 and independently accepted release paths
+        run: |
+          cabal exec -- runghc -isrc -Wall -Werror test/P8UnicodeUtf8Main.hs
+          cabal exec -- runghc -isrc -Wall -Werror test/Phase1INT005CertifiedReleaseEnvelopeMain.hs
+          cabal exec -- runghc -isrc -Wall -Werror test/Phase1VerificationSourceArtifactClosureMain.hs
+          cabal exec -- runghc -isrc -Wall -Werror test/Phase1StageClosureMain.hs
+
+  rocq-canonical-key-model:
+    runs-on: ubuntu-24.04
+    container:
+      image: rocq/rocq-prover:9.2.0
+      options: --user root
+    steps:
+      - uses: actions/checkout@v4
+      - name: Compile C1 dependency and C2, inspect assumptions and objects
+        shell: bash
+        run: |
+          set -euo pipefail
+          export PATH="/home/rocq/.opam/$COMPILER/bin:$PATH"
+          rocq -v
+          rocq c -Q proof/Phil Phil proof/Phil/Verification/P8UnicodeUtf8Model.v > /tmp/p8-c2-c1.log
+          rocq c -Q proof/Phil Phil proof/Phil/Verification/P8RecursiveCanonicalOrderModel.v | tee /tmp/p8-c2-assumptions.log
+          rocq check -Q proof/Phil Phil Phil.Verification.P8UnicodeUtf8Model
+          rocq check -Q proof/Phil Phil Phil.Verification.P8RecursiveCanonicalOrderModel
+          sha256sum proof/Phil/Verification/P8UnicodeUtf8Model.vo proof/Phil/Verification/P8RecursiveCanonicalOrderModel.vo /tmp/p8-c2-assumptions.log
