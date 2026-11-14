@@ -6,6 +6,11 @@ module Phil.Compiler.SourceSystems
   , prepareSourceSystemsAdmission
   , lowerSourceSystems
   , VerifiedSourceSystemsProduction
+  , VerifiedSourceCheckEventGraph
+  , verifiedSourceSystemsCheckEventGraph
+  , verifiedSourceCheckEventOccurrences
+  , verifiedSourceCheckEventArchitectureIdentity
+  , verifiedSourceCheckEventCoreSemantics
   , VerifiedSourceSystemsProductionError (..)
   , produceVerifiedSourceSystems
   , verifiedSourceSystemsArchitectureIdentity
@@ -22,7 +27,10 @@ import Phil.Compiler.SourceArchitecture
   , buildCheckedSourceArchitecture
   )
 import Phil.Compiler.SourceBundle
-  ( SourceBundleCheckError
+  ( CheckedSourceEvidenceOccurrence
+  , CheckedSourceBundle
+  , checkedSourceEvidenceOccurrences
+  , SourceBundleCheckError
   , SourceEnvironmentMap
   , SourceRootMap
   , checkPortableSourceBundle
@@ -110,10 +118,42 @@ lowerSourceSystems (SourceSystemsAdmission architecture program correspondence) 
 -- Its constructor is private; caller-created CheckedSourceArchitecture values
 -- cannot enter the stronger producing function below.
 -- This is NOT a StageClosure or CertifiedRelease origin certificate.
+-- | Private provenance of original *static checker* observations from the
+-- rechecked raw source bundle and the exact already-admitted Core/Architecture
+-- pair. The constructor is private: public CheckedSourceUnit/Surface results
+-- and copied evidence arrays cannot construct this witness. This witnesses
+-- P2 transport, NOT an actual later P7 assurance use, universal Core op-event
+-- simulation, SYS-012 completeness or SYS-013 discharge.
+data VerifiedSourceCheckEventGraph = VerifiedSourceCheckEventGraph
+  [CheckedSourceEvidenceOccurrence]
+  ArchitectureInstanceIdentity
+  SemanticForm
+  deriving (Eq, Show)
+
 data VerifiedSourceSystemsProduction = VerifiedSourceSystemsProduction
   SourceSystemsAdmission
   Phase1StageBundle
+  VerifiedSourceCheckEventGraph
   deriving (Eq, Show)
+
+verifiedSourceCheckEventOccurrences
+  :: VerifiedSourceCheckEventGraph -> [CheckedSourceEvidenceOccurrence]
+verifiedSourceCheckEventOccurrences (VerifiedSourceCheckEventGraph events _ _) = events
+
+verifiedSourceCheckEventArchitectureIdentity
+  :: VerifiedSourceCheckEventGraph -> ArchitectureInstanceIdentity
+verifiedSourceCheckEventArchitectureIdentity
+  (VerifiedSourceCheckEventGraph _ identity _) = identity
+
+verifiedSourceCheckEventCoreSemantics
+  :: VerifiedSourceCheckEventGraph -> SemanticForm
+verifiedSourceCheckEventCoreSemantics
+  (VerifiedSourceCheckEventGraph _ _ semantics) = semantics
+
+verifiedSourceSystemsCheckEventGraph
+  :: VerifiedSourceSystemsProduction -> VerifiedSourceCheckEventGraph
+verifiedSourceSystemsCheckEventGraph
+  (VerifiedSourceSystemsProduction _ _ graph) = graph
 
 data VerifiedSourceSystemsProductionError
   = VerifiedSourceBundleRejected SourceBundleCheckError
@@ -146,15 +186,19 @@ produceVerifiedSourceSystems roots environments sites policy portable program co
     (prepareSourceSystemsAdmission policy architecture program)
   stage <- mapLeft VerifiedSourceLoweringRejected
     (lowerSourceSystems admitted context)
+  let graph = VerifiedSourceCheckEventGraph
+        (checkedSourceEvidenceOccurrences checked)
+        (sourceSystemsArchitectureIdentity admitted)
+        (sourceSystemsProgramSemantics admitted)
   if phase1StageInstanceRevision stage ==
       identityInstanceRevision (sourceSystemsArchitectureIdentity admitted)
-    then Right (VerifiedSourceSystemsProduction admitted stage)
+    then Right (VerifiedSourceSystemsProduction admitted stage graph)
     else Left VerifiedSourceInstanceRevisionDrift
 
 verifiedSourceSystemsArchitectureIdentity
   :: VerifiedSourceSystemsProduction -> ArchitectureInstanceIdentity
 verifiedSourceSystemsArchitectureIdentity
-  (VerifiedSourceSystemsProduction admitted _) =
+  (VerifiedSourceSystemsProduction admitted _ _) =
     sourceSystemsArchitectureIdentity admitted
 
 -- | The exact descriptor independently rederived from the raw ordinary source
@@ -163,12 +207,12 @@ verifiedSourceSystemsArchitectureIdentity
 verifiedSourceSystemsArchitectureDescriptor
   :: VerifiedSourceSystemsProduction -> ArchitectureInstanceDescriptor
 verifiedSourceSystemsArchitectureDescriptor
-  (VerifiedSourceSystemsProduction (SourceSystemsAdmission architecture _ _) _) =
+  (VerifiedSourceSystemsProduction (SourceSystemsAdmission architecture _ _) _ _) =
     checkedArchitectureDescriptor (checkedSourceArchitectureRoot architecture)
 
 verifiedSourceSystemsStage
   :: VerifiedSourceSystemsProduction -> Phase1StageBundle
-verifiedSourceSystemsStage (VerifiedSourceSystemsProduction _ stage) = stage
+verifiedSourceSystemsStage (VerifiedSourceSystemsProduction _ stage _) = stage
 
 sourceSystemsArchitectureIdentity
   :: SourceSystemsAdmission

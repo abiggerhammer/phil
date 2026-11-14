@@ -1,0 +1,47 @@
+name: Phase 1 P9-E2 Sealed Source Event Provenance
+
+on:
+  pull_request:
+    paths:
+      - 'src/Phil/Compiler/SourceBundle.hs'
+      - 'src/Phil/Compiler/SourceCore.hs'
+      - 'src/Phil/Compiler/SourceSystems.hs'
+      - 'src/Phil/Verification/VerifiedStageClosureProduction.hs'
+      - 'test/Phase1P9SealedSourceEventMain.hs'
+      - 'test/Phase1INT001WitnessE2EMain.hs'
+      - '.github/workflows/phase1-p9-e2-source-provenance.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'src/Phil/Compiler/SourceBundle.hs'
+      - 'src/Phil/Compiler/SourceCore.hs'
+      - 'src/Phil/Compiler/SourceSystems.hs'
+      - 'src/Phil/Verification/VerifiedStageClosureProduction.hs'
+      - 'test/Phase1P9SealedSourceEventMain.hs'
+      - 'test/Phase1INT001WitnessE2EMain.hs'
+      - '.github/workflows/phase1-p9-e2-source-provenance.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  exact-rechecked-source-event-graph:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: haskell-actions/setup@v2
+        with:
+          ghc-version: '9.6.7'
+          cabal-version: 'latest'
+      - name: Strict all-source typecheck
+        run: cabal build all --enable-tests --ghc-options=-Werror
+      - name: P9-E2 exact native typecheck
+        run: |
+          cabal exec -- ghc -isrc -itest -Wall -Werror -fno-code test/Phase1P9SealedSourceEventMain.hs
+          cabal exec -- ghc -isrc -itest -Wall -Werror -fno-code test/Phase1INT001WitnessE2EMain.hs
+      - name: Real P2 source-event identity and negative tests
+        run: cabal exec -- runghc -isrc -Wall -Werror test/Phase1P9SealedSourceEventMain.hs
+      - name: Actual Upload and Steve P2/P6/P7 replays
+        run: cabal exec -- runghc -isrc -Wall -Werror test/Phase1INT001WitnessE2EMain.hs
+      - name: Preserve original ordinary checker E1 regression
+        run: cabal exec -- runghc -isrc -Wall -Werror test/Phase1P9SourceEvidenceMain.hs
