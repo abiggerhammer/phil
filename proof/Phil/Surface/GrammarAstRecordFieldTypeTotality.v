@@ -1,11 +1,15 @@
-From Stdlib Require Import Lists.List.
+From Stdlib Require Import Lists.List Strings.String.
 
 From Phil.Surface Require Import
+  GrammarDerivation
+  GrammarDeterminacySimpleResolverSoundness
+  GrammarAstSourceHeader
   GrammarAstRecordFieldTypeSpine
   GrammarAstRecordFieldsTotality
   GrammarAstOptionalFieldTypeTotality.
 
 Import ListNotations.
+Open Scope string_scope.
 
 (* Converse for the record-level field-type refinement from #1172. *)
 
