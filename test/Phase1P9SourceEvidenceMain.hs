@@ -9,7 +9,7 @@ import Phil.Core.Static (emptyStaticContext, declareOpaqueClaim)
 import Phil.Core.Syntax (Mode (..), Name (..), Proposition (..), RefTerm (..), Ty (..))
 import Phil.Surface.Check
   ( InitialBinding (..), SourceEvidenceBranch (..), SourceEvidenceEvent (..)
-  , SourceEvidenceUse (..), SurfaceEnvironment (..), SurfaceShape (..)
+  , SourceEvidenceUse (..), PrimitiveSemantics (..), SurfaceEnvironment (..), SurfaceShape (..)
   , checkSurfaceComponent, checkSurfaceComponentWithEvidence, emptySurfaceEnvironment
   )
 import Phil.Surface.Parser (parseSurfaceFile)
@@ -24,6 +24,7 @@ main = do
     , check "real accepted Core value evidence survives ordinary source checking" realCoreUse
     , check "Core evidence in both joined branches keeps separate site and route" joinedCoreUses
     , check "repeated checked source sites preserve ordinals and identities" repeatedUses
+    , check "genuine primitive policy evidence consumption is observed" beginPolicyUse
     , check "named proof use retains actual focused binding" namedProof
     , check "ordinary acceptance and observed acceptance are identical" sameAcceptance
     , check "rejected proof cannot mint accepted event" rejectedSource
@@ -118,6 +119,24 @@ repeatedUses = do
       && map sourceEvidenceOrdinal proofUses == [0,1]
       && sourceEvidenceSite (head proofUses) /= sourceEvidenceSite (last proofUses))
     (Left ("repeated source uses lost ordered distinct sites: " ++ show events))
+
+beginPolicyUse :: Either String ()
+beginPolicyUse = do
+  static <- either (Left . show) Right $
+    declareOpaqueClaim "BeginPolicy" [] emptyStaticContext
+  let env = (emptySurfaceEnvironment static)
+        { surfaceInitialBindings = Map.singleton "policy"
+            (InitialBinding Unrestricted (TyProof (Atom "BeginPolicy" [])) PlainShape)
+        , surfacePrimitives = Map.singleton "consume_begin_policy_evidence"
+            PrimitiveConsumeBeginPolicyEvidence
+        }
+  events <- checked env
+    "component Policy { consume_begin_policy_evidence(policy) }"
+  let recognized = [() | event <- events
+        , SourceBeginPolicyEvidence (Name "policy") (TyProof (Atom "BeginPolicy" []))
+            <- [sourceEvidenceUse event]]
+  unless (length recognized == 1)
+    (Left ("successful primitive evidence use was dropped: " ++ show events))
 
 namedProof :: Either String ()
 namedProof = do

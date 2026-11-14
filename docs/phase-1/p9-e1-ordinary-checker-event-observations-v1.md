@@ -9,3 +9,44 @@ The event data types have public constructors for observation/test discriminatio
 The dedicated P9 workflow typechecks actual instrumented source with GHC -Wall -Werror, runs the native positive/negative branch and proof tests, and preserves existing accepted Surface proof/branch tests. It does not modify Grammar-v1/TCB, the 244 normative conformance cases, signing/release workflows, P8/Rocq/FSEM claims or other lanes.
 
 **Remaining E1 completeness gate:** inspect every accepted proof/evidence site, branch/loop/callable alternative, ordinal reuse across an actual joined path, and exact concrete Upload/Steve evidence-positive source examples. If the sample native suite finds lost real use events, fix this *same PR* and re-run full CI; do not call it complete or advance E2 before that test evidence exists.
+
+
+## Acceptance-site inventory increment (same E1 branch)
+
+At the source Engine, distinct admitted uses cannot be exhausted by the two Core
+`checkValue` calls. This E1 path also observes successful
+`PrimitiveConsumeBeginPolicyEvidence` using the exact checked policy binding
+and type, and successful `evalCommit` consuming a parsed-receive witness
+(the pending endpoint, actual parsed shape and named witness when available).
+A rejected/mismatched policy binding or parsed provenance cannot produce
+an accepted event. These are *local checked semantic-use observations*, not
+P7/whole-release evidence, and the parsed-evidence shape is not an authority
+token or assertion of dynamic execution.
+
+In the current checker the decision to introduce `TyValidated` evidence in
+`evalValidate` or proof binders in `bindDecisionPattern` is an *evidence
+producer*, not automatically proof that the evidence was later consumed.
+Ordinary `evalSend`, callable argument flow, generic primitives and ambient
+unrestricted reads similarly need occurrence-level classification before a
+complete semantic-consumer domain can be claimed. Successful local checking
+by itself must never be turned into an asserted P7 final use. The Core
+`ValueResult` lists already remove repeated identical `EvidenceUse` records
+within one Core result (`appendEvidenceList`), so this E1 observer faithfully
+retains the resulting checked occurrences but cannot reverse that upstream
+deduplication; whether a stronger per-internal-use representation is necessary
+remains an explicit source/Core semantic question for a separate review.
+
+Current native tests cover the *actual parsed production checker*, a
+successful actual Core value-check use, different Core uses in statically
+checked branches after a join, sequential source occurrence ordinals, named
+and rejected proof, empty-use separation and an accepted primitive policy
+consumption. The original EXEC-015 omission fixture was updated to initialize
+the three new observation-only fields under strict `-Wmissing-fields`.
+The original 244 normative rows, Grammar-v1, TCB and publication workflows
+remain unchanged.
+
+**Completeness gate remains OPEN** until all accepted evidence-use routes,
+including parsed commit and higher-level source-owned use correspondence, are
+checked by real positive and negative tests. E1 observations by themselves
+cannot authenticate the P2 same checked-source event; E2/E3 and SYS-012/013
+are separately unproved.

@@ -2022,9 +2022,13 @@ evalPrimitiveRule environment state located primitive arguments =
       arity 1
       evidenceName <- namedExpression MissingEvidence (head arguments)
       meta <- lookupMeta (head arguments) (unName evidenceName) state
+      let checkedUse = Right [valuePath
+            (recordSourceEvidence (locatedSpan located)
+              (SourceBeginPolicyEvidence evidenceName (bindingType meta)) state)
+            RuntimeUnit]
       case bindingType meta of
-        TyValidated "BeginPolicy" _ _ -> unit
-        TyProof (Atom "BeginPolicy" _) -> unit
+        TyValidated "BeginPolicy" _ _ -> checkedUse
+        TyProof (Atom "BeginPolicy" _) -> checkedUse
         _ -> throw (head arguments) MissingEvidence
           "binding is not BeginPolicy evidence"
     PrimitiveUse -> do
@@ -2471,7 +2475,12 @@ evalCommit environment state located pendingExpression evidenceExpression = do
       "forged parsed evidence has no ingress provenance"
     _ -> throw evidenceExpression RecognitionProvenance
       "commit_receive requires Parsed evidence"
-  Right [valuePath next (RuntimeScalar successor)]
+  let evidenceSource = case locatedValue evidenceExpression of
+        VariableExpression name -> Just (Name name)
+        _ -> Nothing
+      recorded = recordSourceEvidence (locatedSpan located)
+        (SourceParsedCommitEvidence pendingName evidenceSource (scalarShape evidence)) next
+  Right [valuePath recorded (RuntimeScalar successor)]
 
 evalBorrow
   :: SurfaceEnvironment

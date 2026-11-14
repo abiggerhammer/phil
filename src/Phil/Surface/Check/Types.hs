@@ -332,6 +332,8 @@ data SourceEvidenceUse
   | SourceRequirementEvidence Proposition (Maybe Name) (Maybe FocusPlan)
   | SourceProveEvidence FocusedRequirement Bool
   | SourceCallableResidualEvidence Text Proposition Name
+  | SourceBeginPolicyEvidence Name Ty
+  | SourceParsedCommitEvidence Name (Maybe Name) SurfaceShape
   deriving (Eq, Show)
 
 data SourceEvidenceEvent = SourceEvidenceEvent
