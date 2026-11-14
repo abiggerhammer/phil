@@ -138,8 +138,10 @@ Proof.
       phase1_surface_normalize_generic_kind_type_spine base = Some refined).
     {
       unfold base, refined.
-      cbn.
-      rewrite Hvalidate.
+      pose proof
+        (phase1_surface_expect_literal_round_trip
+          "Type" selected Hvalidate) as Hselected_literal.
+      rewrite Hselected_literal.
       reflexivity.
     }
     assert (Hnormalize :
@@ -159,8 +161,10 @@ Proof.
       phase1_surface_normalize_generic_kind_type_spine base = Some refined).
     {
       unfold base, refined.
-      cbn.
-      rewrite Hvalidate.
+      pose proof
+        (phase1_surface_expect_literal_round_trip
+          "Nat" selected Hvalidate) as Hselected_literal.
+      rewrite Hselected_literal.
       reflexivity.
     }
     assert (Hnormalize :
@@ -180,8 +184,10 @@ Proof.
       phase1_surface_normalize_generic_kind_type_spine base = Some refined).
     {
       unfold base, refined.
-      cbn.
-      rewrite Hvalidate.
+      pose proof
+        (phase1_surface_expect_literal_round_trip
+          "Session" selected Hvalidate) as Hselected_literal.
+      rewrite Hselected_literal.
       reflexivity.
     }
     assert (Hnormalize :
@@ -201,8 +207,10 @@ Proof.
       phase1_surface_normalize_generic_kind_type_spine base = Some refined).
     {
       unfold base, refined.
-      cbn.
-      rewrite Hvalidate.
+      pose proof
+        (phase1_surface_expect_literal_round_trip
+          "Message" selected Hvalidate) as Hselected_literal.
+      rewrite Hselected_literal.
       reflexivity.
     }
     assert (Hnormalize :
@@ -222,8 +230,10 @@ Proof.
       phase1_surface_normalize_generic_kind_type_spine base = Some refined).
     {
       unfold base, refined.
-      cbn.
-      rewrite Hvalidate.
+      pose proof
+        (phase1_surface_expect_literal_round_trip
+          "Effects" selected Hvalidate) as Hselected_literal.
+      rewrite Hselected_literal.
       reflexivity.
     }
     assert (Hnormalize :
