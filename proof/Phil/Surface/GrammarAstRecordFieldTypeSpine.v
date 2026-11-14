@@ -85,22 +85,14 @@ Proof.
   destruct (phase1_surface_normalize_optional_field_type_list fields)
     as [actual |] eqn:Hfields; try discriminate Hnormalize.
   inversion Hnormalize; subst refined.
-  cbn [phase1_surface_record_field_type_spine_tree
-       phase1_surface_record_fields_spine_tree
-       phase1_record_field_type_spine_name
-       phase1_record_field_type_spine_generic_params
-       phase1_record_field_type_spine_mode
-       phase1_record_field_type_spine_requirements
-       phase1_record_field_type_spine_fields
-       phase1_record_fields_spine_name
-       phase1_record_fields_spine_generic_params
-       phase1_record_fields_spine_mode
-       phase1_record_fields_spine_requirements
-       phase1_record_fields_spine_fields].
-  rewrite
+  pose proof
     (phase1_surface_normalize_optional_field_type_list_round_trip
-      fields actual Hfields).
-  reflexivity.
+      fields actual Hfields) as Htree.
+  destruct fields as [source_fields |];
+  destruct actual as [refined_fields |];
+  cbn in Htree.
+  cbn.
+  congruence.
 Qed.
 
 Definition phase1_surface_normalize_record_field_type_tree
