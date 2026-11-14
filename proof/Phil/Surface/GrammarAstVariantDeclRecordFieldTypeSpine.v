@@ -1,6 +1,13 @@
+From Stdlib Require Import Lists.List Strings.String.
+
 From Phil.Surface Require Import
+  GrammarDerivation
+  GrammarAstSourceHeader
   GrammarAstVariantPayloadSpine
   GrammarAstVariantRecordFieldTypeSpine.
+
+Import ListNotations.
+Open Scope string_scope.
 
 (*
   Lift the record-field-type-refined variant payload through the optional
