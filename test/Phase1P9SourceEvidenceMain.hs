@@ -87,7 +87,7 @@ coreBase = base
 realCoreUse :: Either String ()
 realCoreUse = do
   events <- checked coreBase
-    "component Actual { let value = accept good as TrueBool; return value }"
+    "component Actual { let value = accept good as TrueBool\n return value }"
   let core = [ event | event <- events
         , SourceCoreValueEvidence _ <- [sourceEvidenceUse event] ]
   unless (not (null core) && all (null . sourceEvidenceBranchRoute) core)
@@ -111,7 +111,7 @@ joinedCoreUses = do
 repeatedUses :: Either String ()
 repeatedUses = do
   events <- checked base
-    "component Repeated { prove true; prove true; return unit }"
+    "component Repeated { prove true\n prove true\n return unit }"
   let proofUses = [event | event <- events
         , SourceProveEvidence _ _ <- [sourceEvidenceUse event]]
   unless (length proofUses == 2
