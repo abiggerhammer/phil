@@ -1,0 +1,59 @@
+name: Phase 1 P8 Canonical SemanticForm Representation
+
+on:
+  pull_request:
+    paths:
+      - 'src/Phil/Verification/P8SemanticFormCodec.hs'
+      - 'test/P8CanonicalRepresentationMain.hs'
+      - 'proof/Phil/Verification/P8CanonicalFormModel.v'
+      - 'docs/phase-1/p8-canonical-form-representation-boundary-v1.md'
+      - '.github/workflows/phase1-p8-canonical-form-representation.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'src/Phil/Verification/P8SemanticFormCodec.hs'
+      - 'test/P8CanonicalRepresentationMain.hs'
+      - 'proof/Phil/Verification/P8CanonicalFormModel.v'
+      - 'docs/phase-1/p8-canonical-form-representation-boundary-v1.md'
+      - '.github/workflows/phase1-p8-canonical-form-representation.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  native-actual-domain-codec:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: haskell-actions/setup@v2
+        with:
+          ghc-version: '9.6.7'
+          cabal-version: 'latest'
+      - name: Strict entire Haskell build
+        run: cabal build all --enable-tests --ghc-options=-Werror
+      - name: Compile exact native codec including dependent library
+        run: cabal exec -- ghc -isrc -itest -Wall -Werror -fno-code test/P8CanonicalRepresentationMain.hs
+      - name: Run native data round-trips, Unicode and malformed wire negatives
+        run: cabal exec -- runghc -isrc -Wall -Werror test/P8CanonicalRepresentationMain.hs
+      - name: Recheck independently accepted Upload and Steve origin paths
+        run: |
+          cabal exec -- runghc -isrc -Wall -Werror test/Phase1INT005CertifiedReleaseEnvelopeMain.hs
+          cabal exec -- runghc -isrc -Wall -Werror test/Phase1VerificationSourceArtifactClosureMain.hs
+          cabal exec -- runghc -isrc -Wall -Werror test/Phase1StageClosureMain.hs
+
+  concrete-rocq-model-only:
+    runs-on: ubuntu-24.04
+    container:
+      image: rocq/rocq-prover:9.2.0
+      options: --user root
+    steps:
+      - uses: actions/checkout@v4
+      - name: Compile structural model with named assumptions and proof check
+        shell: bash
+        run: |
+          set -euo pipefail
+          export PATH="/home/rocq/.opam/$COMPILER/bin:$PATH"
+          rocq -v
+          rocq c -Q proof/Phil Phil proof/Phil/Verification/P8CanonicalFormModel.v | tee /tmp/p8-canonical-proof-assumptions.log
+          rocq check -Q proof/Phil Phil Phil.Verification.P8CanonicalFormModel
+          sha256sum proof/Phil/Verification/P8CanonicalFormModel.vo /tmp/p8-canonical-proof-assumptions.log
