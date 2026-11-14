@@ -22,7 +22,9 @@ check label yes = do
   unless yes (error ("P8 codec: " <> label))
   putStrLn ("P8 codec check: " <> label)
 
-rejected :: Either String a -> Bool
+-- Only the fact of rejection matters: decoders return String errors, while
+-- the actual native producer returns a typed GenericApplicationIdentityError.
+rejected :: Either e a -> Bool
 rejected (Left _) = True
 rejected (Right _) = False
 
