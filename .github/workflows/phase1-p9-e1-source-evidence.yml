@@ -1,0 +1,45 @@
+name: Phase 1 P9-E1 Ordinary Source Evidence Observation
+
+on:
+  pull_request:
+    paths:
+      - 'src/Phil/Surface/Check.hs'
+      - 'src/Phil/Surface/Check/Engine.hs'
+      - 'src/Phil/Surface/Check/Types.hs'
+      - 'src/Phil/Surface/Check/Support.hs'
+      - 'test/Phase1P9SourceEvidenceMain.hs'
+      - '.github/workflows/phase1-p9-e1-source-evidence.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'src/Phil/Surface/Check.hs'
+      - 'src/Phil/Surface/Check/Engine.hs'
+      - 'src/Phil/Surface/Check/Types.hs'
+      - 'src/Phil/Surface/Check/Support.hs'
+      - 'test/Phase1P9SourceEvidenceMain.hs'
+      - '.github/workflows/phase1-p9-e1-source-evidence.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  exact-ordinary-surface-event-inventory:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: haskell-actions/setup@v2
+        with:
+          ghc-version: '9.6.7'
+          cabal-version: 'latest'
+      - name: Strict source build
+        run: cabal build all --enable-tests --ghc-options=-Werror
+      - name: Strict typecheck evidence observations
+        run: cabal exec -- ghc -isrc -itest -Wall -Werror -fno-code test/Phase1P9SourceEvidenceMain.hs
+      - name: Actual source events and static branch histories
+        run: cabal exec -- runghc -isrc -Wall -Werror test/Phase1P9SourceEvidenceMain.hs
+      - name: Existing checker evidence regressions
+        run: |
+          cabal exec -- runghc -isrc -Wall -Werror test/Phase1AuditBranchEvidenceCaptureMain.hs
+          cabal exec -- runghc -isrc -Wall -Werror test/Phase1AuditBranchEvidenceDelayedMain.hs
+          cabal exec -- runghc -isrc -Wall -Werror test/Phase1ProveCompetenceMain.hs
+          cabal exec -- runghc -isrc -Wall -Werror test/Phase1INT001SteveOrdinaryProviderSourceMain.hs

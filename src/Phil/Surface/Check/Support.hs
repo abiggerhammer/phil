@@ -121,6 +121,9 @@ emptySurfaceState = SurfaceState
   , stateFresh = 0
   , stateFrame = 0
   , stateActiveEndpoint = Nothing
+  , stateEvidenceBranchRoute = []
+  , stateEvidenceEvents = []
+  , stateEvidenceNextOrdinal = 0
   }
 
 continuePath :: SurfaceState -> SurfacePath
