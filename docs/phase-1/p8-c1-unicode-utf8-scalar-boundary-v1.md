@@ -1,0 +1,20 @@
+# P8-C1 — strict Unicode scalar / UTF-8 byte grammar (PARTIAL)
+
+**Source pin:** `main` at `1ef856a58fce768a51a8d04eec308a99cee1d0c3` on 2026-11-14, before this PR. The branch must be rechecked against live `main` at merge. **Controlling authority:** [P8 #1770 maintainer authorization](https://github.com/abiggerhammer/phil/issues/1770#issuecomment-6875298118). Parent audit #1584 remains OPEN; P9 #1771 remains independent; P10 #1772 remains BLOCKED.
+
+## Exact scope and real producer
+
+- The actual native `SemanticForm` contains `Text`, nested ordered lists, `Set SemanticForm` and `Map Text SemanticForm` (`src/Phil/Core/Static.hs`). `P8SemanticFormCodec.putText` uses real `Data.Text.Encoding.encodeUtf8` and a **canonical decimal UTF-8 byte length**; `parseText` uses the strict `decodeUtf8'` interface and rejects invalid or length-inconsistent input.
+- `P8UnicodeUtf8Model.v` is a concrete *single-scalar UTF-8 octet grammar*: 1 byte 00–7F; 2 bytes C2–DF 80–BF; 3 bytes E0 A0–BF, ED 80–9F, and E1–EC/EE–EF with 80–BF continuation; 4 bytes F0 90–BF, F4 80–8F, and F1–F3 with 80–BF continuation. Explicit `nat` elements here represent **octets/codepoint arithmetic inside the model**, not invented native identity encodings or release credentials.
+- The Rocq executable `p8_decode_exact_scalar` checks exact one-scalar length and canonical octet grammar. Named proofs show wellformed scalar-octet model round-trip, injectivity of this exact octet encoding, and its 1–4 byte width. Compiled examples reject overlong sequences, surrogates, out-of-range, bad continuation, truncated data, and trailing octets. The numeric value and Unicode scalar predicate are exposed **without pretending their complete correspondence or numeric scalar encoding has been proved**.
+- `P8UnicodeUtf8Main.hs` tests an independently written UTF-8 octet arithmetic reference against **actual** Haskell `Data.Text.Encoding.encodeUtf8` and `decodeUtf8'`, then against native `encodeP8SemanticForm` and `decodeP8SemanticForm`, at deterministic scalar samples spanning all four widths and edge boundaries, including U+00E9, U+1F642, U+0000 and U+10FFFF. It checks exact text byte-length framing, composed-versus-decomposed distinctness, and strict malformed byte rejection.
+- The new path-scoped workflow executes full strict GHC 9.6.7, the above native differential and accepted Upload/Steve provenance smoke tests; Rocq 9.2.0 compiles named lemmas, prints assumptions and recursively checks compiled `.vo`. Original 244 normative cases and all trust/release workflows are unchanged.
+
+## Explicit unproved boundaries
+
+1. This **single-scalar octet model is not yet a full Rocq implementation of concatenated Unicode `Text` streams**, nor a proved bijection from every numeric scalar U+0000..U+10FFFF (excluding surrogates) onto octets. Multi-scalar native text is exercised, not proved in Rocq.
+2. Native `Data.Text` representation/invariants and `Text.Encoding` implementation semantics are **not imported into the Rocq kernel**. Agreement over a deterministic sample, however broad, is not a theorem about arbitrary Haskell `Text`.
+3. Haskell `Ord`/Map/Set recursive canonicality and full D/V/Q/M role coupling are C2, not C1. Neither C1 nor C2 confers an accepted opaque checker-to-Rocq producer for P2/P6/P7; C3 must check P9's original-event provenance and may stop if it remains absent.
+4. `P8UnicodeUtf8Model.v` contains no axiom or `Admitted`. The wellformedness assumptions on its theorems are explicit premises about an *executable* predicate, **not** claims that a native checker emitted those premises. No accepted language change or new TCB fact is inferred.
+
+**Gate:** Merge C1 only with full green exact-head GHC/Rocq/negative and independent source-acceptance tests and protected merge intent. A green C1 must not close P8, enable P10, or claim `FinalArtifactCertified`. Next: C2 concrete recursive form + real native ordering correspondence; stop for review if proper C2 implementation requires unapproved shared-file ownership or an extra trusted semantic assumption.

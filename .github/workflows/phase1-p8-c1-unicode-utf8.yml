@@ -1,0 +1,57 @@
+name: Phase 1 P8-C1 Unicode UTF8 Scalar Model
+
+on:
+  pull_request:
+    paths:
+      - 'proof/Phil/Verification/P8UnicodeUtf8Model.v'
+      - 'test/P8UnicodeUtf8Main.hs'
+      - 'docs/phase-1/p8-c1-unicode-utf8-scalar-boundary-v1.md'
+      - '.github/workflows/phase1-p8-c1-unicode-utf8.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'proof/Phil/Verification/P8UnicodeUtf8Model.v'
+      - 'test/P8UnicodeUtf8Main.hs'
+      - 'docs/phase-1/p8-c1-unicode-utf8-scalar-boundary-v1.md'
+      - '.github/workflows/phase1-p8-c1-unicode-utf8.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  native-utf8-differential:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: haskell-actions/setup@v2
+        with:
+          ghc-version: '9.6.7'
+          cabal-version: 'latest'
+      - name: Strict complete Haskell build
+        run: cabal build all --enable-tests --ghc-options=-Werror
+      - name: Strict native source typecheck
+        run: cabal exec -- ghc -isrc -itest -Wall -Werror -fno-code test/P8UnicodeUtf8Main.hs
+      - name: Execute Unicode, UTF-8 and malformed-input differential negatives
+        run: cabal exec -- runghc -isrc -Wall -Werror test/P8UnicodeUtf8Main.hs
+      - name: Preserve independently accepted source to StageClosure and release paths
+        run: |
+          cabal exec -- runghc -isrc -Wall -Werror test/Phase1INT005CertifiedReleaseEnvelopeMain.hs
+          cabal exec -- runghc -isrc -Wall -Werror test/Phase1VerificationSourceArtifactClosureMain.hs
+          cabal exec -- runghc -isrc -Wall -Werror test/Phase1StageClosureMain.hs
+
+  rocq-utf8-scalar-model:
+    runs-on: ubuntu-24.04
+    container:
+      image: rocq/rocq-prover:9.2.0
+      options: --user root
+    steps:
+      - uses: actions/checkout@v4
+      - name: Compile exact scalar grammar, check proof object and assumption census
+        shell: bash
+        run: |
+          set -euo pipefail
+          export PATH="/home/rocq/.opam/${COMPILER}/bin:$PATH"
+          rocq -v
+          rocq c -Q proof/Phil Phil proof/Phil/Verification/P8UnicodeUtf8Model.v | tee /tmp/p8-c1-assumptions.log
+          rocq check -Q proof/Phil Phil Phil.Verification.P8UnicodeUtf8Model
+          sha256sum proof/Phil/Verification/P8UnicodeUtf8Model.vo /tmp/p8-c1-assumptions.log
