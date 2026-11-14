@@ -1,0 +1,123 @@
+name: Phase 1 P11 V2 Pinned Candidate Evidence (Unsigned, No Publication)
+
+# Audit-only: no tag, release, credentials, or production release trigger.
+on:
+  pull_request:
+    paths:
+      - '.github/workflows/phase1-p11-v2-candidate-evidence.yml'
+      - 'scripts/ci/audit-p11-v2-complete-delta.py'
+      - 'scripts/ci/audit-p11-v2-unsigned-stage.sh'
+      - 'audit/p11-v2-independent-auditor-handoff-2026-11-14.md'
+
+permissions:
+  contents: read
+
+jobs:
+  full-pinned-delta:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          path: audit-tools
+      - uses: actions/checkout@v4
+        with:
+          path: pinned-source
+          ref: 9c7d48bc7c5f85b241df9343136c104c3af7a22b
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Complete three-baseline historical/rejected-to-new-pin source delta and adversarial controls
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 audit-tools/scripts/ci/audit-p11-v2-complete-delta.py --self-test
+          python3 audit-tools/scripts/ci/audit-p11-v2-complete-delta.py \
+            --repo pinned-source --out "$RUNNER_TEMP/p11-v2-candidate-delta" \
+            | tee "$RUNNER_TEMP/p11-v2-candidate-delta.log"
+          test -s "$RUNNER_TEMP/p11-v2-candidate-delta/p11-v2-complete-delta-summary.json"
+          grep -q '^P11_FINAL_RELEASE_BYTES=ABSENT;' "$RUNNER_TEMP/p11-v2-candidate-delta.log"
+          test -s "$RUNNER_TEMP/p11-v2-candidate-delta/rejected-checkpoint-to-p11-review-v2.name-status.z"
+          test -s "$RUNNER_TEMP/p11-v2-candidate-delta/phil-to-p11-review-v2.name-status.z"
+          test -s "$RUNNER_TEMP/p11-v2-candidate-delta/steve-to-p11-review-v2.name-status.z"
+      - name: Preserve COMPLETE three-baseline diff, NUL inventories, classifications and SHA
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: p11-v2-full-three-baseline-delta-9c7d48bc7c5f
+          path: |
+            ${{ runner.temp }}/p11-v2-candidate-delta/
+            ${{ runner.temp }}/p11-v2-candidate-delta.log
+          if-no-files-found: warn
+          retention-days: 30
+
+  provisional-linux-assets:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          path: audit-tools
+      - uses: actions/checkout@v4
+        with:
+          path: pinned-source
+          ref: 9c7d48bc7c5f85b241df9343136c104c3af7a22b
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: haskell-actions/setup@v2
+        with:
+          ghc-version: '9.6.7'
+          cabal-version: 'latest'
+      - name: Build and smoke unsigned Linux Phil/Steve staging bytes from pinned tree
+        shell: bash
+        run: |
+          set -euo pipefail
+          cd pinned-source
+          bash ../audit-tools/scripts/ci/audit-p11-v2-unsigned-stage.sh linux \
+            "$RUNNER_TEMP/p11-v2-candidate-linux" | tee "$RUNNER_TEMP/p11-v2-candidate-linux-run.log"
+      - name: Preserve exact Linux bytes and provenance (NOT a published release)
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: p11-v2-source-9c7d48bc7c5f-linux-unsigned-structural
+          path: |
+            ${{ runner.temp }}/p11-v2-candidate-linux/
+            ${{ runner.temp }}/p11-v2-candidate-linux-run.log
+          if-no-files-found: warn
+          retention-days: 30
+
+  provisional-darwin-assets:
+    runs-on: macos-26
+    timeout-minutes: 100
+    env:
+      MACOSX_DEPLOYMENT_TARGET: '11.0'
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          path: audit-tools
+      - uses: actions/checkout@v4
+        with:
+          path: pinned-source
+          ref: 9c7d48bc7c5f85b241df9343136c104c3af7a22b
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: haskell-actions/setup@v2
+        with:
+          ghc-version: '9.6.7'
+          cabal-version: 'latest'
+      - name: Build and strictly smoke native Apple Silicon unsigned candidate staging
+        shell: bash
+        run: |
+          set -euo pipefail
+          cd pinned-source
+          bash ../audit-tools/scripts/ci/audit-p11-v2-unsigned-stage.sh darwin \
+            "$RUNNER_TEMP/p11-v2-candidate-darwin" | tee "$RUNNER_TEMP/p11-v2-candidate-darwin-run.log"
+      - name: Preserve exact Darwin unsigned bytes and explicit notarization PENDING disclosure
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: p11-v2-source-9c7d48bc7c5f-darwin-unsigned-structural
+          path: |
+            ${{ runner.temp }}/p11-v2-candidate-darwin/
+            ${{ runner.temp }}/p11-v2-candidate-darwin-run.log
+          if-no-files-found: warn
+          retention-days: 30
