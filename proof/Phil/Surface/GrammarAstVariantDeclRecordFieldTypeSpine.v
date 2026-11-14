@@ -108,7 +108,7 @@ Proof.
   destruct
     (phase1_surface_normalize_optional_record_field_type_variant_payload payload)
     as [actual |] eqn:Hpayload; try discriminate Hnormalize.
-  inversion Hnormalize; subst refined.
+  inversion Hnormalize; subst.
   cbn.
   rewrite
     (phase1_surface_normalize_optional_record_field_type_variant_payload_round_trip

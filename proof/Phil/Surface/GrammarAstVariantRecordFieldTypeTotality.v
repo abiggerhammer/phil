@@ -7,6 +7,7 @@ From Phil.Surface Require Import
   GrammarAstSourceHeaderTotality
   GrammarAstVariantPayloadSpine
   GrammarAstVariantRecordFieldTypeSpine
+  GrammarAstRecordFieldsTotality
   GrammarAstOptionalFieldTypeTotality
   GrammarAstDataTotality.
 
