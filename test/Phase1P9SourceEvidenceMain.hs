@@ -6,7 +6,7 @@ import qualified Data.Map.Strict as Map
 import Data.Text (Text)
 import Phil.Core.Focusing (FocusMechanism (..), FocusedRequirement (..))
 import Phil.Core.Static (emptyStaticContext, declareOpaqueClaim)
-import Phil.Core.Syntax (Mode (..), Proposition (..), Ty (..))
+import Phil.Core.Syntax (Mode (..), Name (..), Proposition (..), RefTerm (..), Ty (..))
 import Phil.Surface.Check
   ( InitialBinding (..), SourceEvidenceBranch (..), SourceEvidenceEvent (..)
   , SourceEvidenceUse (..), SurfaceEnvironment (..), SurfaceShape (..)
@@ -21,6 +21,9 @@ main = do
   results <- sequence
     [ check "empty source has no evidence use" noUses
     , check "two equal-resource branches retain distinct actual evidence" bothBranches
+    , check "real accepted Core value evidence survives ordinary source checking" realCoreUse
+    , check "Core evidence in both joined branches keeps separate site and route" joinedCoreUses
+    , check "repeated checked source sites preserve ordinals and identities" repeatedUses
     , check "named proof use retains actual focused binding" namedProof
     , check "ordinary acceptance and observed acceptance are identical" sameAcceptance
     , check "rejected proof cannot mint accepted event" rejectedSource
@@ -63,6 +66,58 @@ bothBranches = do
         ]
   unless (length routes == 2 && routes == [["true"],["false"]]) $
     Left ("missing/duplicated branch observations: " ++ show routes)
+
+
+-- These run through the production parser and the exact production checker;
+-- neither test constructs a ValueResult or an accepted event manually.
+trueBool :: Ty
+trueBool = TyRefined (Name "v") TyBool
+  (Equal (RefVar (Name "v")) (RefBool True))
+
+coreBase :: SurfaceEnvironment
+coreBase = base
+  { surfaceInitialBindings = Map.fromList
+      [ ("flag", InitialBinding Unrestricted TyBool PlainShape)
+      , ("good", InitialBinding Unrestricted trueBool PlainShape)
+      , ("other", InitialBinding Unrestricted trueBool PlainShape)
+      ]
+  , surfaceTypeAliases = Map.singleton "TrueBool" trueBool
+  }
+
+realCoreUse :: Either String ()
+realCoreUse = do
+  events <- checked coreBase
+    "component Actual { let value = accept good as TrueBool; return value }"
+  let core = [ event | event <- events
+        , SourceCoreValueEvidence _ <- [sourceEvidenceUse event] ]
+  unless (not (null core) && all (null . sourceEvidenceBranchRoute) core)
+    (Left ("real checked Core value evidence missing: " ++ show events))
+
+joinedCoreUses :: Either String ()
+joinedCoreUses = do
+  events <- checked coreBase $
+    "component Joined { let value = decide flag { "
+    <> "true => { accept good as TrueBool } "
+    <> "false => { accept other as TrueBool } "
+    <> "} return value }"
+  let core = [ event | event <- events
+        , SourceCoreValueEvidence _ <- [sourceEvidenceUse event] ]
+      routes = map (map sourceBranchLabel . sourceEvidenceBranchRoute) core
+  unless (length core >= 2 && "true" `elem` concat routes
+        && "false" `elem` concat routes
+        && length (map sourceEvidenceSite core) >= 2)
+    (Left ("joined static alternatives lost a Core checked-use event: " ++ show events))
+
+repeatedUses :: Either String ()
+repeatedUses = do
+  events <- checked base
+    "component Repeated { prove true; prove true; return unit }"
+  let proofUses = [event | event <- events
+        , SourceProveEvidence _ _ <- [sourceEvidenceUse event]]
+  unless (length proofUses == 2
+      && map sourceEvidenceOrdinal proofUses == [0,1]
+      && sourceEvidenceSite (head proofUses) /= sourceEvidenceSite (last proofUses))
+    (Left ("repeated source uses lost ordered distinct sites: " ++ show events))
 
 namedProof :: Either String ()
 namedProof = do
