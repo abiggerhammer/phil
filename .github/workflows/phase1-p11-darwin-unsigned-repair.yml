@@ -5,12 +5,14 @@ on:
   pull_request:
     paths:
       - 'scripts/release/build-phil-phase1-darwin-package.sh'
+      - 'scripts/release/emit-phil-unsigned-darwin-distribution.hs'
       - '.github/workflows/phase1-p11-darwin-unsigned-repair.yml'
       - 'audit/p11-darwin-unsigned-repair-2026-11-13.md'
   push:
     branches: [main]
     paths:
       - 'scripts/release/build-phil-phase1-darwin-package.sh'
+      - 'scripts/release/emit-phil-unsigned-darwin-distribution.hs'
       - '.github/workflows/phase1-p11-darwin-unsigned-repair.yml'
       - 'audit/p11-darwin-unsigned-repair-2026-11-13.md'
 
@@ -35,6 +37,8 @@ jobs:
           bash scripts/ci/setup-llvm18.sh
           bash scripts/ci/cabal-update-retry.sh
           cabal build all --enable-tests --ghc-options=-Werror
+          cabal -v0 exec -- runghc -isrc -Wall -Werror \
+            scripts/release/emit-phil-unsigned-darwin-distribution.hs --self-test
           out="$RUNNER_TEMP/p11-repair-linux"
           mkdir -p "$out"
           bash scripts/release/build-phil-phase1-package.sh "$out" > "$out/phil-build.log"
@@ -114,6 +118,8 @@ jobs:
           if ! brew list llvm@18 >/dev/null 2>&1; then brew install llvm@18; fi
           bash scripts/ci/cabal-update-retry.sh
           cabal build all --enable-tests --ghc-options=-Werror
+          cabal -v0 exec -- runghc -isrc -Wall -Werror \
+            scripts/release/emit-phil-unsigned-darwin-distribution.hs --self-test
           out="$RUNNER_TEMP/p11-repair-darwin"
           mkdir -p "$out"
           bash scripts/release/build-phil-phase1-darwin-package.sh "$out" > "$out/phil-build.log"
@@ -138,6 +144,11 @@ jobs:
           steveroot="$out/extracted/phil-steve-0.1.0-phase1-aarch64-apple-darwin"
           test -s "$philroot/share/phil/phil.release-package"
           test -s "$philroot/share/phil/phase1-handoff-manifest-v1.tsv"
+          grep '^tcb[[:space:]]id=build-toolchain'             "$philroot/share/phil/phil.release-package"             | grep -Fq 'native unsigned philc executable'
+          if grep -Fq 'native signed philc executable'               "$philroot/share/phil/phil.release-package"; then
+            echo 'P11 ERROR: unsigned Darwin trust record falsely claims signed binary' >&2
+            exit 1
+          fi
           test -s "$out/$phil.release"
           (cd "$philroot" && ./smoke-test.sh) | tee "$out/phil-smoke.log"
           (cd "$steveroot" && ./smoke-test.sh) | tee "$out/steve-smoke.log"

@@ -53,12 +53,12 @@ chmod 0755 "$stage/smoke-test.sh"
 build_commit="$(git rev-parse HEAD)"
 release_package="$stage/share/phil/phil.release-package"
 
-# Bind the exact UNSIGNED native compiler, source and handoff root to the
-# existing INT-011 Darwin distribution identity. This is structural package
-# evidence, not Developer-ID signing, notarization or a P7 origin certificate.
+# Bind the exact UNSIGNED compiler/source/handoff using the native typed
+# INT-011 distribution record with a structurally checked unsigned-only
+# trust basis. The signed/privileged release builder stays unchanged.
 cabal -v0 exec -- runghc -isrc -Wall -Werror \
-  app/Phase1INT011DistributionReleaseMain.hs \
-  emit-darwin phil "0.1.0-phase1" "$build_commit" \
+  scripts/release/emit-phil-unsigned-darwin-distribution.hs \
+  "0.1.0-phase1" "$build_commit" \
   "$stage/share/phil/phase1-handoff-manifest-v1.tsv" \
   "$stage/bin/philc" \
   > "$release_package"
