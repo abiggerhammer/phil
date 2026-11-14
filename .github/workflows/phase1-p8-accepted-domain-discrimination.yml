@@ -1,0 +1,74 @@
+name: Phase 1 P8 Accepted-Domain Discrimination
+
+on:
+  pull_request:
+    paths:
+      - 'test/P8AcceptedDomainBoundaryMain.hs'
+      - 'docs/phase-1/p8-accepted-domain-representation-census-v1.md'
+      - '.github/workflows/phase1-p8-accepted-domain-discrimination.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'test/P8AcceptedDomainBoundaryMain.hs'
+      - 'docs/phase-1/p8-accepted-domain-representation-census-v1.md'
+      - '.github/workflows/phase1-p8-accepted-domain-discrimination.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  native-domain-negative-controls:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: haskell-actions/setup@v2
+        with:
+          ghc-version: '9.6.7'
+          cabal-version: 'latest'
+      - name: Strict complete Haskell build
+        run: cabal build all --enable-tests --ghc-options=-Werror
+      - name: Typecheck P8 exact native-domain probes
+        run: cabal exec -- ghc -isrc -itest -Wall -Werror -fno-code test/P8AcceptedDomainBoundaryMain.hs
+      - name: Execute native recursive/Unicode/Map/Set/role negative controls
+        run: cabal exec -- runghc -isrc -Wall -Werror test/P8AcceptedDomainBoundaryMain.hs
+      - name: Recheck independent accepted Upload and Steve source/stage/release
+        run: |
+          cabal exec -- runghc -isrc -Wall -Werror test/Phase1INT005CertifiedReleaseEnvelopeMain.hs
+          cabal exec -- runghc -isrc -Wall -Werror test/Phase1VerificationSourceArtifactClosureMain.hs
+          cabal exec -- runghc -isrc -Wall -Werror test/Phase1StageClosureMain.hs
+
+  existing-conditional-rocq-boundary:
+    runs-on: ubuntu-24.04
+    container:
+      image: rocq/rocq-prover:9.2.0
+      options: --user root
+    steps:
+      - uses: actions/checkout@v4
+      - name: Compile original conditional boundary and fixed-adapter predecessor closure
+        shell: bash
+        run: |
+          set -euo pipefail
+          export PATH="/home/rocq/.opam/${COMPILER}/bin:$PATH"
+          rocq -v
+          rocq c -Q proof/Phil Phil proof/Phil/Verification/NativeFinalInstanceTypedCorrespondence.v
+          rocq c -Q proof/Phil Phil proof/Phil/Systems/FactDisposition.v
+          rocq c -Q proof/Phil Phil proof/Phil/Assurance/ValidityScope.v
+          rocq c -Q proof/Phil Phil proof/Phil/Core/SystemsStageClosure.v
+          rocq c -Q proof/Phil Phil proof/Phil/Verification/VerificationArtifact.v
+          rocq c -Q proof/Phil Phil proof/Phil/Verification/FinalManifestStageReflection.v
+          rocq c -Q proof/Phil Phil proof/Phil/Verification/FinalManifestNativeCoordinateReflection.v
+          rocq c -Q proof/Phil Phil proof/Phil/Verification/FinalManifestFixedAdapter.v
+          rocq c -Q proof/Phil Phil proof/Phil/Verification/FinalManifestFixedAdapterCertification.v
+          cat >/tmp/P8OriginalBoundaryAssumptions.v <<'EOF'
+          From Phil.Verification Require Import NativeFinalInstanceTypedCorrespondence FinalManifestFixedAdapterCertification.
+          Print Assumptions native_generic_atom_application_model_roundtrip.
+          Print Assumptions native_unordered_atom_repeated_member_not_canonical_model.
+          Print Assumptions native_record_atom_duplicate_field_not_canonical_model.
+          Print Assumptions native_ascii_profile_model_rejects_high_bit.
+          Print Assumptions represented_stage_coordinates_reflect_only_with_injections.
+          Print Assumptions fixed_adapter_full_certification_preserves_predecessors.
+          EOF
+          rocq c -Q proof/Phil Phil /tmp/P8OriginalBoundaryAssumptions.v | tee /tmp/p8-existing-rocq-assumptions.log
+          rocq check -Q proof/Phil Phil Phil.Verification.NativeFinalInstanceTypedCorrespondence
+          rocq check -Q proof/Phil Phil Phil.Verification.FinalManifestFixedAdapterCertification
+          sha256sum proof/Phil/Verification/NativeFinalInstanceTypedCorrespondence.vo proof/Phil/Verification/FinalManifestFixedAdapterCertification.vo /tmp/p8-existing-rocq-assumptions.log
