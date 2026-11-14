@@ -28,7 +28,6 @@ import Phil.Compiler.SourceArchitecture
   )
 import Phil.Compiler.SourceBundle
   ( CheckedSourceEvidenceOccurrence
-  , CheckedSourceBundle
   , checkedSourceEvidenceOccurrences
   , SourceBundleCheckError
   , SourceEnvironmentMap
