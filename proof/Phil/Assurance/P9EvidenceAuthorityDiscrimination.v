@@ -218,11 +218,13 @@ Theorem p9_existing_positive_models_stay_positive :
     stableSameEventFinalUseWitness /\
   ImportedAssumptionAuthorityPreserved exactAuthorityWitness.
 Proof.
-  repeat split.
+  split.
   - exact exact_consumer_domain_witness_is_authoritative.
-  - exact checked_closed_same_event_has_complete_final_correspondence.
-  - exact stable_same_event_has_complete_final_correspondence.
-  - exact exact_authority_witness_preserves_required_stage_assumption.
+  - split.
+    + exact checked_closed_same_event_has_complete_final_correspondence.
+    + split.
+      * exact stable_same_event_has_complete_final_correspondence.
+      * exact exact_authority_witness_preserves_required_stage_assumption.
 Qed.
 
 (* Kernel-checked exported witness statuses.  This prints dependency
