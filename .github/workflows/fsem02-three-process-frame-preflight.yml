@@ -9,14 +9,14 @@ on:
       - 'proof/Phil/Core/FSEM02PingThreeProcessFrame.v'
       - 'docs/phase-1/formal-semantics-source-ping-third-process-frame-fsem02-v1.md'
       - 'docs/phase-1/typing-and-semantics-reader-guide-v1.md'
-      - '.github/workflows/fsem02-ping-joint-gate-priority-preflight.yml'
+      - '.github/workflows/fsem02-three-process-frame-preflight.yml'
   pull_request:
     paths:
       - 'test/Phase1FSEM02ProtocolProgressionMain.hs'
       - 'proof/Phil/Core/FSEM02PingThreeProcessFrame.v'
       - 'docs/phase-1/formal-semantics-source-ping-third-process-frame-fsem02-v1.md'
       - 'docs/phase-1/typing-and-semantics-reader-guide-v1.md'
-      - '.github/workflows/fsem02-ping-joint-gate-priority-preflight.yml'
+      - '.github/workflows/fsem02-three-process-frame-preflight.yml'
 
 permissions:
   contents: read
