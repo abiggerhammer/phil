@@ -1,6 +1,11 @@
 From Stdlib Require Import Lists.List.
 
 From Phil.Surface Require Import
+  GrammarDerivation
+  GrammarDeterminacySimpleResolverSoundness
+  GrammarAstSourceHeader
+  GrammarAstRecordFieldsSpine
+  GrammarAstFieldTypeSpine
   GrammarAstFieldTypeListSpine
   GrammarAstFieldTypeTotality
   GrammarAstRecordFieldsTotality.
