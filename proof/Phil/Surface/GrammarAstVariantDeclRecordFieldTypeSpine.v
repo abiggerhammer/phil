@@ -108,18 +108,13 @@ Proof.
   destruct
     (phase1_surface_normalize_optional_record_field_type_variant_payload payload)
     as [actual |] eqn:Hpayload; try discriminate Hnormalize.
-  inversion Hnormalize; subst.
-  change
-    (PTNonterminal "variant_decl"
-      (PTSequence
-        [ phase1_surface_identifier_tree name;
-          phase1_surface_optional_record_field_type_variant_payload_tree actual
-        ]) =
-     PTNonterminal "variant_decl"
-      (PTSequence
-        [ phase1_surface_identifier_tree name;
-          phase1_surface_optional_variant_payload_spine_tree payload
-        ])).
+  inversion Hnormalize; subst refined.
+  unfold phase1_surface_record_field_type_variant_spine_tree,
+    phase1_surface_variant_payload_variant_spine_tree.
+  cbn [phase1_record_field_type_variant_spine_name
+       phase1_record_field_type_variant_spine_payload
+       phase1_variant_payload_variant_spine_name
+       phase1_variant_payload_variant_spine_payload].
   rewrite
     (phase1_surface_normalize_optional_record_field_type_variant_payload_round_trip
       payload actual Hpayload).

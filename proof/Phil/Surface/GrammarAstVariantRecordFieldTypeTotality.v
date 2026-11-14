@@ -111,15 +111,7 @@ Proof.
     + exact Hrefined.
     + unfold refined.
       rewrite Htree, Hopen_tree, Hclose_tree.
-      change
-        (PTSequence
-          [ PTLiteral "{";
-            phase1_surface_optional_field_type_list_tree refined_fields;
-            PTLiteral "}" ]) =
-        (PTSequence
-          [ PTLiteral "{";
-            fields_tree;
-            PTLiteral "}" ]).
+      cbn [phase1_surface_record_field_type_variant_payload_selected_tree].
       rewrite Hrefined_fields_tree.
       reflexivity.
 Qed.
