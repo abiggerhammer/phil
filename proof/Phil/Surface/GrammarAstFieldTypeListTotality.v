@@ -59,51 +59,53 @@ Proof.
   destruct
     (derives_sequence_expression_exposes_items
       phase1_surface_rules path
-      [ ELiteral ",";
-        ENonterminal "field_decl"
-      ]
+      [ ELiteral ","; ENonterminal "field_decl" ]
       input rest tree Hderive)
     as [trees [Htree Hitems]].
-  repeat match goal with
-  | Hseq : DerivesSequence phase1_surface_rules _ _ (_ :: _) _ _ _ |- _ =>
-      inversion Hseq; subst; clear Hseq
-  end.
-  match goal with
-  | Hnil : DerivesSequence phase1_surface_rules _ _ [] _ _ _ |- _ =>
-      inversion Hnil; subst; clear Hnil
-  end.
-  match goal with
-  | Hcomma : Derives phase1_surface_rules _
-      (ELiteral ",") _ _ ?comma_tree,
-    Hfield : Derives phase1_surface_rules _
-      (ENonterminal "field_decl") _ _ ?field_tree |- _ =>
-      destruct
-        (literal_derivation_is_exact
-          phase1_surface_rules _ "," _ _ comma_tree Hcomma)
-        as [comma_tail [_ [_ Hcomma_tree]]];
-      destruct
-        (phase1_surface_normalize_field_type_layers_total_from_derivation
-          _ _ _ field_tree Hfield)
-        as [base [refined [Hbase [Hrefined Hrefined_tree]]]];
-      assert (Hsuffix :
-        phase1_surface_normalize_field_suffix tree = Some base);
-      [ rewrite Htree, Hcomma_tree;
-        unfold phase1_surface_normalize_field_suffix,
-          phase1_surface_expect_sequence,
-          phase1_surface_exact2,
-          phase1_surface_expect_literal;
-        cbn;
-        rewrite Hbase;
-        reflexivity
-      | exists base, refined;
-        split;
-        [ exact Hsuffix
-        | split;
-          [ exact Hrefined
-          | unfold phase1_surface_field_type_suffix_tree;
-            rewrite Htree, Hcomma_tree, Hrefined_tree;
-            reflexivity ] ] ]
-  end.
+  destruct
+    (derives_sequence_cons_exposes_head_exact
+      phase1_surface_rules path 0
+      (ELiteral ",") [ENonterminal "field_decl"]
+      input rest trees Hitems)
+    as [after_comma [comma_tree [tail_trees
+      [Htrees [Hcomma Htail]]]]].
+  destruct
+    (derives_sequence_cons_exposes_head_exact
+      phase1_surface_rules path 1
+      (ENonterminal "field_decl") []
+      after_comma rest tail_trees Htail)
+    as [after_field [field_tree [nil_trees
+      [Htail_trees [Hfield Hnil]]]]].
+  rewrite Htrees, Htail_trees in Htree.
+  inversion Hnil; subst nil_trees.
+  destruct
+    (literal_derivation_is_exact
+      phase1_surface_rules _ "," _ _ comma_tree Hcomma)
+    as [comma_tail [_ [_ Hcomma_tree]]].
+  destruct
+    (phase1_surface_normalize_field_type_layers_total_from_derivation
+      _ _ _ field_tree Hfield)
+    as [base [refined [Hbase [Hrefined Hrefined_tree]]]].
+  assert (Hsuffix :
+    phase1_surface_normalize_field_suffix tree = Some base).
+  {
+    rewrite Htree, Hcomma_tree.
+    unfold phase1_surface_normalize_field_suffix,
+      phase1_surface_expect_sequence,
+      phase1_surface_exact2,
+      phase1_surface_expect_literal.
+    cbn.
+    rewrite Hbase.
+    reflexivity.
+  }
+  exists base, refined.
+  split.
+  - exact Hsuffix.
+  - split.
+    + exact Hrefined.
+    + unfold phase1_surface_field_type_suffix_tree.
+      rewrite Htree, Hcomma_tree, Hrefined_tree.
+      reflexivity.
 Qed.
 
 Lemma phase1_surface_normalize_field_type_suffixes_layers_total_from_repetition :
@@ -157,79 +159,90 @@ Proof.
       phase1_surface_rules path
       [ ENonterminal "field_decl";
         ERepetition phase1_surface_field_suffix_expression_for_totality;
-        EOptional (ELiteral ",")
-      ]
+        EOptional (ELiteral ",") ]
       input rest tree Hderive)
     as [trees [Htree Hitems]].
-  repeat match goal with
-  | Hseq : DerivesSequence phase1_surface_rules _ _ (_ :: _) _ _ _ |- _ =>
-      inversion Hseq; subst; clear Hseq
-  end.
-  match goal with
-  | Hnil : DerivesSequence phase1_surface_rules _ _ [] _ _ _ |- _ =>
-      inversion Hnil; subst; clear Hnil
-  end.
-  match goal with
-  | Hfirst : Derives phase1_surface_rules _
-      (ENonterminal "field_decl") _ _ ?first_tree,
-    Hrest : Derives phase1_surface_rules _
+  destruct
+    (derives_sequence_cons_exposes_head_exact
+      phase1_surface_rules path 0
+      (ENonterminal "field_decl")
+      [ ERepetition phase1_surface_field_suffix_expression_for_totality;
+        EOptional (ELiteral ",") ]
+      input rest trees Hitems)
+    as [after_first [first_tree [tail1_trees
+      [Htrees [Hfirst Htail1]]]]].
+  destruct
+    (derives_sequence_cons_exposes_head_exact
+      phase1_surface_rules path 1
       (ERepetition phase1_surface_field_suffix_expression_for_totality)
-      _ _ ?rest_tree,
-    Htrailing : Derives phase1_surface_rules _
-      (EOptional (ELiteral ",")) _ _ ?trailing_tree |- _ =>
-      destruct
-        (phase1_surface_normalize_field_type_layers_total_from_derivation
-          _ _ _ first_tree Hfirst)
-        as [base_first [refined_first
-            [Hbase_first [Hrefined_first Hrefined_first_tree]]]];
-      destruct
-        (phase1_surface_repetition_derivation_exposes
-          _ phase1_surface_field_suffix_expression_for_totality
-          _ _ rest_tree Hrest)
-        as [rest_trees [Hrest_tree Hrest_body]];
-      destruct
-        (phase1_surface_normalize_field_type_suffixes_layers_total_from_repetition
-          _ phase1_surface_field_suffix_expression_for_totality
-          _ _ rest_trees Hrest_body eq_refl)
-        as [base_rest [refined_rest [Hbase_rest Hrefined_rest]]];
-      destruct
-        (phase1_surface_normalize_trailing_comma_total_from_derivation
-          _ _ _ trailing_tree Htrailing)
-        as [trailing [Htrailing_normalize Htrailing_round_trip]];
-      let base := constr:(
-        {| phase1_field_list_spine_first := base_first;
-           phase1_field_list_spine_rest := base_rest;
-           phase1_field_list_spine_trailing_comma := trailing |}) in
-      let refined := constr:(
-        {| phase1_field_type_list_spine_first := refined_first;
-           phase1_field_type_list_spine_rest := refined_rest;
-           phase1_field_type_list_spine_trailing_comma := trailing |}) in
-      assert (Hbase :
-        phase1_surface_normalize_field_list_spine tree = Some base);
-      [ rewrite Htree, Hrest_tree;
-        unfold phase1_surface_normalize_field_list_spine,
-          phase1_surface_expect_sequence,
-          phase1_surface_exact3,
-          phase1_surface_expect_repetition;
-        cbn;
-        rewrite Hbase_first;
-        rewrite Htrailing_normalize;
-        rewrite Hbase_rest;
-        reflexivity
-      | assert (Hrefined :
-          phase1_surface_normalize_field_type_list_spine base = Some refined);
-        [ cbn;
-          rewrite Hrefined_first, Hrefined_rest;
-          reflexivity
-        | exists base, refined;
-          split;
-          [ exact Hbase
-          | split;
-            [ exact Hrefined
-            | transitivity (phase1_surface_field_list_spine_tree base);
-              [ eapply phase1_surface_normalize_field_type_list_spine_round_trip;
-                exact Hrefined
-              | eapply phase1_surface_normalize_field_list_spine_round_trip;
-                exact Hbase ] ] ] ] ]
-  end.
+      [ EOptional (ELiteral ",") ]
+      after_first rest tail1_trees Htail1)
+    as [after_rest [rest_tree [tail2_trees
+      [Htail1_trees [Hrest Htail2]]]]].
+  destruct
+    (derives_sequence_cons_exposes_head_exact
+      phase1_surface_rules path 2
+      (EOptional (ELiteral ",")) []
+      after_rest rest tail2_trees Htail2)
+    as [after_trailing [trailing_tree [nil_trees
+      [Htail2_trees [Htrailing Hnil]]]]].
+  rewrite Htrees, Htail1_trees, Htail2_trees in Htree.
+  inversion Hnil; subst nil_trees.
+  destruct
+    (phase1_surface_normalize_field_type_layers_total_from_derivation
+      _ _ _ first_tree Hfirst)
+    as [base_first [refined_first
+        [Hbase_first [Hrefined_first Hrefined_first_tree]]]].
+  destruct
+    (phase1_surface_repetition_derivation_exposes
+      _ phase1_surface_field_suffix_expression_for_totality
+      _ _ rest_tree Hrest)
+    as [rest_trees [Hrest_tree Hrest_body]].
+  destruct
+    (phase1_surface_normalize_field_type_suffixes_layers_total_from_repetition
+      _ phase1_surface_field_suffix_expression_for_totality
+      _ _ rest_trees Hrest_body eq_refl)
+    as [base_rest [refined_rest [Hbase_rest Hrefined_rest]]].
+  destruct
+    (phase1_surface_normalize_trailing_comma_total_from_derivation
+      _ _ _ trailing_tree Htrailing)
+    as [trailing [Htrailing_normalize Htrailing_round_trip]].
+  pose (base :=
+    {| phase1_field_list_spine_first := base_first;
+       phase1_field_list_spine_rest := base_rest;
+       phase1_field_list_spine_trailing_comma := trailing |}).
+  pose (refined :=
+    {| phase1_field_type_list_spine_first := refined_first;
+       phase1_field_type_list_spine_rest := refined_rest;
+       phase1_field_type_list_spine_trailing_comma := trailing |}).
+  assert (Hbase :
+    phase1_surface_normalize_field_list_spine tree = Some base).
+  {
+    rewrite Htree, Hrest_tree.
+    unfold phase1_surface_normalize_field_list_spine,
+      phase1_surface_expect_sequence,
+      phase1_surface_exact3,
+      phase1_surface_expect_repetition.
+    cbn.
+    rewrite Hbase_first, Htrailing_normalize, Hbase_rest.
+    reflexivity.
+  }
+  assert (Hrefined :
+    phase1_surface_normalize_field_type_list_spine base = Some refined).
+  {
+    unfold phase1_surface_normalize_field_type_list_spine, base.
+    cbn.
+    rewrite Hrefined_first, Hrefined_rest.
+    reflexivity.
+  }
+  exists base, refined.
+  split.
+  - exact Hbase.
+  - split.
+    + exact Hrefined.
+    + transitivity (phase1_surface_field_list_spine_tree base).
+      * eapply phase1_surface_normalize_field_type_list_spine_round_trip.
+        exact Hrefined.
+      * eapply phase1_surface_normalize_field_list_spine_round_trip.
+        exact Hbase.
 Qed.
