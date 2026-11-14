@@ -140,6 +140,11 @@ main = do
             choiceTypedPrefixWrongBody go offer wrongBody)
     , test "Cancel source-choice crosswired contexts recover both terminal close orders"
         (choiceTerminalCrosswiredContextRefusal cancel offer "Cancel" (Outcome "Cancel"))
+    , test "Go source-choice End resource-map disagreement refuses before retirement"
+        (do choiceTerminalResourceAgreementRefusal go offer "Go" (Outcome "Done")
+            choiceTypedPrefixWrongBody go offer wrongBody)
+    , test "Cancel source-choice End resource-map disagreements preserve peer-first Close"
+        (choiceTerminalResourceAgreementRefusal cancel offer "Cancel" (Outcome "Cancel"))
     , test "diamond rejects wrong externally authorized peer outcome precisely" (choiceCloseDiamondBadPeer go offer)
     , test "diamond rejects wrong source Client close outcome precisely" (choiceCloseDiamondBadClient go offer)
     , test "diamond rejects minimally malformed source offer before both orders" (choiceCloseDiamondWrongBody go offer wrongBody)
@@ -2500,3 +2505,127 @@ choiceTerminalCrosswiredContextRefusal client server label outcome = do
                 == Map.lookup spectatorOccurrence (owners ready))
         "externally restored checked process contexts lost End Close diamond"
     _ -> Left "source-derived successor lacks a checked terminal protocol context"
+
+
+-- FSEM-02: Core End resource-map disagreement is an adversarial state,
+-- not a source-permitted context transfer. Explicit restoration of the
+-- independently checked original context is a separate test operation.
+choiceTerminalResourceAgreementRefusal
+  :: Text -> Text -> Text -> Outcome -> Either String ()
+choiceTerminalResourceAgreementRefusal client server label outcome = do
+  fx <- fixture client server
+  diamond <- mapLeft show $ choiceCloseDiamond fx label outcome outcome
+  let ready = statefulChoiceSuccessor
+        (statefulChoiceClientCloseSourceReplay
+          (statefulChoiceExplicitPeerCloseClient
+            (choiceCloseDiamondForward diamond)))
+      network = fxNetwork fx
+      cp = fxClientProcess fx
+      sp = fxServerProcess fx
+      cn = fxClientNext fx
+      sn = serverNext
+      revision = binaryProtocolInstanceRevision (fxInstance fx)
+      contexts = communicationProtocolContexts
+      owners = communicationRestrictedOwners
+      baseline = choiceCloseDiamondReverse diamond
+      opposite = if outcome == Outcome "Done"
+        then Outcome "Cancel" else Outcome "Done"
+      foreignRevision = ProtocolInstanceRevision "fsem02.resource-agreement.foreign"
+      runSide (side, process, endpoint, role, peer, peerEnd, peerRole,
+               occurrence, checked) = do
+        let attempt state suppliedRevision =
+              closeProcessEndpointState network state process endpoint
+                suppliedRevision role outcome
+            closePeer state =
+              closeProcessEndpointState network state peer peerEnd
+                revision peerRole outcome
+            damage edit = ready
+              { communicationProtocolContexts = Map.adjust
+                  (\context -> context
+                    { protocolResources = edit (protocolResources context) })
+                  process (contexts ready) }
+            absent = damage (\resources -> resources
+              { linearBindings = Map.delete endpoint (linearBindings resources) })
+            wrongType = damage (\resources -> resources
+              { linearBindings = Map.insert endpoint TyBool (linearBindings resources) })
+            wrongSession = damage (\resources -> resources
+              { linearBindings = Map.insert endpoint
+                  (TyEndpoint (End opposite)) (linearBindings resources) })
+            probes =
+              [ ("missing linear resource", absent,
+                  ProtocolEndpointResourceMissing endpoint)
+              , ("wrong linear resource type", wrongType,
+                  ProtocolEndpointResourceTypeMismatch endpoint TyBool)
+              , ("wrong linear End session", wrongSession,
+                  ProtocolEndpointSessionMismatch endpoint
+                    (End outcome) (End opposite))
+              ]
+            runProbe (description, altered, expectedError) = do
+              let name = side <> " / " <> description
+              assert (altered /= ready && owners altered == owners ready
+                   && Map.lookup peer (contexts altered)
+                        == Map.lookup peer (contexts ready)
+                   && Map.lookup process (contexts altered)
+                        /= Just checked
+                   && Map.lookup occurrence (owners altered)
+                        == Map.lookup occurrence (owners ready))
+                (name <> ": Core-only resource alteration changed owner or peer")
+              case attempt altered revision of
+                Left (EndpointClosureProtocolError actualProcess actualError) ->
+                  assert (actualProcess == process && actualError == expectedError)
+                    (name <> ": precise protocol-resource error mismatch")
+                other -> Left (name <> ": malformed resource granted End: "
+                               <> show other)
+              case attempt altered foreignRevision of
+                Left (EndpointClosureProtocolError actualProcess
+                  (ProtocolInstanceMismatch actualEndpoint supplied live)) ->
+                    assert (actualProcess == process && actualEndpoint == endpoint
+                         && supplied == foreignRevision && live == revision)
+                      (name <> ": foreign instance did not precede resource gate")
+                other -> Left (name <> ": wrong nominal precedence: " <> show other)
+              afterPeer <- mapLeft show (closePeer altered)
+              assert (Map.lookup occurrence (owners afterPeer)
+                       == Map.lookup occurrence (owners ready)
+                   && Map.lookup spectatorOccurrence (owners afterPeer)
+                       == Map.lookup spectatorOccurrence (owners ready)
+                   && Map.lookup process (contexts afterPeer)
+                       == Map.lookup process (contexts altered))
+                (name <> ": independent peer Close changed faulty target state")
+              case attempt afterPeer revision of
+                Left (EndpointClosureProtocolError actualProcess actualError) ->
+                  assert (actualProcess == process && actualError == expectedError)
+                    (name <> ": peer-first resource refusal changed")
+                other -> Left (name <> ": peer Close laundered resource refusal: "
+                               <> show other)
+              let externallyRestored = afterPeer
+                    { communicationProtocolContexts =
+                        Map.insert process checked (contexts afterPeer) }
+              afterTarget <- mapLeft show (attempt externallyRestored revision)
+              directTarget <- mapLeft show (attempt ready revision)
+              directBoth <- mapLeft show (closePeer directTarget)
+              assert (afterTarget == directBoth
+                   && afterTarget == baseline
+                   && Map.notMember occurrence (owners afterTarget)
+                   && Map.lookup spectatorOccurrence (owners afterTarget)
+                        == Map.lookup spectatorOccurrence (owners ready))
+                (name <> ": restoring checked context lost complete Close diamond")
+        assert (Map.lookup process (contexts ready) == Just checked
+             && Map.lookup occurrence (owners ready) == Just (process, endpoint)
+             && Map.lookup endpoint (linearBindings (protocolResources checked))
+                  == Just (TyEndpoint (End outcome))
+             && fmap protocolEndpointSession
+                  (Map.lookup endpoint (protocolEndpoints checked))
+                  == Just (End outcome))
+          (side <> ": checked source End metadata/resource precondition missing")
+        mapM_ runProbe probes
+  assert (cp /= sp && cn /= sn
+       && Map.lookup clientOccurrence (owners ready) == Just (cp, cn)
+       && Map.lookup serverOccurrence (owners ready) == Just (sp, sn))
+    "source-derived End owner identities unavailable for resource agreement gate"
+  case (Map.lookup cp (contexts ready), Map.lookup sp (contexts ready)) of
+    (Just cc, Just sc) -> do
+      runSide ("Client", cp, cn, clientRole, sp, sn, serverRole,
+               clientOccurrence, cc)
+      runSide ("Server", sp, sn, serverRole, cp, cn, clientRole,
+               serverOccurrence, sc)
+    _ -> Left "source-derived End context missing before resource agreement checks"
