@@ -31,6 +31,8 @@ main = do
     , check "genuine primitive policy evidence consumption is observed" beginPolicyUse
     , check "real Upload server preserves both parsed commit evidence uses" (uploadServerUses uploadServer)
     , check "real Upload client retains checked proof-use event" (uploadClientUse uploadClient)
+    , check "real Upload selection and receive each consume selected policy proof" (uploadPolicyUses uploadServer)
+    , check "changed ordinary source site has different checker-event coordinates" sourceSiteChanges
     , check "named proof use retains actual focused binding" namedProof
     , check "ordinary acceptance and observed acceptance are identical" sameAcceptance
     , check "rejected proof cannot mint accepted event" rejectedSource
@@ -158,6 +160,34 @@ uploadServerUses source = do
       && Name "pendingBegin" `elem` pending
       && length pending >= 2)
     (Left ("real Upload parsed commits were lost across branches: " ++ show pending))
+
+-- Both real selected policy uses are observed at the exact successful
+-- checker sites: neither evidence availability nor a copied event suffices.
+uploadPolicyUses :: Text -> Either String ()
+uploadPolicyUses source = do
+  env <- either (Left . show) Right $
+    phase0EnvironmentFor "examples/upload/server.phil"
+  events <- checked env source
+  let uses = [event | event <- events
+        , SourceRequirementEvidence _ (Just (Name "beginPolicy")) _
+            <- [sourceEvidenceUse event]]
+      sites = map sourceEvidenceSite uses
+  unless (length uses >= 2
+      && any (/= head sites) (tail sites)
+      && all (not . null . sourceEvidenceBranchRoute) uses) $
+    Left ("real Upload policy proof consumers missing/distorted: " ++ show uses)
+
+-- A mere event name or proof text is not a source-site identity. E2 must
+-- separately bind the site to the rechecked raw source unit and declaration.
+sourceSiteChanges :: Either String ()
+sourceSiteChanges = do
+  before <- checked base "component Site { prove true\n return unit }"
+  after <- checked base "component Site {\n prove true\n return unit }"
+  unless (not (null before)
+      && map sourceEvidenceUse before == map sourceEvidenceUse after
+      && map sourceEvidenceSite before /= map sourceEvidenceSite after) $
+    Left ("source edits failed to distinguish checked event sites: "
+      ++ show (before, after))
 
 uploadClientUse :: Text -> Either String ()
 uploadClientUse source = do

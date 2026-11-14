@@ -61,3 +61,53 @@ regressions. These tests do not invent evidence events, and their success
 means only real Surface checking/observation, **not** the future P2/P6/P7
 source-rechecked authority closure. Hosted CI and full census must pass on
 the final exact HEAD.
+
+## Actual accepted-checker use-site inventory (E1 review)
+
+This audit distinguishes **use** (recorded only after the corresponding actual
+successful check) from a **producer** of candidate proof/validation data.
+Current production `Engine.hs` observation call paths are:
+
+| Actual accepting path | Observable checked event | Does it assert runtime execution? |
+| --- | --- | --- |
+| `evalAccept → checkValue → applyValueResult` | Each returned `ValueResult.valueResultEvidence` as `SourceCoreValueEvidence` | No |
+| `evalSelect → checkRequirement` per configured selected-branch requirement | `SourceRequirementEvidence`, including selected named binder or focused plan | No |
+| `evalSelect → checkSelectedPayload → checkValue/Using → applyValueResult` | Actual checked payload `SourceCoreValueEvidence` | No |
+| `evalReceiveExactWithBinding → checkConfiguredRequirement → checkRequirement` | Successful configured `SourceRequirementEvidence` for required byte count | No |
+| `evalProve → focusProposition / solveRequirement` | `SourceProveEvidence` for each checked focused requirement (including whether a verified decision procedure was needed) | No |
+| `checkCallableDecisionArm → checkObligation → exactEvidenceBinding` | Each independently discharged `SourceCallableResidualEvidence` | No |
+| `evalPrimitive PrimitiveConsumeBeginPolicyEvidence` | Successfully checked exact `SourceBeginPolicyEvidence` binding/type | No |
+| `evalCommit → parsed provenance / frame checks` | `SourceParsedCommitEvidence` for accepted source pending-frame/witness pair | No |
+
+Each path is checked by the normal `checkSurfaceComponentWithEvidence`
+transition. It does not use an independent proof fixture to mint an event.
+`checkStatements`, `checkValueBlock`, `checkScopedValueBlock`,
+`checkDecisionArm` and `checkOfferArm` traverse the actual alternatives;
+`enterEvidenceBranch` attaches original static arm coordinates and
+`joinMetadata` unions all surviving event histories rather than choosing
+first-path metadata. The terminal paths are retained separately.
+
+Classification of nearby paths that **do not by themselves consume a
+selected proof**: `evalValidate` and `bindDecisionPattern` create
+validation decisions/bindings; `evalRecognize` creates a parsed candidate;
+`evalCallable` may create a decision with stated facts; `evalSend` performs
+a checked payload move and protocol transition (it does not call
+`checkValue` or the evidence checker); `evalClose` and `evalRelease`
+enforce resource/protocol outcomes. All may be semantically important for
+SYS-012, but E1 must not mislabel their successful checks as P7 evidence use.
+
+**Known representation boundary:** `Core.Value.appendEvidenceList` already
+deduplicates identical structural `EvidenceUse` entries inside a single
+`ValueResult`. E1 faithfully observes the Core checker's actual returned
+list, not an imagined internal un-deduplicated occurrence trace. Distinct
+ordinary source sites and static branches remain distinguished in E1.
+A stronger internal occurrence authority, if required by E2/P7, cannot be
+inferred from that list without a separate competent producer decision.
+
+The on-disk Upload source test now checks both real parsed commits **and**
+the two distinct successful BeginPolicy selecting/receiving proof consumers,
+including source sites and branch routes. A source-coordinate mutation test
+ensures identical abstract proof use at a moved source site changes the
+checker-event coordinate. These tests establish observational fidelity only;
+they do not authenticate source unit identity, a complete SYS-012 consumer
+domain, or final use in a certified release.
