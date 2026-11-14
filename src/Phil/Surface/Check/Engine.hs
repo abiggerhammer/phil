@@ -3,6 +3,7 @@
 
 module Phil.Surface.Check.Engine
   ( checkSurfaceComponent
+  , checkSurfaceComponentWithEvidence
   , traceSurfaceBorrowComponent
   , ProductEliminationRun (..)
   , traceSurfaceProductEliminationComponent
@@ -38,6 +39,7 @@ module Phil.Surface.Check.Engine
   ) where
 
 import Control.Monad (foldM, unless, when)
+import Data.List (find, foldl')
 import qualified Data.Map.Strict as Map
 import Data.Maybe (mapMaybe)
 import qualified Data.Set as Set
@@ -153,15 +155,60 @@ checkSurfaceComponent
   :: SurfaceEnvironment
   -> Located Component
   -> Either SurfaceCheckError SurfaceCheckResult
-checkSurfaceComponent environment locatedComponent = do
+checkSurfaceComponent environment locatedComponent =
+  fst <$> checkSurfaceComponentWithEvidence environment locatedComponent
+
+-- | The normal checker and source-use observation share ONE real transition.
+-- E2 must later seal this data under an actual rechecked raw-source producer.
+checkSurfaceComponentWithEvidence
+  :: SurfaceEnvironment
+  -> Located Component
+  -> Either SurfaceCheckError (SurfaceCheckResult, [SourceEvidenceEvent])
+checkSurfaceComponentWithEvidence environment locatedComponent = do
   initial <- initializeState environment (locatedValue locatedComponent)
   checkProvides environment initial (locatedValue locatedComponent)
   paths <- checkBlock environment initial (componentBody (locatedValue locatedComponent))
   finalPaths <- mapM (finalizePath environment (locatedSpan locatedComponent)) paths
-  Right SurfaceCheckResult
-    { checkedComponentName = componentName (locatedValue locatedComponent)
-    , checkedTerminalControls = map toCoreControl finalPaths
+  let result = SurfaceCheckResult
+        { checkedComponentName = componentName (locatedValue locatedComponent)
+        , checkedTerminalControls = map toCoreControl finalPaths
+        }
+  Right (result, unionEventHistories (map pathState finalPaths))
+
+-- | Keep branch-specific event records while collapsing only genuinely shared
+-- pre-fork events. All successful static alternatives are observations.
+unionEventHistories :: [SurfaceState] -> [SourceEvidenceEvent]
+unionEventHistories = foldl' add []
+  where
+    add prior state = foldl' addOne prior (stateEvidenceEvents state)
+    addOne prior event
+      | event `elem` prior = prior
+      | otherwise = prior ++ [event]
+
+recordSourceEvidence :: SourceSpan -> SourceEvidenceUse -> SurfaceState -> SurfaceState
+recordSourceEvidence site use state =
+  let event = SourceEvidenceEvent
+        { sourceEvidenceSite = site
+        , sourceEvidenceBranchRoute = stateEvidenceBranchRoute state
+        , sourceEvidenceOrdinal = stateEvidenceNextOrdinal state
+        , sourceEvidenceUse = use
+        }
+  in state
+    { stateEvidenceEvents = stateEvidenceEvents state ++ [event]
+    , stateEvidenceNextOrdinal = stateEvidenceNextOrdinal state + 1
     }
+
+enterEvidenceBranch :: SourceSpan -> Text -> SurfaceState -> SurfaceState
+enterEvidenceBranch site label state = state
+  { stateEvidenceBranchRoute =
+      stateEvidenceBranchRoute state ++ [SourceEvidenceBranch site label]
+  }
+
+commonEvidenceRoute :: [[SourceEvidenceBranch]] -> [SourceEvidenceBranch]
+commonEvidenceRoute [] = []
+commonEvidenceRoute (first : rest) = foldl' common first rest
+  where
+    common left right = map fst $ takeWhile (uncurry (==)) (zip left right)
 
 -- | A bounded, source-authorized two-predecessor if/join evaluation.
 -- Both successor paths are checked against the SAME exact production initial
@@ -2321,7 +2368,7 @@ evalReceiveExactWithBinding environment state located count endpointExpression e
     TyBytes index -> Right index
     other -> throw located TypeMismatch
       ("receive_exact requires Bytes, found " <> Text.pack (show other))
-  checkConfiguredRequirement
+  checkedState <- checkConfiguredRequirement
     environment state count (surfaceReceiveExactRequirement environment) explicitEvidence
   rawCount <- mapElaboration count $
     elaborateRefTerm (elaborationEnv environment state) count
@@ -2334,7 +2381,7 @@ evalReceiveExactWithBinding environment state located count endpointExpression e
   unless (normalizeRefTerm natCount == normalizeRefTerm expectedIndex) $
     throw count TypeMismatch
       "receive_exact count differs from the protocol byte length"
-  let (temp, state1) = freshName "$receive-exact" state
+  let (temp, state1) = freshName "$receive-exact" checkedState
   rawStep <- mapSession located $
     receiveEndpoint (Name endpoint) temp (resourceContext (stateCore state1))
   step <- instantiateSurfaceMessageStep located actual rawStep
@@ -2360,13 +2407,16 @@ evalSelect environment state located branch endpointExpression explicitEvidence 
   endpointMeta <- lookupMeta endpointExpression endpoint state
   (expectedPayload, _) <- sessionSelectBranch located endpointMeta (branchValueLabel branch)
   actual <- selectedOccurrenceTerm environment state expectedPayload (branchValueArguments branch)
-  mapM_
+  requiredUses <- mapM
     (\requirement -> checkRequirement environment state located requirement explicitEvidence)
     (Map.findWithDefault []
       (branchValueLabel branch)
       (surfaceSelectRequirements environment))
+  let withRequirements = foldl'
+        (\current use -> recordSourceEvidence (locatedSpan located) use current)
+        state requiredUses
   state1 <- checkSelectedPayload
-    environment state expectedPayload (branchValueArguments branch) explicitEvidence
+    environment withRequirements expectedPayload (branchValueArguments branch) explicitEvidence
   let (temp, state2) = freshName "$select" state1
   rawStep <- mapSession located $
     selectEndpoint
@@ -2589,9 +2639,10 @@ checkDecisionArm
   -> DecisionKind
   -> Located CaseArm
   -> Either SurfaceCheckError [SurfacePath]
-checkDecisionArm environment state decision locatedArm = do
+checkDecisionArm environment original decision locatedArm = do
   let pattern' = caseArmPattern (locatedValue locatedArm)
       label = casePatternLabel pattern'
+      state = enterEvidenceBranch (locatedSpan locatedArm) label original
   case callableDecisionControl decision label of
     Just (CallableOutcomeCloses outcome) ->
       checkDeclaredTerminalCallableArm environment state outcome locatedArm
@@ -2704,16 +2755,18 @@ checkCallableDecisionArm environment incoming scoped obligations body = do
   mapM checkAndPrune paths
   where
     checkAndPrune path = do
-      mapM_ (checkObligation (pathState path)) obligations
+      checked <- foldM checkObligation (pathState path) obligations
       pruneScopedPath
         (locatedSpan body)
         (Map.keysSet (stateBindings incoming))
-        path
+        path { pathState = checked }
 
     checkObligation branchState (name, proposition) =
       let required = rewriteProposition branchState proposition
-      in unless (hasExactEvidence required branchState) $
-        Left SurfaceCheckError
+      in case exactEvidenceBinding required branchState of
+        Just binding -> Right (recordSourceEvidence (locatedSpan body)
+          (SourceCallableResidualEvidence name required binding) branchState)
+        Nothing -> Left SurfaceCheckError
           { surfaceErrorSpan = locatedSpan body
           , surfaceErrorClass = MissingEvidence
           , surfaceErrorDetail =
@@ -2927,7 +2980,8 @@ checkOfferArm
 checkOfferArm environment incoming endpoint locatedArm = do
   let pattern' = caseArmPattern (locatedValue locatedArm)
       label = casePatternLabel pattern'
-      (temp, state1) = freshName "$offer" incoming
+      branched = enterEvidenceBranch (locatedSpan locatedArm) label incoming
+      (temp, state1) = freshName "$offer" branched
   rawStep <- mapSession locatedArm $
     offerEndpoint
       (Name endpoint)
@@ -3404,7 +3458,7 @@ evalAccept environment state located valueExpression surfaceTarget = do
       (stateCore state) of
     Left errorValue -> Left (valueError located errorValue)
     Right checked -> Right checked
-  let next = applyValueResult (unName valueName) state result
+  let next = applyValueResult (locatedSpan located) (unName valueName) state result
       mode = maybe Unrestricted bindingMode $
         Map.lookup (unName valueName) (stateBindings state)
   Right
@@ -3428,7 +3482,7 @@ evalProve environment state located propositionSource = do
   let requirements = focusPrerequisites plan ++ [focusGoal plan]
       unresolved = filter (not . dischargedRequirement) requirements
   if null unresolved
-    then proofValue proposition
+    then proofValue proposition requirements []
     else if any ((== FocusNeedsExplicitMechanism) . focusedMechanism) unresolved
       then throw located OpaqueProof
         "opaque claim cannot be introduced by generic prove"
@@ -3438,14 +3492,20 @@ evalProve environment state located propositionSource = do
         else do
           solved <- mapM (solveRequirement state) unresolved
           if and solved
-            then proofValue proposition
+            then proofValue proposition requirements unresolved
             else throw located MissingEvidence
               "transparent proposition is not established by checked evidence/certificate"
   where
-    proofValue proposition = Right
-      [ valuePath state (RuntimeScalar
-          (ScalarValue Unrestricted (TyProof proposition) PlainShape))
-      ]
+    proofValue proposition requirements decisionChecked =
+      let next = foldl'
+            (\current requirement -> recordSourceEvidence (locatedSpan located)
+              (SourceProveEvidence requirement (requirement `elem` decisionChecked))
+              current)
+            state requirements
+      in Right
+        [ valuePath next (RuntimeScalar
+            (ScalarValue Unrestricted (TyProof proposition) PlainShape))
+        ]
 
 evalFallback
   :: SurfaceEnvironment
@@ -3510,7 +3570,7 @@ checkSelectedPayload environment state (Just message) [argument] explicitEvidenc
             (VVar (Name name))
             (rewriteTy state (messageType message))
             (stateCore state)
-      Right (applyValueResult name state result)
+      Right (applyValueResult (locatedSpan argument) name state result)
     _ -> do
       scalar <- inferReadOnlyScalar environment state argument
       checkScalarAgainst state argument scalar (messageType message)
@@ -3532,10 +3592,11 @@ checkConfiguredRequirement
   -> Located a
   -> Maybe Proposition
   -> Maybe (Located SurfaceExpression)
-  -> Either SurfaceCheckError ()
-checkConfiguredRequirement _ _ _ Nothing _ = Right ()
-checkConfiguredRequirement environment state located (Just proposition) explicitEvidence =
-  checkRequirement environment state located proposition explicitEvidence
+  -> Either SurfaceCheckError SurfaceState
+checkConfiguredRequirement _ state _ Nothing _ = Right state
+checkConfiguredRequirement environment state located (Just proposition) explicitEvidence = do
+  use <- checkRequirement environment state located proposition explicitEvidence
+  Right (recordSourceEvidence (locatedSpan located) use state)
 
 checkRequirement
   :: SurfaceEnvironment
@@ -3543,19 +3604,20 @@ checkRequirement
   -> Located a
   -> Proposition
   -> Maybe (Located SurfaceExpression)
-  -> Either SurfaceCheckError ()
+  -> Either SurfaceCheckError SourceEvidenceUse
 checkRequirement environment state located proposition explicitEvidence = do
   let required = rewriteProposition state proposition
-  if hasExactEvidence required state
-    then Right ()
-    else case explicitEvidence of
+  case exactEvidenceBinding required state of
+    Just name -> Right (SourceRequirementEvidence required (Just name) Nothing)
+    Nothing -> case explicitEvidence of
       Just expression -> do
         evidenceName <- namedExpression MissingEvidence expression
         meta <- lookupMeta expression (unName evidenceName) state
         case evidenceProposition (bindingType meta) of
           Just actual
             | normalizeProposition (rewriteProposition state actual)
-                == normalizeProposition required -> Right ()
+                == normalizeProposition required ->
+                    Right (SourceRequirementEvidence required (Just evidenceName) Nothing)
           _ -> throw expression MissingEvidence
               "explicit evidence proves a different proposition/context/subject"
       Nothing -> do
@@ -3566,13 +3628,15 @@ checkRequirement environment state located proposition explicitEvidence = do
             required
         if dischargedRequirement (focusGoal plan)
             && all dischargedRequirement (focusPrerequisites plan)
-          then Right ()
+          then Right (SourceRequirementEvidence required Nothing (Just plan))
           else throw located MissingEvidence
             ("required proposition is not established: " <> Text.pack (show required))
 
-hasExactEvidence :: Proposition -> SurfaceState -> Bool
-hasExactEvidence proposition state =
-  any matches $ Map.elems $ unrestrictedBindings $ resourceContext $ stateCore state
+-- | Identify the existing unrestricted binder whose proposition matches.
+exactEvidenceBinding :: Proposition -> SurfaceState -> Maybe Name
+exactEvidenceBinding proposition state =
+  fmap fst $ find (matches . snd) $
+    Map.toAscList $ unrestrictedBindings $ resourceContext $ stateCore state
   where
     required = normalizeProposition proposition
     matches ty = case evidenceProposition ty of
@@ -3679,6 +3743,9 @@ joinMetadata span' paths joined = do
     , stateFresh = maximum (map stateFresh states)
     , stateFrame = maximum (map stateFrame states)
     , stateActiveEndpoint = commonActiveEndpoint states surviving
+    , stateEvidenceBranchRoute = commonEvidenceRoute (map stateEvidenceBranchRoute states)
+    , stateEvidenceEvents = unionEventHistories states
+    , stateEvidenceNextOrdinal = maximum (map stateEvidenceNextOrdinal states)
     }
   where
     ensureAgrees surviving state = mapM_
@@ -3830,9 +3897,12 @@ termNames term = case term of
   RefScale _ value -> termNames value
   _ -> []
 
-applyValueResult :: Text -> SurfaceState -> ValueResult -> SurfaceState
-applyValueResult source state result =
-  let next = state { stateCore = valueResultState result }
+applyValueResult :: SourceSpan -> Text -> SurfaceState -> ValueResult -> SurfaceState
+applyValueResult site source state result =
+  let next = foldl'
+        (\current evidence -> recordSourceEvidence site (SourceCoreValueEvidence evidence) current)
+        (state { stateCore = valueResultState result })
+        (valueResultEvidence result)
       coreName = Name source
       context = resourceContext (stateCore next)
       stillPresent =

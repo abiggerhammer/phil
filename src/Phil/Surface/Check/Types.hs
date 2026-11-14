@@ -23,6 +23,9 @@ module Phil.Surface.Check.Types
   , selectReleaseTransition
   , SurfaceEnvironment (..)
   , SurfaceCheckResult (..)
+  , SourceEvidenceBranch (..)
+  , SourceEvidenceUse (..)
+  , SourceEvidenceEvent (..)
   , emptySurfaceEnvironment
   , BindingMeta (..)
   , SurfaceState (..)
@@ -39,6 +42,8 @@ import Data.Set (Set)
 import qualified Data.Set as Set
 import Data.Text (Text)
 import Phil.Core.Checker (CheckState)
+import Phil.Core.Focusing (FocusPlan, FocusedRequirement)
+import Phil.Core.Refinement (EvidenceUse)
 import Phil.Core.Recognition
   ( ParsedWitness
   , PendingRawView
@@ -314,6 +319,29 @@ selectReleaseTransition environment ownerType =
           (releaseTransitionRequirements transition)
           (surfaceSatisfiedReleaseRequirements environment)
 
+-- | Successfully checked original Surface evidence uses; observable data only.
+-- These values are NOT source-sealed P2/P6/P7 capabilities or runtime traces.
+data SourceEvidenceBranch = SourceEvidenceBranch
+  { sourceBranchSpan :: SourceSpan
+  , sourceBranchLabel :: Text
+  }
+  deriving (Eq, Ord, Show)
+
+data SourceEvidenceUse
+  = SourceCoreValueEvidence EvidenceUse
+  | SourceRequirementEvidence Proposition (Maybe Name) (Maybe FocusPlan)
+  | SourceProveEvidence FocusedRequirement Bool
+  | SourceCallableResidualEvidence Text Proposition Name
+  deriving (Eq, Show)
+
+data SourceEvidenceEvent = SourceEvidenceEvent
+  { sourceEvidenceSite :: SourceSpan
+  , sourceEvidenceBranchRoute :: [SourceEvidenceBranch]
+  , sourceEvidenceOrdinal :: Int
+  , sourceEvidenceUse :: SourceEvidenceUse
+  }
+  deriving (Eq, Show)
+
 data SurfaceCheckResult = SurfaceCheckResult
   { checkedComponentName :: Text
   , checkedTerminalControls :: [Control]
@@ -369,6 +397,9 @@ data SurfaceState = SurfaceState
   , stateFresh :: Int
   , stateFrame :: Int
   , stateActiveEndpoint :: Maybe Text
+  , stateEvidenceBranchRoute :: [SourceEvidenceBranch]
+  , stateEvidenceEvents :: [SourceEvidenceEvent]
+  , stateEvidenceNextOrdinal :: Int
   }
   deriving (Eq, Show)
 

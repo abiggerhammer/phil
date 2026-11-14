@@ -19,6 +19,9 @@ module Phil.Surface.Check
   , selectReleaseTransition
   , SurfaceEnvironment (..)
   , SurfaceCheckResult (..)
+  , SourceEvidenceBranch (..)
+  , SourceEvidenceUse (..)
+  , SourceEvidenceEvent (..)
   , ModuleName (..)
   , ModuleTable
   , ResolutionScope
@@ -28,6 +31,7 @@ module Phil.Surface.Check
   , ModuleResolutionError (..)
   , emptySurfaceEnvironment
   , checkSurfaceComponent
+  , checkSurfaceComponentWithEvidence
   , emptyModuleTable
   , emptyResolutionScope
   , declareModule
@@ -51,9 +55,17 @@ checkSurfaceComponent
   :: SurfaceEnvironment
   -> Located Component
   -> Either SurfaceCheckError SurfaceCheckResult
-checkSurfaceComponent environment component = do
+checkSurfaceComponent environment component =
+  fst <$> checkSurfaceComponentWithEvidence environment component
+
+-- | Real source checker evidence observations, not authenticated final authority.
+checkSurfaceComponentWithEvidence
+  :: SurfaceEnvironment
+  -> Located Component
+  -> Either SurfaceCheckError (SurfaceCheckResult, [SourceEvidenceEvent])
+checkSurfaceComponentWithEvidence environment component = do
   preflightComponent environment component
-  Engine.checkSurfaceComponent environment component
+  Engine.checkSurfaceComponentWithEvidence environment component
 
 -- Phase 1 module/import resolution -------------------------------------------
 

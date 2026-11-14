@@ -1,0 +1,11 @@
+# P9-E1: original ordinary source-checker evidence observations
+
+**Control:** [#1771](https://github.com/abiggerhammer/phil/issues/1771#issuecomment-6878199353). **Status:** real native checker-instrumentation slice; not source/Core sealed authority, not final evidence use, and not P9 discharge.
+
+The new `checkSurfaceComponentWithEvidence` invokes the *same original* checked preflight and successful Surface checker transition as ordinary `checkSurfaceComponent`. It observes actual successful checked `ValueResult.valueResultEvidence` before the old `applyValueResult` state-only projection, actual `checkRequirement` on select/receive-exact, `evalProve` focus and checked decisions, and real CALL-019 `checkCallableDecisionArm` residual evidence. Each typed evidence-use occurrence carries its checker site span, source static arm route, and sequential event ordinal. Multiple checked static `decide` / `offer` branches are preserved across `joinMetadata` resource joins and stopped path finalizations. A statically checked branch is NOT a report of runtime execution. Zero evidence uses is NOT proof of selected final use.
+
+The event data types have public constructors for observation/test discrimination and **cannot mint authority**. E2 must bind the complete per-source-site graph and source/Core correspondence from the actual rechecked raw source into the private P2 and both P6 StageClosure arms; E3 must require genuine final consuming use in P7. This slice does not connect those producers, and does not establish complete SYS-012 later-consumer universe nor SYS-013 immutable assumption selected provenance.
+
+The dedicated P9 workflow typechecks actual instrumented source with GHC -Wall -Werror, runs the native positive/negative branch and proof tests, and preserves existing accepted Surface proof/branch tests. It does not modify Grammar-v1/TCB, the 244 normative conformance cases, signing/release workflows, P8/Rocq/FSEM claims or other lanes.
+
+**Remaining E1 completeness gate:** inspect every accepted proof/evidence site, branch/loop/callable alternative, ordinal reuse across an actual joined path, and exact concrete Upload/Steve evidence-positive source examples. If the sample native suite finds lost real use events, fix this *same PR* and re-run full CI; do not call it complete or advance E2 before that test evidence exists.
