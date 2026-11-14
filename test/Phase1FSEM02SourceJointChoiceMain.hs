@@ -135,6 +135,11 @@ main = do
             choiceTypedPrefixWrongBody go offer wrongBody)
     , test "Cancel source-choice absent protocol context preserves peer-first frame and exact recovery"
         (choiceTerminalMissingContextPrecedence cancel offer "Cancel" (Outcome "Cancel"))
+    , test "Go source-choice crosswired checked End contexts refuse both process owners"
+        (do choiceTerminalCrosswiredContextRefusal go offer "Go" (Outcome "Done")
+            choiceTypedPrefixWrongBody go offer wrongBody)
+    , test "Cancel source-choice crosswired contexts recover both terminal close orders"
+        (choiceTerminalCrosswiredContextRefusal cancel offer "Cancel" (Outcome "Cancel"))
     , test "diamond rejects wrong externally authorized peer outcome precisely" (choiceCloseDiamondBadPeer go offer)
     , test "diamond rejects wrong source Client close outcome precisely" (choiceCloseDiamondBadClient go offer)
     , test "diamond rejects minimally malformed source offer before both orders" (choiceCloseDiamondWrongBody go offer wrongBody)
@@ -2408,3 +2413,90 @@ choiceTerminalMissingContextPrecedence client server label outcome = do
               "restoring exactly the checked source context failed Close diamond"
           _ -> Right ()
         ) variants
+
+
+
+-- The independently source-checked process-local End contexts are not
+-- interchangeable. Swapping them is an adversarial Core input, NEVER a
+-- source-endorsed context transfer or nominal protocol authority.
+choiceTerminalCrosswiredContextRefusal
+  :: Text -> Text -> Text -> Outcome -> Either String ()
+choiceTerminalCrosswiredContextRefusal client server label outcome = do
+  fx <- fixture client server
+  diamond <- mapLeft show $ choiceCloseDiamond fx label outcome outcome
+  let ready = statefulChoiceSuccessor
+        (statefulChoiceClientCloseSourceReplay
+          (statefulChoiceExplicitPeerCloseClient
+            (choiceCloseDiamondForward diamond)))
+      network = fxNetwork fx
+      cp = fxClientProcess fx
+      sp = fxServerProcess fx
+      cn = fxClientNext fx
+      sn = serverNext
+      revision = binaryProtocolInstanceRevision (fxInstance fx)
+      contexts = communicationProtocolContexts
+      owners = communicationRestrictedOwners
+      closeClient state = closeProcessEndpointState network state
+        cp cn revision clientRole outcome
+      closePeer state = closeProcessEndpointState network state
+        sp sn revision serverRole outcome
+      expectClientWrong side state =
+        case closeClient state of
+          Left (EndpointClosureProtocolError p (ProtocolEndpointUnknown n)) ->
+            assert (p == cp && n == cn)
+              (side <> ": wrong Client error identity")
+          other -> Left (side <> ": expected Client context refusal: " <> show other)
+      expectPeerWrong side state =
+        case closePeer state of
+          Left (EndpointClosureProtocolError p (ProtocolEndpointUnknown n)) ->
+            assert (p == sp && n == sn)
+              (side <> ": wrong peer error identity")
+          other -> Left (side <> ": expected peer context refusal: " <> show other)
+  case (Map.lookup cp (contexts ready), Map.lookup sp (contexts ready)) of
+    (Just cc, Just sc) -> do
+      let crossed = ready
+            { communicationProtocolContexts =
+                Map.insert sp cc (Map.insert cp sc (contexts ready)) }
+          restoreClient state = state
+            { communicationProtocolContexts = Map.insert cp cc (contexts state) }
+          restorePeer state = state
+            { communicationProtocolContexts = Map.insert sp sc (contexts state) }
+          baseline = choiceCloseDiamondReverse diamond
+      assert (cp /= sp && cn /= sn && cc /= sc
+           && owners crossed == owners ready
+           && restorePeer (restoreClient crossed) == ready
+           && Map.lookup clientOccurrence (owners ready) == Just (cp, cn)
+           && Map.lookup serverOccurrence (owners ready) == Just (sp, sn))
+        "crosswired contexts changed accepted terminal owner preconditions"
+      expectClientWrong "both swapped" crossed
+      expectPeerWrong "both swapped" crossed
+      let clientRestored = restoreClient crossed
+      expectPeerWrong "only Client restored" clientRestored
+      afterClient <- mapLeft show (closeClient clientRestored)
+      expectPeerWrong "after Client closes" afterClient
+      assert (Map.notMember clientOccurrence (owners afterClient)
+           && Map.lookup serverOccurrence (owners afterClient)
+                == Map.lookup serverOccurrence (owners ready)
+           && Map.lookup spectatorOccurrence (owners afterClient)
+                == Map.lookup spectatorOccurrence (owners ready))
+        "Client-only context restoration damaged peer or borrowed spectator"
+      clientThenPeer <- mapLeft show (closePeer (restorePeer afterClient))
+      let peerRestored = restorePeer crossed
+      expectClientWrong "only peer restored" peerRestored
+      afterPeer <- mapLeft show (closePeer peerRestored)
+      expectClientWrong "after peer closes" afterPeer
+      assert (Map.notMember serverOccurrence (owners afterPeer)
+           && Map.lookup clientOccurrence (owners afterPeer)
+                == Map.lookup clientOccurrence (owners ready)
+           && Map.lookup spectatorOccurrence (owners afterPeer)
+                == Map.lookup spectatorOccurrence (owners ready))
+        "peer-only context restoration damaged Client or borrowed spectator"
+      peerThenClient <- mapLeft show (closeClient (restoreClient afterPeer))
+      assert (clientThenPeer == baseline && peerThenClient == baseline
+           && clientThenPeer == peerThenClient
+           && Map.notMember clientOccurrence (owners clientThenPeer)
+           && Map.notMember serverOccurrence (owners clientThenPeer)
+           && Map.lookup spectatorOccurrence (owners clientThenPeer)
+                == Map.lookup spectatorOccurrence (owners ready))
+        "externally restored checked process contexts lost End Close diamond"
+    _ -> Left "source-derived successor lacks a checked terminal protocol context"
