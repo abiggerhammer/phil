@@ -1,5 +1,6 @@
 From Phil.Surface Require Import
   GrammarDerivation
+  GrammarAstRecordFieldsSpine
   GrammarAstFieldTypeListSpine.
 
 (*
