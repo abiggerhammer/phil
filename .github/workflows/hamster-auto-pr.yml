@@ -6,6 +6,8 @@ on:
       - 'hamster/proof-audit/**'
       - 'hamster/rocq-refinement/**'
       - 'hamster/impl-audit/**'
+      - 'hamster/p8-representation/**'
+      - 'hamster/p9-evidence/**'
 
 permissions:
   contents: read
@@ -39,6 +41,12 @@ jobs:
               ;;
             hamster/impl-audit/*)
               lane="impl-audit"
+              ;;
+            hamster/p8-representation/*)
+              lane="p8-representation"
+              ;;
+            hamster/p9-evidence/*)
+              lane="p9-evidence"
               ;;
             *)
               echo "Unexpected hamster branch: $BRANCH" >&2
@@ -114,6 +122,22 @@ jobs:
             echo "PR creation returned without an open PR for $BRANCH" >&2
             exit 1
           fi
+
+          # Two explicitly authorized new proof lanes need their native label.
+          # Keep older lane behavior unchanged; do not allow arbitrary labels.
+          case "$LANE" in
+            p8-representation|p9-evidence)
+              if ! gh label list --repo "$GH_REPO" --limit 1000 --json name \
+                   | jq -e --arg name "lane: $LANE" \
+                     'any(.[]; .name == $name)' >/dev/null; then
+                gh label create "lane: $LANE" --repo "$GH_REPO" \
+                  --color 6a737d --description 'Bounded Phase 1 final-authority proof lane' \
+                || gh label list --repo "$GH_REPO" --limit 1000 --json name \
+                     | jq -e --arg name "lane: $LANE" \
+                       'any(.[]; .name == $name)' >/dev/null
+              fi
+              ;;
+          esac
 
           gh pr edit "$number" --repo "$GH_REPO" --add-label "lane: $LANE"
 

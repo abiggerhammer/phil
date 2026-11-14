@@ -11,8 +11,8 @@ from dataclasses import asdict, dataclass
 from typing import Any
 
 SUPPORTED_LANES = {
-    "auto-pr": {"proof-audit", "rocq-refinement", "impl-audit"},
-    "merge": {"proof-audit", "rocq-refinement", "impl-audit"},
+    "auto-pr": {"proof-audit", "rocq-refinement", "impl-audit", "p8-representation", "p9-evidence"},
+    "merge": {"proof-audit", "rocq-refinement", "impl-audit", "p8-representation", "p9-evidence"},
     "refresh": {"impl-audit"},
 }
 

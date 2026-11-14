@@ -40,7 +40,7 @@ jobs:
           fi
 
           case "$lane" in
-            proof-audit|rocq-refinement|impl-audit) ;;
+            proof-audit|rocq-refinement|impl-audit|p8-representation|p9-evidence) ;;
             *)
               echo "Unsupported hamster lane: $lane" >&2
               exit 1
