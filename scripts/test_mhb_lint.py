@@ -82,6 +82,37 @@ class MhbLintTests(unittest.TestCase):
             ],
         )
 
+    def test_new_final_authority_proof_lanes_are_strictly_scoped(self):
+        for lane in ("p8-representation", "p9-evidence"):
+            for operation in ("auto-pr", "merge"):
+                with self.subTest(lane=lane, operation=operation):
+                    snapshot = clean_snapshot()
+                    snapshot["operation"] = operation
+                    snapshot["lane"] = lane
+                    snapshot["pr"]["labels"] = ["lane: " + lane]
+                    snapshot["pr"]["head_ref"] = "hamster/" + lane + "/first-proof"
+                    self.assertEqual(mhb_lint.lint_snapshot(snapshot), [])
+
+            # A new proof lane never inherits the separately authorized
+            # generated-file refresh privilege of the impl-audit hamster.
+            snapshot = clean_snapshot()
+            snapshot["operation"] = "refresh"
+            snapshot["lane"] = lane
+            snapshot["pr"]["labels"] = ["lane: " + lane]
+            snapshot["pr"]["head_ref"] = "hamster/" + lane + "/first-proof"
+            self.assertIn("MHB001",
+                          [x.rule_id for x in mhb_lint.lint_snapshot(snapshot)])
+
+            # Exact lane isolation: no other lane label may confer authority.
+            snapshot["operation"] = "merge"
+            snapshot["pr"]["labels"] = ["lane: " + lane, "lane: impl-audit"]
+            self.assertIn("MHB002",
+                          [x.rule_id for x in mhb_lint.lint_snapshot(snapshot)])
+            snapshot["pr"]["labels"] = ["lane: " + lane]
+            snapshot["pr"]["head_ref"] = "hamster/impl-audit/foreign"
+            self.assertIn("MHB003",
+                          [x.rule_id for x in mhb_lint.lint_snapshot(snapshot)])
+
     def test_phase1_int007_generated_whitelist(self):
         snapshot = clean_snapshot()
         snapshot.update(
