@@ -1,7 +1,8 @@
 From Stdlib Require Import Strings.String Lists.List Bool.Bool.
 From Phil.Core Require Import Syntax FSEM02StatefulSourceChoice
   FSEM02SelectedClientClose FSEM02ChoiceAmbiguousClose
-  FSEM02ChoiceMissingContextGate FSEM02ChoiceOutcomeResourceGate.
+  FSEM02ChoiceMissingContextGate FSEM02ChoiceResourceAgreementGate
+  FSEM02ChoiceOutcomeResourceGate.
 Import ListNotations.
 
 (* Non-normative FSEM-02: each flag is supplied by an independent native
