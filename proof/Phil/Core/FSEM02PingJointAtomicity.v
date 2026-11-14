@@ -241,15 +241,15 @@ Theorem fsem02PingJointAdmittedSuccessExactAndFrame :
       (Receive receiverBinder receiverTy receiverCont)
       senderOld senderNext receiverOld receiverNext
       senderBefore receiverBefore = Some (senderAfter, receiverAfter) ->
-    senderAgrees = true /\\
-    receiverAgrees = true /\\
-    linearBindings senderAfter senderOld = None /\\
-    linearBindings senderAfter senderNext = Some (endpointType senderCont) /\\
-    linearBindings receiverAfter receiverOld = None /\\
-    linearBindings receiverAfter receiverNext = Some (endpointType receiverCont) /\\
-    affineBindings senderAfter = affineBindings senderBefore /\\
-    sharedLoans senderAfter = sharedLoans senderBefore /\\
-    affineBindings receiverAfter = affineBindings receiverBefore /\\
+    senderAgrees = true /\
+    receiverAgrees = true /\
+    linearBindings senderAfter senderOld = None /\
+    linearBindings senderAfter senderNext = Some (endpointType senderCont) /\
+    linearBindings receiverAfter receiverOld = None /\
+    linearBindings receiverAfter receiverNext = Some (endpointType receiverCont) /\
+    affineBindings senderAfter = affineBindings senderBefore /\
+    sharedLoans senderAfter = sharedLoans senderBefore /\
+    affineBindings receiverAfter = affineBindings receiverBefore /\
     sharedLoans receiverAfter = sharedLoans receiverBefore.
 Proof.
   intros senderAgrees receiverAgrees
