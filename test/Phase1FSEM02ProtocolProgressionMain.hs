@@ -39,6 +39,8 @@ main = do
         (sourcePingSuccessorResourceFreshness accepted)
     , test "FSEM-02 source Ping joint successor freshness and atomic peer refusal"
         (sourcePingJointSuccessorAtomicity accepted)
+    , test "FSEM-02 parsed Ping joint predecessor resource agreement refuses either peer before continuation"
+        (sourcePingJointPredecessorResourceGates accepted stale)
     , test "FSEM-02 source Ping joint nominal instance/role fail-closed peer"
         (sourcePingJointNominalRefusal accepted)
     , test "FSEM-02 source Ping joint terminal Close orders agree and reject stale replay"
@@ -521,6 +523,121 @@ rejectJointCollision runJoint request before process context successor mode = do
       assert (actualProcess == process && name == successor)
         "joint collision diagnostic lost exact process or source successor"
     other -> Left ("joint " <> show mode <> " collision yielded wrong result: " <> show other)
+
+
+-- Both parser-checked Ping endpoints must retain their exact linear predecessor
+-- resource at a synchronous Send/Receive. Adversarial Core resource-map faults
+-- are deliberately NOT source permissions. No failed joint attempt commits
+-- either peer's otherwise eligible successor.
+sourcePingJointPredecessorResourceGates :: Text.Text -> Text.Text -> Either String ()
+sourcePingJointPredecessorResourceGates accepted rejected = do
+  -- Preserve the separate minimally rejected *source* witness and exact class.
+  sourceStaleCloseRejected rejected
+  plans <- sourcePlans accepted
+  (network, clientProcess, serverProcess) <- sourcePingJointNetwork
+  let revision = sourceProtocolInstance plans
+      client = sourceClientPlan plans
+      server = sourceServerPlan plans
+      clientOld = grammarV1ResolvedBinderCoreName (checkedComponentSendEndpoint client)
+      clientNext = grammarV1ResolvedBinderCoreName (checkedComponentSendSuccessor client)
+      serverOld = grammarV1ResolvedBinderCoreName (checkedComponentReceiveEndpoint server)
+      serverNext = grammarV1ResolvedBinderCoreName (checkedComponentReceiveSuccessor server)
+      spectator = Name "fsem02.ping.joint.resource.borrowed.spectator"
+      clientSide = ProcessRendezvousSide clientProcess clientOld clientNext revision clientRole
+      serverSide = ProcessRendezvousSide serverProcess serverOld serverNext revision serverRole
+      request = JointProcessRendezvous (SendReceiveRendezvous clientSide serverSide)
+      run contexts = checkProcessCommunication (sourceBinaryInstance plans)
+        network contexts request
+  assert (sourceServerHead plans == dualSession (sourceClientHead plans)
+       && clientOld /= clientNext && serverOld /= serverNext
+       && clientOld /= serverOld && clientNext /= serverNext)
+    "source Ping predecessor/successor heads are not exact independent duals"
+  clientContext <- mapLeft show $
+    insertProtocolEndpoint clientOld revision clientRole
+      (sourceClientHead plans) emptyProtocolContext
+  rawServer <- mapLeft show $
+    insertProtocolEndpoint serverOld revision serverRole
+      (sourceServerHead plans) emptyProtocolContext
+  withSpectator <- mapLeft show $
+    insertBinding Affine spectator (TyUInt 8) (protocolResources rawServer)
+  withLoan <- mapLeft show $ startSharedLoan spectator withSpectator
+  let serverContext = rawServer { protocolResources = withLoan }
+      before = Map.fromList [(clientProcess, clientContext), (serverProcess, serverContext)]
+      changeResource owner replacement ctx =
+        let resources = protocolResources ctx
+            bindings = linearBindings resources
+            changed = case replacement of
+              Nothing -> Map.delete owner bindings
+              Just ty -> Map.insert owner ty bindings
+        in ctx { protocolResources = resources { linearBindings = changed } }
+      probe process old headSession context = do
+        let cases =
+              [ ("missing", Nothing, ProtocolEndpointResourceMissing old)
+              , ("wrong type", Just (TyUInt 8),
+                  ProtocolEndpointResourceTypeMismatch old (TyUInt 8))
+              , ("wrong session", Just (TyEndpoint (End done)),
+                  ProtocolEndpointSessionMismatch old headSession (End done))
+              ]
+        mapM_ (\(label, replacement, expected) -> do
+          let bad = Map.insert process (changeResource old replacement context) before
+          case run bad of
+            Left (RendezvousProtocolError actualProcess actualError) ->
+              assert (actualProcess == process && actualError == expected)
+                ("joint " <> label <> " error lost source predecessor/process or class")
+            other -> Left ("joint " <> label <> " fault progressed or misdiagnosed: "
+                            <> show other)) cases
+  probe clientProcess clientOld (sourceClientHead plans) clientContext
+  probe serverProcess serverOld (sourceServerHead plans) serverContext
+  -- When both parties have faults, the real checker evaluates Client first.
+  -- Repairing only Client exposes Server's fault, never a partial transition.
+  let doubleFault = Map.insert clientProcess (changeResource clientOld Nothing clientContext)
+                  $ Map.insert serverProcess
+                      (changeResource serverOld (Just (TyUInt 8)) serverContext) before
+  case run doubleFault of
+    Left (RendezvousProtocolError process (ProtocolEndpointResourceMissing name)) ->
+      assert (process == clientProcess && name == clientOld)
+        "double-fault ordering did not refuse the client predecessor first"
+    other -> Left ("double-fault Ping unexpectedly progressed: " <> show other)
+  case run (Map.insert serverProcess
+              (changeResource serverOld (Just (TyUInt 8)) serverContext) before) of
+    Left (RendezvousProtocolError process
+          (ProtocolEndpointResourceTypeMismatch name actual)) ->
+      assert (process == serverProcess && name == serverOld && actual == TyUInt 8)
+        "repairing Client did not expose Server's exact bad predecessor resource"
+    other -> Left ("single remaining server fault unexpectedly progressed: " <> show other)
+  after <- mapLeft show $ run before
+  clientAfter <- maybe (Left "healthy Send missing Client") Right
+    (Map.lookup clientProcess after)
+  serverAfter <- maybe (Left "healthy Receive missing Server") Right
+    (Map.lookup serverProcess after)
+  assert
+    (Map.keysSet after == Map.keysSet before
+     && Map.notMember clientOld (protocolEndpoints clientAfter)
+     && Map.notMember serverOld (protocolEndpoints serverAfter)
+     && Map.lookup clientNext (protocolEndpoints clientAfter)
+          == Just (ProtocolEndpointBinding clientNext revision clientRole (End done))
+     && Map.lookup serverNext (protocolEndpoints serverAfter)
+          == Just (ProtocolEndpointBinding serverNext revision serverRole (End done))
+     && Map.lookup clientNext (linearBindings (protocolResources clientAfter))
+          == Just (TyEndpoint (End done))
+     && Map.lookup serverNext (linearBindings (protocolResources serverAfter))
+          == Just (TyEndpoint (End done))
+     && Map.notMember clientOld (linearBindings (protocolResources clientAfter))
+     && Map.notMember serverOld (linearBindings (protocolResources serverAfter)))
+    "restored joint Ping failed to consume both exact predecessors and type successors"
+  assert
+    (affineBindings (protocolResources serverAfter) == affineBindings withLoan
+     && sharedLoans (protocolResources serverAfter) == sharedLoans withLoan)
+    "resource-gated Ping changed unrelated borrowed affine spectator"
+  again <- mapLeft show $ run before
+  assert (again == after && Map.lookup clientProcess before == Just clientContext
+         && Map.lookup serverProcess before == Just serverContext)
+    "rejected resource trials silently mutated original joint source-derived state"
+  case run after of
+    Left (RendezvousEndpointNotOwnedByProcess process old) ->
+      assert (process == clientProcess && old == clientOld)
+        "replayed joint Ping did not reject its exact consumed predecessor"
+    other -> Left ("stale joint Ping predecessor was reused after repair: " <> show other)
 
 sourcePingJointNetwork :: Either String (ProcessNetwork, ProcessKey, ProcessKey)
 sourcePingJointNetwork = do

@@ -140,3 +140,134 @@ Proof.
     eq_refl Hreceiver) as [HreceiverAffine HreceiverLoans].
   repeat split; assumption.
 Qed.
+
+
+(* FSEM-02: nonterminal Send/Receive resource agreement is a separate,
+   externally checked native premise. The finite Rocq ResourceContext has
+   an abstract endpointType token, not the actual Haskell TyEndpoint session
+   constructor. These boolean gates therefore do NOT prove resource-map
+   correspondence or turn forged metadata into protocol authority. *)
+Definition fsem02PingJointResourceAdmission
+  (senderAgrees receiverAgrees : bool)
+  (senderHead receiverHead : Session)
+  (senderOld senderNext receiverOld receiverNext : Name)
+  (senderBefore receiverBefore : ResourceContext)
+  : option (ResourceContext * ResourceContext) :=
+  if senderAgrees then
+    if receiverAgrees then
+      fsem02PingJointResources senderHead receiverHead
+        senderOld senderNext receiverOld receiverNext
+        senderBefore receiverBefore
+    else None
+  else None.
+
+Theorem fsem02PingJointRejectsDisagreedSender :
+  forall receiverAgrees senderHead receiverHead
+         senderOld senderNext receiverOld receiverNext
+         senderBefore receiverBefore,
+    fsem02PingJointResourceAdmission false receiverAgrees
+      senderHead receiverHead senderOld senderNext receiverOld receiverNext
+      senderBefore receiverBefore = None.
+Proof. reflexivity. Qed.
+
+Theorem fsem02PingJointRejectsDisagreedReceiver :
+  forall senderAgrees senderHead receiverHead
+         senderOld senderNext receiverOld receiverNext
+         senderBefore receiverBefore,
+    fsem02PingJointResourceAdmission senderAgrees false
+      senderHead receiverHead senderOld senderNext receiverOld receiverNext
+      senderBefore receiverBefore = None.
+Proof. intros. destruct senderAgrees; reflexivity. Qed.
+
+Theorem fsem02PingJointRejectsMissingSenderPredecessor :
+  forall senderAgrees receiverAgrees senderHead receiverHead
+         senderOld senderNext receiverOld receiverNext
+         senderBefore receiverBefore,
+    linearBindings senderBefore senderOld = None ->
+    fsem02PingJointResourceAdmission senderAgrees receiverAgrees
+      senderHead receiverHead senderOld senderNext receiverOld receiverNext
+      senderBefore receiverBefore = None.
+Proof.
+  intros senderAgrees receiverAgrees senderHead receiverHead
+    senderOld senderNext receiverOld receiverNext
+    senderBefore receiverBefore Hmissing.
+  unfold fsem02PingJointResourceAdmission.
+  destruct senderAgrees; [|reflexivity].
+  destruct receiverAgrees; [|reflexivity].
+  apply fsem02PingJointRejectsFailedSender.
+  destruct (fsem02Progression FSEM02Send senderHead
+    senderOld senderNext senderBefore) as [| actualAfter] eqn:Hstep.
+  - reflexivity.
+  - exfalso.
+    eapply (stale_linear_predecessor_cannot_succeed
+      FSEM02Send senderHead senderOld senderNext
+      senderBefore actualAfter Hmissing).
+    exact Hstep.
+Qed.
+
+Theorem fsem02PingJointRejectsMissingReceiverPredecessor :
+  forall senderAgrees receiverAgrees senderHead receiverHead
+         senderOld senderNext receiverOld receiverNext
+         senderBefore receiverBefore,
+    linearBindings receiverBefore receiverOld = None ->
+    fsem02PingJointResourceAdmission senderAgrees receiverAgrees
+      senderHead receiverHead senderOld senderNext receiverOld receiverNext
+      senderBefore receiverBefore = None.
+Proof.
+  intros senderAgrees receiverAgrees senderHead receiverHead
+    senderOld senderNext receiverOld receiverNext
+    senderBefore receiverBefore Hmissing.
+  unfold fsem02PingJointResourceAdmission.
+  destruct senderAgrees; [|reflexivity].
+  destruct receiverAgrees; [|reflexivity].
+  apply fsem02PingJointRejectsFailedReceiver.
+  destruct (fsem02Progression FSEM02Receive receiverHead
+    receiverOld receiverNext receiverBefore) as [| actualAfter] eqn:Hstep.
+  - reflexivity.
+  - exfalso.
+    eapply (stale_linear_predecessor_cannot_succeed
+      FSEM02Receive receiverHead receiverOld receiverNext
+      receiverBefore actualAfter Hmissing).
+    exact Hstep.
+Qed.
+
+Theorem fsem02PingJointAdmittedSuccessExactAndFrame :
+  forall senderAgrees receiverAgrees
+         senderBinder receiverBinder senderTy receiverTy
+         senderCont receiverCont senderOld senderNext receiverOld receiverNext
+         senderBefore receiverBefore senderAfter receiverAfter,
+    fsem02PingJointResourceAdmission senderAgrees receiverAgrees
+      (Send senderBinder senderTy senderCont)
+      (Receive receiverBinder receiverTy receiverCont)
+      senderOld senderNext receiverOld receiverNext
+      senderBefore receiverBefore = Some (senderAfter, receiverAfter) ->
+    senderAgrees = true /\\
+    receiverAgrees = true /\\
+    linearBindings senderAfter senderOld = None /\\
+    linearBindings senderAfter senderNext = Some (endpointType senderCont) /\\
+    linearBindings receiverAfter receiverOld = None /\\
+    linearBindings receiverAfter receiverNext = Some (endpointType receiverCont) /\\
+    affineBindings senderAfter = affineBindings senderBefore /\\
+    sharedLoans senderAfter = sharedLoans senderBefore /\\
+    affineBindings receiverAfter = affineBindings receiverBefore /\\
+    sharedLoans receiverAfter = sharedLoans receiverBefore.
+Proof.
+  intros senderAgrees receiverAgrees
+    senderBinder receiverBinder senderTy receiverTy senderCont receiverCont
+    senderOld senderNext receiverOld receiverNext
+    senderBefore receiverBefore senderAfter receiverAfter Hstep.
+  unfold fsem02PingJointResourceAdmission in Hstep.
+  destruct senderAgrees; try discriminate.
+  destruct receiverAgrees; try discriminate.
+  pose proof (fsem02PingJointSuccessConsumesBothAndTypesSuccessors
+    senderBinder receiverBinder senderTy receiverTy
+    senderCont receiverCont senderOld senderNext receiverOld receiverNext
+    senderBefore receiverBefore senderAfter receiverAfter Hstep)
+    as [HsenderOld [HsenderNext [HreceiverOld HreceiverNext]]].
+  pose proof (fsem02PingJointSuccessFramesBothAffineAndLoans
+    senderBinder receiverBinder senderTy receiverTy
+    senderCont receiverCont senderOld senderNext receiverOld receiverNext
+    senderBefore receiverBefore senderAfter receiverAfter Hstep)
+    as [HsenderAffine [HsenderLoans [HreceiverAffine HreceiverLoans]]].
+  repeat split; try reflexivity; assumption.
+Qed.
