@@ -1,6 +1,17 @@
+From Stdlib Require Import Lists.List Strings.String.
+
 From Phil.Surface Require Import
+  GrammarDerivation
+  GrammarAstSourceHeader
+  GrammarAstGenericParamsSpine
+  GrammarAstStructuralModeSpine
+  GrammarAstGenericRequirementsSpine
   GrammarAstRecordFieldsSpine
+  GrammarAstFieldTypeListSpine
   GrammarAstOptionalFieldTypeSpine.
+
+Import ListNotations.
+Open Scope string_scope.
 
 (*
   Lift the refined optional field-list type payload into record_decl.
