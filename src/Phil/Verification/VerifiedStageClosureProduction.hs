@@ -8,6 +8,7 @@ module Phil.Verification.VerifiedStageClosureProduction
   , produceVerifiedStageClosure
   , verifiedStageClosureSourceProduction
   , verifiedStageClosureSelected
+  , verifiedStageClosureSourceCheckEventGraph
   ) where
 
 import qualified Phil.Compiler.SourceSystems as Source
@@ -153,6 +154,15 @@ produceVerifiedStageClosure production expectations template = do
 verifiedStageClosureSourceProduction
   :: VerifiedStageClosureProduction -> Source.VerifiedSourceSystemsProduction
 verifiedStageClosureSourceProduction (VerifiedStageClosureProduction source _) = source
+
+-- | The exact same private P2 source event graph retained through both P6
+-- StageClosure arms (whose full source bases are checked for equality).
+-- Neither arm claims P7 final evidence use on the strength of this projection.
+verifiedStageClosureSourceCheckEventGraph
+  :: VerifiedStageClosureProduction -> Source.VerifiedSourceCheckEventGraph
+verifiedStageClosureSourceCheckEventGraph
+  (VerifiedStageClosureProduction production _) =
+    Source.verifiedSourceSystemsCheckEventGraph production
 
 verifiedStageClosureSelected
   :: VerifiedStageClosureProduction -> Closure.StageClosureBundle

@@ -258,6 +258,19 @@ uploadVerifiedProducer clientSource serverSource = do
   original <- mapLeft show (lowerSourceSystems admitted uploadRealizationContext)
   let occurrence = verifiedSourceSystemsArchitectureIdentity produced
       fullStage = verifiedSourceSystemsStage produced
+      sourceGraph = verifiedSourceSystemsCheckEventGraph produced
+      events = verifiedSourceCheckEventOccurrences sourceGraph
+      uploaded = [ checkedEvidenceEvent evidence
+                 | evidence <- events
+                 , checkedEvidenceUnitId evidence == SourceUnitId "unit.upload.server"
+                 , checkedEvidenceDeclarationSite evidence
+                     == DeclarationSiteId "site.upload.server" ]
+  assert (not (null uploaded))
+    "P9-E2 real Upload server lost source-qualified checker uses"
+  assert (verifiedSourceCheckEventArchitectureIdentity sourceGraph == occurrence
+      && verifiedSourceCheckEventCoreSemantics sourceGraph
+           == coreSystemsProgramSemanticForm uploadCoreProgram)
+    "P9-E2 private Upload source graph lost exact K/I or admitted Core"
   mapLeft show (verifyPhase1StageBundle fullStage)
   assert (identityInstanceKey occurrence == InstanceKey "inst:phase1.upload")
     "source-owned producer lost Upload occurrence K"
@@ -279,6 +292,11 @@ steveVerifiedProducer putSource getSource = do
   original <- mapLeft show (lowerSourceSystems admitted context)
   let occurrence = verifiedSourceSystemsArchitectureIdentity produced
       fullStage = verifiedSourceSystemsStage produced
+      sourceGraph = verifiedSourceSystemsCheckEventGraph produced
+  assert (verifiedSourceCheckEventArchitectureIdentity sourceGraph == occurrence
+      && verifiedSourceCheckEventCoreSemantics sourceGraph
+           == coreSystemsProgramSemanticForm steveCoreProgram)
+    "P9-E2 private Steve source graph lost exact K/I or admitted Core"
   mapLeft show (verifyPhase1StageBundle fullStage)
   assert (identityInstanceKey occurrence == InstanceKey "inst:phase1.steve")
     "source-owned producer lost Steve occurrence K"
@@ -341,6 +359,9 @@ uploadVerifiedStageClosure clientSource serverSource = do
     (produceVerifiedStageClosure production uploadProviderCallExpectations template)
   assert (verifiedStageClosureSourceProduction retained == production)
     "Upload lost sealed producer"
+  assert (verifiedStageClosureSourceCheckEventGraph retained
+      == verifiedSourceSystemsCheckEventGraph production)
+    "P9-E2 Upload P6 changed its exact P2 source-checker events"
   assertStageFromProduction production (verifiedStageClosureSelected retained)
 
 steveVerifiedStageClosure :: Text -> Text -> Either String ()
@@ -351,6 +372,9 @@ steveVerifiedStageClosure putSource getSource = do
     (produceVerifiedStageClosure production steveProviderCallExpectations template)
   assert (verifiedStageClosureSourceProduction retained == production)
     "Steve lost sealed producer"
+  assert (verifiedStageClosureSourceCheckEventGraph retained
+      == verifiedSourceSystemsCheckEventGraph production)
+    "P9-E2 Steve P6 changed its exact P2 source-checker events"
   assertStageFromProduction production (verifiedStageClosureSelected retained)
 
 assertStageFromProduction

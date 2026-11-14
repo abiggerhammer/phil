@@ -1,6 +1,8 @@
 module Phil.Compiler.SourceBundle
   ( SourceEnvironmentMap
   , SourceRootMap
+  , CheckedSourceEvidenceOccurrence (..)
+  , checkedSourceEvidenceOccurrences
   , CheckedSourceUnit (..)
   , CheckedSourceBundle (..)
   , SourceBundleCheckError (..)
@@ -16,7 +18,8 @@ import Phil.Surface.Check
   ( SurfaceCheckError
   , SurfaceCheckResult
   , SurfaceEnvironment
-  , checkSurfaceComponent
+  , SourceEvidenceEvent
+  , checkSurfaceComponentWithEvidence
   )
 import Phil.Surface.Lineage
   ( DeclarationSiteId
@@ -41,6 +44,18 @@ type SourceEnvironmentMap = Map DeclarationKey SurfaceEnvironment
 -- recognize witness names or infer roots from source presentation.
 type SourceRootMap = Map Text DeclarationKey
 
+-- | Public observational data, NOT a credential. Only the private raw-source
+-- rechecking VerifiedSourceSystemsProduction can seal these occurrences.
+-- Unit and persisted declaration site remain separate from editable spans,
+-- names, and the selected Architecture instance key.
+data CheckedSourceEvidenceOccurrence = CheckedSourceEvidenceOccurrence
+  { checkedEvidenceUnitId :: SourceUnitId
+  , checkedEvidenceDeclarationSite :: DeclarationSiteId
+  , checkedEvidenceDeclarationKey :: DeclarationKey
+  , checkedEvidenceEvent :: SourceEvidenceEvent
+  }
+  deriving (Eq, Show)
+
 -- | One ordinary source unit after exact lineage resolution, parsing, and the
 -- ordinary surface checker have all accepted it.
 data CheckedSourceUnit = CheckedSourceUnit
@@ -49,6 +64,7 @@ data CheckedSourceUnit = CheckedSourceUnit
   , checkedSourceDeclarationKey :: DeclarationKey
   , checkedSourceComponent :: Located Component
   , checkedSourceResult :: SurfaceCheckResult
+  , checkedSourceEvidenceEvents :: [SourceEvidenceEvent]
   }
   deriving (Eq, Show)
 
@@ -62,6 +78,21 @@ data CheckedSourceBundle = CheckedSourceBundle
   , checkedSourceUnits :: [CheckedSourceUnit]
   }
   deriving (Eq, Show)
+
+-- | Public projection for diagnostics and tests. Constructing or modifying a
+-- CheckedSourceBundle does NOT mint a source-owned P9 acceptance.
+checkedSourceEvidenceOccurrences
+  :: CheckedSourceBundle -> [CheckedSourceEvidenceOccurrence]
+checkedSourceEvidenceOccurrences bundle =
+  [ CheckedSourceEvidenceOccurrence
+      { checkedEvidenceUnitId = checkedSourceUnitId unit
+      , checkedEvidenceDeclarationSite = checkedSourceDeclarationSite unit
+      , checkedEvidenceDeclarationKey = checkedSourceDeclarationKey unit
+      , checkedEvidenceEvent = event
+      }
+  | unit <- checkedSourceUnits bundle
+  , event <- checkedSourceEvidenceEvents unit
+  ]
 
 data SourceBundleCheckError
   = SourceBundleLineageError LineageError
@@ -114,14 +145,15 @@ checkPortableSourceBundle roots environments bundle = do
       surfaceFile <- mapLeft (SourceBundleParseError unitId) $
         parseSurfaceFile (unSourceUnitId unitId) (portableSourceText unit)
       component <- exactlyOneComponent unitId surfaceFile
-      checked <- mapLeft (SourceBundleSurfaceCheckError unitId declarationKey) $
-        checkSurfaceComponent environment component
+      (checked, events) <- mapLeft (SourceBundleSurfaceCheckError unitId declarationKey) $
+        checkSurfaceComponentWithEvidence environment component
       Right CheckedSourceUnit
         { checkedSourceUnitId = unitId
         , checkedSourceDeclarationSite = siteId
         , checkedSourceDeclarationKey = declarationKey
         , checkedSourceComponent = component
         , checkedSourceResult = checked
+        , checkedSourceEvidenceEvents = events
         }
 
 exactlyOneComponent

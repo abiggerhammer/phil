@@ -25,7 +25,7 @@ import Phil.Core.Static
   , checkedArchitectureIdentity
   )
 import Phil.Core.Syntax (Control (..), Outcome (..))
-import Phil.Surface.Check (SurfaceCheckResult (..))
+import Phil.Surface.Check (SourceEvidenceEvent, SurfaceCheckResult (..))
 import Phil.Surface.Syntax
 import Phil.Systems.GenericLowering
   ( CoreSystemsBlock (..)
@@ -52,6 +52,10 @@ data CheckedSourceCoreCorrespondence = CheckedSourceCoreCorrespondence
   , sourceCoreProgramSemantics :: SemanticForm
   , sourceCoreSourceInventories :: Map Text SourceCoreInventory
   , sourceCoreCoreInventories :: Map Text SourceCoreInventory
+  -- | Exact checked source-event observations keyed to the *verified*
+  -- source/Core function domain. No CoreSystemsOperation is asserted to
+  -- perform each static checker use; this is not an event-lowering theorem.
+  , sourceCoreSourceEvidenceByFunction :: Map Text [SourceEvidenceEvent]
   }
   deriving (Eq, Show)
 
@@ -94,6 +98,8 @@ verifySourceCoreCorrespondence architecture program = do
     , sourceCoreProgramSemantics = coreSystemsProgramSemanticForm program
     , sourceCoreSourceInventories = sourceInventories
     , sourceCoreCoreInventories = coreInventories
+    , sourceCoreSourceEvidenceByFunction =
+        Map.map checkedSourceEvidenceEvents sourceFunctions
     }
   where
     requireEmbeddedFunctionKey (mapKey, function)
