@@ -104,6 +104,7 @@ Theorem
       phase1_surface_variant_payload_variant_spine_tree variant.
 Proof.
   intros [name payload] refined Hnormalize.
+  unfold phase1_surface_normalize_record_field_type_variant_spine in Hnormalize.
   cbn in Hnormalize.
   destruct
     (phase1_surface_normalize_optional_record_field_type_variant_payload payload)
