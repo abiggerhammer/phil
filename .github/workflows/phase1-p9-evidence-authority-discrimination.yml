@@ -1,0 +1,51 @@
+name: Phase 1 P9 Evidence Authority Discrimination
+
+on:
+  pull_request:
+    paths:
+      - 'proof/Phil/Assurance/P9EvidenceAuthorityDiscrimination.v'
+      - 'docs/phase-1/p9-event-assumption-consumer-census-v1.md'
+      - '.github/workflows/phase1-p9-evidence-authority-discrimination.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'proof/Phil/Assurance/P9EvidenceAuthorityDiscrimination.v'
+      - 'docs/phase-1/p9-event-assumption-consumer-census-v1.md'
+      - '.github/workflows/phase1-p9-evidence-authority-discrimination.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  p9-evidence-authority-discrimination:
+    runs-on: ubuntu-latest
+    container:
+      image: rocq/rocq-prover:9.2.0
+      options: --user root
+    steps:
+      - uses: actions/checkout@v4
+      - name: Compile all source proof dependencies, adversarial models and assumption printouts
+        shell: bash
+        run: |
+          set -euo pipefail
+          export PATH="/home/rocq/.opam/${COMPILER}/bin:$PATH"
+          rocq --version
+          rocq c -Q proof/Phil Phil proof/Phil/Surface/BranchEvidenceSupport.v
+          rocq c -Q proof/Phil Phil proof/Phil/Assurance/EvidenceConsumerSubjectTransport.v
+          rocq c -Q proof/Phil Phil proof/Phil/Assurance/EvidenceConsumerEndpointCoverage.v
+          rocq c -Q proof/Phil Phil proof/Phil/Assurance/EvidenceConsumerSelectionCoverage.v
+          rocq c -Q proof/Phil Phil proof/Phil/Assurance/EvidenceConsumerUseClassification.v
+          rocq c -Q proof/Phil Phil proof/Phil/Assurance/EvidenceConsumerFinalUseCorrespondence.v
+          rocq c -Q proof/Phil Phil proof/Phil/Assurance/SystemsErasureConsumerDomainBoundary.v
+          rocq c -Q proof/Phil Phil proof/Phil/Assurance/SystemsAssumptionAuthorityBoundary.v
+          rocq c -Q proof/Phil Phil proof/Phil/Assurance/P9EvidenceAuthorityDiscrimination.v
+          sha256sum \
+            proof/Phil/Assurance/P9EvidenceAuthorityDiscrimination.v \
+            proof/Phil/Assurance/P9EvidenceAuthorityDiscrimination.vo \
+            > p9-evidence-authority-discrimination.sha256
+          cat p9-evidence-authority-discrimination.sha256
+      - uses: actions/upload-artifact@v4
+        with:
+          name: p9-evidence-authority-discrimination
+          path: p9-evidence-authority-discrimination.sha256
+          if-no-files-found: error
