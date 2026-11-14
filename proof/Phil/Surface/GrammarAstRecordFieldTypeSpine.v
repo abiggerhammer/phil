@@ -85,8 +85,18 @@ Proof.
   destruct (phase1_surface_normalize_optional_field_type_list fields)
     as [actual |] eqn:Hfields; try discriminate Hnormalize.
   inversion Hnormalize; subst refined.
-  cbn -[phase1_surface_optional_field_type_list_tree
-         phase1_surface_optional_fields_tree].
+  cbn [phase1_surface_record_field_type_spine_tree
+       phase1_surface_record_fields_spine_tree
+       phase1_record_field_type_spine_name
+       phase1_record_field_type_spine_generic_params
+       phase1_record_field_type_spine_mode
+       phase1_record_field_type_spine_requirements
+       phase1_record_field_type_spine_fields
+       phase1_record_fields_spine_name
+       phase1_record_fields_spine_generic_params
+       phase1_record_fields_spine_mode
+       phase1_record_fields_spine_requirements
+       phase1_record_fields_spine_fields].
   rewrite
     (phase1_surface_normalize_optional_field_type_list_round_trip
       fields actual Hfields).
