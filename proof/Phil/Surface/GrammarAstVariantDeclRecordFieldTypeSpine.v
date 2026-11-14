@@ -109,7 +109,17 @@ Proof.
     (phase1_surface_normalize_optional_record_field_type_variant_payload payload)
     as [actual |] eqn:Hpayload; try discriminate Hnormalize.
   inversion Hnormalize; subst.
-  cbn.
+  change
+    (PTNonterminal "variant_decl"
+      (PTSequence
+        [ phase1_surface_identifier_tree name;
+          phase1_surface_optional_record_field_type_variant_payload_tree actual
+        ]) =
+     PTNonterminal "variant_decl"
+      (PTSequence
+        [ phase1_surface_identifier_tree name;
+          phase1_surface_optional_variant_payload_spine_tree payload
+        ])).
   rewrite
     (phase1_surface_normalize_optional_record_field_type_variant_payload_round_trip
       payload actual Hpayload).

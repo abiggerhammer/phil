@@ -40,65 +40,88 @@ Proof.
       ]
       input rest tree Hderive)
     as [trees [Htree Hitems]].
-  repeat match goal with
-  | Hseq : DerivesSequence phase1_surface_rules _ _ (_ :: _) _ _ _ |- _ =>
-      inversion Hseq; subst; clear Hseq
-  end.
-  match goal with
-  | Hnil : DerivesSequence phase1_surface_rules _ _ [] _ _ _ |- _ =>
-      inversion Hnil; subst; clear Hnil
-  end.
-  match goal with
-  | Hopen : Derives phase1_surface_rules _ (ELiteral "{") _ _ ?open_tree,
-    Hfields : Derives phase1_surface_rules _
+  destruct
+    (derives_sequence_cons_exposes_head_exact
+      phase1_surface_rules path 0
+      (ELiteral "{")
+      [ phase1_surface_optional_fields_expression_for_totality;
+        ELiteral "}" ]
+      input rest trees Hitems)
+    as [after_open [open_tree [tail1_trees
+      [Htrees [Hopen Htail1]]]]].
+  destruct
+    (derives_sequence_cons_exposes_head_exact
+      phase1_surface_rules path 1
       phase1_surface_optional_fields_expression_for_totality
-      _ _ ?fields_tree,
-    Hclose : Derives phase1_surface_rules _ (ELiteral "}") _ _ ?close_tree |- _ =>
-      destruct
-        (literal_derivation_is_exact
-          phase1_surface_rules _ "{" _ _ open_tree Hopen)
-        as [open_tail [_ [_ Hopen_tree]]];
-      destruct
-        (literal_derivation_is_exact
-          phase1_surface_rules _ "}" _ _ close_tree Hclose)
-        as [close_tail [_ [_ Hclose_tree]]];
-      destruct
-        (phase1_surface_normalize_optional_field_type_tree_total_from_derivation
-          _ _ _ fields_tree Hfields)
-        as [base_fields [refined_fields
-            [Hbase_fields [Hrefined_fields Hrefined_fields_tree]]]];
-      let base := constr:(Phase1VariantRecordPayloadSpine base_fields) in
-      let refined := constr:(
-        Phase1RecordFieldTypeVariantRecordPayloadSpine refined_fields) in
-      assert (Hbase :
-        phase1_surface_normalize_record_variant_payload_selected tree =
-          Some base);
-      [ rewrite Htree, Hopen_tree, Hclose_tree;
-        unfold phase1_surface_normalize_record_variant_payload_selected,
-          phase1_surface_expect_sequence,
-          phase1_surface_exact3,
-          phase1_surface_expect_literal;
-        cbn;
-        rewrite Hbase_fields;
-        reflexivity
-      | assert (Hrefined :
-          phase1_surface_normalize_record_field_type_variant_payload_spine
-            base = Some refined);
-        [ cbn;
-          rewrite Hrefined_fields;
-          reflexivity
-        | exists base, refined;
-          split;
-          [ exact Hbase
-          | split;
-            [ exact Hrefined
-            | cbn;
-              rewrite Htree, Hopen_tree, Hclose_tree;
-              exact (f_equal
-                (fun fields =>
-                  PTSequence [PTLiteral "{"; fields; PTLiteral "}"])
-                Hrefined_fields_tree) ] ] ] ]
-  end.
+      [ELiteral "}"]
+      after_open rest tail1_trees Htail1)
+    as [after_fields [fields_tree [tail2_trees
+      [Htail1_trees [Hfields Htail2]]]]].
+  destruct
+    (derives_sequence_cons_exposes_head_exact
+      phase1_surface_rules path 2
+      (ELiteral "}") []
+      after_fields rest tail2_trees Htail2)
+    as [after_close [close_tree [nil_trees
+      [Htail2_trees [Hclose Hnil]]]]].
+  rewrite Htrees, Htail1_trees, Htail2_trees in Htree.
+  inversion Hnil; subst nil_trees.
+  destruct
+    (literal_derivation_is_exact
+      phase1_surface_rules _ "{" _ _ open_tree Hopen)
+    as [open_tail [_ [_ Hopen_tree]]].
+  destruct
+    (literal_derivation_is_exact
+      phase1_surface_rules _ "}" _ _ close_tree Hclose)
+    as [close_tail [_ [_ Hclose_tree]]].
+  destruct
+    (phase1_surface_normalize_optional_field_type_tree_total_from_derivation
+      _ _ _ fields_tree Hfields)
+    as [base_fields [refined_fields
+      [Hbase_fields [Hrefined_fields Hrefined_fields_tree]]]].
+  pose (base := Phase1VariantRecordPayloadSpine base_fields).
+  pose (refined :=
+    Phase1RecordFieldTypeVariantRecordPayloadSpine refined_fields).
+  assert (Hbase :
+    phase1_surface_normalize_record_variant_payload_selected tree =
+      Some base).
+  {
+    rewrite Htree, Hopen_tree, Hclose_tree.
+    unfold phase1_surface_normalize_record_variant_payload_selected,
+      phase1_surface_expect_sequence,
+      phase1_surface_exact3,
+      phase1_surface_expect_literal.
+    cbn.
+    rewrite Hbase_fields.
+    reflexivity.
+  }
+  assert (Hrefined :
+    phase1_surface_normalize_record_field_type_variant_payload_spine
+      base = Some refined).
+  {
+    unfold base, refined.
+    cbn.
+    rewrite Hrefined_fields.
+    reflexivity.
+  }
+  exists base, refined.
+  split.
+  - exact Hbase.
+  - split.
+    + exact Hrefined.
+    + unfold refined.
+      rewrite Htree, Hopen_tree, Hclose_tree.
+      change
+        (PTSequence
+          [ PTLiteral "{";
+            phase1_surface_optional_field_type_list_tree refined_fields;
+            PTLiteral "}" ]) =
+        (PTSequence
+          [ PTLiteral "{";
+            fields_tree;
+            PTLiteral "}" ]).
+      rewrite Hrefined_fields_tree.
+      reflexivity.
 Qed.
 
 Lemma
