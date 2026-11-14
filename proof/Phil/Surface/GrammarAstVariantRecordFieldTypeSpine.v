@@ -83,11 +83,21 @@ Proof.
     pose proof
       (phase1_surface_normalize_optional_field_type_list_round_trip
         fields actual Hfields) as Htree.
-    destruct fields as [source_fields |];
-    destruct actual as [refined_fields |];
-    cbn in Htree.
-    cbn.
-    congruence.
+    change
+      (PTNonterminal "variant_payload"
+        (PTAlternative 0
+          (PTSequence
+            [ PTLiteral "{";
+              phase1_surface_optional_field_type_list_tree actual;
+              PTLiteral "}" ])) =
+       PTNonterminal "variant_payload"
+        (PTAlternative 0
+          (PTSequence
+            [ PTLiteral "{";
+              phase1_surface_optional_fields_tree fields;
+              PTLiteral "}" ]))).
+    rewrite Htree.
+    reflexivity.
   - inversion Hnormalize; subst refined.
     reflexivity.
 Qed.

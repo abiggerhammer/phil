@@ -88,11 +88,29 @@ Proof.
   pose proof
     (phase1_surface_normalize_optional_field_type_list_round_trip
       fields actual Hfields) as Htree.
-  destruct fields as [source_fields |];
-  destruct actual as [refined_fields |];
-  cbn in Htree.
-  cbn.
-  congruence.
+  change
+    (PTNonterminal "record_decl"
+      (PTSequence
+        [ PTLiteral "record";
+          phase1_surface_identifier_tree name;
+          phase1_surface_optional_generic_params_tree generic_params;
+          phase1_surface_optional_mode_tree mode;
+          phase1_surface_optional_generic_requirements_tree requirements;
+          PTLiteral "{";
+          phase1_surface_optional_field_type_list_tree actual;
+          PTLiteral "}" ]) =
+     PTNonterminal "record_decl"
+      (PTSequence
+        [ PTLiteral "record";
+          phase1_surface_identifier_tree name;
+          phase1_surface_optional_generic_params_tree generic_params;
+          phase1_surface_optional_mode_tree mode;
+          phase1_surface_optional_generic_requirements_tree requirements;
+          PTLiteral "{";
+          phase1_surface_optional_fields_tree fields;
+          PTLiteral "}" ])).
+  rewrite Htree.
+  reflexivity.
 Qed.
 
 Definition phase1_surface_normalize_record_field_type_tree
