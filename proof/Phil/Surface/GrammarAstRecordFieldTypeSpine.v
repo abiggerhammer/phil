@@ -85,7 +85,8 @@ Proof.
   destruct (phase1_surface_normalize_optional_field_type_list fields)
     as [actual |] eqn:Hfields; try discriminate Hnormalize.
   inversion Hnormalize; subst refined.
-  cbn.
+  cbn -[phase1_surface_optional_field_type_list_tree
+         phase1_surface_optional_fields_tree].
   rewrite
     (phase1_surface_normalize_optional_field_type_list_round_trip
       fields actual Hfields).
