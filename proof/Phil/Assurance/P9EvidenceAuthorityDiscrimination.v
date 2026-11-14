@@ -82,47 +82,103 @@ Proof.
   discriminate.
 Qed.
 
-Ltac p9_refute_bad_authority :=
-  intro;
-  match goal with
-  | H : ImportedAssumptionAuthorityPreserved _ |- _ =>
-    destruct (H 1 eq_refl) as [authority [scope Hrequired]]
-  end;
-  repeat match goal with
-  | H : _ /\ _ |- _ => destruct H
-  end;
-  cbn in *;
-  congruence.
+(*
+  Unpack an actual required key at the imported authority boundary.
+  This proves each immutable-record obligation is necessary, rather than
+  hoping generic congruence discovers the stage key / authority key links.
+*)
+Theorem p9_import_requires_every_authority_field :
+  forall digestOK subjectOK boundaryOK selectedOK permittedOK currentOK,
+    ImportedAssumptionAuthorityPreserved
+      (p9AssumptionVariant
+        digestOK subjectOK boundaryOK selectedOK permittedOK currentOK) ->
+    digestOK = true /\
+    subjectOK = true /\
+    boundaryOK = true /\
+    selectedOK = true /\
+    permittedOK = true /\
+    currentOK = true.
+Proof.
+  intros digestOK subjectOK boundaryOK selectedOK permittedOK currentOK
+    Hauthority.
+  pose proof (Hauthority 1 eq_refl) as Hrequired.
+  destruct Hrequired as
+    [authority [scope
+      [Hmap [Hscope [Hpresent [Hlocal [Hdigest [Hsubject
+      [HauthorityScope [Hboundary
+      [Hselected [Hpermitted Hcurrent]]]]]]]]]]]].
+  cbn in Hmap, Hscope.
+  inversion Hmap; subst authority.
+  inversion Hscope; subst scope.
+  cbn in Hdigest, Hsubject, Hboundary, Hselected, Hpermitted, Hcurrent.
+  repeat split.
+  - destruct digestOK; [reflexivity | discriminate Hdigest].
+  - destruct subjectOK; [reflexivity | discriminate Hsubject].
+  - destruct boundaryOK; [reflexivity | discriminate Hboundary].
+  - destruct selectedOK; [reflexivity | discriminate Hselected].
+  - destruct permittedOK; [reflexivity | discriminate Hpermitted].
+  - destruct currentOK; [reflexivity | discriminate Hcurrent].
+Qed.
 
 Theorem p9_bad_digest_cannot_be_imported :
   ~ ImportedAssumptionAuthorityPreserved
       (p9AssumptionVariant false true true true true true).
-Proof. p9_refute_bad_authority. Qed.
+Proof.
+  intro H.
+  pose proof (p9_import_requires_every_authority_field
+    false true true true true true H) as [Hd _].
+  discriminate Hd.
+Qed.
 
 Theorem p9_bad_subject_cannot_be_imported :
   ~ ImportedAssumptionAuthorityPreserved
       (p9AssumptionVariant true false true true true true).
-Proof. p9_refute_bad_authority. Qed.
+Proof.
+  intro H.
+  pose proof (p9_import_requires_every_authority_field
+    true false true true true true H) as [_ [Hs _]].
+  discriminate Hs.
+Qed.
 
 Theorem p9_bad_boundary_cannot_be_imported :
   ~ ImportedAssumptionAuthorityPreserved
       (p9AssumptionVariant true true false true true true).
-Proof. p9_refute_bad_authority. Qed.
+Proof.
+  intro H.
+  pose proof (p9_import_requires_every_authority_field
+    true true false true true true H) as [_ [_ [Hb _]]].
+  discriminate Hb.
+Qed.
 
 Theorem p9_unselected_authority_cannot_be_imported :
   ~ ImportedAssumptionAuthorityPreserved
       (p9AssumptionVariant true true true false true true).
-Proof. p9_refute_bad_authority. Qed.
+Proof.
+  intro H.
+  pose proof (p9_import_requires_every_authority_field
+    true true true false true true H) as [_ [_ [_ [Hs _]]]].
+  discriminate Hs.
+Qed.
 
 Theorem p9_unpermitted_authority_cannot_be_imported :
   ~ ImportedAssumptionAuthorityPreserved
       (p9AssumptionVariant true true true true false true).
-Proof. p9_refute_bad_authority. Qed.
+Proof.
+  intro H.
+  pose proof (p9_import_requires_every_authority_field
+    true true true true false true H) as [_ [_ [_ [_ [Hp _]]]]].
+  discriminate Hp.
+Qed.
 
 Theorem p9_expired_authority_cannot_be_imported :
   ~ ImportedAssumptionAuthorityPreserved
       (p9AssumptionVariant true true true true true false).
-Proof. p9_refute_bad_authority. Qed.
+Proof.
+  intro H.
+  pose proof (p9_import_requires_every_authority_field
+    true true true true true false H) as [_ [_ [_ [_ [_ Hc]]]]].
+  discriminate Hc.
+Qed.
 
 (* A local-consumer registry may refer to a key that has no selected
    immutable authority record.  Naming it in the required set is not
