@@ -109,14 +109,13 @@ Proof.
     (phase1_surface_normalize_optional_record_field_type_variant_payload payload)
     as [actual |] eqn:Hpayload; try discriminate Hnormalize.
   inversion Hnormalize; subst.
-  unfold phase1_surface_record_field_type_variant_spine_tree,
-    phase1_surface_variant_payload_variant_spine_tree.
-  cbn [phase1_record_field_type_variant_spine_name
-       phase1_record_field_type_variant_spine_payload
-       phase1_variant_payload_variant_spine_name
-       phase1_variant_payload_variant_spine_payload].
-  rewrite
+  pose proof
     (phase1_surface_normalize_optional_record_field_type_variant_payload_round_trip
-      payload actual Hpayload).
-  reflexivity.
+      payload actual Hpayload) as Htree.
+  exact
+    (f_equal
+      (fun p : ParseTree =>
+        PTNonterminal "variant_decl"
+          (PTSequence [phase1_surface_identifier_tree name; p]))
+      Htree).
 Qed.
