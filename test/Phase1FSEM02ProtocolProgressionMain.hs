@@ -43,6 +43,8 @@ main = do
         (sourcePingJointPredecessorResourceGates accepted stale)
     , test "FSEM-02 parsed Ping missing process context precedes peer predecessor faults"
         (sourcePingJointMissingContextPrecedence accepted stale)
+    , test "FSEM-02 Ping joint leaves a third activated process and its active loan untouched"
+        (sourcePingJointThreeProcessFrame accepted stale)
     , test "FSEM-02 Ping joint validation orders nominal, projection and resource faults across peers"
         (sourcePingJointGatePriority accepted stale)
     , test "FSEM-02 source Ping joint nominal instance/role fail-closed peer"
@@ -899,6 +901,140 @@ sourcePingJointNetwork = do
   let revision = identityInstanceRevision (processNetworkRoot network)
   pure (network, deriveProcessKey revision (processSiteKey clientSite),
         deriveProcessKey revision (processSiteKey serverSite))
+
+
+-- A third independently activated process does not participate in the
+-- source-derived binary Ping rendezvous. Its admitted process-local resource
+-- context and active affine loan must survive both success and peer rejection.
+-- This does NOT infer a third source component or activation resource authority.
+sourcePingJointThreeProcessNetwork
+  :: Either String (ProcessNetwork, ProcessKey, ProcessKey, ProcessKey)
+sourcePingJointThreeProcessNetwork = do
+  let root = InstanceKey "fsem02.ping.three.root"
+      clientSlot = OccurrenceSlotKey "client"
+      serverSlot = OccurrenceSlotKey "server"
+      thirdSlot = OccurrenceSlotKey "uninvolved"
+      leaf name = ArchitectureNodeSpec
+        { architectureNodeDeclaration = sourcePingJointDeclaration name
+        , architectureNodeStaticBindings = Map.empty
+        , architectureNodeRequirements = []
+        , architectureNodeChildren = []
+        , architectureNodeReferences = []
+        }
+      spec = ArchitectureNodeSpec
+        { architectureNodeDeclaration = sourcePingJointDeclaration "three.root"
+        , architectureNodeStaticBindings = Map.empty
+        , architectureNodeRequirements = []
+        , architectureNodeChildren =
+            [ ArchitectureChildSpec clientSlot (leaf "ClientWorker")
+            , ArchitectureChildSpec serverSlot (leaf "ServerWorker")
+            , ArchitectureChildSpec thirdSlot (leaf "ExternalUninvolvedWorker") ]
+        , architectureNodeReferences = []
+        }
+      clientSite = ProcessDeclarationSite
+        (ProcessSiteKey "fsem02.ping.three.client") (scopedInstanceKey root clientSlot)
+      serverSite = ProcessDeclarationSite
+        (ProcessSiteKey "fsem02.ping.three.server") (scopedInstanceKey root serverSlot)
+      thirdSite = ProcessDeclarationSite
+        (ProcessSiteKey "fsem02.ping.three.uninvolved") (scopedInstanceKey root thirdSlot)
+  graph <- mapLeft show $ instantiateArchitecture root spec
+  network0 <- mapLeft show $ elaborateProcessNetwork graph
+    [clientSite, serverSite, thirdSite]
+  network <- mapLeft show $ activateRootProcesses network0
+  let revision = identityInstanceRevision (processNetworkRoot network)
+      process site = deriveProcessKey revision (processSiteKey site)
+  pure (network, process clientSite, process serverSite, process thirdSite)
+
+sourcePingJointThreeProcessFrame :: Text.Text -> Text.Text -> Either String ()
+sourcePingJointThreeProcessFrame source stale = do
+  plans <- sourcePlans source
+  -- Both source witnesses are real parser/checker input; the third process
+  -- and its resource state are explicitly independent external premises.
+  sourceStaleCloseRejected stale
+  (network, clientProcess, serverProcess, thirdProcess) <-
+    sourcePingJointThreeProcessNetwork
+  let revision = sourceProtocolInstance plans
+      client = sourceClientPlan plans
+      server = sourceServerPlan plans
+      clientOld = grammarV1ResolvedBinderCoreName (checkedComponentSendEndpoint client)
+      clientNext = grammarV1ResolvedBinderCoreName (checkedComponentSendSuccessor client)
+      serverOld = grammarV1ResolvedBinderCoreName (checkedComponentReceiveEndpoint server)
+      serverNext = grammarV1ResolvedBinderCoreName (checkedComponentReceiveSuccessor server)
+      spectator = Name "fsem02.three.uninvolved.affine"
+      clientSide = ProcessRendezvousSide
+        clientProcess clientOld clientNext revision clientRole
+      serverSide = ProcessRendezvousSide
+        serverProcess serverOld serverNext revision serverRole
+      request = JointProcessRendezvous (SendReceiveRendezvous clientSide serverSide)
+      runJoint = checkProcessCommunication (sourceBinaryInstance plans) network
+  assert (clientProcess /= serverProcess && clientProcess /= thirdProcess
+          && serverProcess /= thirdProcess)
+    "three activated process identities unexpectedly alias"
+  assert (sourceServerHead plans == dualSession (sourceClientHead plans))
+    "three-process frame fixture lost source Ping duality"
+  clientBefore <- mapLeft show $ insertProtocolEndpoint
+    clientOld revision clientRole (sourceClientHead plans) emptyProtocolContext
+  serverBefore <- mapLeft show $ insertProtocolEndpoint
+    serverOld revision serverRole (sourceServerHead plans) emptyProtocolContext
+  thirdResource <- mapLeft show $ insertBinding
+    Affine spectator (TyUInt 8) (protocolResources emptyProtocolContext)
+  thirdLoan <- mapLeft show $ startSharedLoan spectator thirdResource
+  let thirdBefore = emptyProtocolContext { protocolResources = thirdLoan }
+      before = Map.fromList
+        [(clientProcess, clientBefore), (serverProcess, serverBefore),
+         (thirdProcess, thirdBefore)]
+      checkUninvolved label contexts =
+        assert (Map.lookup thirdProcess contexts == Just thirdBefore
+                && Map.keysSet contexts == Map.keysSet before)
+          (label <> " lost exact uninvolved process/loan/context population")
+  checkUninvolved "before" before
+  -- An admitted pair progresses while the unrelated third activated process
+  -- is preserved byte-for-byte, not just its affine owner projection.
+  after <- mapLeft show $ runJoint before request
+  checkUninvolved "after valid Ping" after
+  clientAfter <- maybe (Left "missing three-process client") Right
+    (Map.lookup clientProcess after)
+  serverAfter <- maybe (Left "missing three-process server") Right
+    (Map.lookup serverProcess after)
+  assert
+    (Map.notMember clientOld (protocolEndpoints clientAfter)
+     && Map.notMember serverOld (protocolEndpoints serverAfter)
+     && Map.notMember clientOld (linearBindings (protocolResources clientAfter))
+     && Map.notMember serverOld (linearBindings (protocolResources serverAfter))
+     && Map.lookup clientNext (protocolEndpoints clientAfter)
+          == Just (ProtocolEndpointBinding clientNext revision clientRole (End done))
+     && Map.lookup serverNext (protocolEndpoints serverAfter)
+          == Just (ProtocolEndpointBinding serverNext revision serverRole (End done)))
+    "third-process frame success did not consume both source predecessors and type successors"
+  -- Both malformed pre-states must refuse without producing ANY successful
+  -- process map. Fixing only one independent peer restores the original
+  -- admitted transition; no rollback or hidden repair is modeled.
+  badClient <- mapLeft show $ insertProtocolEndpoint
+    clientOld revision clientRole (End done) emptyProtocolContext
+  badServer <- mapLeft show $ insertProtocolEndpoint
+    serverOld revision serverRole (End done) emptyProtocolContext
+  let malformedClient = Map.insert clientProcess badClient before
+      malformedServer = Map.insert serverProcess badServer before
+      checkRefusal label process expected contexts =
+        case runJoint contexts request of
+          Left (RendezvousProjectionSessionMismatch actual wanted observed) ->
+            assert (actual == process && wanted == expected && observed == End done)
+              (label <> " wrong process/head rejection")
+          other -> Left (label <> " did not refuse with exact head error: " <> show other)
+  checkUninvolved "bad client trial input" malformedClient
+  checkUninvolved "bad server trial input" malformedServer
+  checkRefusal "client invalid head" clientProcess (sourceClientHead plans)
+    malformedClient
+  checkRefusal "server invalid head" serverProcess (sourceServerHead plans)
+    malformedServer
+  assert (runJoint before request == Right after)
+    "independently restored three-process input did not replay the exact successor"
+  case runJoint after request of
+    Left (RendezvousEndpointNotOwnedByProcess process staleName) ->
+      assert (process == clientProcess && staleName == clientOld)
+        "three-process stale predecessor refusal lost exact client process/name"
+    other -> Left ("three-process stale rendezvous advanced: " <> show other)
+  checkUninvolved "post-success stale refusal input" after
 
 sourcePingJointDeclaration :: Text.Text -> DeclarationIdentity
 sourcePingJointDeclaration name = deriveDeclarationIdentity DeclarationDescriptor
