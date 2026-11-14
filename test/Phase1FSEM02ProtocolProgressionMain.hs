@@ -43,6 +43,8 @@ main = do
         (sourcePingJointPredecessorResourceGates accepted stale)
     , test "FSEM-02 parsed Ping missing process context precedes peer predecessor faults"
         (sourcePingJointMissingContextPrecedence accepted stale)
+    , test "FSEM-02 Ping joint validation orders nominal, projection and resource faults across peers"
+        (sourcePingJointGatePriority accepted stale)
     , test "FSEM-02 source Ping joint nominal instance/role fail-closed peer"
         (sourcePingJointNominalRefusal accepted)
     , test "FSEM-02 source Ping joint terminal Close orders agree and reject stale replay"
@@ -736,6 +738,135 @@ sourcePingJointMissingContextPrecedence accepted rejected = do
     "failed context/resource trials changed the original checked state"
   expectError "post-success stale predecessor"
     (RendezvousEndpointNotOwnedByProcess clientProcess clientOld) after
+
+
+-- A new nonterminal diagnostic boundary: both endpoint nominal/projection
+-- gates are checked before either process consumes linear predecessor state.
+-- This is observable production checker order, not source-granted authority.
+sourcePingJointGatePriority :: Text.Text -> Text.Text -> Either String ()
+sourcePingJointGatePriority accepted rejected = do
+  sourceStaleCloseRejected rejected
+  plans <- sourcePlans accepted
+  (network, clientProcess, serverProcess) <- sourcePingJointNetwork
+  let revision = sourceProtocolInstance plans
+      client = sourceClientPlan plans
+      server = sourceServerPlan plans
+      clientOld = grammarV1ResolvedBinderCoreName (checkedComponentSendEndpoint client)
+      clientNext = grammarV1ResolvedBinderCoreName (checkedComponentSendSuccessor client)
+      serverOld = grammarV1ResolvedBinderCoreName (checkedComponentReceiveEndpoint server)
+      serverNext = grammarV1ResolvedBinderCoreName (checkedComponentReceiveSuccessor server)
+      spectator = Name "fsem02.ping.gate.priority.borrowed"
+      foreignRevision = ProtocolInstanceRevision "fsem02.ping.gate.foreign"
+      clientSide = ProcessRendezvousSide clientProcess clientOld clientNext revision clientRole
+      serverSide = ProcessRendezvousSide serverProcess serverOld serverNext revision serverRole
+      attempt left right = JointProcessRendezvous (SendReceiveRendezvous left right)
+      normal = attempt clientSide serverSide
+      run contexts request =
+        checkProcessCommunication (sourceBinaryInstance plans) network contexts request
+      corruptResource old context =
+        let resources = protocolResources context
+        in context { protocolResources = resources
+          { linearBindings = Map.insert old (TyUInt 8) (linearBindings resources) } }
+      corruptHead old context =
+        context { protocolEndpoints = Map.adjust
+          (\binding -> binding { protocolEndpointSession = End done })
+          old (protocolEndpoints context) }
+      expect label expected contexts request =
+        case run contexts request of
+          Left actual -> assert (actual == expected)
+            (label <> ": unexpected exact diagnostic: " <> show actual)
+          Right _ -> Left (label <> ": invalid two-party source Ping advanced")
+  assert
+    (foreignRevision /= revision && sourceServerHead plans == dualSession (sourceClientHead plans)
+      && sourceClientHead plans /= End done && sourceServerHead plans /= End done)
+    "Ping gate-priority test nominal and nonterminal session premises alias"
+  clientContext <- mapLeft show $
+    insertProtocolEndpoint clientOld revision clientRole
+      (sourceClientHead plans) emptyProtocolContext
+  rawServer <- mapLeft show $
+    insertProtocolEndpoint serverOld revision serverRole
+      (sourceServerHead plans) emptyProtocolContext
+  framed <- mapLeft show $
+    insertBinding Affine spectator (TyUInt 8) (protocolResources rawServer)
+  loaned <- mapLeft show $ startSharedLoan spectator framed
+  let serverContext = rawServer { protocolResources = loaned }
+      before = Map.fromList [(clientProcess, clientContext),
+                             (serverProcess, serverContext)]
+      badClient = corruptResource clientOld (corruptHead clientOld clientContext)
+      badServer = corruptResource serverOld (corruptHead serverOld serverContext)
+      nominalFailure process = RendezvousProtocolInstanceMismatch
+        process revision foreignRevision
+      headFailure process headSession = RendezvousProjectionSessionMismatch
+        process headSession (End done)
+      resourceFailure process old = RendezvousProtocolError process
+        (ProtocolEndpointResourceTypeMismatch old (TyUInt 8))
+      bothBadResources = Map.insert clientProcess
+        (corruptResource clientOld clientContext)
+        (Map.insert serverProcess (corruptResource serverOld serverContext) before)
+  -- Requested nominal identity wins even over locally incorrect projection
+  -- and incorrect linear resource on that same process.
+  expect "Client foreign instance ahead of local head/resource"
+    (nominalFailure clientProcess)
+    (Map.insert clientProcess badClient before)
+    (attempt (clientSide { rendezvousInstance = foreignRevision }) serverSide)
+  expect "Server foreign instance ahead of local head/resource"
+    (nominalFailure serverProcess)
+    (Map.insert serverProcess badServer before)
+    (attempt clientSide (serverSide { rendezvousInstance = foreignRevision }))
+  -- Once nominal identity is restored, the projected Send/Receive head wins
+  -- before resource lookup; restoring the exact head exposes the bad type.
+  expect "Client projection before local linear resource"
+    (headFailure clientProcess (sourceClientHead plans))
+    (Map.insert clientProcess badClient before) normal
+  expect "Server projection before local linear resource"
+    (headFailure serverProcess (sourceServerHead plans))
+    (Map.insert serverProcess badServer before) normal
+  expect "Client restored head exposes bad linear resource"
+    (resourceFailure clientProcess clientOld)
+    (Map.insert clientProcess (corruptResource clientOld clientContext) before)
+    normal
+  expect "Server restored head exposes bad linear resource"
+    (resourceFailure serverProcess serverOld)
+    (Map.insert serverProcess (corruptResource serverOld serverContext) before)
+    normal
+  -- A fault in the later peer's nominal metadata is diagnosed BEFORE the
+  -- earlier peer's linear-resource error: two-side validation is atomic.
+  expect "Server nominal fault precedes Client resource fault"
+    (nominalFailure serverProcess) bothBadResources
+    (attempt clientSide (serverSide { rendezvousInstance = foreignRevision }))
+  expect "after Server nominal repair, Client resource fault is first"
+    (resourceFailure clientProcess clientOld) bothBadResources normal
+  expect "after Client resource repair, Server resource fault remains"
+    (resourceFailure serverProcess serverOld)
+    (Map.insert serverProcess (corruptResource serverOld serverContext) before)
+    normal
+  after <- mapLeft show $ run before normal
+  clientAfter <- maybe (Left "Ping priority success omitted Client") Right
+    (Map.lookup clientProcess after)
+  serverAfter <- maybe (Left "Ping priority success omitted Server") Right
+    (Map.lookup serverProcess after)
+  assert
+    (Map.notMember clientOld (protocolEndpoints clientAfter)
+      && Map.notMember serverOld (protocolEndpoints serverAfter)
+      && Map.lookup clientNext (protocolEndpoints clientAfter)
+        == Just (ProtocolEndpointBinding clientNext revision clientRole (End done))
+      && Map.lookup serverNext (protocolEndpoints serverAfter)
+        == Just (ProtocolEndpointBinding serverNext revision serverRole (End done))
+      && Map.notMember clientOld (linearBindings (protocolResources clientAfter))
+      && Map.notMember serverOld (linearBindings (protocolResources serverAfter))
+      && Map.lookup clientNext (linearBindings (protocolResources clientAfter))
+        == Just (TyEndpoint (End done))
+      && Map.lookup serverNext (linearBindings (protocolResources serverAfter))
+        == Just (TyEndpoint (End done))
+      && affineBindings (protocolResources serverAfter) == affineBindings loaned
+      && sharedLoans (protocolResources serverAfter) == sharedLoans loaned)
+    "restored joint Ping lost predecessor retirement, typed successors or borrowed frame"
+  expect "post-success predecessor cannot replay"
+    (RendezvousEndpointNotOwnedByProcess clientProcess clientOld) after normal
+  assert (Map.lookup clientProcess before == Just clientContext
+          && Map.lookup serverProcess before == Just serverContext
+          && run before normal == Right after)
+    "diagnostic probes changed original source-derived communication state"
 
 sourcePingJointNetwork :: Either String (ProcessNetwork, ProcessKey, ProcessKey)
 sourcePingJointNetwork = do
