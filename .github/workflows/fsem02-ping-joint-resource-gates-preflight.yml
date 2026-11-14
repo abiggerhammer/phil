@@ -1,0 +1,84 @@
+name: FSEM-02 Ping Joint Predecessor Resource Agreement Early Preflight
+
+on:
+  push:
+    branches:
+      - formal-semantics/fsem02-ping-joint-predecessor-resource-gates
+    paths:
+      - 'test/Phase1FSEM02ProtocolProgressionMain.hs'
+      - 'proof/Phil/Core/FSEM02PingJointAtomicity.v'
+      - 'docs/phase-1/formal-semantics-source-ping-joint-resource-gates-fsem02-v1.md'
+      - 'docs/phase-1/typing-and-semantics-reader-guide-v1.md'
+      - '.github/workflows/fsem02-ping-joint-resource-gates-preflight.yml'
+  pull_request:
+    paths:
+      - 'test/Phase1FSEM02ProtocolProgressionMain.hs'
+      - 'proof/Phil/Core/FSEM02PingJointAtomicity.v'
+      - 'docs/phase-1/formal-semantics-source-ping-joint-resource-gates-fsem02-v1.md'
+      - 'docs/phase-1/typing-and-semantics-reader-guide-v1.md'
+      - '.github/workflows/fsem02-ping-joint-resource-gates-preflight.yml'
+
+concurrency:
+  group: fsem02-ping-joint-resource-gates-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  strict-haskell-source-ping-joint:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: haskell-actions/setup@v2
+        with:
+          ghc-version: '9.6.7'
+          cabal-version: 'latest'
+          cabal-update: false
+      - run: bash scripts/ci/cabal-update-retry.sh
+      - run: cabal build lib:phil-core --ghc-options=-Werror
+      - name: Parsed-source Ping joint malformed predecessor resource refusal and retry
+        run: |
+          set -euo pipefail
+          cabal exec -- ghc -isrc -Wall -Werror -fno-code test/Phase1FSEM02ProtocolProgressionMain.hs
+          cabal exec -- runghc -isrc -Wall -Werror test/Phase1FSEM02ProtocolProgressionMain.hs
+          sha256sum test/Phase1FSEM02ProtocolProgressionMain.hs test/fixtures/fsem02-protocol-progression-v1/accepted.phil test/fixtures/fsem02-protocol-progression-v1/stale-close.phil
+
+  rocq:
+    runs-on: ubuntu-24.04
+    container:
+      image: rocq/rocq-prover:9.2.0
+      options: --user root
+    steps:
+      - uses: actions/checkout@v4
+      - name: Conditional paired Ping predecessor admission and refusal proofs
+        shell: bash
+        run: |
+          set -euo pipefail
+          export PATH="/home/rocq/.opam/${COMPILER}/bin:$PATH"
+          for file in \
+            proof/Phil/Core/Syntax.v \
+            proof/Phil/Core/Context.v \
+            proof/Phil/Core/ContextJoin.v \
+            proof/Phil/Core/ProcessJoin.v \
+            proof/Phil/Core/ProcessTerminal.v \
+            proof/Phil/Core/ArchitectureIdentity.v \
+            proof/Phil/Core/ArchitectureInstantiation.v \
+            proof/Phil/Core/ProviderReplacementQualification.v \
+            proof/Phil/Core/ArchitectureRealization.v \
+            proof/Phil/Systems/FactDisposition.v \
+            proof/Phil/Assurance/ValidityScope.v \
+            proof/Phil/Core/SystemsStageClosure.v \
+            proof/Phil/Core/SystemsGenericLowering.v \
+            proof/Phil/Core/ConcurrencySemantics.v \
+            proof/Phil/Core/SessionStep.v \
+            proof/Phil/Core/FSEM02ProtocolHeadProgression.v \
+            proof/Phil/Core/FSEM02BranchOutcomeSeparation.v \
+            proof/Phil/Core/FSEM02OfferSuccessorFreshness.v \
+            proof/Phil/Core/FSEM02PingSuccessorFreshness.v \
+            proof/Phil/Core/FSEM02PingJointAtomicity.v
+          do
+            rocq c -Q proof/Phil Phil "$file"
+          done
+          if grep -nE '^[[:space:]]*(Admitted[.]|Axiom[[:space:]]|Parameter[[:space:]])' proof/Phil/Core/FSEM02PingJointAtomicity.v; then exit 1; fi
+          sha256sum proof/Phil/Core/FSEM02PingJointAtomicity.v proof/Phil/Core/FSEM02PingJointAtomicity.vo
