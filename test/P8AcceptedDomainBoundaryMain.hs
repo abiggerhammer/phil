@@ -7,7 +7,6 @@ module Main (main) where
 import Control.Monad (unless)
 import qualified Data.Map.Strict as Map
 import qualified Data.Set as Set
-import Data.Text (Text)
 import qualified Data.Text as Text
 import Phil.Assurance.Types (Digest (..))
 import Phil.Core.Generic
