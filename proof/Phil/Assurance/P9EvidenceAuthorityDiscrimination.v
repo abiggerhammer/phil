@@ -83,9 +83,11 @@ Proof.
 Qed.
 
 Ltac p9_refute_bad_authority :=
-  intro Hauthority;
-  pose proof (Hauthority 1 eq_refl) as Hrequired;
-  destruct Hrequired as [authority [scope Hrequired]];
+  intro;
+  match goal with
+  | H : ImportedAssumptionAuthorityPreserved _ |- _ =>
+    destruct (H 1 eq_refl) as [authority [scope Hrequired]]
+  end;
   repeat match goal with
   | H : _ /\ _ |- _ => destruct H
   end;
