@@ -41,6 +41,8 @@ main = do
         (sourcePingJointSuccessorAtomicity accepted)
     , test "FSEM-02 parsed Ping joint predecessor resource agreement refuses either peer before continuation"
         (sourcePingJointPredecessorResourceGates accepted stale)
+    , test "FSEM-02 parsed Ping missing process context precedes peer predecessor faults"
+        (sourcePingJointMissingContextPrecedence accepted stale)
     , test "FSEM-02 source Ping joint nominal instance/role fail-closed peer"
         (sourcePingJointNominalRefusal accepted)
     , test "FSEM-02 source Ping joint terminal Close orders agree and reject stale replay"
@@ -638,6 +640,102 @@ sourcePingJointPredecessorResourceGates accepted rejected = do
       assert (process == clientProcess && old == clientOld)
         "replayed joint Ping did not reject its exact consumed predecessor"
     other -> Left ("stale joint Ping predecessor was reused after repair: " <> show other)
+
+
+-- Missing process-local context precedes a malformed peer resource in the
+-- actual production joint Send/Receive checker. These faults are external
+-- test inputs, not source-granted resource edits or a synthetic rollback.
+sourcePingJointMissingContextPrecedence :: Text.Text -> Text.Text -> Either String ()
+sourcePingJointMissingContextPrecedence accepted rejected = do
+  sourceStaleCloseRejected rejected
+  plans <- sourcePlans accepted
+  (network, clientProcess, serverProcess) <- sourcePingJointNetwork
+  let revision = sourceProtocolInstance plans
+      client = sourceClientPlan plans
+      server = sourceServerPlan plans
+      clientOld = grammarV1ResolvedBinderCoreName (checkedComponentSendEndpoint client)
+      clientNext = grammarV1ResolvedBinderCoreName (checkedComponentSendSuccessor client)
+      serverOld = grammarV1ResolvedBinderCoreName (checkedComponentReceiveEndpoint server)
+      serverNext = grammarV1ResolvedBinderCoreName (checkedComponentReceiveSuccessor server)
+      spectator = Name "fsem02.ping.context.gate.spectator"
+      clientSide = ProcessRendezvousSide clientProcess clientOld clientNext revision clientRole
+      serverSide = ProcessRendezvousSide serverProcess serverOld serverNext revision serverRole
+      request = JointProcessRendezvous (SendReceiveRendezvous clientSide serverSide)
+      run contexts = checkProcessCommunication (sourceBinaryInstance plans)
+        network contexts request
+      wrongResource name context =
+        let resources = protocolResources context
+        in context { protocolResources = resources
+             { linearBindings = Map.insert name (TyUInt 8)
+                 (linearBindings resources) } }
+      expectError label expected contexts =
+        case run contexts of
+          Left actual -> assert (actual == expected)
+            (label <> ": wrong exact process/error: " <> show actual)
+          Right _ -> Left (label <> ": malformed joint context was accepted")
+  assert (sourceServerHead plans == dualSession (sourceClientHead plans))
+    "source Ping heads are not dual"
+  clientContext <- mapLeft show $ insertProtocolEndpoint
+    clientOld revision clientRole (sourceClientHead plans) emptyProtocolContext
+  rawServer <- mapLeft show $ insertProtocolEndpoint
+    serverOld revision serverRole (sourceServerHead plans) emptyProtocolContext
+  borrowed <- mapLeft show $
+    insertBinding Affine spectator (TyUInt 8) (protocolResources rawServer)
+  loaned <- mapLeft show $ startSharedLoan spectator borrowed
+  let serverContext = rawServer { protocolResources = loaned }
+      before = Map.fromList [(clientProcess, clientContext),
+                             (serverProcess, serverContext)]
+      clientWrong = wrongResource clientOld clientContext
+      serverWrong = wrongResource serverOld serverContext
+      missingClientWrongServer = Map.singleton serverProcess serverWrong
+      missingServerWrongClient = Map.singleton clientProcess clientWrong
+  expectError "both process contexts missing"
+    (RendezvousMissingProtocolContext clientProcess) Map.empty
+  expectError "Client absent despite bad Server resource"
+    (RendezvousMissingProtocolContext clientProcess) missingClientWrongServer
+  expectError "Server absent despite bad Client resource"
+    (RendezvousMissingProtocolContext serverProcess) missingServerWrongClient
+  expectError "restoring Client exposes Server bad type"
+    (RendezvousProtocolError serverProcess
+       (ProtocolEndpointResourceTypeMismatch serverOld (TyUInt 8)))
+    (Map.insert clientProcess clientContext missingClientWrongServer)
+  expectError "restoring Server exposes Client bad type"
+    (RendezvousProtocolError clientProcess
+       (ProtocolEndpointResourceTypeMismatch clientOld (TyUInt 8)))
+    (Map.insert serverProcess serverContext missingServerWrongClient)
+  after <- mapLeft show $ run before
+  clientAfter <- maybe (Left "joint context gate lost Client") Right
+    (Map.lookup clientProcess after)
+  serverAfter <- maybe (Left "joint context gate lost Server") Right
+    (Map.lookup serverProcess after)
+  assert
+    (Map.keysSet after == Map.keysSet before
+      && Map.notMember clientOld (protocolEndpoints clientAfter)
+      && Map.notMember serverOld (protocolEndpoints serverAfter)
+      && Map.notMember clientOld (linearBindings (protocolResources clientAfter))
+      && Map.notMember serverOld (linearBindings (protocolResources serverAfter))
+      && Map.lookup clientNext (linearBindings (protocolResources clientAfter))
+        == Just (TyEndpoint (End done))
+      && Map.lookup serverNext (linearBindings (protocolResources serverAfter))
+        == Just (TyEndpoint (End done))
+      && Map.lookup clientNext (protocolEndpoints clientAfter)
+        == Just (ProtocolEndpointBinding clientNext revision clientRole (End done))
+      && Map.lookup serverNext (protocolEndpoints serverAfter)
+        == Just (ProtocolEndpointBinding serverNext revision serverRole (End done)))
+    "restored Ping did not consume both predecessors and install successors"
+  assert
+    (affineBindings (protocolResources serverAfter) == affineBindings loaned
+      && sharedLoans (protocolResources serverAfter) == sharedLoans loaned
+      && unrestrictedBindings (protocolResources serverAfter)
+        == unrestrictedBindings loaned)
+    "restored Ping changed independent borrowed affine spectator"
+  duplicate <- mapLeft show $ run before
+  assert (duplicate == after
+    && Map.lookup clientProcess before == Just clientContext
+    && Map.lookup serverProcess before == Just serverContext)
+    "failed context/resource trials changed the original checked state"
+  expectError "post-success stale predecessor"
+    (RendezvousEndpointNotOwnedByProcess clientProcess clientOld) after
 
 sourcePingJointNetwork :: Either String (ProcessNetwork, ProcessKey, ProcessKey)
 sourcePingJointNetwork = do
