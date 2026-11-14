@@ -21,8 +21,7 @@ Lemma p8_c2_bytes_ltb_irrefl :
 Proof.
   induction bytes as [|a tail IH].
   - reflexivity.
-  - simpl. rewrite Nat.ltb_irrefl. rewrite Nat.ltb_irrefl.
-    exact IH.
+  - simpl. rewrite Nat.ltb_irrefl. simpl. exact IH.
 Qed.
 
 (* Every key is checked against ALL later keys; no assumed comparator
