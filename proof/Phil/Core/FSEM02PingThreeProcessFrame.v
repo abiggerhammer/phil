@@ -115,5 +115,12 @@ Proof.
     senderOld senderNext receiverOld receiverNext senderBefore receiverBefore)
     as [[leftAfter rightAfter]|] eqn:Hpair; simpl in Hstep;
     try discriminate.
-  eapply fsem02ThirdProcessFrameOnPairSuccess; eauto.
+  inversion Hstep; subst; clear Hstep.
+  unfold fsem02WriteTwoProcessContexts.
+  assert (HotherLeftEq : Nat.eqb spectator left = false).
+  { apply Nat.eqb_neq. exact Hleft. }
+  assert (HotherRightEq : Nat.eqb spectator right = false).
+  { apply Nat.eqb_neq. exact Hright. }
+  rewrite HotherLeftEq, HotherRightEq.
+  reflexivity.
 Qed.
