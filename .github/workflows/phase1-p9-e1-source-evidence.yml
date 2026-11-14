@@ -42,3 +42,4 @@ jobs:
           cabal exec -- runghc -isrc -Wall -Werror test/Phase1AuditBranchEvidenceCaptureMain.hs
           cabal exec -- runghc -isrc -Wall -Werror test/Phase1AuditBranchEvidenceDelayedMain.hs
           cabal exec -- runghc -isrc -Wall -Werror test/Phase1ProveCompetenceMain.hs
+          cabal exec -- runghc -isrc -Wall -Werror test/Phase1INT001SteveOrdinaryProviderSourceMain.hs

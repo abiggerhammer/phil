@@ -4,6 +4,7 @@ module Main (main) where
 import Control.Monad (unless)
 import qualified Data.Map.Strict as Map
 import Data.Text (Text)
+import qualified Data.Text.IO as TextIO
 import Phil.Core.Focusing (FocusMechanism (..), FocusedRequirement (..))
 import Phil.Core.Static (emptyStaticContext, declareOpaqueClaim)
 import Phil.Core.Syntax (Mode (..), Name (..), Proposition (..), RefTerm (..), Ty (..))
@@ -13,11 +14,14 @@ import Phil.Surface.Check
   , checkSurfaceComponent, checkSurfaceComponentWithEvidence, emptySurfaceEnvironment
   )
 import Phil.Surface.Parser (parseSurfaceFile)
+import Phil.Surface.Phase0 (phase0EnvironmentFor)
 import Phil.Surface.Syntax (SurfaceFile (..))
 import System.Exit (exitFailure)
 
 main :: IO ()
 main = do
+  uploadServer <- TextIO.readFile "examples/upload/server.phil"
+  uploadClient <- TextIO.readFile "examples/upload/client.phil"
   results <- sequence
     [ check "empty source has no evidence use" noUses
     , check "two equal-resource branches retain distinct actual evidence" bothBranches
@@ -25,6 +29,8 @@ main = do
     , check "Core evidence in both joined branches keeps separate site and route" joinedCoreUses
     , check "repeated checked source sites preserve ordinals and identities" repeatedUses
     , check "genuine primitive policy evidence consumption is observed" beginPolicyUse
+    , check "real Upload server preserves both parsed commit evidence uses" (uploadServerUses uploadServer)
+    , check "real Upload client retains checked proof-use event" (uploadClientUse uploadClient)
     , check "named proof use retains actual focused binding" namedProof
     , check "ordinary acceptance and observed acceptance are identical" sameAcceptance
     , check "rejected proof cannot mint accepted event" rejectedSource
@@ -137,6 +143,31 @@ beginPolicyUse = do
             <- [sourceEvidenceUse event]]
   unless (length recognized == 1)
     (Left ("successful primitive evidence use was dropped: " ++ show events))
+
+
+-- Real repository Upload source (not a hand-written modeled event) exercises
+-- nested accepted/rejected static routes and two actual parsed commits.
+uploadServerUses :: Text -> Either String ()
+uploadServerUses source = do
+  env <- either (Left . show) Right $
+    phase0EnvironmentFor "examples/upload/server.phil"
+  events <- checked env source
+  let pending = [ name | event <- events
+        , SourceParsedCommitEvidence name _ _ <- [sourceEvidenceUse event] ]
+  unless (Name "pendingHello" `elem` pending
+      && Name "pendingBegin" `elem` pending
+      && length pending >= 2)
+    (Left ("real Upload parsed commits were lost across branches: " ++ show pending))
+
+uploadClientUse :: Text -> Either String ()
+uploadClientUse source = do
+  env <- either (Left . show) Right $
+    phase0EnvironmentFor "examples/upload/client.phil"
+  events <- checked env source
+  let uses = [event | event <- events
+        , SourceProveEvidence _ _ <- [sourceEvidenceUse event]]
+  unless (not (null uses))
+    (Left ("real Upload client lost checked proof use: " ++ show events))
 
 namedProof :: Either String ()
 namedProof = do

@@ -50,3 +50,14 @@ including parsed commit and higher-level source-owned use correspondence, are
 checked by real positive and negative tests. E1 observations by themselves
 cannot authenticate the P2 same checked-source event; E2/E3 and SYS-012/013
 are separately unproved.
+
+**Real source fixtures:** The E1 native suite now parses the actual
+`examples/upload/server.phil` and requires the two independently checked
+`commit_receive` events for `pendingHello` and `pendingBegin`, including
+their nested static branch routes, and parses `examples/upload/client.phil`
+to require its successful `prove` event. The dedicated P9 workflow also runs
+the already-authoritative ordinary Steve SourceBundle/provider acceptance
+regressions. These tests do not invent evidence events, and their success
+means only real Surface checking/observation, **not** the future P2/P6/P7
+source-rechecked authority closure. Hosted CI and full census must pass on
+the final exact HEAD.
