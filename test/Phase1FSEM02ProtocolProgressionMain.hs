@@ -45,6 +45,8 @@ main = do
         (sourcePingJointMissingContextPrecedence accepted stale)
     , test "FSEM-02 Ping joint leaves a third activated process and its active loan untouched"
         (sourcePingJointThreeProcessFrame accepted stale)
+    , test "FSEM-02 two disjoint source Ping pairs commute and refuse independently"
+        (sourcePingDisjointPairCommutation accepted stale)
     , test "FSEM-02 Ping joint validation orders nominal, projection and resource faults across peers"
         (sourcePingJointGatePriority accepted stale)
     , test "FSEM-02 source Ping joint nominal instance/role fail-closed peer"
@@ -1035,6 +1037,158 @@ sourcePingJointThreeProcessFrame source stale = do
         "three-process stale predecessor refusal lost exact client process/name"
     other -> Left ("three-process stale rendezvous advanced: " <> show other)
   checkUninvolved "post-success stale refusal input" after
+
+
+-- Two independent instances of the same source-checked Ping predecessor/
+-- successor plan are externally instantiated at four distinct active sites.
+-- This is a finite scheduler-order test, not source authority for a four-
+-- component program or a universal partial-order reduction theorem.
+sourcePingDisjointPairNetwork
+  :: Either String (ProcessNetwork, ProcessKey, ProcessKey, ProcessKey, ProcessKey)
+sourcePingDisjointPairNetwork = do
+  let root = InstanceKey "fsem02.ping.disjoint.root"
+      slotAC = OccurrenceSlotKey "a-client"
+      slotAS = OccurrenceSlotKey "a-server"
+      slotBC = OccurrenceSlotKey "b-client"
+      slotBS = OccurrenceSlotKey "b-server"
+      leaf name = ArchitectureNodeSpec
+        { architectureNodeDeclaration = sourcePingJointDeclaration name
+        , architectureNodeStaticBindings = Map.empty
+        , architectureNodeRequirements = []
+        , architectureNodeChildren = []
+        , architectureNodeReferences = []
+        }
+      spec = ArchitectureNodeSpec
+        { architectureNodeDeclaration = sourcePingJointDeclaration "disjoint.root"
+        , architectureNodeStaticBindings = Map.empty
+        , architectureNodeRequirements = []
+        , architectureNodeChildren =
+            [ ArchitectureChildSpec slotAC (leaf "ExternalClientA")
+            , ArchitectureChildSpec slotAS (leaf "ExternalServerA")
+            , ArchitectureChildSpec slotBC (leaf "ExternalClientB")
+            , ArchitectureChildSpec slotBS (leaf "ExternalServerB") ]
+        , architectureNodeReferences = []
+        }
+      site label slot = ProcessDeclarationSite (ProcessSiteKey label)
+        (scopedInstanceKey root slot)
+      acSite = site "fsem02.ping.disjoint.a.client" slotAC
+      asSite = site "fsem02.ping.disjoint.a.server" slotAS
+      bcSite = site "fsem02.ping.disjoint.b.client" slotBC
+      bsSite = site "fsem02.ping.disjoint.b.server" slotBS
+  graph <- mapLeft show $ instantiateArchitecture root spec
+  network0 <- mapLeft show $ elaborateProcessNetwork graph
+    [acSite, asSite, bcSite, bsSite]
+  network <- mapLeft show $ activateRootProcesses network0
+  let revision = identityInstanceRevision (processNetworkRoot network)
+      process siteValue = deriveProcessKey revision (processSiteKey siteValue)
+  pure (network, process acSite, process asSite, process bcSite, process bsSite)
+
+sourcePingDisjointPairCommutation :: Text.Text -> Text.Text -> Either String ()
+sourcePingDisjointPairCommutation accepted rejected = do
+  plans <- sourcePlans accepted
+  sourceStaleCloseRejected rejected
+  (network, ac, as, bc, bs) <- sourcePingDisjointPairNetwork
+  let revision = sourceProtocolInstance plans
+      clientPlan = sourceClientPlan plans
+      serverPlan = sourceServerPlan plans
+      clientOld = grammarV1ResolvedBinderCoreName
+        (checkedComponentSendEndpoint clientPlan)
+      clientNext = grammarV1ResolvedBinderCoreName
+        (checkedComponentSendSuccessor clientPlan)
+      serverOld = grammarV1ResolvedBinderCoreName
+        (checkedComponentReceiveEndpoint serverPlan)
+      serverNext = grammarV1ResolvedBinderCoreName
+        (checkedComponentReceiveSuccessor serverPlan)
+      side process old next role = ProcessRendezvousSide
+        process old next revision role
+      joint c s = JointProcessRendezvous (SendReceiveRendezvous
+        (side c clientOld clientNext clientRole)
+        (side s serverOld serverNext serverRole))
+      requestA = joint ac as
+      requestB = joint bc bs
+      run contexts request = checkProcessCommunication
+        (sourceBinaryInstance plans) network contexts request
+      expectNext contexts process old next role = do
+        context <- maybe (Left ("missing process context " <> show process))
+          Right (Map.lookup process contexts)
+        assert
+          (Map.notMember old (protocolEndpoints context)
+            && Map.notMember old (linearBindings (protocolResources context))
+            && Map.lookup next (protocolEndpoints context)
+              == Just (ProtocolEndpointBinding next revision role (End done))
+            && Map.lookup next (linearBindings (protocolResources context))
+              == Just (TyEndpoint (End done)))
+          ("incorrect predecessor consumption or successor for " <> show process)
+      expectStale label process old contexts request =
+        case run contexts request of
+          Left (RendezvousEndpointNotOwnedByProcess actual stale) ->
+            assert (actual == process && stale == old)
+              (label <> ": incorrect stale process/binder")
+          other -> Left (label <> ": stale replay unexpectedly progressed: " <> show other)
+      expectBadHead label process expected contexts request =
+        case run contexts request of
+          Left (RendezvousProjectionSessionMismatch actual wanted observed) ->
+            assert (actual == process && wanted == expected && observed == End done)
+              (label <> ": wrong exact projection-head refusal")
+          other -> Left (label <> ": wrong nonterminal refusal: " <> show other)
+  assert
+    (length (Map.keys (Map.fromList [(ac, ()), (as, ()),
+                                      (bc, ()), (bs, ())])) == 4
+      && sourceServerHead plans == dualSession (sourceClientHead plans)
+      && sourceClientHead plans /= End done
+      && sourceServerHead plans /= End done)
+    "two independently activated Ping pairs alias keys or heads"
+  clientBefore <- mapLeft show $ insertProtocolEndpoint
+    clientOld revision clientRole (sourceClientHead plans) emptyProtocolContext
+  serverBefore <- mapLeft show $ insertProtocolEndpoint
+    serverOld revision serverRole (sourceServerHead plans) emptyProtocolContext
+  let before = Map.fromList
+        [(ac, clientBefore), (as, serverBefore),
+         (bc, clientBefore), (bs, serverBefore)]
+  afterA <- mapLeft show $ run before requestA
+  assert
+    (Map.lookup bc afterA == Just clientBefore
+      && Map.lookup bs afterA == Just serverBefore
+      && Map.keysSet afterA == Map.keysSet before)
+    "pair A mutated independent pair B or population"
+  afterAB <- mapLeft show $ run afterA requestB
+  afterB <- mapLeft show $ run before requestB
+  assert
+    (Map.lookup ac afterB == Just clientBefore
+      && Map.lookup as afterB == Just serverBefore
+      && Map.keysSet afterB == Map.keysSet before)
+    "pair B mutated independent pair A or population"
+  afterBA <- mapLeft show $ run afterB requestA
+  assert (afterAB == afterBA && Map.keysSet afterAB == Map.keysSet before)
+    "two distinct active Ping pairs did not commute under opposite schedules"
+  expectNext afterAB ac clientOld clientNext clientRole
+  expectNext afterAB as serverOld serverNext serverRole
+  expectNext afterAB bc clientOld clientNext clientRole
+  expectNext afterAB bs serverOld serverNext serverRole
+  expectStale "stale pair A" ac clientOld afterAB requestA
+  expectStale "stale pair B" bc clientOld afterAB requestB
+  -- An independently malformed B head must neither abort the valid A step
+  -- nor partially advance the B pair. Repair of B is explicit, not silent.
+  wrongBServer <- mapLeft show $ insertProtocolEndpoint
+    serverOld revision serverRole (End done) emptyProtocolContext
+  let brokenB = Map.insert bs wrongBServer before
+  expectBadHead "B rejected before A" bs (sourceServerHead plans)
+    brokenB requestB
+  afterAWithBrokenB <- mapLeft show $ run brokenB requestA
+  assert
+    (Map.lookup bc afterAWithBrokenB == Just clientBefore
+      && Map.lookup bs afterAWithBrokenB == Just wrongBServer
+      && Map.keysSet afterAWithBrokenB == Map.keysSet before)
+    "valid A step damaged independently malformed B contexts"
+  expectBadHead "B still rejected after A" bs (sourceServerHead plans)
+    afterAWithBrokenB requestB
+  let repairedB = Map.insert bs serverBefore afterAWithBrokenB
+  afterRepair <- mapLeft show $ run repairedB requestB
+  assert (afterRepair == afterAB && run before requestA == Right afterA
+          && run before requestB == Right afterB)
+    "explicit B repair did not recover exact schedule-independent successor"
+  expectStale "A after repaired B" ac clientOld afterRepair requestA
+  expectStale "B after repaired B" bc clientOld afterRepair requestB
 
 sourcePingJointDeclaration :: Text.Text -> DeclarationIdentity
 sourcePingJointDeclaration name = deriveDeclarationIdentity DeclarationDescriptor
