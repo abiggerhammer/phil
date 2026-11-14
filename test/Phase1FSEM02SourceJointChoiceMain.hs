@@ -150,6 +150,11 @@ main = do
             choiceTypedPrefixWrongBody go offer wrongBody)
     , test "Cancel source-choice End resource failures precede wrong outcome on both peers"
         (choiceTerminalOutcomeResourcePrecedence cancel offer "Cancel" (Outcome "Cancel"))
+    , test "Go source-choice triple fault gates missing context before bad resource/outcome"
+        (do choiceTerminalTripleFaultLadder go offer "Go" (Outcome "Done")
+            choiceTypedPrefixWrongBody go offer wrongBody)
+    , test "Cancel source-choice triple fault stages preserve exact peer-first End diamond"
+        (choiceTerminalTripleFaultLadder cancel offer "Cancel" (Outcome "Cancel"))
     , test "diamond rejects wrong externally authorized peer outcome precisely" (choiceCloseDiamondBadPeer go offer)
     , test "diamond rejects wrong source Client close outcome precisely" (choiceCloseDiamondBadClient go offer)
     , test "diamond rejects minimally malformed source offer before both orders" (choiceCloseDiamondWrongBody go offer wrongBody)
@@ -2756,3 +2761,147 @@ choiceTerminalOutcomeResourcePrecedence client server label outcome = do
       runSide ("Server", sp, sn, serverRole, cp, cn, clientRole,
                serverOccurrence, sc)
     _ -> Left "missing checked End context before outcome/resource precedence"
+
+
+-- FSEM-02: a staged *adversarial Core observation* cannot turn a missing
+-- process-local protocol context into a successful terminal Close, even if a
+-- malformed End linear resource and a wrong external outcome were prepared
+-- independently. Restore each external premise one at a time; observe exact
+-- missing-context, resource, outcome, then separately authorized success.
+-- None of these restoration operations is source-granted protocol authority.
+choiceTerminalTripleFaultLadder
+  :: Text -> Text -> Text -> Outcome -> Either String ()
+choiceTerminalTripleFaultLadder client server label outcome = do
+  fx <- fixture client server
+  diamond <- mapLeft show $ choiceCloseDiamond fx label outcome outcome
+  let ready = statefulChoiceSuccessor
+        (statefulChoiceClientCloseSourceReplay
+          (statefulChoiceExplicitPeerCloseClient
+            (choiceCloseDiamondForward diamond)))
+      network = fxNetwork fx
+      cp = fxClientProcess fx
+      sp = fxServerProcess fx
+      cn = fxClientNext fx
+      sn = serverNext
+      revision = binaryProtocolInstanceRevision (fxInstance fx)
+      contexts = communicationProtocolContexts
+      owners = communicationRestrictedOwners
+      baseline = choiceCloseDiamondReverse diamond
+      opposite = if outcome == Outcome "Done"
+        then Outcome "Cancel" else Outcome "Done"
+      runSide (side, process, endpoint, role, peer, peerEnd, peerRole,
+               occurrence, checked) = do
+        let resources = protocolResources checked
+            wrongResources =
+              [ ("missing resource",
+                  resources { linearBindings =
+                    Map.delete endpoint (linearBindings resources) },
+                  ProtocolEndpointResourceMissing endpoint)
+              , ("wrong type",
+                  resources { linearBindings =
+                    Map.insert endpoint TyBool (linearBindings resources) },
+                  ProtocolEndpointResourceTypeMismatch endpoint TyBool)
+              , ("wrong End session",
+                  resources { linearBindings =
+                    Map.insert endpoint (TyEndpoint (End opposite))
+                      (linearBindings resources) },
+                  ProtocolEndpointSessionMismatch endpoint
+                    (End outcome) (End opposite))
+              ]
+            attempt state supplied = closeProcessEndpointState
+              network state process endpoint revision role supplied
+            closePeer state = closeProcessEndpointState
+              network state peer peerEnd revision peerRole outcome
+            withContext state value = state
+              { communicationProtocolContexts =
+                  Map.insert process value (contexts state) }
+            withoutContext state = state
+              { communicationProtocolContexts =
+                  Map.delete process (contexts state) }
+            expectMissing description state supplied =
+              case attempt state supplied of
+                Left (EndpointClosureMissingProtocolContext actual) ->
+                  assert (actual == process)
+                    (description <> ": missing-context process changed")
+                other -> Left (description <>
+                  ": wrong missing-context precedence: " <> show other)
+            expectResource description state supplied expectedError =
+              case attempt state supplied of
+                Left (EndpointClosureProtocolError actualProcess actualError) ->
+                  assert (actualProcess == process && actualError == expectedError)
+                    (description <> ": resource gate was skipped or changed")
+                other -> Left (description <>
+                  ": wrong resource versus outcome precedence: " <> show other)
+            expectWrongOutcome description state =
+              case attempt state opposite of
+                Left (EndpointClosureProtocolError actualProcess
+                  (ProtocolSessionError (CloseOutcomeMismatch expected supplied))) ->
+                  assert (actualProcess == process
+                       && expected == outcome && supplied == opposite)
+                    (description <> ": incorrect external outcome diagnostic")
+                other -> Left (description <>
+                  ": restored resource silently granted wrong outcome: " <> show other)
+            probe (description, badResources, expectedError) = do
+              let badContext = checked { protocolResources = badResources }
+                  damaged = withContext ready badContext
+                  hidden = withoutContext damaged
+                  name = side <> " / " <> description
+              assert (damaged /= ready
+                   && owners damaged == owners ready
+                   && owners hidden == owners ready
+                   && Map.lookup process (contexts hidden) == Nothing
+                   && Map.lookup peer (contexts hidden)
+                        == Map.lookup peer (contexts ready)
+                   && Map.lookup occurrence (owners hidden)
+                        == Just (process, endpoint))
+                (name <> ": faulty inputs changed source-derived exact ownership")
+              mapM_ (expectMissing (name <> " / hidden context") hidden)
+                [outcome, opposite]
+              let shownBad = withContext hidden badContext
+              mapM_ (\supplied -> expectResource
+                  (name <> " / restored malformed context") shownBad
+                  supplied expectedError) [outcome, opposite]
+              let restored = withContext shownBad checked
+              expectWrongOutcome (name <> " / checked context restored") restored
+              afterPeer <- mapLeft show (closePeer hidden)
+              assert (Map.lookup occurrence (owners afterPeer)
+                        == Just (process, endpoint)
+                   && Map.lookup spectatorOccurrence (owners afterPeer)
+                        == Map.lookup spectatorOccurrence (owners ready)
+                   && Map.lookup peer (contexts afterPeer)
+                        /= Map.lookup peer (contexts ready))
+                (name <> ": independent peer Close did not frame faulty owner")
+              expectMissing (name <> " / peer-first hidden context")
+                afterPeer opposite
+              let peerBad = withContext afterPeer badContext
+              expectResource (name <> " / peer-first malformed context")
+                peerBad opposite expectedError
+              let peerRestored = withContext peerBad checked
+              expectWrongOutcome (name <> " / peer-first checked context")
+                peerRestored
+              peerThenTarget <- mapLeft show (attempt peerRestored outcome)
+              targetFirst <- mapLeft show (attempt ready outcome)
+              targetThenPeer <- mapLeft show (closePeer targetFirst)
+              assert (peerThenTarget == targetThenPeer
+                   && targetThenPeer == baseline
+                   && Map.notMember occurrence (owners peerThenTarget)
+                   && Map.lookup spectatorOccurrence (owners peerThenTarget)
+                        == Map.lookup spectatorOccurrence (owners ready))
+                (name <> ": complete restored End Close diamond disagrees")
+        assert (Map.lookup process (contexts ready) == Just checked
+             && Map.lookup occurrence (owners ready) == Just (process, endpoint)
+             && Map.lookup endpoint (linearBindings resources)
+                  == Just (TyEndpoint (End outcome)))
+          (side <> ": source-derived terminal End initial conditions absent")
+        mapM_ probe wrongResources
+  assert (cp /= sp && cn /= sn
+       && Map.lookup clientOccurrence (owners ready) == Just (cp, cn)
+       && Map.lookup serverOccurrence (owners ready) == Just (sp, sn))
+    "terminal source-derived owner identity missing for triple-fault ladder"
+  case (Map.lookup cp (contexts ready), Map.lookup sp (contexts ready)) of
+    (Just cc, Just sc) -> do
+      runSide ("Client", cp, cn, clientRole, sp, sn, serverRole,
+               clientOccurrence, cc)
+      runSide ("Server", sp, sn, serverRole, cp, cn, clientRole,
+               serverOccurrence, sc)
+    _ -> Left "source-derived terminal End contexts absent before triple-fault test"
