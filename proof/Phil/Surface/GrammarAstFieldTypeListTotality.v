@@ -1,4 +1,4 @@
-From Stdlib Require Import Lists.List.
+From Stdlib Require Import Lists.List Strings.String.
 
 From Phil.Surface Require Import
   GrammarDerivation
@@ -11,6 +11,7 @@ From Phil.Surface Require Import
   GrammarAstRecordFieldsTotality.
 
 Import ListNotations.
+Open Scope string_scope.
 
 (* Converse for the field-list type refinement from #1163. *)
 
