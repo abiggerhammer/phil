@@ -118,7 +118,7 @@ Proof. reflexivity. Qed.
 (* Concrete FALSE shortcut: native U < R, but wire u > r. *)
 Example p8_c2_wire_order_not_native_constructor_order :
   (2 <? 3) = true /\ (117 <? 114) = false.
-Proof. reflexivity. Qed.
+Proof. split; reflexivity. Qed.
 
 Print Assumptions p8_c2_bytes_ltb_irrefl.
 Print Assumptions p8_c2_strict_keys_no_duplicates.
