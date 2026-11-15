@@ -93,8 +93,12 @@ import Phil.Core.Static
   , deriveArchitectureInstanceIdentity
   )
 import Phil.Systems.ProviderCallCorrespondence (ProviderCallExpectationMap)
+import Phil.Systems.RuntimeCarrierBinding
+  ( RuntimeCarrierBinding (..), RuntimeCarrierBindingError (..), checkRuntimeCarrierBindings )
+import Phil.Systems.RuntimeCarrierCoverage (RuntimeCarrierKey (..))
 import Phil.Systems.IR
-  ( loweringLedgerRoot
+  ( RuntimeSiteKind (..), RuntimeSiteRef (..)
+  , loweringLedgerRoot
   , systemsArtifactDigest
   , systemsArtifactLoweringLedger
   )
@@ -1003,6 +1007,25 @@ p9F1Upload clientSource serverSource = do
   lostInput <- mapLeft show (H.decodePhase1AssuranceInputs missingUseWire)
   assert (lostInput /= inputs)
     "P9-F1 missing selected use row silently matched original selection"
+  -- Only retained-runtime uses belong in runtime-carrier binding. Even a
+  -- manifest-selected checked-static use cannot acquire one via a fake site.
+  let staticManifest = sourceManifestBindingManifest binding
+      staticSystems = phase1StageSystemsArtifact (verifiedStageClosureSelected stage)
+      selectedEvidence = head (Map.elems (A.ledgerEvidence ledger))
+      fakeSite = RuntimeSiteRef
+        (SourceSemanticRuntime "p9.f1.not-a-runtime-site")
+        (A.evidenceObligationRevision selectedEvidence)
+        (A.evidenceEntryId selectedEvidence)
+        "p9.f1.forged-cost"
+      fakeBinding = RuntimeCarrierBinding useId
+        (RuntimeCarrierKey "p9.f1.forged-carrier") fakeSite
+  mapLeft show (checkRuntimeCarrierBindings ledger staticManifest staticSystems
+    Map.empty Map.empty)
+  case checkRuntimeCarrierBindings ledger staticManifest staticSystems
+      Map.empty (Map.singleton useId fakeBinding) of
+    Left (RuntimeCarrierBindingDomainMismatch expected actual)
+      | Set.null expected && actual == Set.singleton useId -> Right ()
+    other -> Left ("P9-F1 static-use runtime carrier spoof: " ++ show other)
   -- The substituted fully rehashed selection passes ordinary immutable
   -- closure, but MUST be rejected at the real sealed source event consumer.
   let wrongFact = fact { A.staticUseOrdinal = A.staticUseOrdinal fact + 42 }
