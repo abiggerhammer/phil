@@ -129,5 +129,5 @@ main = do
     (TE.decodeUtf8' (BS.pack [0,0]) == Right (textOf [0,0])
       && isRejected (decodeP8SemanticForm (atomWire "A" <> "B"))
       && isRejected (decodeP8SemanticForm "at01:A")
-      && isRejected (decodeP8SemanticForm "at2:A")))
+      && isRejected (decodeP8SemanticForm "at2:A"))
   putStrLn "P8-D1 native stream differential passed (no universal Text bridge claimed)"

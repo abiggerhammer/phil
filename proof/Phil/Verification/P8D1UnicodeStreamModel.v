@@ -74,13 +74,14 @@ Definition p8_d1_decode (bytes : list nat)
   p8_d1_decode_fuel (length bytes) bytes.
 
 Ltac p8_d1_lead_bounds :=
-  unfold p8_utf8_scalar_wellformed, p8_octet_between in *;
-  simpl in *;
+  (* Do not [simpl] the symbolic Nat.leb tests: doing so unfolds their
+     recursion and hides the arithmetic inequalities from lia. *)
+  unfold p8_utf8_scalar_wellformed, p8_octet_between in H;
   repeat match goal with
-    | H : (_ && _) = true |- _ =>
-        apply andb_true_iff in H; destruct H
-    | H : (_ <=? _) = true |- _ =>
-        apply Nat.leb_le in H
+    | Q : (_ && _) = true |- _ =>
+        apply andb_true_iff in Q; destruct Q
+    | Q : (_ <=? _) = true |- _ =>
+        apply Nat.leb_le in Q
   end;
   lia.
 
