@@ -38,6 +38,7 @@ module Phil.Assurance.Types
   , deriveExportDigest
   , deriveAssuranceUseDigest
   , deriveStaticCheckedSourceFactDigest
+  , renderStaticCheckedSourceFact
   , deriveManifestId
   ) where
 
