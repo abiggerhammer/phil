@@ -1012,7 +1012,8 @@ p9F1Upload clientSource serverSource = do
   -- Only retained-runtime uses belong in runtime-carrier binding. Even a
   -- manifest-selected checked-static use cannot acquire one via a fake site.
   let staticManifest = sourceManifestBindingManifest binding
-      staticSystems = phase1StageSystemsArtifact (verifiedStageClosureSelected stage)
+      staticSystems = phase1StageSystemsArtifact
+        (verifiedSourceSystemsStage (verifiedStageClosureSourceProduction stage))
       selectedEvidence = head (Map.elems (A.ledgerEvidence ledger))
       fakeSite = RuntimeSiteRef
         (SourceSemanticRuntime "p9.f1.not-a-runtime-site")
