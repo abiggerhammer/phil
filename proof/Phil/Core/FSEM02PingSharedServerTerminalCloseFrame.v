@@ -101,7 +101,7 @@ Proof.
   { apply Nat.eqb_neq. exact HnotClient. }
   assert (Hserver : Nat.eqb spectator server = false).
   { apply Nat.eqb_neq. exact HnotServer. }
-  rewrite Hserver, Hclient, Hclient, Hserver.
+  rewrite Hserver, Hclient.
   reflexivity.
 Qed.
 
