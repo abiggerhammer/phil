@@ -141,6 +141,8 @@ import Phil.Verification.SourceManifestBinding
   )
 import Phil.Verification.ReleasePackage
   ( buildCertifiedReleasePackage
+  , buildStructuralReleasePackage
+  , renderStructuralReleasePackage
   , renderCertifiedReleasePackage
   , verifiedOriginPackageStructural
   , certifiedReleasePackageManifestId
@@ -1021,6 +1023,30 @@ p9F1Upload clientSource serverSource = do
         (RuntimeCarrierKey "p9.f1.forged-carrier") fakeSite
   mapLeft show (checkRuntimeCarrierBindings ledger staticManifest staticSystems
     Map.empty Map.empty)
+  -- INT-005 structural output must identify the selected checked-static fact
+  -- separately, without claiming that the final P7 consumer used it.
+  let p9LLVM = lowerSystemsConservative phase0LLVMTarget staticSystems
+      p9Trust = [p7TrustValue "compiler" CompilerCheckerTrust]
+      p9Profile = CertifiedReleaseProfile
+        { releaseProfileRevision = ReleaseProfileRevision "p9.f1.static.trace.v1"
+        , releaseProfileManifestTarget = "p9-f1-source-target"
+        , releaseProfileManifestCompilationProfile = "p9-f1-checked"
+        , releaseProfileLLVMTarget = phase0LLVMTarget
+        , releaseProfileRequiredTrustKinds = Set.singleton CompilerCheckerTrust
+        }
+  release <- mapLeft show (certifyReleaseArtifact
+    p9Profile context ledger staticManifest (verifiedStageClosureSelected stage)
+    p9LLVM p9Trust)
+  package <- mapLeft show (buildStructuralReleasePackage ledger release)
+  let packageTrace = renderStructuralReleasePackage package
+  assert ("kind=checked-static-v1" `Text.isInfixOf` packageTrace)
+    "P9-F1 release sidecar lost distinct static-use type"
+  assert (("fact-digest=" <> A.unDigest (A.deriveStaticCheckedSourceFactDigest fact))
+      `Text.isInfixOf` packageTrace)
+    "P9-F1 release sidecar lost selected typed source-fact digest"
+  assert (("evidence=" <> A.unEvidenceEntryId
+      (A.evidenceEntryId selectedEvidence)) `Text.isInfixOf` packageTrace)
+    "P9-F1 release sidecar lost selected immutable evidence"
   case checkRuntimeCarrierBindings ledger staticManifest staticSystems
       Map.empty (Map.singleton useId fakeBinding) of
     Left (RuntimeCarrierBindingDomainMismatch expected actual)
@@ -1144,14 +1170,17 @@ p9F1Selection production fact = do
     [architectureDeclarationIdentity descriptor]
     [deriveArchitectureInstanceIdentity descriptor] []
     graph policy [evidence])
-  let context = A.emptyVerificationContext
+  let producedSystems = phase1StageSystemsArtifact
+        (verifiedSourceSystemsStage production)
+      context = A.emptyVerificationContext
         { A.verificationArchitectureDigest = verificationBundleArchitectureDigest bundle
         , A.verificationPhilCoreDigest = A.digestText "p9.f1.checked-core"
-        , A.verificationImplementationDigest = A.digestText "p9.f1.checked-implementation"
+        , A.verificationImplementationDigest = systemsArtifactDigest producedSystems
         , A.verificationTarget = "p9-f1-source-target"
         , A.verificationCompilationProfile = "p9-f1-checked"
         , A.verificationExpectedObligations = Map.keysSet (verificationGraphNodes graph)
-        , A.verificationLoweringLedgerRoot = A.digestText "p9.f1.lowering" }
+        , A.verificationLoweringLedgerRoot = loweringLedgerRoot
+            (systemsArtifactLoweringLedger producedSystems) }
       selection = ManifestClosureSelection
         (Set.singleton evidenceKey) Set.empty Map.empty (Set.singleton useKey)
   source <- makeP7Source descriptor (A.ArtifactRef "p9.f1.real-source-body")
