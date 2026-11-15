@@ -1,0 +1,44 @@
+name: Phase 1 Wager Example Source Conformance
+
+# The initial maintainer workflow PR checks the exact outside-contributor
+# snapshot before that example is merged. Later PRs check the PR merge source.
+# No privileged events, write tokens, or publishing steps.
+on:
+  pull_request:
+    paths:
+      - 'examples/wager/**'
+      - 'test/ExampleWagerRoundMain.hs'
+      - '.github/workflows/phase1-wager-example.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  wager-source-and-negatives:
+    name: Wager source / role duality / record mode (8 cases)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    steps:
+      - name: Check out submitted PR merge
+        uses: actions/checkout@v4
+      - name: Bootstrap the exact external example before it lands
+        if: hashFiles('test/ExampleWagerRoundMain.hs') == ''
+        uses: actions/checkout@v4
+        with:
+          repository: HigherMaestro/phil
+          ref: f170969e16e197c6652115638f37381e4f1692af
+      - uses: haskell-actions/setup@v2
+        with:
+          ghc-version: '9.6.7'
+          cabal-version: 'latest'
+          cabal-update: false
+      - name: Bounded Hackage index retry
+        run: bash scripts/ci/cabal-update-retry.sh
+      - name: Strict warning-free Phil library
+        run: cabal build lib:phil-core --ghc-options=-Werror
+      - name: Strict compile of submitted source/negative driver
+        run: cabal exec -- ghc -isrc -Wall -Werror -fno-code test/ExampleWagerRoundMain.hs
+      - name: Run all eight source and precise-error checks
+        run: cabal exec -- runghc -isrc -Wall -Werror test/ExampleWagerRoundMain.hs
+      - name: Exact inputs for the verified example
+        run: sha256sum examples/wager/round.phil examples/wager/README.md test/ExampleWagerRoundMain.hs
