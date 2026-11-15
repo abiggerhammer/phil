@@ -86,7 +86,7 @@ Proof.
   rewrite Colon, D.
   destruct rest as [|next tail].
   - simpl [app p8_e1_count_scan p8_f1_digit_value].
-    rewrite Nat.eqb_refl. reflexivity.
+    reflexivity.
   - assert (NZ : first <> 48).
     { destruct Canonical as [Impossible | Nonzero];
         [discriminate | exact Nonzero]. }
