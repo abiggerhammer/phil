@@ -175,7 +175,10 @@ Proof.
     (phase1_surface_normalize_record_field_type_variant_spines rest_variants)
     as [rest_refined |] eqn:Hrest; try discriminate Hnormalize.
   inversion Hnormalize; subst.
-  cbn.
+  cbn -[phase1_surface_record_field_type_variant_spine_tree
+    phase1_surface_variant_payload_variant_spine_tree
+    phase1_surface_record_field_type_data_suffix_tree
+    phase1_surface_variant_payload_data_suffix_tree].
   rewrite
     (phase1_surface_normalize_record_field_type_variant_spine_round_trip
       first_variant first_refined Hfirst).
