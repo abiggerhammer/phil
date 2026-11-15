@@ -257,7 +257,7 @@ Proof.
   apply p8_e1_parse_text_prefix_conservation in H as [Valid _].
   unfold p8_d2_text_valid in Valid.
   destruct (p8_d1_decode txt) as [scalars|] eqn:E; try discriminate.
-  exists scalars. split; [exact E|].
+  exists scalars. split; [reflexivity|].
   apply p8_d1_stream_canonical_acceptance in E as [Wellformed Enc].
   split; assumption.
 Qed.
