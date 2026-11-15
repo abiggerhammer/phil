@@ -53,6 +53,8 @@ main = do
         (sourcePingSharedServerContention accepted stale)
     , test "FSEM-02 shared-Server winner Closes commute and loser remains stale"
         (sourcePingSharedServerTerminalCloseFrame accepted stale)
+    , test "FSEM-02 shared-Client winner Closes commute and unselected Server stays live"
+        (sourcePingSharedClientTerminalCloseFrame accepted stale)
     , test "FSEM-02 Ping joint validation orders nominal, projection and resource faults across peers"
         (sourcePingJointGatePriority accepted stale)
     , test "FSEM-02 source Ping joint nominal instance/role fail-closed peer"
@@ -1283,6 +1285,152 @@ sourcePingSharedClientContention accepted rejected = do
       && Map.lookup spectator afterA == Map.lookup spectator afterB)
     "overlap unexpectedly commuted or failed deterministic one-step replay"
 
+
+
+-- Dual terminal boundary to shared-Server contention: one Client Send
+-- predecessor competes with TWO externally activated Server Receives.
+-- The winning Client and selected Server Close locally in either order.
+-- The unselected Server's exact Receive head, its linear owner and a separate
+-- actively loaned affine spectator must survive both Closes unchanged.
+-- This test does not infer activation/disposal grants from source spelling.
+sourcePingSharedClientTerminalCloseFrame
+  :: Text.Text -> Text.Text -> Either String ()
+sourcePingSharedClientTerminalCloseFrame accepted rejected = do
+  plans <- sourcePlans accepted
+  sourceStaleCloseRejected rejected
+  (network, client, serverA, spectator, serverB) <-
+    sourcePingDisjointPairNetwork
+  let revision = sourceProtocolInstance plans
+      sender = sourceClientPlan plans
+      receiver = sourceServerPlan plans
+      clientOld = grammarV1ResolvedBinderCoreName
+        (checkedComponentSendEndpoint sender)
+      clientNext = grammarV1ResolvedBinderCoreName
+        (checkedComponentSendSuccessor sender)
+      serverOld = grammarV1ResolvedBinderCoreName
+        (checkedComponentReceiveEndpoint receiver)
+      serverNext = grammarV1ResolvedBinderCoreName
+        (checkedComponentReceiveSuccessor receiver)
+      spectatorName = Name "fsem02.shared-client.terminal.loaned"
+      side p old next role = ProcessRendezvousSide p old next revision role
+      request server = JointProcessRendezvous (SendReceiveRendezvous
+        (side client clientOld clientNext clientRole)
+        (side server serverOld serverNext serverRole))
+      run contexts req = checkProcessCommunication
+        (sourceBinaryInstance plans) network contexts req
+      closeOne process endpoint role contexts = do
+        current <- maybe (Left "shared-client Close missing process") Right
+          (Map.lookup process contexts)
+        step <- mapLeft show $ checkProtocolAction
+          (ProtocolCloseRequest endpoint revision role done) current
+        assert
+          (checkedProtocolPredecessor step
+            == ProtocolEndpointBinding endpoint revision role (End done)
+           && checkedProtocolSuccessor step == Nothing)
+          "shared-client Close failed to consume exact End without successor"
+        let closed = checkedProtocolContext step
+        assert (Map.notMember endpoint (protocolEndpoints closed)
+             && Map.notMember endpoint (linearBindings (protocolResources closed)))
+          "shared-client Close retained terminal endpoint or linear owner"
+        pure (Map.insert process closed contexts)
+      expectSpentClient label contexts req =
+        case run contexts req of
+          Left (RendezvousEndpointNotOwnedByProcess actual old) ->
+            assert (actual == client && old == clientOld)
+              (label <> ": wrong stale Client predecessor/diagnostic")
+          other -> Left (label <> ": spent Client Send advanced: " <> show other)
+  assert (sourceServerHead plans == dualSession (sourceClientHead plans)
+       && clientOld /= clientNext && serverOld /= serverNext
+       && client /= serverA && client /= serverB && serverA /= serverB)
+    "shared-client terminal test has aliased keys or nondual source heads"
+  clientBefore <- mapLeft show $ insertProtocolEndpoint
+    clientOld revision clientRole (sourceClientHead plans) emptyProtocolContext
+  serverBefore <- mapLeft show $ insertProtocolEndpoint
+    serverOld revision serverRole (sourceServerHead plans) emptyProtocolContext
+  framed <- mapLeft show $ insertBinding Affine spectatorName
+    (TyUInt 8) (protocolResources emptyProtocolContext)
+  loaned <- mapLeft show $ startSharedLoan spectatorName framed
+  let spectatorBefore = emptyProtocolContext { protocolResources = loaned }
+      before = Map.fromList
+        [(client, clientBefore), (serverA, serverBefore),
+         (serverB, serverBefore), (spectator, spectatorBefore)]
+      finish label winner loser progressed = do
+        clientEnd <- maybe (Left (label <> ": missing Client End")) Right
+          (Map.lookup client progressed)
+        winnerEnd <- maybe (Left (label <> ": missing Server End")) Right
+          (Map.lookup winner progressed)
+        assert
+          (Map.lookup clientNext (protocolEndpoints clientEnd)
+            == Just (ProtocolEndpointBinding clientNext revision clientRole (End done))
+           && Map.lookup clientNext (linearBindings (protocolResources clientEnd))
+            == Just (TyEndpoint (End done))
+           && Map.lookup serverNext (protocolEndpoints winnerEnd)
+            == Just (ProtocolEndpointBinding serverNext revision serverRole (End done))
+           && Map.lookup serverNext (linearBindings (protocolResources winnerEnd))
+            == Just (TyEndpoint (End done))
+           && Map.notMember clientOld (protocolEndpoints clientEnd)
+           && Map.notMember serverOld (protocolEndpoints winnerEnd)
+           && Map.lookup loser progressed == Just serverBefore
+           && Map.lookup spectator progressed == Just spectatorBefore)
+          (label <> ": first step failed typed End or loser/spectator frame")
+        -- A failed End action has no committed CheckedProtocolStep and cannot
+        -- remove the still-live peer; the correct action remains available.
+        case checkProtocolAction
+            (ProtocolCloseRequest serverNext revision serverRole (Outcome "Wrong"))
+            winnerEnd of
+          Left (ProtocolSessionError (CloseOutcomeMismatch expected actual)) ->
+            assert (expected == done && actual == Outcome "Wrong")
+              (label <> ": wrong terminal outcome did not reject precisely")
+          other -> Left (label <> ": invalid terminal Close advanced: " <> show other)
+        clientFirst <- closeOne client clientNext clientRole progressed
+        forward <- closeOne winner serverNext serverRole clientFirst
+        serverFirst <- closeOne winner serverNext serverRole progressed
+        reversed <- closeOne client clientNext clientRole serverFirst
+        assert
+          (forward == reversed
+           && Map.keysSet forward == Map.keysSet before
+           && Map.lookup winner clientFirst == Just winnerEnd
+           && Map.lookup client serverFirst == Just clientEnd
+           && Map.lookup loser forward == Just serverBefore
+           && Map.lookup spectator forward == Just spectatorBefore)
+          (label <> ": local Close order changed loser/spectator or terminal map")
+        let finalClient = Map.lookup client forward
+            finalWinner = Map.lookup winner forward
+        assert
+          (maybe False (Map.null . protocolEndpoints) finalClient
+           && maybe False (Map.null . protocolEndpoints) finalWinner
+           && maybe False (Map.null . linearBindings . protocolResources) finalClient
+           && maybe False (Map.null . linearBindings . protocolResources) finalWinner)
+          (label <> ": committed terminal owners/endpoints remain live")
+        expectSpentClient (label <> ": loser after both Closes")
+          forward (request loser)
+        expectSpentClient (label <> ": winner replay after both Closes")
+          forward (request winner)
+        case finalClient of
+          Nothing -> Left (label <> ": missing final Client")
+          Just ctx -> case checkProtocolAction
+            (ProtocolCloseRequest clientNext revision clientRole done) ctx of
+              Left (ProtocolEndpointUnknown old) ->
+                assert (old == clientNext) (label <> ": stale Client Close identity")
+              other -> Left (label <> ": repeated Client Close: " <> show other)
+        case finalWinner of
+          Nothing -> Left (label <> ": missing final Server")
+          Just ctx -> case checkProtocolAction
+            (ProtocolCloseRequest serverNext revision serverRole done) ctx of
+              Left (ProtocolEndpointUnknown old) ->
+                assert (old == serverNext) (label <> ": stale Server Close identity")
+              other -> Left (label <> ": repeated Server Close: " <> show other)
+        pure forward
+  progressedA <- mapLeft show $ run before (request serverA)
+  completedA <- finish "Server A wins" serverA serverB progressedA
+  progressedB <- mapLeft show $ run before (request serverB)
+  completedB <- finish "Server B wins" serverB serverA progressedB
+  assert
+    (completedA /= completedB
+     && run before (request serverA) == Right progressedA
+     && run before (request serverB) == Right progressedB
+     && Map.lookup spectator completedA == Map.lookup spectator completedB)
+    "shared-client alternate winners lacked deterministic replay or spectator frame"
 
 -- Dual to shared-Client contention: independent source-derived Client senders
 -- compete for the *same* Server process/linear Receive predecessor. The
