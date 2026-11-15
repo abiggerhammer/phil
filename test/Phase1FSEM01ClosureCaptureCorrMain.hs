@@ -156,14 +156,21 @@ checkBorrowFailure input stage matches = do
         "scoped capture failure invented a loan-close successor"
     _ -> Left "wrong successful native loan prefix on rejection"
 
-mutations :: Text -> Text -> Text -> Either String ()
-mutations linear duplicate scoped = do
+mutations :: Text -> Text -> Text -> Text -> Text -> Either String ()
+mutations linear duplicate scoped weakened wrongMode = do
   good <- direct linear
   dup <- direct duplicate
   loan <- borrow scoped
+  weak <- direct weakened
+  badMode <- borrow wrongMode
+  dupError <- case directOutcome dup of
+    Left (SourceClosureCaptureError err) -> Right err
+    other -> Left ("expected duplicate capture error: " ++ show other)
   assert (verifyDirectCaptureCuts good == Right () &&
           verifyDirectCaptureCuts dup == Right () &&
-          verifyBorrowCaptureCuts loan == Right ())
+          verifyDirectCaptureCuts weak == Right () &&
+          verifyBorrowCaptureCuts loan == Right () &&
+          verifyBorrowCaptureCuts badMode == Right ())
     "baseline CORR-1 source witnesses disagree"
   let start = directInitial good
       fakeCuts = good { directCuts = [start, start] }
@@ -171,17 +178,37 @@ mutations linear duplicate scoped = do
       fakeSummary = good { directSummary = Nothing }
       fakeStage = good { directFailureStage = Just ClosureNativeUse }
       fakeDup = dup { directFinal = Just (directInitial dup) }
+      fakeGoodMode = good { directDeclaredMode = Just Unrestricted }
+      fakeWeakPayload = weak
+        { directOutcome = Left (SourceClosureModeMismatch Unrestricted Unrestricted) }
+      fakeWeakDeclared = weak { directDeclaredMode = Just Affine }
       fakeLoanClosed = loan { borrowClosed = Nothing }
       fakeLoanCuts = loan { borrowCuts = [borrowInitial loan] }
       fakeLoanExtent = loan { borrowExtent = EscapingClosure }
+      fakeGoodBorrowMode = loan { borrowDeclaredMode = Just Linear }
+      fakeBorrowPayload = badMode
+        { borrowOutcome = Left (SourceClosureModeMismatch Linear Linear) }
+      fakeBorrowDeclared = badMode { borrowDeclaredMode = Just Affine }
+      fakeBorrowCapture = loan
+        { borrowFailureStage = Just ClosureCaptureValidation
+        , borrowClosed = Nothing
+        , borrowCuts = take 2 (borrowCuts loan)
+        , borrowOutcome = Left (SourceClosureCaptureError dupError) }
   assert (all (== Left DirectCutOrErrorMismatch)
             [verifyDirectCaptureCuts fakeCuts, verifyDirectCaptureCuts fakeFinal,
              verifyDirectCaptureCuts fakeSummary, verifyDirectCaptureCuts fakeStage,
-             verifyDirectCaptureCuts fakeDup])
+             verifyDirectCaptureCuts fakeDup,
+             verifyDirectCaptureCuts fakeGoodMode,
+             verifyDirectCaptureCuts fakeWeakPayload,
+             verifyDirectCaptureCuts fakeWeakDeclared])
     "forged direct owner state, failure stage or summary was accepted"
   assert (all (== Left BorrowCutOrErrorMismatch)
             [verifyBorrowCaptureCuts fakeLoanClosed, verifyBorrowCaptureCuts fakeLoanCuts,
-             verifyBorrowCaptureCuts fakeLoanExtent])
+             verifyBorrowCaptureCuts fakeLoanExtent,
+             verifyBorrowCaptureCuts fakeGoodBorrowMode,
+             verifyBorrowCaptureCuts fakeBorrowPayload,
+             verifyBorrowCaptureCuts fakeBorrowDeclared,
+             verifyBorrowCaptureCuts fakeBorrowCapture])
     "forged scoped loan result or extent was accepted"
 
 main :: IO ()
@@ -224,9 +251,9 @@ main = do
           checkBorrowFailure wrongMode ClosureModeValidation
             (== SourceClosureModeMismatch Unrestricted Linear)
           checkOutOfFragment wrongView False
-          mutations linear duplicate local
+          mutations linear duplicate local weak wrongMode
         _ -> Left "source specimen list changed arity"
   case result of
     Right () -> putStrLn
-      "PASS: 16 parsed C-1 source specimens, native Γ/A/Δ/loan cuts, precise failure stages, eight forged-evidence refusals"
+      "PASS: 16 parsed C-1 source specimens, native Γ/A/Δ/loan cuts, precise failure stages, 15 forged-evidence refusals"
     Left err -> putStrLn ("FAIL: " ++ err) >> exitFailure
