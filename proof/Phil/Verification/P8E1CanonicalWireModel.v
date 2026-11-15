@@ -200,7 +200,7 @@ Proof.
   apply Nat.leb_le in E.
   split.
   - rewrite firstn_length, Nat.min_l by lia. reflexivity.
-  - apply firstn_skipn.
+  - symmetry. apply firstn_skipn.
 Qed.
 
 Theorem p8_e1_take_exact_prefix :
