@@ -179,7 +179,7 @@ Proof.
      cbn would expand the child trees before their round-trip rewrites. *)
   unfold phase1_surface_data_record_field_type_spine_tree,
     phase1_surface_data_variant_payload_spine_tree.
-  cbn only [
+  cbn [
     phase1_data_record_field_type_spine_name
     phase1_data_record_field_type_spine_generic_params
     phase1_data_record_field_type_spine_mode
