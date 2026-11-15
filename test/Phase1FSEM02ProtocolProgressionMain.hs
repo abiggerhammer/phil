@@ -51,6 +51,8 @@ main = do
         (sourcePingSharedClientContention accepted stale)
     , test "FSEM-02 competing Ping receivers sharing a Server predecessor refuse second use"
         (sourcePingSharedServerContention accepted stale)
+    , test "FSEM-02 shared-Server winner Closes commute and loser remains stale"
+        (sourcePingSharedServerTerminalCloseFrame accepted stale)
     , test "FSEM-02 Ping joint validation orders nominal, projection and resource faults across peers"
         (sourcePingJointGatePriority accepted stale)
     , test "FSEM-02 source Ping joint nominal instance/role fail-closed peer"
@@ -1381,6 +1383,137 @@ sourcePingSharedServerContention accepted rejected = do
     && afterA /= afterB
     && Map.lookup spectator afterA == Map.lookup spectator afterB)
     "shared Server refused healthy first step, unexpectedly commuted or lost frame"
+
+
+-- Distinct from the single-step shared-Server contention regression: advance
+-- the winning Client and shared Server all the way to terminal Close.  Neither
+-- local Close may revive the already consumed shared predecessor or mutate the
+-- losing Client or an unrelated, actively borrowed affine spectator.  The
+-- extra activated Client and disposal/nominal grants are external test inputs,
+-- not architecture authority derived from the two-component Ping source.
+sourcePingSharedServerTerminalCloseFrame
+  :: Text.Text -> Text.Text -> Either String ()
+sourcePingSharedServerTerminalCloseFrame accepted rejected = do
+  plans <- sourcePlans accepted
+  sourceStaleCloseRejected rejected
+  (network, clientA, server, clientB, spectator) <-
+    sourcePingDisjointPairNetwork
+  let revision = sourceProtocolInstance plans
+      sender = sourceClientPlan plans
+      receiver = sourceServerPlan plans
+      clientOld = grammarV1ResolvedBinderCoreName
+        (checkedComponentSendEndpoint sender)
+      clientNext = grammarV1ResolvedBinderCoreName
+        (checkedComponentSendSuccessor sender)
+      serverOld = grammarV1ResolvedBinderCoreName
+        (checkedComponentReceiveEndpoint receiver)
+      serverNext = grammarV1ResolvedBinderCoreName
+        (checkedComponentReceiveSuccessor receiver)
+      spectatorName = Name "fsem02.shared-server.terminal.borrowed"
+      side p old next role = ProcessRendezvousSide p old next revision role
+      request client = JointProcessRendezvous (SendReceiveRendezvous
+        (side client clientOld clientNext clientRole)
+        (side server serverOld serverNext serverRole))
+      run contexts req = checkProcessCommunication
+        (sourceBinaryInstance plans) network contexts req
+      closeOne process endpoint role contexts = do
+        current <- maybe (Left "terminal contention missing process") Right
+          (Map.lookup process contexts)
+        step <- mapLeft show $ checkProtocolAction
+          (ProtocolCloseRequest endpoint revision role done) current
+        assert (checkedProtocolPredecessor step
+                   == ProtocolEndpointBinding endpoint revision role (End done)
+             && checkedProtocolSuccessor step == Nothing)
+          "terminal contention Close consumed wrong typed End or invented successor"
+        let closed = checkedProtocolContext step
+        assert (Map.notMember endpoint (protocolEndpoints closed)
+             && Map.notMember endpoint (linearBindings (protocolResources closed)))
+          "terminal contention Close retained endpoint or linear owner"
+        pure (Map.insert process closed contexts)
+      expectStale label expectedProcess old contexts req =
+        case run contexts req of
+          Left (RendezvousEndpointNotOwnedByProcess actual stale) ->
+            assert (actual == expectedProcess && stale == old)
+              (label <> ": wrong stale process/endpoint")
+          other -> Left (label <> ": stale request progressed: " <> show other)
+  assert (sourceServerHead plans == dualSession (sourceClientHead plans)
+       && clientOld /= clientNext && serverOld /= serverNext)
+    "source Ping terminal contention heads or predecessors alias"
+  clientBefore <- mapLeft show $ insertProtocolEndpoint
+    clientOld revision clientRole (sourceClientHead plans) emptyProtocolContext
+  serverBefore <- mapLeft show $ insertProtocolEndpoint
+    serverOld revision serverRole (sourceServerHead plans) emptyProtocolContext
+  framed <- mapLeft show $ insertBinding Affine spectatorName
+    (TyUInt 8) (protocolResources emptyProtocolContext)
+  loaned <- mapLeft show $ startSharedLoan spectatorName framed
+  let spectatorBefore = emptyProtocolContext { protocolResources = loaned }
+      before = Map.fromList
+        [(clientA, clientBefore), (server, serverBefore),
+         (clientB, clientBefore), (spectator, spectatorBefore)]
+      finish label winner loser progressed = do
+        winnerEnd <- maybe (Left (label <> ": missing winner End")) Right
+          (Map.lookup winner progressed)
+        serverEnd <- maybe (Left (label <> ": missing server End")) Right
+          (Map.lookup server progressed)
+        assert
+          (Map.lookup clientNext (protocolEndpoints winnerEnd)
+             == Just (ProtocolEndpointBinding clientNext revision clientRole (End done))
+           && Map.lookup serverNext (protocolEndpoints serverEnd)
+             == Just (ProtocolEndpointBinding serverNext revision serverRole (End done))
+           && Map.lookup loser progressed == Just clientBefore
+           && Map.lookup spectator progressed == Just spectatorBefore)
+          (label <> ": first step changed uninvolved Client or terminal heads")
+        clientFirst <- closeOne winner clientNext clientRole progressed
+        forward <- closeOne server serverNext serverRole clientFirst
+        serverFirst <- closeOne server serverNext serverRole progressed
+        reverseOrder <- closeOne winner clientNext clientRole serverFirst
+        assert
+          (forward == reverseOrder
+           && Map.keysSet forward == Map.keysSet before
+           && Map.lookup loser forward == Just clientBefore
+           && Map.lookup spectator forward == Just spectatorBefore
+           && Map.lookup server clientFirst == Just serverEnd
+           && Map.lookup winner serverFirst == Just winnerEnd)
+          (label <> ": terminal Close orders fail to commute or break frame")
+        let finalWinner = Map.lookup winner forward
+            finalServer = Map.lookup server forward
+        assert
+          (maybe False (Map.null . protocolEndpoints) finalWinner
+           && maybe False (Map.null . protocolEndpoints) finalServer
+           && maybe False
+                (Map.null . linearBindings . protocolResources) finalWinner
+           && maybe False
+                (Map.null . linearBindings . protocolResources) finalServer)
+          (label <> ": terminal endpoints or restricted owners remain")
+        expectStale (label <> " loser after both Closes")
+          server serverOld forward (request loser)
+        expectStale (label <> " winner replay after both Closes")
+          winner clientOld forward (request winner)
+        case finalWinner of
+          Nothing -> Left (label <> ": final winner missing")
+          Just ctx -> case checkProtocolAction
+            (ProtocolCloseRequest clientNext revision clientRole done) ctx of
+              Left (ProtocolEndpointUnknown old) ->
+                assert (old == clientNext) (label <> ": wrong stale Client Close")
+              other -> Left (label <> ": repeated Client Close: " <> show other)
+        case finalServer of
+          Nothing -> Left (label <> ": final Server missing")
+          Just ctx -> case checkProtocolAction
+            (ProtocolCloseRequest serverNext revision serverRole done) ctx of
+              Left (ProtocolEndpointUnknown old) ->
+                assert (old == serverNext) (label <> ": wrong stale Server Close")
+              other -> Left (label <> ": repeated Server Close: " <> show other)
+        pure forward
+  progressedA <- mapLeft show $ run before (request clientA)
+  completedA <- finish "A wins" clientA clientB progressedA
+  progressedB <- mapLeft show $ run before (request clientB)
+  completedB <- finish "B wins" clientB clientA progressedB
+  assert
+    (completedA /= completedB
+     && run before (request clientA) == Right progressedA
+     && run before (request clientB) == Right progressedB
+     && Map.lookup spectator completedA == Map.lookup spectator completedB)
+    "alternate winner terminal replays were not deterministic or lost spectator"
 
 
 sourcePingJointDeclaration :: Text.Text -> DeclarationIdentity
