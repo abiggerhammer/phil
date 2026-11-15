@@ -1,0 +1,65 @@
+name: Phase 1 P8-E2 canonical structural and typed application
+
+on:
+  pull_request:
+    paths:
+      - 'proof/Phil/Verification/P8E2CanonicalApplicationModel.v'
+      - 'test/P8E2CanonicalApplicationMain.hs'
+      - 'docs/phase-1/p8-e2-canonical-application-model-v1.md'
+      - '.github/workflows/phase1-p8-e2-canonical-application.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'proof/Phil/Verification/P8E2CanonicalApplicationModel.v'
+      - 'test/P8E2CanonicalApplicationMain.hs'
+      - 'docs/phase-1/p8-e2-canonical-application-model-v1.md'
+      - '.github/workflows/phase1-p8-e2-canonical-application.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  native-typed-application-differential:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: haskell-actions/setup@v2
+        with:
+          ghc-version: '9.6.7'
+          cabal-version: 'latest'
+      - name: Build production and all native tests without warnings
+        run: cabal build all --enable-tests --ghc-options=-Werror
+      - name: Compile native recursive and typed application differential strictly
+        run: cabal exec -- ghc -isrc -itest -Wall -Werror -fno-code test/P8E2CanonicalApplicationMain.hs
+      - name: Run real native positive and tamper negatives
+        run: cabal exec -- runghc -isrc -Wall -Werror test/P8E2CanonicalApplicationMain.hs
+      - name: Preserve real source, stage and release regressions
+        run: |
+          cabal exec -- runghc -isrc -Wall -Werror test/Phase1INT005CertifiedReleaseEnvelopeMain.hs
+          cabal exec -- runghc -isrc -Wall -Werror test/Phase1VerificationSourceArtifactClosureMain.hs
+          cabal exec -- runghc -isrc -Wall -Werror test/Phase1StageClosureMain.hs
+
+  rocq-typed-application-model:
+    runs-on: ubuntu-24.04
+    container:
+      image: rocq/rocq-prover:9.2.0
+      options: --user root
+    steps:
+      - uses: actions/checkout@v4
+      - name: Compile full C1 D1 D2 E1 E2 proof closure, Print Assumptions, check objects
+        shell: bash
+        run: |
+          set -euo pipefail
+          export PATH="/home/rocq/.opam/$COMPILER/bin:$PATH"
+          rocq -v
+          rocq c -Q proof/Phil Phil proof/Phil/Verification/P8UnicodeUtf8Model.v
+          rocq c -Q proof/Phil Phil proof/Phil/Verification/P8D1UnicodeStreamModel.v
+          rocq c -Q proof/Phil Phil proof/Phil/Verification/P8D2StructuralOrderModel.v
+          rocq c -Q proof/Phil Phil proof/Phil/Verification/P8E1CanonicalWireModel.v
+          rocq c -Q proof/Phil Phil proof/Phil/Verification/P8E2CanonicalApplicationModel.v | tee /tmp/p8-e2-assumptions.log
+          rocq check -Q proof/Phil Phil Phil.Verification.P8UnicodeUtf8Model
+          rocq check -Q proof/Phil Phil Phil.Verification.P8D1UnicodeStreamModel
+          rocq check -Q proof/Phil Phil Phil.Verification.P8D2StructuralOrderModel
+          rocq check -Q proof/Phil Phil Phil.Verification.P8E1CanonicalWireModel
+          rocq check -Q proof/Phil Phil Phil.Verification.P8E2CanonicalApplicationModel
+          sha256sum proof/Phil/Verification/P8UnicodeUtf8Model.vo proof/Phil/Verification/P8D1UnicodeStreamModel.vo proof/Phil/Verification/P8D2StructuralOrderModel.vo proof/Phil/Verification/P8E1CanonicalWireModel.vo proof/Phil/Verification/P8E2CanonicalApplicationModel.vo /tmp/p8-e2-assumptions.log
