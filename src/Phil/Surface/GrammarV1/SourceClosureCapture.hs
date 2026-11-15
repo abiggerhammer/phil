@@ -68,6 +68,8 @@ data SourceDirectClosureRun = SourceDirectClosureRun
   , directCaptures :: [GrammarV1ResolvedBinder]
   , directInitial :: Core.ResourceContext
   , directSummary :: Maybe ClosureCaptureSummary
+  -- | Exact explicit source mode, or Nothing for derived mode.
+  , directDeclaredMode :: Maybe Mode
   -- | Exact native resource contexts: initial and each successful useBinding.
   -- A rejected use preserves its successful prefix, NOT an invented successor.
   , directCuts :: [Core.ResourceContext]
@@ -81,6 +83,8 @@ data SourceBorrowClosureRun = SourceBorrowClosureRun
   , borrowView :: GrammarV1ResolvedBinder
   , borrowExtent :: ClosureExtent
   , borrowInitial :: Core.ResourceContext
+  -- | Exact explicit source mode, or Nothing for derived mode.
+  , borrowDeclaredMode :: Maybe Mode
   -- | Native initial, successful loan-start, and (only on success) loan-close.
   , borrowCuts :: [Core.ResourceContext]
   , borrowFailureStage :: Maybe SourceClosureFailureStage
@@ -136,6 +140,7 @@ runDirect typed resolved closure =
         , directCaptures = resolved
         , directInitial = initial
         , directSummary = Nothing
+        , directDeclaredMode = sourceMode (grammarV1ClosureMode closure)
         , directCuts = [initial]
         , directFailureStage = Nothing
         , directFinal = Nothing
@@ -248,6 +253,7 @@ runBorrow typed owner view isEscape closure =
       start = SourceBorrowClosureRun
         { borrowOwner = owner, borrowView = view, borrowExtent = extent
         , borrowInitial = initial, borrowCuts = [initial]
+        , borrowDeclaredMode = sourceMode (grammarV1ClosureMode closure)
         , borrowFailureStage = Nothing, borrowStarted = Nothing
         , borrowClosed = Nothing, borrowOutcome = Right () }
   in case Core.startSharedLoan ownerName initial of
