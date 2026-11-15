@@ -89,25 +89,15 @@ Proof.
   now rewrite H.
 Qed.
 
-Theorem fsem02MixedPrefixPingThenCloseAfterRefusal :
+Theorem fsem02MixedPrefixPingAfterRefusal :
   forall site before,
     before site = FSEM02AwaitPing ->
-    match fsem02MixPing site (snd (fsem02MixBadClose site before)) with
-    | Some pinged => fsem02MixClose site pinged
-    | None => None
-    end = Some (fsem02MixWrite site FSEM02Retired before).
+    fsem02MixPing site (snd (fsem02MixBadClose site before)) =
+      Some (fsem02MixWrite site FSEM02LiveEnd before).
 Proof.
   intros site before H.
-  unfold fsem02MixBadClose; simpl.
-  unfold fsem02MixPing; rewrite H.
-  simpl.
-  change (Some (fsem02MixWrite site FSEM02Retired
-    (fsem02MixWrite site FSEM02LiveEnd before)) =
-    Some (fsem02MixWrite site FSEM02Retired before)).
-  f_equal.
-  apply functional_extensionality; intro key.
-  unfold fsem02MixWrite.
-  destruct (Nat.eqb key site); reflexivity.
+  unfold fsem02MixPing, fsem02MixBadClose; simpl.
+  now rewrite H.
 Qed.
 
 Theorem fsem02MixedPrefixIndependentPhaseUpdatesCommute :
