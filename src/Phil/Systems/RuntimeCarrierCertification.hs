@@ -256,6 +256,8 @@ verifyCoveredUse ledger manifest claimStage carriers bindings witness use carrie
         } -> Right (obligation, evidence, cost)
       ErasureUse {} -> Left (RuntimeCarrierCertificationLinkedUseNotRetained
         (runtimeCarrierUseId use) assuranceId)
+      CheckedStaticUse {} -> Left (RuntimeCarrierCertificationLinkedUseNotRetained
+        (runtimeCarrierUseId use) assuranceId)
 
   unless (Set.member assuranceId (manifestAssuranceUses manifest)) $
     Left (RuntimeCarrierCertificationLinkedAssuranceUseMissing
