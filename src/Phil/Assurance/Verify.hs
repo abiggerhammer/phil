@@ -20,7 +20,12 @@ import Phil.Assurance.EvidenceAuthorityKernelBridge
   , runtimeAuthorityKernelAccepts
   )
 import Phil.Assurance.Types
-import Phil.Core.Syntax (ObligationId (..))
+import Phil.Core.Syntax (ObligationId (..), Proposition (Truth))
+import Phil.Core.Static
+  ( ArchitectureInstanceIdentity (..), DeclarationKey (..)
+  , InstanceKey (..), InstanceRevision (..) )
+import Phil.Surface.Lineage (SourceUnitId (..), DeclarationSiteId (..))
+import Phil.Surface.Syntax (SourcePoint (..), SourceSpan (..))
 
 
 data GraphNode
@@ -87,6 +92,10 @@ data ManifestError
   | AssuranceUseEvidenceMismatch AssuranceUseId EvidenceEntryId RevisionId
   | RuntimeUseRequiresRuntimeEvidence AssuranceUseId EvidenceEntryId
   | RuntimeUseCostMismatch AssuranceUseId Text
+  | CheckedStaticUseWithoutEvidence AssuranceUseId
+  | CheckedStaticUseInvalidFact AssuranceUseId
+  | CheckedStaticUseRevisionSubjectMismatch AssuranceUseId RevisionId
+  | CheckedStaticUseUnqualifiedEvidence AssuranceUseId EvidenceEntryId
   | LedgerHistoryMutation Text
   deriving (Eq, Show)
 
@@ -347,6 +356,49 @@ verifyManifest context ledger manifest = do
             Left (RuntimeUseCostMismatch key costRef)
           unless (Set.member costRef (verificationKnownCostRefs context)) $
             Left (RuntimeUseCostMismatch key costRef)
+        CheckedStaticUse _ _ _ entries fact -> do
+          when (null entries) (Left (CheckedStaticUseWithoutEvidence key))
+          unless (staticFactWellFormed fact) $
+            Left (CheckedStaticUseInvalidFact key)
+          selectedRevision <- case Map.lookup revision (ledgerRevisions ledger) of
+            Nothing -> Left (MissingRevision revision)
+            Just value -> Right value
+          unless (revisionStatement selectedRevision ==
+                  renderPropositionCanonical (staticUseCanonicalProposition fact)) $
+            Left (CheckedStaticUseRevisionSubjectMismatch key revision)
+          mapM_ (verifyStaticEvidence key revision evidence fact) entries
+
+    staticFactWellFormed fact = and
+      [ not (Text.null (unSourceUnitId (staticUseSourceUnit fact)))
+      , not (Text.null (unDeclarationSiteId (staticUseDeclarationSite fact)))
+      , not (Text.null (unDeclarationKey (staticUseDeclarationKey fact)))
+      , not (Text.null (unInstanceKey
+          (identityInstanceKey (staticUseArchitecture fact))))
+      , not (Text.null (unInstanceRevision
+          (identityInstanceRevision (staticUseArchitecture fact))))
+      , sourcePointOffset (sourceSpanEnd (staticUseSite fact)) >=
+          sourcePointOffset (sourceSpanStart (staticUseSite fact))
+      , staticUseOrdinal fact >= 0
+      , staticUseCanonicalProposition fact /= Truth
+      , staticUseOriginalProposition fact /= Truth
+      ]
+
+    -- Manifest selection validates immutable evidence semantics only.
+    -- Original source-checker provenance requires the sealed P2/P6 producer.
+    verifyStaticEvidence useId revision evidence fact entryId = do
+      verifyUseEvidence useId revision evidence entryId
+      entry <- case Map.lookup entryId evidence of
+        Nothing -> Left (AssuranceUseMissingEvidence useId entryId)
+        Just value -> Right value
+      unless (evidenceAssuranceKind entry == KernelChecked
+              && evidenceRole entry == EvidenceRole "source_checked_static_use"
+              && evidenceProducer entry == "Phil.Surface.Check.Engine"
+              && evidenceChecker entry == "Phil.Surface.Check.Engine"
+              && evidenceJustifies entry ==
+                   [renderPropositionCanonical (staticUseCanonicalProposition fact)]
+              && evidenceInputDigests entry == [deriveStaticCheckedSourceFactDigest fact]
+              && null (evidenceAssumptions entry)) $
+        Left (CheckedStaticUseUnqualifiedEvidence useId entryId)
 
     verifyUseEvidence useId revision evidence entryId =
       case Map.lookup entryId evidence of

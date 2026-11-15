@@ -1,0 +1,49 @@
+name: Phase 1 P9-F1 Checked Static Source Use
+
+on:
+  pull_request:
+    paths:
+      - 'src/Phil/Assurance/Types.hs'
+      - 'src/Phil/Assurance/Verify.hs'
+      - 'src/Phil/Verification/VerifiedStageClosureProduction.hs'
+      - 'test/Phase1INT001WitnessE2EMain.hs'
+      - 'docs/phase-1/p9-f1-checked-static-source-use-v1.md'
+      - '.github/workflows/phase1-p9-f1-checked-static-use.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'src/Phil/Assurance/Types.hs'
+      - 'src/Phil/Assurance/Verify.hs'
+      - 'src/Phil/Verification/VerifiedStageClosureProduction.hs'
+      - 'test/Phase1INT001WitnessE2EMain.hs'
+      - 'docs/phase-1/p9-f1-checked-static-source-use-v1.md'
+      - '.github/workflows/phase1-p9-f1-checked-static-use.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  immutable-static-use-and-sealed-source-producer:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: haskell-actions/setup@v2
+        with:
+          ghc-version: '9.6.7'
+          cabal-version: 'latest'
+      - name: Strict all-source build
+        run: cabal build all --enable-tests --ghc-options=-Werror
+      - name: Strict P9 F1 and predecessor typechecking
+        run: |
+          cabal exec -- ghc -isrc -itest -Wall -Werror -fno-code test/Phase1INT001WitnessE2EMain.hs
+          cabal exec -- ghc -isrc -itest -Wall -Werror -fno-code test/Phase1P9SourceEvidenceMain.hs
+          cabal exec -- ghc -isrc -itest -Wall -Werror -fno-code test/Phase1P9SealedSourceEventMain.hs
+          cabal exec -- ghc -isrc -itest -Wall -Werror -fno-code test/Phase1INT002ManifestClosureMain.hs
+      - name: Original P2 P6 P7 Upload and Steve and new selected static use negatives
+        run: cabal exec -- runghc -isrc -Wall -Werror test/Phase1INT001WitnessE2EMain.hs
+      - name: Original P9 E1 and E2 source-event checks
+        run: |
+          cabal exec -- runghc -isrc -Wall -Werror test/Phase1P9SourceEvidenceMain.hs
+          cabal exec -- runghc -isrc -Wall -Werror test/Phase1P9SealedSourceEventMain.hs
+      - name: Independently retain ordinary assurance and manifest behavior
+        run: cabal exec -- runghc -isrc -Wall -Werror test/Phase1INT002ManifestClosureMain.hs
