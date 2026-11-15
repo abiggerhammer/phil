@@ -283,7 +283,7 @@ Proof.
   destruct (p8_e2_bytes_equal (p8_e2_put_application candidate) wire)
     eqn:Equal; try discriminate.
   apply p8_e2_bytes_equal_sound in Equal.
-  inversion H; subst; clear H.
+  inversion H; subst candidate; clear H.
   pose proof (p8_e2_parsed_application_is_valid wire app [] P) as V.
   repeat split; assumption.
 Qed.
