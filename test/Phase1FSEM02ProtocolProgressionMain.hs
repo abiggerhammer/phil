@@ -2470,7 +2470,7 @@ sourcePingThreeDisjointTerminalSchedules accepted rejected = do
       (Map.lookup endpoint (protocolEndpoints current)
         == Just (ProtocolEndpointBinding endpoint revision role (End done))
        && Map.lookup endpoint (linearBindings (protocolResources current))
-        == Just (TyEndpoint (End done))))
+        == Just (TyEndpoint (End done)))
       ("triple progression lost exact typed successor at " <> show p))
     terminalSides
   expected <- foldM closeOne canonical terminalSides
