@@ -1,5 +1,5 @@
 From Stdlib Require Import Arith.PeanoNat.
-From Phil.Core Require Import Syntax Context
+From Phil.Core Require Import Syntax Context FSEM02PingThreeProcessFrame
   FSEM02PingSharedClientContention FSEM02PingSharedServerTerminalCloseFrame.
 
 (* Non-normative conditional process-map model. The source-derived End
