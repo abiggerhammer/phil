@@ -174,7 +174,7 @@ Proof.
   destruct
     (phase1_surface_normalize_record_field_type_variant_spines rest_variants)
     as [rest_refined |] eqn:Hrest; try discriminate Hnormalize.
-  inversion Hnormalize; subst refined.
+  inversion Hnormalize; subst.
   cbn.
   rewrite
     (phase1_surface_normalize_record_field_type_variant_spine_round_trip
