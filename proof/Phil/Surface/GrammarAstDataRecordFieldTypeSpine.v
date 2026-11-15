@@ -167,6 +167,7 @@ Proof.
   intros
     [name generic_params mode requirements first_variant rest_variants]
     refined Hnormalize.
+  unfold phase1_surface_normalize_data_record_field_type_spine in Hnormalize.
   cbn in Hnormalize.
   destruct
     (phase1_surface_normalize_record_field_type_variant_spine first_variant)
