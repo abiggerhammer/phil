@@ -100,6 +100,17 @@ cabal run phil-core -- parse examples/upload/client.phil
 
 A successful `parse` command still means only syntactic acceptance and source-location recovery; semantic acceptance belongs to whole-component checking and later competent verification/lowering stages.
 
+
+## Community & Sponsorship
+
+Phil is an Apache-2.0 open-source project supported by contributors, independent developers, and sponsors.
+
+[Higher.fun](https://higher.fun/) is among the supporters helping fund Phil's development. The Philcoin community has also begun experimenting with Phil and contributing examples.
+
+See [Community & Sponsorship](docs/community-and-sponsorship.md) for ways to get involved, sponsor acknowledgements, and the Philcoin Solana mint address.
+
+Philcoin is a separate community token. **You do not need to own or purchase any token to use, contribute to, or build with Phil.**
+
 ## License
 
 Phil's source code, proofs, examples, and repository documentation are licensed under the **Apache License 2.0**. See [`LICENSE`](LICENSE).
