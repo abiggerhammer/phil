@@ -101,10 +101,22 @@ Proof.
        phase1_record_field_type_spine_mode
        phase1_record_field_type_spine_requirements
        phase1_record_field_type_spine_fields].
-  rewrite
-    (phase1_surface_normalize_optional_generic_params_kind_type_round_trip
-      generic_params actual Hgeneric).
-  reflexivity.
+  exact
+    (f_equal
+      (fun generic_tree : ParseTree =>
+        PTNonterminal "record_decl"
+          (PTSequence
+            [ PTLiteral "record";
+              phase1_surface_identifier_tree name;
+              generic_tree;
+              phase1_surface_optional_mode_tree mode;
+              phase1_surface_optional_generic_requirements_tree requirements;
+              PTLiteral "{";
+              phase1_surface_optional_field_type_list_tree fields;
+              PTLiteral "}"
+            ]))
+      (phase1_surface_normalize_optional_generic_params_kind_type_round_trip
+        generic_params actual Hgeneric)).
 Qed.
 
 Definition phase1_surface_normalize_record_generic_kind_type_tree
@@ -221,10 +233,25 @@ Proof.
        phase1_data_record_field_type_spine_requirements
        phase1_data_record_field_type_spine_first_variant
        phase1_data_record_field_type_spine_rest_variants].
-  rewrite
-    (phase1_surface_normalize_optional_generic_params_kind_type_round_trip
-      generic_params actual Hgeneric).
-  reflexivity.
+  exact
+    (f_equal
+      (fun generic_tree : ParseTree =>
+        PTNonterminal "data_decl"
+          (PTSequence
+            [ PTLiteral "data";
+              phase1_surface_identifier_tree name;
+              generic_tree;
+              phase1_surface_optional_mode_tree mode;
+              phase1_surface_optional_generic_requirements_tree requirements;
+              PTLiteral "=";
+              phase1_surface_record_field_type_variant_spine_tree first_variant;
+              PTRepetition
+                (map phase1_surface_record_field_type_data_suffix_tree
+                  rest_variants);
+              PTLiteral ";"
+            ]))
+      (phase1_surface_normalize_optional_generic_params_kind_type_round_trip
+        generic_params actual Hgeneric)).
 Qed.
 
 Definition phase1_surface_normalize_data_generic_kind_type_tree

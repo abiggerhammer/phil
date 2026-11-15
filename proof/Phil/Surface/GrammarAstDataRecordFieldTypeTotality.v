@@ -13,6 +13,7 @@ From Phil.Surface Require Import
   GrammarAstGenericRequirementsSpine
   GrammarAstGenericRequirementsTotality
   GrammarAstGenericParamsTotality
+  GrammarAstStructuralModeTotality
   GrammarAstDataRecordFieldTypeSpine
   GrammarAstVariantDeclRecordFieldTypeTotality
   GrammarAstDataTotality.
