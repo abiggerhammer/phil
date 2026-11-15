@@ -9,6 +9,7 @@ From Phil.Surface Require Import
   GrammarAstGenericKindTypeSpine
   GrammarAstRecordDataGenericKindTypeSpine
   GrammarAstGenericKindTypeTotality
+  GrammarAstGenericParamKindTypeSpine
   GrammarAstGenericParamKindTypeTotality
   GrammarAstRecordFieldTypeTotality
   GrammarAstDataRecordFieldTypeTotality.
