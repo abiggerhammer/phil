@@ -51,7 +51,7 @@ main = do
         (sourcePingDisjointPairCommutation accepted stale)
     , test "FSEM-02 disjoint Ping pairs complete all 24 terminal Close orders"
         (sourcePingDisjointTerminalInterleavings accepted stale)
-    , test "FSEM-02 13440 mixed Ping/Close schedules classify all six endpoint fault probes at every prefix and replay"
+    , test "FSEM-02 13440 mixed Ping/Close schedules classify 806400 Close and 302400 stale joint Ping probes"
         (sourcePingThreeDisjointTerminalSchedules accepted stale)
     , test "FSEM-02 competing Ping sends sharing a Client predecessor refuse second use"
         (sourcePingSharedClientContention accepted stale)
@@ -2536,8 +2536,10 @@ sourcePingThreeDisjointTerminalSchedules accepted rejected = do
          (cc, clientOld, clientNext, clientRole, sourceClientHead plans),
          (cs, serverOld, serverNext, serverRole, sourceServerHead plans)]
       invalidOutcome = Outcome "FSEM02.BadTerminal"
+      pingPairs = [(requestA, ac, as), (requestB, bc, bs), (requestC, cc, cs)]
       inspectPrefix contexts = do
         mapM_ (inspectPhase contexts) prefixSides
+        mapM_ (inspectStaleJointPing contexts) pingPairs
         framedProcess <- maybe (Left "mixed-prefix loaned process missing") Right
           (Map.lookup cs contexts)
         assert
@@ -2589,6 +2591,35 @@ sourcePingThreeDisjointTerminalSchedules accepted rejected = do
               other -> Left ("mixed-prefix stale Close wrong rejection: " <> show other)
           (Just _, Just _) ->
             Left "mixed-prefix predecessor and successor simultaneously live"
+      -- At each mixed prefix, a whole-source-derived joint Ping already
+      -- consumed by that pair must refuse its original two predecessors.
+      -- No partial successor may appear even after unrelated committed Closes.
+      inspectStaleJointPing contexts (requestValue, clientKey, serverKey) = do
+        clientContext <- maybe (Left "stale Ping Client context missing") Right
+          (Map.lookup clientKey contexts)
+        serverContext <- maybe (Left "stale Ping Server context missing") Right
+          (Map.lookup serverKey contexts)
+        let clientLive = Map.member clientOld (protocolEndpoints clientContext)
+            serverLive = Map.member serverOld (protocolEndpoints serverContext)
+            clientOwners = linearBindings (protocolResources clientContext)
+            serverOwners = linearBindings (protocolResources serverContext)
+        case (clientLive, serverLive) of
+          (True, True) ->
+            assert
+              (Map.lookup clientOld clientOwners == Just (TyEndpoint (sourceClientHead plans))
+               && Map.lookup serverOld serverOwners == Just (TyEndpoint (sourceServerHead plans)))
+              "mixed-prefix unstarted pair lost exact source-typed Ping predecessors"
+          (False, False) -> do
+            assert (Map.notMember clientOld clientOwners
+                 && Map.notMember serverOld serverOwners)
+              "mixed-prefix consumed Ping predecessor retains a linear owner"
+            case run contexts requestValue of
+              Left (RendezvousEndpointNotOwnedByProcess actualProcess old) ->
+                assert (actualProcess == clientKey && old == clientOld)
+                  "mixed-prefix stale joint Ping lost exact Client process/predecessor"
+              other -> Left ("mixed-prefix stale joint Ping advanced or misclassified: "
+                             <> show other)
+          _ -> Left "mixed-prefix joint Ping consumed only one peer predecessor"
   mapM_ (\events -> do
     terminal <- foldM (\contexts (_, _, event) -> do
       inspectPrefix contexts
