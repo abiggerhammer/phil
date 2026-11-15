@@ -195,7 +195,7 @@ Proof.
       as [[rest trailing]|] eqn:R; try discriminate.
     inversion H; subst; clear H.
     cbn [p8_e1_fields_count].
-    pose proof (IH fuel next rest trailing R). lia.
+    pose proof (IH fuel next rest suffix R). lia.
 Qed.
 
 (* "g D text V text count : (Q text M form)*". Each role is checked
