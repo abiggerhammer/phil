@@ -51,7 +51,7 @@ main = do
         (sourcePingDisjointPairCommutation accepted stale)
     , test "FSEM-02 disjoint Ping pairs complete all 24 terminal Close orders"
         (sourcePingDisjointTerminalInterleavings accepted stale)
-    , test "FSEM-02 three Pings: 4320 terminal and 13440 mixed Ping/Close schedules"
+    , test "FSEM-02 13440 mixed Ping/Close schedules classify all six endpoint fault probes at every prefix and replay"
         (sourcePingThreeDisjointTerminalSchedules accepted stale)
     , test "FSEM-02 competing Ping sends sharing a Client predecessor refuse second use"
         (sourcePingSharedClientContention accepted stale)
@@ -2524,13 +2524,80 @@ sourcePingThreeDisjointTerminalSchedules accepted rejected = do
     cs serverOld serverRole (sourceServerHead plans)
   assert (length mixedOrders == 13440)
     "three-pair Ping-before-own-Close partial-order census changed"
+  -- At every prefix of every legal schedule, interrogate every endpoint.
+  -- Three distinct refusal classes depend on its *current* source-derived
+  -- session phase. The rejected pure checker result cannot be used as a
+  -- state transition; the same committed prefix must execute the valid suffix.
+  let prefixSides =
+        [(ac, clientOld, clientNext, clientRole, sourceClientHead plans),
+         (as, serverOld, serverNext, serverRole, sourceServerHead plans),
+         (bc, clientOld, clientNext, clientRole, sourceClientHead plans),
+         (bs, serverOld, serverNext, serverRole, sourceServerHead plans),
+         (cc, clientOld, clientNext, clientRole, sourceClientHead plans),
+         (cs, serverOld, serverNext, serverRole, sourceServerHead plans)]
+      invalidOutcome = Outcome "FSEM02.BadTerminal"
+      inspectPrefix contexts = do
+        mapM_ (inspectPhase contexts) prefixSides
+        framedProcess <- maybe (Left "mixed-prefix loaned process missing") Right
+          (Map.lookup cs contexts)
+        assert
+          (affineBindings (protocolResources framedProcess) == affineBindings loaned
+           && sharedLoans (protocolResources framedProcess) == sharedLoans loaned)
+          "mixed-prefix fault probe changed independent affine spectator"
+      inspectPhase contexts (processKey, predecessorName, successorName, endpointRole, prePingHead) = do
+        current <- maybe (Left "mixed-prefix process context missing") Right
+          (Map.lookup processKey contexts)
+        let currentEndpoints = protocolEndpoints current
+            currentOwners = linearBindings (protocolResources current)
+            predecessorBinding = Map.lookup predecessorName currentEndpoints
+            successorBinding = Map.lookup successorName currentEndpoints
+        case (predecessorBinding, successorBinding) of
+          (Just oldBinding, Nothing) -> do
+            assert
+              (oldBinding == ProtocolEndpointBinding predecessorName revision endpointRole prePingHead
+               && Map.lookup predecessorName currentOwners == Just (TyEndpoint prePingHead)
+               && Map.notMember successorName currentOwners)
+              "mixed-prefix pre-Ping binding/linear owner mismatch"
+            case checkProtocolAction
+                (ProtocolCloseRequest predecessorName revision endpointRole done) current of
+              Left (ProtocolSessionError (UnexpectedSessionAction (CloseAction attemptedOutcome) actualHead)) ->
+                assert (attemptedOutcome == done && actualHead == prePingHead)
+                  "mixed-prefix premature Close lost exact live Send/Receive head"
+              other -> Left ("mixed-prefix premature Close wrong rejection: " <> show other)
+          (Nothing, Just endBinding) -> do
+            assert
+              (endBinding == ProtocolEndpointBinding successorName revision endpointRole (End done)
+               && Map.lookup successorName currentOwners == Just (TyEndpoint (End done))
+               && Map.notMember predecessorName currentOwners)
+              "mixed-prefix End successor/linear owner mismatch"
+            case checkProtocolAction
+                (ProtocolCloseRequest successorName revision endpointRole invalidOutcome) current of
+              Left (ProtocolSessionError (CloseOutcomeMismatch expectedOutcome actualOutcome)) ->
+                assert (expectedOutcome == done && actualOutcome == invalidOutcome)
+                  "mixed-prefix wrong-outcome Close lost precise terminal mismatch"
+              other -> Left ("mixed-prefix wrong-outcome Close wrong rejection: " <> show other)
+          (Nothing, Nothing) -> do
+            assert
+              (Map.notMember predecessorName currentOwners
+               && Map.notMember successorName currentOwners)
+              "mixed-prefix retired endpoint retains a linear owner"
+            case checkProtocolAction
+                (ProtocolCloseRequest successorName revision endpointRole done) current of
+              Left (ProtocolEndpointUnknown staleName) ->
+                assert (staleName == successorName)
+                  "mixed-prefix stale Close lost exact retired endpoint"
+              other -> Left ("mixed-prefix stale Close wrong rejection: " <> show other)
+          (Just _, Just _) ->
+            Left "mixed-prefix predecessor and successor simultaneously live"
   mapM_ (\events -> do
-    terminal <- foldM (\contexts (_, _, event) ->
+    terminal <- foldM (\contexts (_, _, event) -> do
+      inspectPrefix contexts
       case event of
         Left req -> mapLeft show (run contexts req)
         Right terminalSide -> closeOne contexts terminalSide) before events
+    inspectPrefix terminal
     assert (terminal == expected && Map.keysSet terminal == Map.keysSet before)
-      "mixed Ping/Close schedule altered owned endpoint or affine frame")
+      "mixed Ping/Close fault/retry schedule altered owned endpoint or affine frame")
     mixedOrders
   mapM_ (\(p, endpoint, role) -> do
     context <- maybe (Left "triple final process absent") Right
