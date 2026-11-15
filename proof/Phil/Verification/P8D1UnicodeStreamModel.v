@@ -201,7 +201,7 @@ Lemma p8_d1_fuel_roundtrip :
       (p8_d1_encode scalars) = Some scalars.
 Proof.
   induction scalars as [|s rest IH]; intros extra H.
-  - reflexivity.
+  - destruct extra; reflexivity.
   - unfold p8_d1_valid in H. simpl in H.
     apply andb_true_iff in H as [Ws Wrest].
     change
