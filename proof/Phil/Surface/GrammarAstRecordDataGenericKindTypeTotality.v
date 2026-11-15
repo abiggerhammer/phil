@@ -67,15 +67,40 @@ Proof.
   rewrite phase1_surface_generic_kind_item_at_tag in Hnth.
   inversion Hnth; subst item.
   destruct tag; cbn in Hselected |- *.
-  - exists Phase1GenericTypeKind.
+  - destruct
+      (literal_derivation_is_exact
+        phase1_surface_rules _ "Type" _ _ selected Hselected)
+      as [literal_tail [_ [_ Hselected_tree]]].
+    rewrite Hselected_tree.
+    exists Phase1GenericTypeKind.
     reflexivity.
-  - exists Phase1GenericNatKind.
+  - destruct
+      (literal_derivation_is_exact
+        phase1_surface_rules _ "Nat" _ _ selected Hselected)
+      as [literal_tail [_ [_ Hselected_tree]]].
+    rewrite Hselected_tree.
+    exists Phase1GenericNatKind.
     reflexivity.
-  - exists Phase1GenericSessionKind.
+  - destruct
+      (literal_derivation_is_exact
+        phase1_surface_rules _ "Session" _ _ selected Hselected)
+      as [literal_tail [_ [_ Hselected_tree]]].
+    rewrite Hselected_tree.
+    exists Phase1GenericSessionKind.
     reflexivity.
-  - exists Phase1GenericMessageKind.
+  - destruct
+      (literal_derivation_is_exact
+        phase1_surface_rules _ "Message" _ _ selected Hselected)
+      as [literal_tail [_ [_ Hselected_tree]]].
+    rewrite Hselected_tree.
+    exists Phase1GenericMessageKind.
     reflexivity.
-  - exists Phase1GenericEffectsKind.
+  - destruct
+      (literal_derivation_is_exact
+        phase1_surface_rules _ "Effects" _ _ selected Hselected)
+      as [literal_tail [_ [_ Hselected_tree]]].
+    rewrite Hselected_tree.
+    exists Phase1GenericEffectsKind.
     reflexivity.
   - destruct
       (phase1_surface_normalize_typed_generic_kind_type_total_from_derivation
