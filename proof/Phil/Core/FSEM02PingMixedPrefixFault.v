@@ -101,8 +101,13 @@ Proof.
   unfold fsem02MixBadClose; simpl.
   unfold fsem02MixPing; rewrite H.
   simpl.
-  unfold fsem02MixClose, fsem02MixWrite; simpl.
-  now rewrite Nat.eqb_refl.
+  change (Some (fsem02MixWrite site FSEM02Retired
+    (fsem02MixWrite site FSEM02LiveEnd before)) =
+    Some (fsem02MixWrite site FSEM02Retired before)).
+  f_equal.
+  apply functional_extensionality; intro key.
+  unfold fsem02MixWrite.
+  destruct (Nat.eqb key site); reflexivity.
 Qed.
 
 Theorem fsem02MixedPrefixIndependentPhaseUpdatesCommute :
