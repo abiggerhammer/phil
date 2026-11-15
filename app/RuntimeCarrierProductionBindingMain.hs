@@ -377,6 +377,7 @@ makeBound
 makeBound claimStage process executionFrom executionTo (assuranceId, assuranceUse) =
   case assuranceUse of
     ErasureUse {} -> Left "non-retained use unexpectedly reached Runtime Carrier fixture"
+    CheckedStaticUse {} -> Left "checked static use is not retained runtime evidence"
     RetainedRuntimeUse
       { useObligationRevision = obligation
       , useRuntimeEvidence = evidence
