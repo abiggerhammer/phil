@@ -19,9 +19,17 @@ import qualified Data.Set as Set
 import Data.Text (Text)
 import qualified Data.Text as Text
 import qualified Data.Text.Encoding as TextEncoding
+import qualified Data.Text.Read as TextRead
 import Numeric (showHex)
 import Phil.Assurance.Types
-import Phil.Core.Syntax (ObligationId (..))
+import Phil.Core.Syntax
+  ( Name (..), ObligationId (..), Proposition (..), RefTerm (..), RefSort (..) )
+import Phil.Core.Static
+  ( ArchitectureInstanceIdentity (..), DeclarationKey (..)
+  , InstanceKey (..), InstanceRevision (..) )
+import Phil.Surface.Check.Types (SourceEvidenceBranch (..))
+import Phil.Surface.Lineage (SourceUnitId (..), DeclarationSiteId (..))
+import Phil.Surface.Syntax (SourcePoint (..), SourceSpan (..))
 import Phil.Verification
   ( ApplicationAssurancePolicy (..)
   , AssurancePolicyRevision (..)
@@ -279,6 +287,271 @@ renderUse useValue = case useValue of
     , hexEvidenceId evidenceId
     , hexText costRef
     ]
+  CheckedStaticUse useId useDigest revision entries fact -> row
+    [ "use-static-v1"
+    , hexUseId useId
+    , digestToken useDigest
+    , hexRevisionId revision
+    , Text.intercalate "," (map hexEvidenceId entries)
+    , hexText (encodeStaticFact fact)
+    ]
+
+
+-- The v1 static-use row is an exact, typed, length-prefixed tree. Its outer
+-- hex envelope makes it safe in the legacy tab-delimited format. Unlike
+-- printable Haskell Show/Read or a digest-only shortcut, this round-trips
+-- every member of the source fact and rejects unknown constructors.
+staticFields :: [Text] -> Text
+staticFields = Text.concat . map (\value ->
+  Text.pack (show (Text.length value)) <> ":" <> value)
+
+staticParseFields :: Int -> Text -> Either Phase1AssuranceInputsError [Text]
+staticParseFields lineNumber = go []
+  where
+    go acc input
+      | Text.null input = Right (reverse acc)
+      | otherwise =
+          let (rawSize, suffix) = Text.breakOn ":" input
+          in case suffix of
+            _ | Text.null suffix -> badStatic lineNumber
+            _ -> do
+              size <- staticNat lineNumber rawSize
+              let (value, rest) = Text.splitAt size (Text.drop 1 suffix)
+              if Text.length value /= size
+                then badStatic lineNumber
+                else go (value : acc) rest
+
+badStatic :: Int -> Either Phase1AssuranceInputsError a
+badStatic lineNumber = Left (lineFailure lineNumber "malformed typed checked static source fact")
+
+staticNat :: Int -> Text -> Either Phase1AssuranceInputsError Int
+staticNat lineNumber raw =
+  case TextRead.decimal raw of
+    Right (value, rest)
+      | Text.null rest && Text.pack (show (value :: Int)) == raw
+        -> Right value
+    _ -> badStatic lineNumber
+
+staticInteger :: Int -> Text -> Either Phase1AssuranceInputsError Integer
+staticInteger lineNumber raw =
+  case TextRead.signed TextRead.decimal raw of
+    Right (value, rest)
+      | Text.null rest && Text.pack (show (value :: Integer)) == raw
+        -> Right value
+    _ -> badStatic lineNumber
+
+staticNumber :: Show a => a -> Text
+staticNumber = Text.pack . show
+
+staticPoint :: SourcePoint -> Text
+staticPoint point = staticFields
+  [ "point", sourcePointFile point, staticNumber (sourcePointLine point)
+  , staticNumber (sourcePointColumn point), staticNumber (sourcePointOffset point)
+  ]
+
+parseStaticPoint :: Int -> Text -> Either Phase1AssuranceInputsError SourcePoint
+parseStaticPoint ln raw = do
+  fields <- staticParseFields ln raw
+  case fields of
+    ["point", file, line, column, offset] ->
+      SourcePoint file <$> staticNat ln line <*> staticNat ln column
+        <*> staticNat ln offset
+    _ -> badStatic ln
+
+staticSpan :: SourceSpan -> Text
+staticSpan spanValue = staticFields
+  [ "span", staticPoint (sourceSpanStart spanValue)
+  , staticPoint (sourceSpanEnd spanValue) ]
+
+parseStaticSpan :: Int -> Text -> Either Phase1AssuranceInputsError SourceSpan
+parseStaticSpan ln raw = do
+  fields <- staticParseFields ln raw
+  case fields of
+    ["span", start, end] ->
+      SourceSpan <$> parseStaticPoint ln start <*> parseStaticPoint ln end
+    _ -> badStatic ln
+
+staticBranch :: SourceEvidenceBranch -> Text
+staticBranch value = staticFields
+  ["branch", staticSpan (sourceBranchSpan value), sourceBranchLabel value]
+
+parseStaticBranch :: Int -> Text -> Either Phase1AssuranceInputsError SourceEvidenceBranch
+parseStaticBranch ln raw = do
+  fields <- staticParseFields ln raw
+  case fields of
+    ["branch", spanValue, label] ->
+      SourceEvidenceBranch <$> parseStaticSpan ln spanValue <*> pure label
+    _ -> badStatic ln
+
+staticSort :: RefSort -> Text
+staticSort sortValue = case sortValue of
+  SortBool -> staticFields ["sort.bool"]
+  SortNat -> staticFields ["sort.nat"]
+  SortUInt width -> staticFields ["sort.uint", staticNumber width]
+  SortEnum name -> staticFields ["sort.enum", name]
+  SortFiniteSeq item -> staticFields ["sort.seq", staticSort item]
+  SortFiniteSet item -> staticFields ["sort.set", staticSort item]
+  SortStableId name -> staticFields ["sort.id", name]
+  SortOpaque name -> staticFields ["sort.opaque", name]
+
+parseStaticSort :: Int -> Text -> Either Phase1AssuranceInputsError RefSort
+parseStaticSort ln raw = do
+  fields <- staticParseFields ln raw
+  case fields of
+    ["sort.bool"] -> Right SortBool
+    ["sort.nat"] -> Right SortNat
+    ["sort.uint", width] -> SortUInt <$> staticNat ln width
+    ["sort.enum", value] -> Right (SortEnum value)
+    ["sort.seq", value] -> SortFiniteSeq <$> parseStaticSort ln value
+    ["sort.set", value] -> SortFiniteSet <$> parseStaticSort ln value
+    ["sort.id", value] -> Right (SortStableId value)
+    ["sort.opaque", value] -> Right (SortOpaque value)
+    _ -> badStatic ln
+
+staticRef :: RefTerm -> Text
+staticRef term = case term of
+  RefVar (Name value) -> staticFields ["ref.var", value]
+  RefNat value -> staticFields ["ref.nat", staticNumber value]
+  RefUInt width value -> staticFields
+    ["ref.uint", staticNumber width, staticNumber value]
+  RefBool True -> staticFields ["ref.true"]
+  RefBool False -> staticFields ["ref.false"]
+  RefField base field sortValue -> staticFields
+    ["ref.field", staticRef base, field, staticSort sortValue]
+  RefLen value -> staticFields ["ref.len", staticRef value]
+  RefToNat value -> staticFields ["ref.to-nat", staticRef value]
+  RefAdd left right -> staticFields ["ref.add", staticRef left, staticRef right]
+  RefSub left right -> staticFields ["ref.sub", staticRef left, staticRef right]
+  RefScale amount value -> staticFields
+    ["ref.scale", staticNumber amount, staticRef value]
+  RefOpaque sortValue value -> staticFields
+    ["ref.opaque", staticSort sortValue, value]
+
+parseStaticRef :: Int -> Text -> Either Phase1AssuranceInputsError RefTerm
+parseStaticRef ln raw = do
+  fields <- staticParseFields ln raw
+  case fields of
+    ["ref.var", value] -> Right (RefVar (Name value))
+    ["ref.nat", value] -> RefNat <$> staticInteger ln value
+    ["ref.uint", width, value] ->
+      RefUInt <$> staticNat ln width <*> staticInteger ln value
+    ["ref.true"] -> Right (RefBool True)
+    ["ref.false"] -> Right (RefBool False)
+    ["ref.field", base, field, sortValue] ->
+      RefField <$> parseStaticRef ln base <*> pure field <*> parseStaticSort ln sortValue
+    ["ref.len", value] -> RefLen <$> parseStaticRef ln value
+    ["ref.to-nat", value] -> RefToNat <$> parseStaticRef ln value
+    ["ref.add", left, right] ->
+      RefAdd <$> parseStaticRef ln left <*> parseStaticRef ln right
+    ["ref.sub", left, right] ->
+      RefSub <$> parseStaticRef ln left <*> parseStaticRef ln right
+    ["ref.scale", amount, value] ->
+      RefScale <$> staticInteger ln amount <*> parseStaticRef ln value
+    ["ref.opaque", sortValue, value] ->
+      RefOpaque <$> parseStaticSort ln sortValue <*> pure value
+    _ -> badStatic ln
+
+staticProposition :: Proposition -> Text
+staticProposition proposition = case proposition of
+  Truth -> staticFields ["prop.true"]
+  Falsehood -> staticFields ["prop.false"]
+  Equal x y -> pair "prop.eq" x y
+  NotEqual x y -> pair "prop.neq" x y
+  LessThan x y -> pair "prop.lt" x y
+  LessEqual x y -> pair "prop.le" x y
+  Member x y -> pair "prop.member" x y
+  Disjoint x y -> pair "prop.disjoint" x y
+  Conjunction x y -> staticFields
+    ["prop.and", staticProposition x, staticProposition y]
+  Disjunction x y -> staticFields
+    ["prop.or", staticProposition x, staticProposition y]
+  Negation x -> staticFields ["prop.not", staticProposition x]
+  Atom value args -> staticFields
+    ["prop.atom", value, staticFields (map staticRef args)]
+  where
+    pair tag x y = staticFields [tag, staticRef x, staticRef y]
+
+parseStaticProposition :: Int -> Text -> Either Phase1AssuranceInputsError Proposition
+parseStaticProposition ln raw = do
+  fields <- staticParseFields ln raw
+  case fields of
+    ["prop.true"] -> Right Truth
+    ["prop.false"] -> Right Falsehood
+    ["prop.eq", x, y] -> pair Equal x y
+    ["prop.neq", x, y] -> pair NotEqual x y
+    ["prop.lt", x, y] -> pair LessThan x y
+    ["prop.le", x, y] -> pair LessEqual x y
+    ["prop.member", x, y] -> pair Member x y
+    ["prop.disjoint", x, y] -> pair Disjoint x y
+    ["prop.and", x, y] ->
+      Conjunction <$> parseStaticProposition ln x <*> parseStaticProposition ln y
+    ["prop.or", x, y] ->
+      Disjunction <$> parseStaticProposition ln x <*> parseStaticProposition ln y
+    ["prop.not", x] -> Negation <$> parseStaticProposition ln x
+    ["prop.atom", value, args] ->
+      Atom value <$> (staticParseFields ln args >>= mapM (parseStaticRef ln))
+    _ -> badStatic ln
+  where
+    pair constructor x y =
+      constructor <$> parseStaticRef ln x <*> parseStaticRef ln y
+
+staticKind :: StaticCheckedUseKind -> Text
+staticKind value = case value of
+  StaticProofByBinding (Name name) -> staticFields ["proof-by-binding", name]
+  StaticRequirementByBinding (Name name) ->
+    staticFields ["require-by-binding", name]
+
+parseStaticKind :: Int -> Text -> Either Phase1AssuranceInputsError StaticCheckedUseKind
+parseStaticKind ln raw = do
+  fields <- staticParseFields ln raw
+  case fields of
+    ["proof-by-binding", name] -> Right (StaticProofByBinding (Name name))
+    ["require-by-binding", name] -> Right (StaticRequirementByBinding (Name name))
+    _ -> badStatic ln
+
+encodeStaticFact :: StaticCheckedSourceFact -> Text
+encodeStaticFact fact = staticFields
+  [ "checked-static-source-fact.v1"
+  , unSourceUnitId (staticUseSourceUnit fact)
+  , unDeclarationSiteId (staticUseDeclarationSite fact)
+  , unDeclarationKey (staticUseDeclarationKey fact)
+  , unInstanceKey (identityInstanceKey (staticUseArchitecture fact))
+  , unInstanceRevision (identityInstanceRevision (staticUseArchitecture fact))
+  , staticSpan (staticUseSite fact)
+  , staticFields (map staticBranch (staticUseBranches fact))
+  , staticNumber (staticUseOrdinal fact)
+  , staticProposition (staticUseOriginalProposition fact)
+  , staticProposition (staticUseCanonicalProposition fact)
+  , staticKind (staticUseKind fact)
+  ]
+
+decodeStaticFact :: Int -> Text -> Either Phase1AssuranceInputsError StaticCheckedSourceFact
+decodeStaticFact ln raw = do
+  fields <- staticParseFields ln raw
+  fact <- case fields of
+    ["checked-static-source-fact.v1", unit, site, key, instanceKey,
+      instanceRevision, spanValue, branches, ordinal, original, canonical, kind] -> do
+        checkedSpan <- parseStaticSpan ln spanValue
+        checkedBranches <- staticParseFields ln branches >>= mapM (parseStaticBranch ln)
+        checkedOrdinal <- staticNat ln ordinal
+        checkedOriginal <- parseStaticProposition ln original
+        checkedCanonical <- parseStaticProposition ln canonical
+        checkedKind <- parseStaticKind ln kind
+        Right StaticCheckedSourceFact
+          { staticUseSourceUnit = SourceUnitId unit
+          , staticUseDeclarationSite = DeclarationSiteId site
+          , staticUseDeclarationKey = DeclarationKey key
+          , staticUseArchitecture = ArchitectureInstanceIdentity
+              (InstanceKey instanceKey) (InstanceRevision instanceRevision)
+          , staticUseSite = checkedSpan
+          , staticUseBranches = checkedBranches
+          , staticUseOrdinal = checkedOrdinal
+          , staticUseOriginalProposition = checkedOriginal
+          , staticUseCanonicalProposition = checkedCanonical
+          , staticUseKind = checkedKind
+          }
+    _ -> badStatic ln
+  if encodeStaticFact fact == raw then Right fact else badStatic ln
 
 data DecodeState = DecodeState
   { decodePolicyRevision :: Maybe AssurancePolicyRevision
@@ -549,6 +822,15 @@ decodeRow state (lineNumber, rawLine)
           costRef <- decodeHex lineNumber rawCost
           insertUse lineNumber useId
             (RetainedRuntimeUse useId digest revision evidenceId costRef) state
+        ["use-static-v1", rawId, rawDigest, rawRevision, rawEvidence, rawFact] -> do
+          useId <- AssuranceUseId <$> decodeHex lineNumber rawId
+          digest <- parseDigest lineNumber rawDigest
+          revision <- RevisionId <$> decodeHex lineNumber rawRevision
+          evidenceIds <- mapM (fmap EvidenceEntryId . decodeHex lineNumber)
+            (splitList rawEvidence)
+          fact <- decodeHex lineNumber rawFact >>= decodeStaticFact lineNumber
+          insertUse lineNumber useId
+            (CheckedStaticUse useId digest revision evidenceIds fact) state
         _ -> Left (lineFailure lineNumber ("malformed row: " <> rawLine))
 
 updateEvidence
@@ -683,6 +965,10 @@ validateUses uses evidence = mapM_ checkUse (Map.elems uses)
     checkUse useValue = case useValue of
       ErasureUse _ _ _ entries -> mapM_ require entries
       RetainedRuntimeUse _ _ _ entry _ -> require entry
+      CheckedStaticUse _ _ _ entries _ ->
+        if null entries
+          then Left (failure "checked static use must select evidence")
+          else mapM_ require entries
 
 row :: [Text] -> Text
 row = Text.intercalate "\t"

@@ -416,6 +416,8 @@ setUseDigest digest assuranceUse = case assuranceUse of
   ErasureUse useId _ revision entries -> ErasureUse useId digest revision entries
   RetainedRuntimeUse useId _ revision entry costRef ->
     RetainedRuntimeUse useId digest revision entry costRef
+  CheckedStaticUse useId _ revision entries fact ->
+    CheckedStaticUse useId digest revision entries fact
 
 test :: String -> Bool -> IO Bool
 test label passed = do

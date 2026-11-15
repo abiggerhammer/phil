@@ -16,7 +16,7 @@ import Phil.Core.Static
   , emptyStaticContext
   , InstanceKey (..)
   )
-import Phil.Core.Syntax (Mode (..), Ty (..))
+import Phil.Core.Syntax (Mode (..), Name (..), Proposition (..), Obligation (..), ObligationId (..), Ty (..))
 import Phil.Examples.Phase1.StageClosureWitnesses
   ( steveStageClosureBundle
   , uploadStageClosureBundle
@@ -55,6 +55,7 @@ import Phil.Surface.Lineage
   , canonicalGrammarRevisionV1
   )
 import Phil.Surface.Phase0 (phase0EnvironmentFor)
+import Phil.Surface.Syntax (SourcePoint (..), SourceSpan (..))
 import Phil.Systems.GenericLowering
   ( CoreSystemsProgram (..)
   , GenericRealizationContext
@@ -65,6 +66,8 @@ import Phil.Systems.Phase1Stage
   , phase1StageSystemsArtifact
   , verifyPhase1StageBundle
   )
+import qualified Phil.Assurance.Types as A
+import qualified Phil.Handoff.Phase1AssuranceInputs as H
 import Phil.Assurance.Types
   ( ArtifactIdentity (..)
   , AssuranceManifest (..)
@@ -90,8 +93,12 @@ import Phil.Core.Static
   , deriveArchitectureInstanceIdentity
   )
 import Phil.Systems.ProviderCallCorrespondence (ProviderCallExpectationMap)
+import Phil.Systems.RuntimeCarrierBinding
+  ( RuntimeCarrierBinding (..), RuntimeCarrierBindingError (..), checkRuntimeCarrierBindings )
+import Phil.Systems.RuntimeCarrierCoverage (RuntimeCarrierKey (..))
 import Phil.Systems.IR
-  ( loweringLedgerRoot
+  ( RuntimeSiteKind (..), RuntimeSiteRef (..)
+  , loweringLedgerRoot
   , systemsArtifactDigest
   , systemsArtifactLoweringLedger
   )
@@ -99,6 +106,10 @@ import Phil.Verification
   ( ApplicationAssurancePolicy (..)
   , AssurancePolicyRevision (..)
   , buildVerificationRevisionGraph
+  , buildVerificationObligationGraph
+  , VerificationObligationInput (..)
+  , VerificationObligationGraph (..)
+  , VerificationDisposition (..)
   )
 import Phil.Verification.ArtifactClosure
   ( certifyApplicationArtifact )
@@ -130,6 +141,8 @@ import Phil.Verification.SourceManifestBinding
   )
 import Phil.Verification.ReleasePackage
   ( buildCertifiedReleasePackage
+  , buildStructuralReleasePackage
+  , renderStructuralReleasePackage
   , renderCertifiedReleasePackage
   , verifiedOriginPackageStructural
   , certifiedReleasePackageManifestId
@@ -171,6 +184,8 @@ main = do
         (steveVerifiedStageClosure stevePut steveGet)
     , test "P6 Steve stage config cannot borrow Upload producer"
         (verifiedStageRejectsWrongConcrete uploadClient uploadServer)
+    , test "P9-F1 Upload checked source use bound to selected immutable assurance"
+        (p9F1Upload uploadClient uploadServer)
     , test "P7 Upload real source-to-final accepting consumer"
         (p7UploadReplay uploadClient uploadServer)
     , test "P7 Steve real source-to-final accepting consumer"
@@ -915,3 +930,261 @@ p7Adversarial clientSource serverSource putSource getSource = do
     (sourceManifestBindingManifest binding) selected alternateLLVM (p7Trust upload))
   assert (alternateLLVMRelease /= release) "P7 LLVM substitution was not distinct"
   check binding artifact alternateLLVMRelease VerifiedFinalOriginCertifiedReleaseSubstituted
+
+-- This is a source-derived P2/P6 and selected-immutable-use test, NOT P7 final
+-- consumption. Even completely rehashed caller-selected ledger data cannot
+-- substitute a distinct original site in the sealed checker graph.
+p9F1Upload :: Text -> Text -> Either String ()
+p9F1Upload clientSource serverSource = do
+  production <- verifiedUploadProduction clientSource serverSource
+  template <- uploadStageClosureBundle
+  stage <- mapLeft show
+    (produceVerifiedStageClosure production uploadProviderCallExpectations template)
+  let sourceGraph = verifiedStageClosureSourceCheckEventGraph stage
+      instanceId = verifiedSourceCheckEventArchitectureIdentity sourceGraph
+      qualified = [ (occurrence, proposition, name)
+        | occurrence <- verifiedSourceCheckEventOccurrences sourceGraph
+        , SourceRequirementEvidence proposition (Just name) Nothing <-
+            [sourceEvidenceUse (checkedEvidenceEvent occurrence)]
+        , name == Name "beginPolicy" ]
+  (occurrence, proposition, binder) <- case qualified of
+    (oneProof : _) -> Right oneProof
+    [] -> Left "P9-F1 actual Upload proof consumer missing"
+  let event = checkedEvidenceEvent occurrence
+      fact = A.StaticCheckedSourceFact
+        { A.staticUseSourceUnit = checkedEvidenceUnitId occurrence
+        , A.staticUseDeclarationSite = checkedEvidenceDeclarationSite occurrence
+        , A.staticUseDeclarationKey = checkedEvidenceDeclarationKey occurrence
+        , A.staticUseArchitecture = instanceId
+        , A.staticUseSite = sourceEvidenceSite event
+        , A.staticUseBranches = sourceEvidenceBranchRoute event
+        , A.staticUseOrdinal = sourceEvidenceOrdinal event
+        , A.staticUseOriginalProposition = proposition
+        , A.staticUseCanonicalProposition = proposition
+        , A.staticUseKind = A.StaticRequirementByBinding binder }
+  assert (not (null (A.staticUseBranches fact)))
+    "P9-F1 selected Upload policy proof has no checked branch"
+  (binding, context, ledger, useId) <- p9F1Selection production fact
+  _ <- mapLeft show
+    (acceptSelectedCheckedStaticUse stage binding context ledger useId)
+  -- The typed immutable handoff is a reversible schema, not a copied
+  -- authority token. Deliberately mutate the actual nested typed source fact.
+  let selectedIds = Map.keysSet (A.ledgerEvidence ledger)
+      p9Selection = ManifestClosureSelection
+        selectedIds Set.empty Map.empty (Set.singleton useId)
+      p9Policy = ApplicationAssurancePolicy
+        (AssurancePolicyRevision "p9.f1.handoff.v1")
+        (Set.singleton StaticallyDischarged)
+  inputs <- mapLeft show
+    (H.derivePhase1AssuranceInputs p9Policy ledger p9Selection)
+  let staticWire = H.renderPhase1AssuranceInputs inputs
+  decoded <- mapLeft show (H.decodePhase1AssuranceInputs staticWire)
+  assert (decoded == inputs) "P9-F1 typed static-use handoff round-trip changed fact"
+  assert ("use-static-v1\t" `Text.isInfixOf` staticWire)
+    "P9-F1 typed handoff lost static use variant"
+  let variantsWire =
+        [ ("unknown static use revision",
+           Text.replace "use-static-v1\t" "use-static-v2\t" staticWire)
+        , ("truncated checked-source-fact field",
+           Text.unlines (map truncateStaticFact (Text.lines staticWire)))
+        , ("deceptively encoded use variant",
+           Text.replace "use-static-v1\t" "use-runtime\t" staticWire)
+        ]
+      truncateStaticFact wireLine
+        | "use-static-v1\t" `Text.isPrefixOf` wireLine =
+            case Text.splitOn "\t" wireLine of
+              [tag, key, digest, revision, entries, factHex] ->
+                Text.intercalate "\t" [tag, key, digest, revision, entries,
+                  Text.dropEnd 2 factHex]
+              _ -> wireLine
+        | otherwise = wireLine
+  mapM_ (\(label, wire) -> case H.decodePhase1AssuranceInputs wire of
+    Left _ -> Right ()
+    Right _ -> Left ("P9-F1 decoded altered static handoff: " ++ label))
+    variantsWire
+  -- Loss of the entire use row is distinguishable from the original selected
+  -- manifest; a standalone empty selection remains valid for weaker APIs.
+  let missingUseWire = Text.unlines
+        (filter (not . Text.isPrefixOf "use-static-v1\t") (Text.lines staticWire))
+  lostInput <- mapLeft show (H.decodePhase1AssuranceInputs missingUseWire)
+  assert (lostInput /= inputs)
+    "P9-F1 missing selected use row silently matched original selection"
+  -- Only retained-runtime uses belong in runtime-carrier binding. Even a
+  -- manifest-selected checked-static use cannot acquire one via a fake site.
+  let staticManifest = sourceManifestBindingManifest binding
+      staticSystems = phase1StageSystemsArtifact
+        (verifiedSourceSystemsStage (verifiedStageClosureSourceProduction stage))
+      selectedEvidence = head (Map.elems (A.ledgerEvidence ledger))
+      fakeSite = RuntimeSiteRef
+        (SourceSemanticRuntime "p9.f1.not-a-runtime-site")
+        (A.evidenceObligationRevision selectedEvidence)
+        (A.evidenceEntryId selectedEvidence)
+        "p9.f1.forged-cost"
+      fakeBinding = RuntimeCarrierBinding useId
+        (RuntimeCarrierKey "p9.f1.forged-carrier") fakeSite
+  mapLeft show (checkRuntimeCarrierBindings ledger staticManifest staticSystems
+    Map.empty Map.empty)
+  -- INT-005 structural output must identify the selected checked-static fact
+  -- separately, without claiming that the final P7 consumer used it.
+  let p9LLVM = lowerSystemsConservative phase0LLVMTarget staticSystems
+      p9Trust = [p7TrustValue "compiler" CompilerCheckerTrust]
+      p9Profile = CertifiedReleaseProfile
+        { releaseProfileRevision = ReleaseProfileRevision "p9.f1.static.trace.v1"
+        , releaseProfileManifestTarget = "p9-f1-source-target"
+        , releaseProfileManifestCompilationProfile = "p9-f1-checked"
+        , releaseProfileLLVMTarget = phase0LLVMTarget
+        , releaseProfileRequiredTrustKinds = Set.singleton CompilerCheckerTrust
+        }
+  release <- mapLeft show (certifyReleaseArtifact
+    p9Profile context ledger staticManifest (verifiedStageClosureSelected stage)
+    p9LLVM p9Trust)
+  package <- mapLeft show (buildStructuralReleasePackage ledger release)
+  let packageTrace = renderStructuralReleasePackage package
+  assert ("kind=checked-static-v1" `Text.isInfixOf` packageTrace)
+    "P9-F1 release sidecar lost distinct static-use type"
+  assert (("fact-digest=" <> A.unDigest (A.deriveStaticCheckedSourceFactDigest fact))
+      `Text.isInfixOf` packageTrace)
+    "P9-F1 release sidecar lost selected typed source-fact digest"
+  assert (("evidence=" <> A.unEvidenceEntryId
+      (A.evidenceEntryId selectedEvidence)) `Text.isInfixOf` packageTrace)
+    "P9-F1 release sidecar lost selected immutable evidence"
+  case checkRuntimeCarrierBindings ledger staticManifest staticSystems
+      Map.empty (Map.singleton useId fakeBinding) of
+    Left (RuntimeCarrierBindingDomainMismatch expected actual)
+      | Set.null expected && actual == Set.singleton useId -> Right ()
+    other -> Left ("P9-F1 static-use runtime carrier spoof: " ++ show other)
+  -- The substituted fully rehashed selection passes ordinary immutable
+  -- closure, but MUST be rejected at the real sealed source event consumer.
+  let wrongFact = fact { A.staticUseOrdinal = A.staticUseOrdinal fact + 42 }
+      originalPoint = sourceSpanStart (A.staticUseSite fact)
+      changedPoint = originalPoint
+        { sourcePointOffset = sourcePointOffset originalPoint + 1 }
+      changedSpan = (A.staticUseSite fact)
+        { sourceSpanStart = changedPoint }
+      originalArch = A.staticUseArchitecture fact
+      fakeArch = originalArch { identityInstanceKey = InstanceKey "inst:forged-same-I" }
+      variants =
+        [ ("ordinal", wrongFact)
+        , ("source unit", fact { A.staticUseSourceUnit = SourceUnitId "unit.forged" })
+        , ("declaration site", fact
+            { A.staticUseDeclarationSite = DeclarationSiteId "site.forged" })
+        , ("source span", fact { A.staticUseSite = changedSpan })
+        , ("branch", fact { A.staticUseBranches = [] })
+        , ("same I wrong K", fact { A.staticUseArchitecture = fakeArch })
+        , ("semantic subject", fact
+            { A.staticUseOriginalProposition = Negation proposition
+            , A.staticUseCanonicalProposition = Negation proposition })
+        ]
+  mapM_ (rejectForged stage production) variants
+  emptySource <- makeP7Source
+    (verifiedSourceSystemsArchitectureDescriptor production)
+    (A.ArtifactRef "p9.f1.empty-source")
+  let descriptor = verifiedSourceSystemsArchitectureDescriptor production
+  (emptyBinding, emptyContext) <- makeP7Binding emptySource descriptor
+    (verifiedStageClosureSelected stage) (A.digestText "p9.f1.empty-core")
+  case acceptSelectedCheckedStaticUse
+      stage emptyBinding emptyContext A.emptyLedger useId of
+    Left (StaticUseNotSelected _) -> Right ()
+    other -> Left ("P9-F1 empty manifest credited proof: " ++ show other)
+
+rejectForged
+  :: VerifiedStageClosureProduction
+  -> VerifiedSourceSystemsProduction
+  -> (String, A.StaticCheckedSourceFact)
+  -> Either String ()
+rejectForged stage production (label, fact) = do
+  (wrongBinding, wrongContext, wrongLedger, wrongId) <-
+    p9F1Selection production fact
+  case acceptSelectedCheckedStaticUse stage
+      wrongBinding wrongContext wrongLedger wrongId of
+    Left (StaticUseNotObservedByOriginalChecker _) -> Right ()
+    other -> Left ("P9-F1 forged " ++ label ++ " accepted: " ++ show other)
+
+p9F1Selection
+  :: VerifiedSourceSystemsProduction
+  -> A.StaticCheckedSourceFact
+  -> Either String
+       (CertifiedSourceManifestBinding, A.VerificationContext,
+        A.AssuranceLedger, A.AssuranceUseId)
+p9F1Selection production fact = do
+  let descriptor = verifiedSourceSystemsArchitectureDescriptor production
+      proposition = A.staticUseCanonicalProposition fact
+      obligationKey = ObligationId "p9.f1.upload.checked-policy"
+      evidenceKey = A.EvidenceEntryId "p9.f1.upload.source-evidence"
+      useKey = A.AssuranceUseId "p9.f1.upload.checked-static-use"
+      policy = ApplicationAssurancePolicy
+        (AssurancePolicyRevision "p9.f1.checked-static.v1")
+        (Set.singleton StaticallyDischarged)
+      input = VerificationObligationInput
+        { verificationInputObligation = Obligation
+            { obligationId = obligationKey
+            , obligationProposition = proposition
+            , obligationOrigin = "P9-F1 exact Upload source proof use"
+            , obligationScope = "upload.checked.policy"
+            , obligationRequiredPoint = "original static checker" }
+        , verificationInputKind = "checked-source-proof-use"
+        , verificationInputRepresentation = "P9-F1 sealed source fact"
+        , verificationInputSubjectIds = []
+        , verificationInputContextIds = []
+        , verificationInputAcceptanceRule =
+            A.AcceptEntry A.KernelChecked (A.EvidenceRole "source_checked_static_use")
+        , verificationInputDependencies = Set.empty }
+  graph <- mapLeft show (buildVerificationObligationGraph
+    [input] (Set.singleton obligationKey))
+  revision <- case Map.elems (verificationGraphNodes graph) of
+    [oneRevision] -> Right oneRevision
+    _ -> Left "P9-F1 expected exactly one selected revision"
+  let rawEvidence = A.EvidenceEntry
+        { A.evidenceEntryId = evidenceKey
+        , A.evidenceEntryDigest = A.Digest ""
+        , A.evidenceObligationRevision = A.revisionId revision
+        , A.evidenceAssuranceKind = A.KernelChecked
+        , A.evidenceRole = A.EvidenceRole "source_checked_static_use"
+        , A.evidenceProducer = "Phil.Surface.Check.Engine"
+        , A.evidenceChecker = "Phil.Surface.Check.Engine"
+        , A.evidenceArtifact = Nothing
+        , A.evidenceInputDigests = [A.deriveStaticCheckedSourceFactDigest fact]
+        , A.evidenceAssumptions = []
+        , A.evidenceDependsOn = []
+        , A.evidenceValidityScope = A.ValidityScope Map.empty
+        , A.evidenceResult = A.EvidenceAccepted
+        , A.evidenceJustifies = [A.renderPropositionCanonical proposition]
+        , A.evidenceRuntimeMechanism = Nothing
+        , A.evidenceRuntimeResidue = []
+        , A.evidenceCostRefs = [] }
+      evidence = rawEvidence
+        { A.evidenceEntryDigest = A.deriveEvidenceEntryDigest rawEvidence }
+      rawUse = A.CheckedStaticUse
+        { A.assuranceUseId = useKey
+        , A.assuranceUseDigest = A.Digest ""
+        , A.useObligationRevision = A.revisionId revision
+        , A.useEvidenceEntries = [evidenceKey]
+        , A.useCheckedStaticFact = fact }
+      selectedUse = rawUse
+        { A.assuranceUseDigest = A.deriveAssuranceUseDigest rawUse }
+      ledger = A.emptyLedger
+        { A.ledgerRevisions = verificationGraphNodes graph
+        , A.ledgerEvidence = Map.singleton evidenceKey evidence
+        , A.ledgerUses = Map.singleton useKey selectedUse }
+  bundle <- mapLeft show (buildVerificationBundle
+    (A.digestText "p9.f1.checked-source-revision")
+    [architectureDeclarationIdentity descriptor]
+    [deriveArchitectureInstanceIdentity descriptor] []
+    graph policy [evidence])
+  let producedSystems = phase1StageSystemsArtifact
+        (verifiedSourceSystemsStage production)
+      context = A.emptyVerificationContext
+        { A.verificationArchitectureDigest = verificationBundleArchitectureDigest bundle
+        , A.verificationPhilCoreDigest = A.digestText "p9.f1.checked-core"
+        , A.verificationImplementationDigest = systemsArtifactDigest producedSystems
+        , A.verificationTarget = "p9-f1-source-target"
+        , A.verificationCompilationProfile = "p9-f1-checked"
+        , A.verificationExpectedObligations = Map.keysSet (verificationGraphNodes graph)
+        , A.verificationLoweringLedgerRoot = loweringLedgerRoot
+            (systemsArtifactLoweringLedger producedSystems) }
+      selection = ManifestClosureSelection
+        (Set.singleton evidenceKey) Set.empty Map.empty (Set.singleton useKey)
+  source <- makeP7Source descriptor (A.ArtifactRef "p9.f1.real-source-body")
+  binding <- mapLeft show (closeSourceManifestBindingForInstance
+    source descriptor bundle policy context ledger selection)
+  pure (binding, context, ledger, useKey)

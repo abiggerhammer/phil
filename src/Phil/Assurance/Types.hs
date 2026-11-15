@@ -20,6 +20,8 @@ module Phil.Assurance.Types
   , EvidenceEntry (..)
   , Assumption (..)
   , ExportEntry (..)
+  , StaticCheckedUseKind (..)
+  , StaticCheckedSourceFact (..)
   , AssuranceUse (..)
   , AssuranceLedger (..)
   , AssuranceManifest (..)
@@ -35,6 +37,8 @@ module Phil.Assurance.Types
   , deriveAssumptionDigest
   , deriveExportDigest
   , deriveAssuranceUseDigest
+  , deriveStaticCheckedSourceFactDigest
+  , renderStaticCheckedSourceFact
   , deriveManifestId
   ) where
 
@@ -50,6 +54,10 @@ import Data.Text (Text)
 import qualified Data.Text as Text
 import qualified Data.Text.Encoding as TextEncoding
 import Data.Word (Word8)
+import Phil.Core.Static (ArchitectureInstanceIdentity (..), DeclarationKey (..), InstanceKey (..), InstanceRevision (..))
+import Phil.Surface.Check.Types (SourceEvidenceBranch (..))
+import Phil.Surface.Lineage (SourceUnitId (..), DeclarationSiteId (..))
+import Phil.Surface.Syntax (SourcePoint (..), SourceSpan (..))
 import Phil.Core.Syntax
   ( Name (..)
   , Obligation (..)
@@ -189,6 +197,24 @@ data ExportEntry = ExportEntry
   }
   deriving (Eq, Ord, Show)
 
+-- Public descriptive source observation, never a sealed checker capability.
+data StaticCheckedUseKind = StaticProofByBinding Name | StaticRequirementByBinding Name
+  deriving (Eq, Ord, Show)
+
+data StaticCheckedSourceFact = StaticCheckedSourceFact
+  { staticUseSourceUnit :: SourceUnitId
+  , staticUseDeclarationSite :: DeclarationSiteId
+  , staticUseDeclarationKey :: DeclarationKey
+  , staticUseArchitecture :: ArchitectureInstanceIdentity
+  , staticUseSite :: SourceSpan
+  , staticUseBranches :: [SourceEvidenceBranch]
+  , staticUseOrdinal :: Int
+  , staticUseOriginalProposition :: Proposition
+  , staticUseCanonicalProposition :: Proposition
+  , staticUseKind :: StaticCheckedUseKind
+  }
+  deriving (Eq, Ord, Show)
+
 data AssuranceUse
   = ErasureUse
       { assuranceUseId :: AssuranceUseId
@@ -202,6 +228,13 @@ data AssuranceUse
       , useObligationRevision :: RevisionId
       , useRuntimeEvidence :: EvidenceEntryId
       , useCostRef :: Text
+      }
+  | CheckedStaticUse
+      { assuranceUseId :: AssuranceUseId
+      , assuranceUseDigest :: Digest
+      , useObligationRevision :: RevisionId
+      , useEvidenceEntries :: [EvidenceEntryId]
+      , useCheckedStaticFact :: StaticCheckedSourceFact
       }
   deriving (Eq, Ord, Show)
 
@@ -490,6 +523,58 @@ deriveAssuranceUseDigest assuranceUse = digestText payload
         , ("evidence", unEvidenceEntryId entry)
         , ("cost", costRef)
         ]
+
+      CheckedStaticUse _ _ revision entries fact -> canonicalFields
+        [ ("kind", "checked_static_source_use.v1")
+        , ("revision", unRevisionId revision)
+        , ("evidence", listText (sort (map unEvidenceEntryId entries)))
+        , ("source-fact", renderStaticCheckedSourceFact fact)
+        ]
+-- The independently reproduced exact source-fact input digest must be
+-- selected with the evidence; a caller's source name or proposition is not
+-- enough. This is still data, never a sealed source-checker witness.
+deriveStaticCheckedSourceFactDigest :: StaticCheckedSourceFact -> Digest
+deriveStaticCheckedSourceFactDigest = digestText . renderStaticCheckedSourceFact
+
+-- Canonical domain-separated v1 original checked-use occurrence encoding.
+-- Public descriptive equality or matching digests cannot grant P9 authority.
+renderStaticCheckedSourceFact :: StaticCheckedSourceFact -> Text
+renderStaticCheckedSourceFact fact = canonicalFields
+  [ ("domain", "phil.assurance.checked-static-source-fact.v1")
+  , ("unit", unSourceUnitId (staticUseSourceUnit fact))
+  , ("declaration-site", unDeclarationSiteId (staticUseDeclarationSite fact))
+  , ("declaration-key", unDeclarationKey (staticUseDeclarationKey fact))
+  , ("architecture-K", unInstanceKey (identityInstanceKey (staticUseArchitecture fact)))
+  , ("architecture-I", unInstanceRevision (identityInstanceRevision (staticUseArchitecture fact)))
+  , ("site", renderStaticSourceSpan (staticUseSite fact))
+  , ("branches", listText (map renderStaticSourceBranch (staticUseBranches fact)))
+  , ("ordinal", Text.pack (show (staticUseOrdinal fact)))
+  , ("original", renderPropositionCanonical (staticUseOriginalProposition fact))
+  , ("canonical", renderPropositionCanonical (staticUseCanonicalProposition fact))
+  , ("mechanism", case staticUseKind fact of
+       StaticProofByBinding (Name name) -> "prove.binding:" <> atomText name
+       StaticRequirementByBinding (Name name) -> "require.binding:" <> atomText name)
+  ]
+
+renderStaticSourceBranch :: SourceEvidenceBranch -> Text
+renderStaticSourceBranch branch = canonicalFields
+  [ ("site", renderStaticSourceSpan (sourceBranchSpan branch))
+  , ("alternative", sourceBranchLabel branch)
+  ]
+
+renderStaticSourceSpan :: SourceSpan -> Text
+renderStaticSourceSpan spanValue = canonicalFields
+  [ ("start", renderStaticSourcePoint (sourceSpanStart spanValue))
+  , ("end", renderStaticSourcePoint (sourceSpanEnd spanValue))
+  ]
+
+renderStaticSourcePoint :: SourcePoint -> Text
+renderStaticSourcePoint point = canonicalFields
+  [ ("file", sourcePointFile point)
+  , ("line", Text.pack (show (sourcePointLine point)))
+  , ("column", Text.pack (show (sourcePointColumn point)))
+  , ("offset", Text.pack (show (sourcePointOffset point)))
+  ]
 
 deriveManifestId :: AssuranceLedger -> AssuranceManifest -> Digest
 deriveManifestId ledger manifest = digestText (canonicalFields

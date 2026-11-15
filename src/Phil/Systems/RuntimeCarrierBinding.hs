@@ -99,6 +99,8 @@ checkRuntimeCarrierBindings ledger manifest artifact carriers bindings = do
     validateBinding useId assuranceUse binding =
       case assuranceUse of
         ErasureUse {} -> Left (RuntimeCarrierBindingDomainMismatch Set.empty (Set.singleton useId))
+        -- A checked static source use has no runtime carrier or cost domain.
+        CheckedStaticUse {} -> Left (RuntimeCarrierBindingDomainMismatch Set.empty (Set.singleton useId))
         RetainedRuntimeUse
           { useObligationRevision = revision
           , useRuntimeEvidence = evidenceId

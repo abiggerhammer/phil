@@ -9,9 +9,24 @@ module Phil.Verification.VerifiedStageClosureProduction
   , verifiedStageClosureSourceProduction
   , verifiedStageClosureSelected
   , verifiedStageClosureSourceCheckEventGraph
+  , AcceptedCheckedStaticUse
+  , CheckedStaticUseAcceptanceError (..)
+  , acceptSelectedCheckedStaticUse
   ) where
 
 import qualified Phil.Compiler.SourceSystems as Source
+import Phil.Compiler.SourceBundle (CheckedSourceEvidenceOccurrence (..))
+import Phil.Core.Static (ArchitectureInstanceIdentity)
+import Phil.Core.Focusing (FocusedRequirement (..), FocusMechanism (..))
+import Phil.Assurance.Types
+  ( AssuranceLedger (..), AssuranceManifest (..), AssuranceUse (..)
+  , AssuranceUseId, StaticCheckedSourceFact (..), StaticCheckedUseKind (..)
+  , VerificationContext )
+import Phil.Assurance.Verify (ManifestError, verifyManifest)
+import qualified Phil.Surface.Check.Types as Checker
+import qualified Phil.Verification.SourceManifestBinding as Binding
+import qualified Data.Map.Strict as Map
+import qualified Data.Set as Set
 import qualified Phil.Systems.AssumptionDependency as Assumption
 import qualified Phil.Systems.AuthorityEffectCorrespondence as Authority
 import qualified Phil.Systems.BoundaryCommitCorrespondence as Boundary
@@ -167,6 +182,94 @@ verifiedStageClosureSourceCheckEventGraph
 verifiedStageClosureSelected
   :: VerifiedStageClosureProduction -> Closure.StageClosureBundle
 verifiedStageClosureSelected (VerifiedStageClosureProduction _ selected) = selected
+
+-- | Opaque checked-source and independently selected immutable use contract.
+-- In particular this is NOT P7 final-use authority, nor proof that a dynamic
+-- runtime alternative executed; those remain separate non-bypassable gates.
+data AcceptedCheckedStaticUse = AcceptedCheckedStaticUse
+  VerifiedStageClosureProduction
+  Binding.CertifiedSourceManifestBinding
+  AssuranceUseId
+  StaticCheckedSourceFact
+  deriving (Eq, Show)
+
+data CheckedStaticUseAcceptanceError
+  = StaticUseSourceInstanceMismatch
+  | StaticUseSelectedManifestRejected ManifestError
+  | StaticUseNotSelected AssuranceUseId
+  | StaticUseNotInLedger AssuranceUseId
+  | StaticUseIncorrectKind AssuranceUseId
+  | StaticUseNotObservedByOriginalChecker AssuranceUseId
+  deriving (Eq, Show)
+
+acceptSelectedCheckedStaticUse
+  :: VerifiedStageClosureProduction
+  -> Binding.CertifiedSourceManifestBinding
+  -> VerificationContext
+  -> AssuranceLedger
+  -> AssuranceUseId
+  -> Either CheckedStaticUseAcceptanceError AcceptedCheckedStaticUse
+acceptSelectedCheckedStaticUse stage binding context ledger useId = do
+  let production = verifiedStageClosureSourceProduction stage
+      descriptor = Source.verifiedSourceSystemsArchitectureDescriptor production
+      graph = verifiedStageClosureSourceCheckEventGraph stage
+      manifest = Binding.sourceManifestBindingManifest binding
+  if Binding.sourceManifestBindingArchitectureDescriptor binding == Just descriptor
+    then Right ()
+    else Left StaticUseSourceInstanceMismatch
+  mapLeft StaticUseSelectedManifestRejected (verifyManifest context ledger manifest)
+  if Set.member useId (manifestAssuranceUses manifest)
+    then Right ()
+    else Left (StaticUseNotSelected useId)
+  selected <- maybe (Left (StaticUseNotInLedger useId)) Right
+    (Map.lookup useId (ledgerUses ledger))
+  fact <- case selected of
+    CheckedStaticUse _ _ _ _ actual -> Right actual
+    _ -> Left (StaticUseIncorrectKind useId)
+  let checkedFacts =
+        [ actual
+        | occurrence <- Source.verifiedSourceCheckEventOccurrences graph
+        , Just actual <- [checkerStaticFact
+            (Source.verifiedSourceCheckEventArchitectureIdentity graph)
+            occurrence]
+        ]
+  if fact `elem` checkedFacts
+    then Right (AcceptedCheckedStaticUse stage binding useId fact)
+    else Left (StaticUseNotObservedByOriginalChecker useId)
+
+-- | A fact is produced only by a named proof or requirement *actually checked*
+-- at its original site. A definition proof (including 'prove true'), an
+-- uncertified decision, and provider outcomes cannot mint a static use.
+checkerStaticFact
+  :: ArchitectureInstanceIdentity
+  -> CheckedSourceEvidenceOccurrence
+  -> Maybe StaticCheckedSourceFact
+checkerStaticFact architecture occurrence =
+  case Checker.sourceEvidenceUse event of
+    Checker.SourceRequirementEvidence proposition (Just binder) Nothing ->
+      Just (makeFact proposition proposition
+        (StaticRequirementByBinding binder))
+    Checker.SourceProveEvidence requirement False ->
+      case focusedMechanism requirement of
+        FocusByEvidence binder ->
+          Just (makeFact (focusedOriginal requirement)
+            (focusedCanonical requirement) (StaticProofByBinding binder))
+        _ -> Nothing
+    _ -> Nothing
+  where
+    event = checkedEvidenceEvent occurrence
+    makeFact original canonical kind = StaticCheckedSourceFact
+      { staticUseSourceUnit = checkedEvidenceUnitId occurrence
+      , staticUseDeclarationSite = checkedEvidenceDeclarationSite occurrence
+      , staticUseDeclarationKey = checkedEvidenceDeclarationKey occurrence
+      , staticUseArchitecture = architecture
+      , staticUseSite = Checker.sourceEvidenceSite event
+      , staticUseBranches = Checker.sourceEvidenceBranchRoute event
+      , staticUseOrdinal = Checker.sourceEvidenceOrdinal event
+      , staticUseOriginalProposition = original
+      , staticUseCanonicalProposition = canonical
+      , staticUseKind = kind
+      }
 
 mapLeft :: (a -> b) -> Either a c -> Either b c
 mapLeft f = either (Left . f) Right
