@@ -9,6 +9,7 @@ From Phil.Surface Require Import
   GrammarAstDataSpine
   GrammarAstVariantSpine
   GrammarAstVariantPayloadSpine
+  GrammarAstVariantDeclRecordFieldTypeSpine
   GrammarAstGenericRequirementsSpine
   GrammarAstDataRecordFieldTypeSpine
   GrammarAstVariantDeclRecordFieldTypeTotality
