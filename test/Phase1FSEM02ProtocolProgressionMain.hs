@@ -51,6 +51,8 @@ main = do
         (sourcePingDisjointPairCommutation accepted stale)
     , test "FSEM-02 disjoint Ping pairs complete all 24 terminal Close orders"
         (sourcePingDisjointTerminalInterleavings accepted stale)
+    , test "FSEM-02 three disjoint Pings commute across 4320 terminal schedules"
+        (sourcePingThreeDisjointTerminalSchedules accepted stale)
     , test "FSEM-02 competing Ping sends sharing a Client predecessor refuse second use"
         (sourcePingSharedClientContention accepted stale)
     , test "FSEM-02 competing Ping receivers sharing a Server predecessor refuse second use"
@@ -2339,6 +2341,186 @@ sourcePingJointCloseRefusalRetry source = do
       assert (endpoint == serverNext) "stale retry server lost original binder"
     other -> Left ("stale retry server advanced: " <> show other)
 
+
+
+-- Three disjoint, externally activated source-checked Ping pairs; neither
+-- the three-pair architecture nor disposal authority comes from source.
+sourcePingThreeDisjointTerminalSchedules :: Text.Text -> Text.Text -> Either String ()
+sourcePingThreeDisjointTerminalSchedules accepted rejected = do
+  plans <- sourcePlans accepted
+  sourceStaleCloseRejected rejected
+  let root = InstanceKey "fsem02.ping.triple.root"
+      slotAC = OccurrenceSlotKey "a-client"
+      slotAS = OccurrenceSlotKey "a-server"
+      slotBC = OccurrenceSlotKey "b-client"
+      slotBS = OccurrenceSlotKey "b-server"
+      slotCC = OccurrenceSlotKey "c-client"
+      slotCS = OccurrenceSlotKey "c-server"
+      leaf label = ArchitectureNodeSpec
+        { architectureNodeDeclaration = sourcePingJointDeclaration label
+        , architectureNodeStaticBindings = Map.empty
+        , architectureNodeRequirements = []
+        , architectureNodeChildren = []
+        , architectureNodeReferences = []
+        }
+      spec = ArchitectureNodeSpec
+        { architectureNodeDeclaration = sourcePingJointDeclaration "triple.root"
+        , architectureNodeStaticBindings = Map.empty
+        , architectureNodeRequirements = []
+        , architectureNodeChildren =
+            [ ArchitectureChildSpec slotAC (leaf "ExternalClientA")
+            , ArchitectureChildSpec slotAS (leaf "ExternalServerA")
+            , ArchitectureChildSpec slotBC (leaf "ExternalClientB")
+            , ArchitectureChildSpec slotBS (leaf "ExternalServerB")
+            , ArchitectureChildSpec slotCC (leaf "ExternalClientC")
+            , ArchitectureChildSpec slotCS (leaf "ExternalServerC") ]
+        , architectureNodeReferences = []
+        }
+      site label slot = ProcessDeclarationSite (ProcessSiteKey label)
+        (scopedInstanceKey root slot)
+      acSite = site "fsem02.triple.a.client" slotAC
+      asSite = site "fsem02.triple.a.server" slotAS
+      bcSite = site "fsem02.triple.b.client" slotBC
+      bsSite = site "fsem02.triple.b.server" slotBS
+      ccSite = site "fsem02.triple.c.client" slotCC
+      csSite = site "fsem02.triple.c.server" slotCS
+  graph <- mapLeft show $ instantiateArchitecture root spec
+  network0 <- mapLeft show $ elaborateProcessNetwork graph
+    [acSite, asSite, bcSite, bsSite, ccSite, csSite]
+  network <- mapLeft show $ activateRootProcesses network0
+  let process siteValue = deriveProcessKey
+        (identityInstanceRevision (processNetworkRoot network))
+        (processSiteKey siteValue)
+      ac = process acSite
+      as = process asSite
+      bc = process bcSite
+      bs = process bsSite
+      cc = process ccSite
+      cs = process csSite
+      revision = sourceProtocolInstance plans
+      client = sourceClientPlan plans
+      server = sourceServerPlan plans
+      clientOld = grammarV1ResolvedBinderCoreName
+        (checkedComponentSendEndpoint client)
+      clientNext = grammarV1ResolvedBinderCoreName
+        (checkedComponentSendSuccessor client)
+      serverOld = grammarV1ResolvedBinderCoreName
+        (checkedComponentReceiveEndpoint server)
+      serverNext = grammarV1ResolvedBinderCoreName
+        (checkedComponentReceiveSuccessor server)
+      side p old next role =
+        ProcessRendezvousSide p old next revision role
+      request c s = JointProcessRendezvous (SendReceiveRendezvous
+        (side c clientOld clientNext clientRole)
+        (side s serverOld serverNext serverRole))
+      requestA = request ac as
+      requestB = request bc bs
+      requestC = request cc cs
+      run contexts req = checkProcessCommunication
+        (sourceBinaryInstance plans) network contexts req
+      terminalSides =
+        [(ac, clientNext, clientRole), (as, serverNext, serverRole),
+         (bc, clientNext, clientRole), (bs, serverNext, serverRole),
+         (cc, clientNext, clientRole), (cs, serverNext, serverRole)]
+      closeOne contexts (p, endpoint, role) = do
+        current <- maybe (Left "triple terminal process absent") Right
+          (Map.lookup p contexts)
+        step <- mapLeft show $ checkProtocolAction
+          (ProtocolCloseRequest endpoint revision role done) current
+        assert
+          (checkedProtocolPredecessor step
+            == ProtocolEndpointBinding endpoint revision role (End done)
+           && checkedProtocolSuccessor step == Nothing)
+          "triple Close did not consume exact typed End predecessor"
+        let closed = checkedProtocolContext step
+        assert
+          (Map.notMember endpoint (protocolEndpoints closed)
+           && Map.notMember endpoint (linearBindings (protocolResources closed)))
+          "triple Close retained endpoint/owner"
+        pure (Map.insert p closed contexts)
+  assert (sourceServerHead plans == dualSession (sourceClientHead plans)
+       && clientOld /= clientNext && serverOld /= serverNext)
+    "triple source Ping projection/occurrences changed"
+  clientBefore <- mapLeft show $ insertProtocolEndpoint
+    clientOld revision clientRole (sourceClientHead plans) emptyProtocolContext
+  serverBefore <- mapLeft show $ insertProtocolEndpoint
+    serverOld revision serverRole (sourceServerHead plans) emptyProtocolContext
+  let spectator = Name "fsem02.triple.affine.loan"
+  framed <- mapLeft show $ insertBinding Affine spectator
+    (TyUInt 8) (protocolResources serverBefore)
+  loaned <- mapLeft show $ startSharedLoan spectator framed
+  let serverCBefore = serverBefore { protocolResources = loaned }
+      before = Map.fromList
+        [(ac, clientBefore), (as, serverBefore),
+         (bc, clientBefore), (bs, serverBefore),
+         (cc, clientBefore), (cs, serverCBefore)]
+      rendezvousOrders = permutations [requestA, requestB, requestC]
+      closeOrders = permutations terminalSides
+  assert (Map.size before == 6 && length rendezvousOrders == 6
+          && length closeOrders == 720)
+    "triple Ping process collision or incomplete order census"
+  canonical <- foldM (\contexts req -> mapLeft show (run contexts req))
+    before [requestA, requestB, requestC]
+  assert (Map.keysSet canonical == Map.keysSet before)
+    "triple Ping changed externally activated process population"
+  mapM_ (\(p, endpoint, role) -> do
+    current <- maybe (Left "triple typed End missing") Right
+      (Map.lookup p canonical)
+    assert
+      (Map.lookup endpoint (protocolEndpoints current)
+        == Just (ProtocolEndpointBinding endpoint revision role (End done))
+       && Map.lookup endpoint (linearBindings (protocolResources current))
+        == Just (TyEndpoint (End done)))
+      ("triple progression lost exact typed successor at " <> show p))
+    terminalSides
+  expected <- foldM closeOne canonical terminalSides
+  mapM_ (\order -> do
+    progressed <- foldM (\contexts req -> mapLeft show (run contexts req))
+      before order
+    assert (progressed == canonical)
+      "three independent Ping rendezvous do not commute"
+    mapM_ (\closeOrder -> do
+      result <- foldM closeOne progressed closeOrder
+      assert (result == expected
+           && Map.keysSet result == Map.keysSet before)
+        "one of six rendezvous by 720 Close schedules differs")
+      closeOrders)
+    rendezvousOrders
+  mapM_ (\(p, endpoint, role) -> do
+    context <- maybe (Left "triple final process absent") Right
+      (Map.lookup p expected)
+    assert (Map.null (protocolEndpoints context)
+         && Map.null (linearBindings (protocolResources context)))
+      "triple terminal context retains endpoint owner"
+    case checkProtocolAction
+        (ProtocolCloseRequest endpoint revision role done) context of
+      Left (ProtocolEndpointUnknown stale) ->
+        assert (stale == endpoint) "triple stale Close changed endpoint identity"
+      other -> Left ("triple stale Close unexpectedly succeeded: " <> show other))
+    terminalSides
+  finalLoaned <- maybe (Left "triple loaned server disappeared") Right
+    (Map.lookup cs expected)
+  assert (affineBindings (protocolResources finalLoaned) == affineBindings loaned
+       && sharedLoans (protocolResources finalLoaned) == sharedLoans loaned)
+    "triple schedules changed independent active affine loan"
+  case run canonical requestA of
+    Left (RendezvousEndpointNotOwnedByProcess p stale) ->
+      assert (p == ac && stale == clientOld)
+        "triple stale rendezvous returned wrong process/predecessor"
+    other -> Left ("triple stale rendezvous advanced: " <> show other)
+  serverC <- maybe (Left "triple Server C missing at End") Right
+    (Map.lookup cs canonical)
+  case checkProtocolAction
+      (ProtocolCloseRequest serverNext revision serverRole (Outcome "Wrong"))
+      serverC of
+    Left (ProtocolSessionError (CloseOutcomeMismatch expectedOutcome actual)) ->
+      assert (expectedOutcome == done && actual == Outcome "Wrong")
+        "triple rejected wrong outcome with imprecise class"
+    other -> Left ("triple wrong-outcome Close advanced: " <> show other)
+  afterOne <- closeOne canonical (ac, clientNext, clientRole)
+  retried <- foldM closeOne afterOne (tail terminalSides)
+  assert (retried == expected)
+    "triple refused Close prevented exact valid deterministic replay"
 
 sourceStaleCloseRejected :: Text.Text -> Either String ()
 sourceStaleCloseRejected source = do
