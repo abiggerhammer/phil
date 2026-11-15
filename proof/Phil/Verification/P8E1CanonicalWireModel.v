@@ -216,7 +216,7 @@ Proof.
   rewrite E.
   rewrite firstn_app, skipn_app.
   rewrite firstn_all, skipn_all, Nat.sub_diag.
-  simpl. reflexivity.
+  simpl. rewrite app_nil_r. reflexivity.
 Qed.
 
 Theorem p8_e1_parse_text_prefix_conservation :
