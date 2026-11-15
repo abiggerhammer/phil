@@ -1374,7 +1374,8 @@ sourcePingSharedServerContention accepted rejected = do
       assert (actual == clientB && expected == sourceClientHead plans
         && observed == End done) "malformed second Client had wrong rejection"
     other -> Left ("malformed second Client unexpectedly progressed: " <> show other)
-  assert (run brokenB requestA == Right afterA
+  afterBrokenA <- mapLeft show $ run brokenB requestA
+  assert (afterBrokenA == Map.insert clientB badClientB afterA
     && run before requestA == Right afterA
     && run before requestB == Right afterB
     && afterA /= afterB
