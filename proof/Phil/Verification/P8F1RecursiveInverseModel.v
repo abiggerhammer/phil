@@ -43,7 +43,7 @@ Lemma p8_f1_count_scan_suffix :
        Some (p8_f1_digit_value acc digits, suffix).
 Proof.
   induction digits as [|b rest IH]; intros suffix acc used Hused Hdigits.
-  - simpl. rewrite Nat.eqb_refl.
+  - simpl.
     assert ((used =? 0) = false) as E by (apply Nat.eqb_neq; lia).
     rewrite E. reflexivity.
   - simpl in Hdigits.
