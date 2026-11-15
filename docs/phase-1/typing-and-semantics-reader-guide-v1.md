@@ -31,6 +31,8 @@ There are several layers of authority; they must not be conflated.
 → the specific proof and implementation correspondence for any claim you want
 to challenge.
 
+The [non-normative FSEM-02 mixed-prefix fault/retry ledger](formal-semantics-source-ping-mixed-prefix-fault-retry-fsem02-v1.md) injects 806,400 phase-specific invalid Close attempts across all ten prefixes of 13,440 legal three-Ping mixed schedules. Exact production error classes, owner-state frames and valid suffix replay are tested separately from eight conditional Rocq 9.2 phase laws; general implementation refinement and external authority remain open.
+
 The [non-normative FSEM-02 mixed Ping/Close partial-order slice](formal-semantics-source-ping-mixed-interleavings-fsem02-v1.md) executes all 13,440 legal schedules of three independent rendezvous with their six terminal Closes, including exact premature-Close refusal after unrelated progress. Six conditional Rocq finite-map lemmas do not establish source-to-proof refinement or general scheduler authority.
 
 The [non-normative FSEM-02 source Ping joint terminal-close diamond](formal-semantics-source-ping-joint-close-diamond-fsem02-v1.md) records two local Close orders after a real joint Send/Receive, exact stale/wrong-terminal rejection, conditional Rocq proofs, and explicit external process/nominal authority premises. It is not an atomic Close or source-interpreter claim.
