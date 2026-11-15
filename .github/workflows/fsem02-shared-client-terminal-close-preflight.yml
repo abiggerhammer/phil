@@ -9,14 +9,14 @@ on:
       - 'proof/Phil/Core/FSEM02PingSharedClientTerminalCloseFrame.v'
       - 'docs/phase-1/formal-semantics-source-ping-shared-client-terminal-close-fsem02-v1.md'
       - 'docs/phase-1/typing-and-semantics-reader-guide-v1.md'
-      - '.github/workflows/fsem02-shared-server-terminal-close-preflight.yml'
+      - '.github/workflows/fsem02-shared-client-terminal-close-preflight.yml'
   pull_request:
     paths:
       - 'test/Phase1FSEM02ProtocolProgressionMain.hs'
       - 'proof/Phil/Core/FSEM02PingSharedClientTerminalCloseFrame.v'
       - 'docs/phase-1/formal-semantics-source-ping-shared-client-terminal-close-fsem02-v1.md'
       - 'docs/phase-1/typing-and-semantics-reader-guide-v1.md'
-      - '.github/workflows/fsem02-shared-server-terminal-close-preflight.yml'
+      - '.github/workflows/fsem02-shared-client-terminal-close-preflight.yml'
 
 permissions:
   contents: read
