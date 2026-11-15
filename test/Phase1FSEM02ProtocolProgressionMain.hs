@@ -1310,11 +1310,11 @@ sourcePingSharedServerContention accepted rejected = do
       requestB = request clientB
       run contexts req = checkProcessCommunication
         (sourceBinaryInstance plans) network contexts req
-      expectStale label contexts req =
+      expectStale label expectedProcess expectedOld contexts req =
         case run contexts req of
           Left (RendezvousEndpointNotOwnedByProcess actual old) ->
-            assert (actual == server && old == serverOld)
-              (label <> ": wrong shared Server or stale Receive predecessor")
+            assert (actual == expectedProcess && old == expectedOld)
+              (label <> ": wrong process or stale predecessor")
           other -> Left (label <> ": competing request progressed: " <> show other)
       checkFirst label after chosen untouched before clientBefore spectatorBefore = do
         c <- maybe (Left (label <> ": missing chosen Client")) Right
@@ -1358,12 +1358,12 @@ sourcePingSharedServerContention accepted rejected = do
          (clientB, clientBefore), (spectator, spectatorBefore)]
   afterA <- mapLeft show $ run before requestA
   checkFirst "A first" afterA clientA clientB before clientBefore spectatorBefore
-  expectStale "B after A" afterA requestB
-  expectStale "A replay" afterA requestA
+  expectStale "B after A" server serverOld afterA requestB
+  expectStale "A replay" clientA clientOld afterA requestA
   afterB <- mapLeft show $ run before requestB
   checkFirst "B first" afterB clientB clientA before clientBefore spectatorBefore
-  expectStale "A after B" afterB requestA
-  expectStale "B replay" afterB requestB
+  expectStale "A after B" server serverOld afterB requestA
+  expectStale "B replay" clientB clientOld afterB requestB
   -- Independent source-head corruption of the second sender has a precise
   -- projection failure and cannot consume the valid shared Server.
   badClientB <- mapLeft show $ insertProtocolEndpoint
