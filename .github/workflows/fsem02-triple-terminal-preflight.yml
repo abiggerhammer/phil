@@ -6,14 +6,14 @@ on:
       - formal-semantics/fsem02-three-disjoint-ping-terminal-schedules
     paths:
       - 'test/Phase1FSEM02ProtocolProgressionMain.hs'
-      - 'proof/Phil/Core/FSEM02PingClosePrefixFaultRetry.v'
+      - 'proof/Phil/Core/FSEM02PingTripleDisjointTerminal.v'
       - 'docs/phase-1/formal-semantics-source-ping-three-disjoint-terminal-fsem02-v1.md'
       - 'docs/phase-1/typing-and-semantics-reader-guide-v1.md'
       - '.github/workflows/fsem02-triple-terminal-preflight.yml'
   pull_request:
     paths:
       - 'test/Phase1FSEM02ProtocolProgressionMain.hs'
-      - 'proof/Phil/Core/FSEM02PingClosePrefixFaultRetry.v'
+      - 'proof/Phil/Core/FSEM02PingTripleDisjointTerminal.v'
       - 'docs/phase-1/formal-semantics-source-ping-three-disjoint-terminal-fsem02-v1.md'
       - 'docs/phase-1/typing-and-semantics-reader-guide-v1.md'
       - '.github/workflows/fsem02-triple-terminal-preflight.yml'
