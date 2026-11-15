@@ -1,0 +1,61 @@
+name: Phase 1 P8-D2 recursive structural order math
+
+on:
+  pull_request:
+    paths:
+      - 'proof/Phil/Verification/P8D2StructuralOrderModel.v'
+      - 'test/P8D2StructuralOrderMain.hs'
+      - 'docs/phase-1/p8-d2-structural-order-proof-boundary-v1.md'
+      - '.github/workflows/phase1-p8-d2-structural-order.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'proof/Phil/Verification/P8D2StructuralOrderModel.v'
+      - 'test/P8D2StructuralOrderMain.hs'
+      - 'docs/phase-1/p8-d2-structural-order-proof-boundary-v1.md'
+      - '.github/workflows/phase1-p8-d2-structural-order.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  native-recursive-structural-differential:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: haskell-actions/setup@v2
+        with:
+          ghc-version: '9.6.7'
+          cabal-version: 'latest'
+      - name: Strict native library and all test builds
+        run: cabal build all --enable-tests --ghc-options=-Werror
+      - name: Compile actual native comparison and independent wire differential
+        run: cabal exec -- ghc -isrc -itest -Wall -Werror -fno-code test/P8D2StructuralOrderMain.hs
+      - name: Execute all D2 native positives and negatives
+        run: cabal exec -- runghc -isrc -Wall -Werror test/P8D2StructuralOrderMain.hs
+      - name: Preserve actual source StageClosure and whole release regression controls
+        run: |
+          cabal exec -- runghc -isrc -Wall -Werror test/Phase1INT005CertifiedReleaseEnvelopeMain.hs
+          cabal exec -- runghc -isrc -Wall -Werror test/Phase1VerificationSourceArtifactClosureMain.hs
+          cabal exec -- runghc -isrc -Wall -Werror test/Phase1StageClosureMain.hs
+
+  rocq-recursive-structural-model:
+    runs-on: ubuntu-24.04
+    container:
+      image: rocq/rocq-prover:9.2.0
+      options: --user root
+    steps:
+      - uses: actions/checkout@v4
+      - name: Compile complete dependency closure, assumptions and recursive proof checking
+        shell: bash
+        run: |
+          set -euo pipefail
+          export PATH="/home/rocq/.opam/$COMPILER/bin:$PATH"
+          rocq -v
+          rocq c -Q proof/Phil Phil proof/Phil/Verification/P8UnicodeUtf8Model.v
+          rocq c -Q proof/Phil Phil proof/Phil/Verification/P8D1UnicodeStreamModel.v
+          rocq c -Q proof/Phil Phil proof/Phil/Verification/P8D2StructuralOrderModel.v | tee /tmp/p8-d2-assumptions.log
+          rocq check -Q proof/Phil Phil Phil.Verification.P8UnicodeUtf8Model
+          rocq check -Q proof/Phil Phil Phil.Verification.P8D1UnicodeStreamModel
+          rocq check -Q proof/Phil Phil Phil.Verification.P8D2StructuralOrderModel
+          sha256sum proof/Phil/Verification/P8UnicodeUtf8Model.vo proof/Phil/Verification/P8D1UnicodeStreamModel.vo proof/Phil/Verification/P8D2StructuralOrderModel.vo /tmp/p8-d2-assumptions.log
