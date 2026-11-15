@@ -76,7 +76,10 @@ Definition p8_d1_decode (bytes : list nat)
 Ltac p8_d1_lead_bounds :=
   (* Do not [simpl] the symbolic Nat.leb tests: doing so unfolds their
      recursion and hides the arithmetic inequalities from lia. *)
-  unfold p8_utf8_scalar_wellformed, p8_octet_between in H;
+  match goal with
+  | Hyp : p8_utf8_scalar_wellformed _ = true |- _ =>
+      unfold p8_utf8_scalar_wellformed, p8_octet_between in Hyp
+  end;
   repeat match goal with
     | Q : (_ && _) = true |- _ =>
         apply andb_true_iff in Q; destruct Q
