@@ -1347,6 +1347,49 @@ sourcePingDisjointTerminalInterleavings accepted rejected = do
     (retried == final && run before requestA == Right afterA
      && run before requestB == Right afterB)
     "refusal/retry differed from terminal result or deterministic replay"
+  -- At each boundary of every four-End schedule, an invalid terminal
+  -- outcome must reject without undoing a committed independent Close.
+  -- Retired endpoints must refuse before checking the offered outcome.
+  mapM_ (\schedule ->
+    mapM_ (\prefixLength -> do
+      prefix <- foldM closeOne afterAB (take prefixLength schedule)
+      assert (Map.keysSet prefix == Map.keysSet afterAB)
+        "Close-prefix fault injection changed process population"
+      loanedServer <- maybe (Left "missing loaned server in Close prefix") Right
+        (Map.lookup bs prefix)
+      assert
+        (affineBindings (protocolResources loanedServer) == affineBindings loaned
+         && sharedLoans (protocolResources loanedServer) == sharedLoans loaned)
+        "Close-prefix fault injection changed affine spectator"
+      mapM_ (\(p, endpoint, role) -> do
+        current <- maybe (Left "missing process at Close prefix") Right
+          (Map.lookup p prefix)
+        let badOutcome = Outcome "Wrong"
+            attempted = checkProtocolAction
+              (ProtocolCloseRequest endpoint revision role badOutcome) current
+        case Map.lookup endpoint (protocolEndpoints current) of
+          Nothing -> case attempted of
+            Left (ProtocolEndpointUnknown actual) ->
+              assert (actual == endpoint)
+                "retired Close-prefix endpoint lost exact refusal identity"
+            other -> Left ("retired Close-prefix endpoint was not refused: " <> show other)
+          Just expectedEnd -> do
+            assert
+              (expectedEnd == ProtocolEndpointBinding endpoint revision role (End done))
+              "live Close-prefix endpoint lost exact End successor"
+            case attempted of
+              Left (ProtocolSessionError (CloseOutcomeMismatch expected actual)) ->
+                assert (expected == done && actual == badOutcome)
+                  "live Close-prefix wrong outcome lost exact diagnostic"
+              other -> Left ("wrong-outcome Close-prefix attempt advanced: " <> show other)
+        ) terminalSides
+      expectStale "Close-prefix stale pair A" ac prefix requestA
+      expectStale "Close-prefix stale pair B" bc prefix requestB
+      resumed <- foldM closeOne prefix (drop prefixLength schedule)
+      assert (resumed == final)
+        "a refused Close-prefix probe changed the deterministic valid suffix"
+      ) [0 .. length schedule]
+    ) schedules
 
 -- Non-normative boundary of disjoint-pair commutation: both requests
 -- compete for exactly one source-derived Client linear predecessor.
