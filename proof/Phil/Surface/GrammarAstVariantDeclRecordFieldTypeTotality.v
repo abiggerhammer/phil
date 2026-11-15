@@ -10,6 +10,7 @@ From Phil.Surface Require Import
   GrammarAstGenericRequirementsSpine
   GrammarAstSourceHeaderTotality
   GrammarAstVariantDeclRecordFieldTypeSpine
+  GrammarAstVariantRecordFieldTypeSpine
   GrammarAstVariantRecordFieldTypeTotality
   GrammarAstDataTotality.
 

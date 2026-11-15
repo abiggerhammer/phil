@@ -175,10 +175,23 @@ Proof.
     (phase1_surface_normalize_record_field_type_variant_spines rest_variants)
     as [rest_refined |] eqn:Hrest; try discriminate Hnormalize.
   inversion Hnormalize; subst.
-  cbn -[phase1_surface_record_field_type_variant_spine_tree
-    phase1_surface_variant_payload_variant_spine_tree
-    phase1_surface_record_field_type_data_suffix_tree
-    phase1_surface_variant_payload_data_suffix_tree].
+  (* Reduce only the enclosing records and their projections.  Unrestricted
+     cbn would expand the child trees before their round-trip rewrites. *)
+  unfold phase1_surface_data_record_field_type_spine_tree,
+    phase1_surface_data_variant_payload_spine_tree.
+  cbn only [
+    phase1_data_record_field_type_spine_name
+    phase1_data_record_field_type_spine_generic_params
+    phase1_data_record_field_type_spine_mode
+    phase1_data_record_field_type_spine_requirements
+    phase1_data_record_field_type_spine_first_variant
+    phase1_data_record_field_type_spine_rest_variants
+    phase1_data_variant_payload_spine_name
+    phase1_data_variant_payload_spine_generic_params
+    phase1_data_variant_payload_spine_mode
+    phase1_data_variant_payload_spine_requirements
+    phase1_data_variant_payload_spine_first_variant
+    phase1_data_variant_payload_spine_rest_variants].
   rewrite
     (phase1_surface_normalize_record_field_type_variant_spine_round_trip
       first_variant first_refined Hfirst).
