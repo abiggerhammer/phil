@@ -10,9 +10,11 @@
 // with a 32-byte nonce, since a pull has only 31 values to guess from.
 // The reveal is (pull, nonce).
 
-// A move, held by the player until it is revealed. It is linear: the nonce
-// can't be copied, so it never opens two commitments, and it can't be dropped
-// without saying so, since losing it forfeits the match.
+// A move, held by the player until it is revealed. The 32-byte nonce makes
+// the record linear, and declaring it any weaker is refused. That is a
+// record-mode obligation only: the protocol below sends tuples, not Move, and
+// WagerPlayer returns unit, so nothing here checks that a nonce is used once
+// or that losing it forfeits the match.
 record Move mode linear {
   pull : {p : U8 | p <= 30},
   nonce : Bytes[32]

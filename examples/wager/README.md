@@ -1,7 +1,8 @@
 # Wager round: a commit-reveal protocol with an external referee
 
 **Status: non-normative example.** It changes no grammar, semantics, proof or CI. Its evidence is
-`test/ExampleWagerRoundMain.hs`.
+`test/ExampleWagerRoundMain.hs`. It is an example of the protocol-shape, role-duality and record-mode checks, not a
+checked implementation of the Solana referee or of a player endpoint.
 
 `round.phil` is one player's side of a round of The Line, a two-player game played between AI agents, in its wager
 mode. Each round both players secretly choose a pull from 0 to 30, and the bigger pull moves a shared node one place
@@ -16,8 +17,12 @@ to 7.3.
 | --- | --- |
 | Commit, wait for both commits, reveal, learn the result, every round | `WagerRound`, a recursive protocol |
 | Before revealing, a player learns that the other side committed, never what | `BothCommitted` carries no payload |
-| A nonce must not open two commitments, and losing it forfeits the match | `Move` is linear |
+| A move's nonce is used once, and losing it forfeits the match | `Move` must be linear: a record-mode obligation only |
 | The referee is a program outside Phil | `role round.Program = external` |
+
+The linear `Move` connects to the running protocol only outside what this example verifies. `WagerRound` sends tuples,
+not `Move`, and `WagerPlayer` returns `unit`, so nothing here checks that a nonce is consumed once across commit and
+reveal, or that losing it forfeits the match.
 
 The first draft declared `Move` as `mode affine`, so that a forfeited match could drop it. The record checker refused
 it with `DeclaredModeWeakensDerived Linear Affine`: `Bytes[32]` makes the record linear. Linear is the right rule for a
