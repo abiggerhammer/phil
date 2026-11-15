@@ -12,7 +12,8 @@ module Phil.Surface.GrammarV1.SourceClosureCaptureCorrespondence
 import qualified Phil.Core.Context as Core
 import Phil.Core.Callable
   ( CallableOccurrenceKey (..), CaptureOccurrenceKey (..)
-  , CaptureTransfer (..), ClosureCapture (..), checkClosureCaptures )
+  , CaptureTransfer (..), ClosureCapture (..), ClosureCaptureSummary (..)
+  , checkClosureCaptures )
 import qualified Data.Map.Strict as Map
 import Phil.Core.CallableScope
   ( ClosureScopeCapture (..), LoanScopeKey (..)
@@ -69,12 +70,16 @@ verifyDirectCaptureCuts run =
     nativeSummary = case mapM describe (directCaptures run) of
       Just descriptions -> Just (checkClosureCaptures descriptions)
       Nothing -> Nothing
+    declaredAgrees summary = case directDeclaredMode run of
+      Nothing -> True
+      Just declared -> declared == closureMinimumStructuralMode summary
     consistent = case directOutcome run of
       Right () ->
         directFailureStage run == Nothing &&
         case nativeSummary of
           Just (Right summary) ->
-            directSummary run == Just summary && cut == nativeCuts &&
+            directSummary run == Just summary && declaredAgrees summary &&
+            cut == nativeCuts &&
             (case nativeResult of
               Right next -> directFinal run == Just next
               Left _ -> False)
@@ -83,18 +88,23 @@ verifyDirectCaptureCuts run =
         directFailureStage run == Just ClosureCaptureValidation &&
         directSummary run == Nothing && prechecked &&
         nativeSummary == Just (Left err)
-      Left (SourceClosureModeMismatch _ _) ->
+      Left (SourceClosureModeMismatch required declared) ->
         directFailureStage run == Just ClosureModeValidation &&
         prechecked &&
         case nativeSummary of
-          Just (Right summary) -> directSummary run == Just summary
+          Just (Right summary) ->
+            directSummary run == Just summary &&
+            required == closureMinimumStructuralMode summary &&
+            directDeclaredMode run == Just declared &&
+            required /= declared
           _ -> False
       Left (SourceClosureCoreError err) ->
         directFailureStage run == Just ClosureNativeUse &&
         directFinal run == Nothing &&
         cut == nativeCuts && nativeResult == Left err &&
         case nativeSummary of
-          Just (Right summary) -> directSummary run == Just summary
+          Just (Right summary) ->
+            directSummary run == Just summary && declaredAgrees summary
           _ -> False
       _ -> False
 
@@ -114,6 +124,18 @@ verifyBorrowCaptureCuts run =
     scopeKey = LoanScopeKey ("loan:" <> view)
     callable = CallableOccurrenceKey ("closure:" <> view)
     captured = ScopedSharedLoanCapture (CaptureOccurrenceKey view) scopeKey
+    nativeCaptureCheck = checkClosureCaptures
+      [ClosureCapture (CaptureOccurrenceKey view) CopyCapture Unrestricted]
+    modeAdmitted = case nativeCaptureCheck of
+      Right summary -> case borrowDeclaredMode run of
+        Nothing -> True
+        Just declared -> declared == closureMinimumStructuralMode summary
+      Left _ -> False
+    modeMismatch required declared = case nativeCaptureCheck of
+      Right summary ->
+        required == closureMinimumStructuralMode summary &&
+        borrowDeclaredMode run == Just declared && required /= declared
+      Left _ -> False
     nativeStart = Core.startSharedLoan owner initial
     consistent = case nativeStart of
       Left err ->
@@ -130,7 +152,7 @@ verifyBorrowCaptureCuts run =
         in started && (case borrowOutcome run of
           Right () ->
             borrowFailureStage run == Nothing &&
-            scoped == Right () &&
+            modeAdmitted && scoped == Right () &&
             case Core.endSharedLoan owner loaned of
               Right closed ->
                 borrowClosed run == Just closed &&
@@ -138,16 +160,20 @@ verifyBorrowCaptureCuts run =
               Left _ -> False
           Left (SourceClosureScopeError err) ->
             borrowFailureStage run == Just ClosureLoanScope &&
+            modeAdmitted &&
             borrowClosed run == Nothing && baseCuts &&
             scoped == Left err
-          Left (SourceClosureModeMismatch _ _) ->
+          Left (SourceClosureModeMismatch required declared) ->
             borrowFailureStage run == Just ClosureModeValidation &&
-            borrowClosed run == Nothing && baseCuts
-          Left (SourceClosureCaptureError _) ->
+            borrowClosed run == Nothing && baseCuts &&
+            modeMismatch required declared
+          Left (SourceClosureCaptureError err) ->
             borrowFailureStage run == Just ClosureCaptureValidation &&
-            borrowClosed run == Nothing && baseCuts
+            borrowClosed run == Nothing && baseCuts &&
+            nativeCaptureCheck == Left err
           Left (SourceClosureCoreError err) ->
             borrowFailureStage run == Just ClosureLoanClose &&
+            modeAdmitted && scoped == Right () &&
             borrowClosed run == Nothing && baseCuts &&
             Core.endSharedLoan owner loaned == Left err
           _ -> False)
