@@ -52,3 +52,10 @@ The source C-1 adapter recognizes only two function-parameter types (`Unrestrict
 ## Reproduction
 
 The focused preflight `.github/workflows/fsem01-corr1-closure-capture-preflight.yml` uses GHC 9.6.7 with a warning-free `cabal build lib:phil-core --ghc-options=-Werror`, runs both the existing C-1 and new CORR-1 source tests under `-Wall -Werror`, and compiles the original conditional C-1 model plus the CORR-1 model in Rocq 9.2. Preserve the exact source/head SHA, proof assumptions, tested witness files and any negative test classifications when reviewing the PR.
+
+The CORR-1 change also extends the exported `SourceDirectClosureRun` and
+`SourceBorrowClosureRun` records and registers its replay module in `phil-core.cabal`.
+When integrating against a newer `main`, verify the *combined* Cabal module list,
+all downstream source adapter consumers, and complete PR-merge-ref Haskell/Rocq
+checks. Historical work-branch green preflights alone cannot establish that
+later main-line changes preserve this bounded correspondence.
