@@ -49,6 +49,8 @@ main = do
         (sourcePingDisjointPairCommutation accepted stale)
     , test "FSEM-02 competing Ping sends sharing a Client predecessor refuse second use"
         (sourcePingSharedClientContention accepted stale)
+    , test "FSEM-02 competing Ping receivers sharing a Server predecessor refuse second use"
+        (sourcePingSharedServerContention accepted stale)
     , test "FSEM-02 Ping joint validation orders nominal, projection and resource faults across peers"
         (sourcePingJointGatePriority accepted stale)
     , test "FSEM-02 source Ping joint nominal instance/role fail-closed peer"
@@ -1278,6 +1280,107 @@ sourcePingSharedClientContention accepted rejected = do
       && run before requestB == Right afterB
       && Map.lookup spectator afterA == Map.lookup spectator afterB)
     "overlap unexpectedly commuted or failed deterministic one-step replay"
+
+
+-- Dual to shared-Client contention: independent source-derived Client senders
+-- compete for the *same* Server process/linear Receive predecessor. The
+-- source fixture grants neither the extra Client nor its activation.
+sourcePingSharedServerContention :: Text.Text -> Text.Text -> Either String ()
+sourcePingSharedServerContention accepted rejected = do
+  plans <- sourcePlans accepted
+  sourceStaleCloseRejected rejected
+  (network, clientA, server, clientB, spectator) <- sourcePingDisjointPairNetwork
+  let revision = sourceProtocolInstance plans
+      clientPlan = sourceClientPlan plans
+      serverPlan = sourceServerPlan plans
+      clientOld = grammarV1ResolvedBinderCoreName
+        (checkedComponentSendEndpoint clientPlan)
+      clientNext = grammarV1ResolvedBinderCoreName
+        (checkedComponentSendSuccessor clientPlan)
+      serverOld = grammarV1ResolvedBinderCoreName
+        (checkedComponentReceiveEndpoint serverPlan)
+      serverNext = grammarV1ResolvedBinderCoreName
+        (checkedComponentReceiveSuccessor serverPlan)
+      spectatorName = Name "fsem02.shared-server.affine-spectator"
+      side p old next role = ProcessRendezvousSide p old next revision role
+      request client = JointProcessRendezvous (SendReceiveRendezvous
+        (side client clientOld clientNext clientRole)
+        (side server serverOld serverNext serverRole))
+      requestA = request clientA
+      requestB = request clientB
+      run contexts req = checkProcessCommunication
+        (sourceBinaryInstance plans) network contexts req
+      expectStale label contexts req =
+        case run contexts req of
+          Left (RendezvousEndpointNotOwnedByProcess actual old) ->
+            assert (actual == server && old == serverOld)
+              (label <> ": wrong shared Server or stale Receive predecessor")
+          other -> Left (label <> ": competing request progressed: " <> show other)
+      checkFirst label after chosen untouched before clientBefore spectatorBefore = do
+        c <- maybe (Left (label <> ": missing chosen Client")) Right
+          (Map.lookup chosen after)
+        s <- maybe (Left (label <> ": missing shared Server")) Right
+          (Map.lookup server after)
+        assert
+          (Map.keysSet after == Map.keysSet before
+            && Map.notMember clientOld (protocolEndpoints c)
+            && Map.notMember clientOld (linearBindings (protocolResources c))
+            && Map.lookup clientNext (protocolEndpoints c)
+              == Just (ProtocolEndpointBinding clientNext revision clientRole (End done))
+            && Map.lookup clientNext (linearBindings (protocolResources c))
+              == Just (TyEndpoint (End done))
+            && Map.notMember serverOld (protocolEndpoints s)
+            && Map.notMember serverOld (linearBindings (protocolResources s))
+            && Map.lookup serverNext (protocolEndpoints s)
+              == Just (ProtocolEndpointBinding serverNext revision serverRole (End done))
+            && Map.lookup serverNext (linearBindings (protocolResources s))
+              == Just (TyEndpoint (End done))
+            && Map.lookup untouched after == Just clientBefore
+            && Map.lookup spectator after == Just spectatorBefore)
+          (label <> ": wrong typed successor or unrelated-state frame")
+  assert
+    (length (Map.keys (Map.fromList
+      [(clientA, ()), (server, ()), (clientB, ()), (spectator, ())])) == 4
+      && sourceServerHead plans == dualSession (sourceClientHead plans)
+      && sourceClientHead plans /= End done
+      && sourceServerHead plans /= End done)
+    "shared Server test lost distinct activated keys or dual source heads"
+  clientBefore <- mapLeft show $ insertProtocolEndpoint
+    clientOld revision clientRole (sourceClientHead plans) emptyProtocolContext
+  serverBefore <- mapLeft show $ insertProtocolEndpoint
+    serverOld revision serverRole (sourceServerHead plans) emptyProtocolContext
+  spectatorResource <- mapLeft show $ insertBinding Affine spectatorName
+    (TyUInt 8) (protocolResources emptyProtocolContext)
+  spectatorLoan <- mapLeft show $ startSharedLoan spectatorName spectatorResource
+  let spectatorBefore = emptyProtocolContext { protocolResources = spectatorLoan }
+      before = Map.fromList
+        [(clientA, clientBefore), (server, serverBefore),
+         (clientB, clientBefore), (spectator, spectatorBefore)]
+  afterA <- mapLeft show $ run before requestA
+  checkFirst "A first" afterA clientA clientB before clientBefore spectatorBefore
+  expectStale "B after A" afterA requestB
+  expectStale "A replay" afterA requestA
+  afterB <- mapLeft show $ run before requestB
+  checkFirst "B first" afterB clientB clientA before clientBefore spectatorBefore
+  expectStale "A after B" afterB requestA
+  expectStale "B replay" afterB requestB
+  -- Independent source-head corruption of the second sender has a precise
+  -- projection failure and cannot consume the valid shared Server.
+  badClientB <- mapLeft show $ insertProtocolEndpoint
+    clientOld revision clientRole (End done) emptyProtocolContext
+  let brokenB = Map.insert clientB badClientB before
+  case run brokenB requestB of
+    Left (RendezvousProjectionSessionMismatch actual expected observed) ->
+      assert (actual == clientB && expected == sourceClientHead plans
+        && observed == End done) "malformed second Client had wrong rejection"
+    other -> Left ("malformed second Client unexpectedly progressed: " <> show other)
+  assert (run brokenB requestA == Right afterA
+    && run before requestA == Right afterA
+    && run before requestB == Right afterB
+    && afterA /= afterB
+    && Map.lookup spectator afterA == Map.lookup spectator afterB)
+    "shared Server refused healthy first step, unexpectedly commuted or lost frame"
+
 
 sourcePingJointDeclaration :: Text.Text -> DeclarationIdentity
 sourcePingJointDeclaration name = deriveDeclarationIdentity DeclarationDescriptor
