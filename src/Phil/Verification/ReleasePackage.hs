@@ -312,31 +312,31 @@ renderBody release selectedEvidence selectedUses decisions = Text.unlines $
               ]
           ]
 
-       -- Static source checking is neither erasure nor a runtime carrier.
-       -- Package bytes expose the exact canonical typed source fact for audit.
-       CheckedStaticUse
-         { assuranceUseDigest = useDigest
-         , useObligationRevision = revision
-         , useEvidenceEntries = entries
-         , useCheckedStaticFact = fact
-         } ->
-           [ recordLine "assurance-use"
-               [ ("id", unAssuranceUseId key)
-               , ("digest", unDigest useDigest)
-               , ("kind", "checked-static-v1")
-               , ("revision", unRevisionId revision)
+      -- Static source checking is neither erasure nor a runtime carrier.
+      -- Package bytes expose the exact canonical typed source fact for audit.
+      CheckedStaticUse
+        { assuranceUseDigest = useDigest
+        , useObligationRevision = revision
+        , useEvidenceEntries = entries
+        , useCheckedStaticFact = fact
+        } ->
+          [ recordLine "assurance-use"
+              [ ("id", unAssuranceUseId key)
+              , ("digest", unDigest useDigest)
+              , ("kind", "checked-static-v1")
+              , ("revision", unRevisionId revision)
+              ]
+          , recordLine "assurance-use-static-fact"
+              [ ("use", unAssuranceUseId key)
+              , ("fact-digest", unDigest (deriveStaticCheckedSourceFactDigest fact))
+              , ("fact-v1", renderStaticCheckedSourceFact fact)
+              ]
+          ] <> [ recordLine "assurance-use-evidence"
+                  [ ("use", unAssuranceUseId key)
+                  , ("evidence", unEvidenceEntryId entry)
+                  ]
+               | entry <- entries
                ]
-           , recordLine "assurance-use-static-fact"
-               [ ("use", unAssuranceUseId key)
-               , ("fact-digest", unDigest (deriveStaticCheckedSourceFactDigest fact))
-               , ("fact-v1", renderStaticCheckedSourceFact fact)
-               ]
-           ] <> [ recordLine "assurance-use-evidence"
-                   [ ("use", unAssuranceUseId key)
-                   , ("evidence", unEvidenceEntryId entry)
-                   ]
-                | entry <- entries
-                ]
 
     renderDecision (key, decision) = recordLine "lowering-decision"
       [ ("id", unDecisionId key)
