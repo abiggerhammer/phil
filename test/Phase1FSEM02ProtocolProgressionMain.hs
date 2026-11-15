@@ -2528,7 +2528,7 @@ sourcePingThreeDisjointTerminalSchedules accepted rejected = do
     terminal <- foldM (\contexts (_, _, event) ->
       case event of
         Left req -> mapLeft show (run contexts req)
-        Right side -> closeOne contexts side) before events
+        Right terminalSide -> closeOne contexts terminalSide) before events
     assert (terminal == expected && Map.keysSet terminal == Map.keysSet before)
       "mixed Ping/Close schedule altered owned endpoint or affine frame")
     mixedOrders
