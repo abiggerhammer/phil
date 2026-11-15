@@ -192,14 +192,21 @@ Proof.
   - rewrite Nat.compare_refl. exact IH.
 Qed.
 
+Lemma p8_d2_key_less_irrefl :
+  forall key, p8_d2_key_less key key = false.
+Proof.
+  intro key. unfold p8_d2_key_less.
+  rewrite p8_d2_byte_compare_refl. reflexivity.
+Qed.
+
 Theorem p8_d2_adjacent_duplicate_key_rejected :
   forall key x y tail,
     p8_d2_strict_keys
       (P8D2FieldCons key x (P8D2FieldCons key y tail)) = false.
 Proof.
   intros key x y tail.
-  cbn [p8_d2_strict_keys p8_d2_all_later_keys p8_d2_key_less].
-  rewrite p8_d2_byte_compare_refl. reflexivity.
+  cbn [p8_d2_strict_keys p8_d2_all_later_keys].
+  rewrite p8_d2_key_less_irrefl. reflexivity.
 Qed.
 
 Theorem p8_d2_duplicate_record_invalid :
