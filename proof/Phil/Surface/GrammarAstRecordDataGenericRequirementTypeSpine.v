@@ -86,7 +86,8 @@ Theorem
       phase1_surface_record_generic_kind_type_spine_tree record.
 Proof.
   intros [name generic_params mode requirements fields] refined Hnormalize.
-  cbn in Hnormalize.
+  unfold phase1_surface_normalize_record_generic_requirement_type_spine in Hnormalize.
+  cbn [phase1_record_generic_kind_type_spine_requirements] in Hnormalize.
   destruct
     (phase1_surface_normalize_optional_generic_requirements_type requirements)
     as [actual |] eqn:Hrequirements; try discriminate Hnormalize.
@@ -221,7 +222,8 @@ Proof.
   intros
     [name generic_params mode requirements first_variant rest_variants]
     refined Hnormalize.
-  cbn in Hnormalize.
+  unfold phase1_surface_normalize_data_generic_requirement_type_spine in Hnormalize.
+  cbn [phase1_data_generic_kind_type_spine_requirements] in Hnormalize.
   destruct
     (phase1_surface_normalize_optional_generic_requirements_type requirements)
     as [actual |] eqn:Hrequirements; try discriminate Hnormalize.

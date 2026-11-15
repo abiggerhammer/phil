@@ -185,20 +185,17 @@ Proof.
   | Hnil : DerivesSequence phase1_surface_rules _ _ [] _ _ _ |- _ =>
       inversion Hnil; subst; clear Hnil
   end.
-  match goal with
-  | Hkind : Derives phase1_surface_rules _ (ENonterminal "generic_kind")
-      _ _ (phase1_surface_generic_kind_spine_tree kind) |- _ =>
-      destruct
-        (phase1_surface_normalize_generic_kind_type_spine_total_from_spine_derivation
-          kind _ _ _ Hkind)
-        as [refined_kind Hrefined_kind];
-      exists
-        {| phase1_generic_param_kind_type_spine_name := name;
-           phase1_generic_param_kind_type_spine_kind := refined_kind |};
-      cbn;
-      rewrite Hrefined_kind;
-      reflexivity
-  end.
+  destruct
+    (phase1_surface_normalize_generic_kind_type_spine_total_from_spine_derivation
+      kind _ _ _)
+    as [refined_kind Hrefined_kind].
+  { eassumption. }
+  exists
+    {| phase1_generic_param_kind_type_spine_name := name;
+       phase1_generic_param_kind_type_spine_kind := refined_kind |}.
+  cbn.
+  rewrite Hrefined_kind.
+  reflexivity.
 Qed.
 
 Lemma
