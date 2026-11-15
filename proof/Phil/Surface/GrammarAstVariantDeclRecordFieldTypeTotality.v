@@ -1,7 +1,17 @@
+From Stdlib Require Import Lists.List Strings.String.
+
 From Phil.Surface Require Import
+  GrammarDerivation
+  GrammarDeterminacySimpleResolverSoundness
+  GrammarAstSourceHeader
+  GrammarAstTopLevelSpine
+  GrammarAstSourceHeaderTotality
   GrammarAstVariantDeclRecordFieldTypeSpine
   GrammarAstVariantRecordFieldTypeTotality
   GrammarAstDataTotality.
+
+Import ListNotations.
+Open Scope string_scope.
 
 (*
   Compose the staged variant normalizers into a raw-tree adapter, then prove

@@ -52,7 +52,7 @@ Proof.
     + eapply phase1_surface_normalize_record_field_type_variant_spine_round_trip.
       exact Hvariant.
     + eapply IH.
-      exact Hrest.
+      reflexivity.
 Qed.
 
 Definition phase1_surface_record_field_type_data_suffix_tree
@@ -88,7 +88,7 @@ Proof.
           variant actual Hvariant).
       reflexivity.
     + eapply IH.
-      exact Hrest.
+      reflexivity.
 Qed.
 
 Record Phase1SurfaceDataRecordFieldTypeSpine : Type := {
