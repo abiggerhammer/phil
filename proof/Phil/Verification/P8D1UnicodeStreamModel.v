@@ -181,10 +181,17 @@ Lemma p8_d1_decode_fuel_step :
     end.
 Proof.
   intros s suffix fuel H.
-  destruct s;
-    cbn [p8_utf8_scalar_bytes app p8_d1_decode_fuel];
-    rewrite (p8_d1_decode_one_prefix _ _ H);
-    destruct (p8_d1_decode_fuel fuel suffix); reflexivity.
+  (* Make the nonempty first scalar explicit before unfolding the fuel
+     recursion. Keep the original byte prefix available for rewriting. *)
+  assert (Nonempty : exists first tail,
+    p8_utf8_scalar_bytes s ++ suffix = first :: tail).
+  { destruct s; simpl; eauto. }
+  destruct Nonempty as [first [tail Prefix]].
+  rewrite Prefix.
+  cbn [p8_d1_decode_fuel].
+  rewrite <- Prefix.
+  rewrite (p8_d1_decode_one_prefix s suffix H).
+  destruct (p8_d1_decode_fuel fuel suffix); reflexivity.
 Qed.
 
 Lemma p8_d1_fuel_roundtrip :
