@@ -88,7 +88,7 @@ Proof.
   destruct
     (phase1_surface_normalize_optional_generic_params_kind_type generic_params)
     as [actual |] eqn:Hgeneric; try discriminate Hnormalize.
-  inversion Hnormalize; subst refined.
+  inversion Hnormalize; subst.
   cbn.
   rewrite
     (phase1_surface_normalize_optional_generic_params_kind_type_round_trip
@@ -195,7 +195,7 @@ Proof.
   destruct
     (phase1_surface_normalize_optional_generic_params_kind_type generic_params)
     as [actual |] eqn:Hgeneric; try discriminate Hnormalize.
-  inversion Hnormalize; subst refined.
+  inversion Hnormalize; subst.
   cbn.
   rewrite
     (phase1_surface_normalize_optional_generic_params_kind_type_round_trip
