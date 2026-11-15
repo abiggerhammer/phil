@@ -31,6 +31,8 @@ There are several layers of authority; they must not be conflated.
 → the specific proof and implementation correspondence for any claim you want
 to challenge.
 
+The [non-normative FSEM-02 mixed Ping/Close partial-order slice](formal-semantics-source-ping-mixed-interleavings-fsem02-v1.md) executes all 13,440 legal schedules of three independent rendezvous with their six terminal Closes, including exact premature-Close refusal after unrelated progress. Six conditional Rocq finite-map lemmas do not establish source-to-proof refinement or general scheduler authority.
+
 The [non-normative FSEM-02 source Ping joint terminal-close diamond](formal-semantics-source-ping-joint-close-diamond-fsem02-v1.md) records two local Close orders after a real joint Send/Receive, exact stale/wrong-terminal rejection, conditional Rocq proofs, and explicit external process/nominal authority premises. It is not an atomic Close or source-interpreter claim.
 
 The bounded non-normative [FSEM-02 terminal End linear-resource agreement refusal](formal-semantics-choice-resource-agreement-gate-fsem02-v1.md) checks exact native missing, wrong-type and wrong-session resource diagnostics against independently accepted Go/Cancel Select/Offer End contexts on both processes, including nominal precedence, unaffected peer Close and explicit externally restored two-order convergence. Conditional finite Rocq resource gates do not prove Map-to-model fidelity or grant protocol authority.

@@ -51,7 +51,7 @@ main = do
         (sourcePingDisjointPairCommutation accepted stale)
     , test "FSEM-02 disjoint Ping pairs complete all 24 terminal Close orders"
         (sourcePingDisjointTerminalInterleavings accepted stale)
-    , test "FSEM-02 three disjoint Pings commute across 4320 terminal schedules"
+    , test "FSEM-02 three Pings: 4320 terminal and 13440 mixed Ping/Close schedules"
         (sourcePingThreeDisjointTerminalSchedules accepted stale)
     , test "FSEM-02 competing Ping sends sharing a Client predecessor refuse second use"
         (sourcePingSharedClientContention accepted stale)
@@ -2456,6 +2456,23 @@ sourcePingThreeDisjointTerminalSchedules accepted rejected = do
          (cc, clientBefore), (cs, serverCBefore)]
       rendezvousOrders = permutations [requestA, requestB, requestC]
       closeOrders = permutations terminalSides
+      -- All Ping-before-Close schedules are already covered above.
+      -- Here each pair may Close before unrelated pairs rendezvous.
+      mixedEvents =
+        [ (0 :: Int, True, Left requestA)
+        , (1, True, Left requestB)
+        , (2, True, Left requestC)
+        , (0, False, Right (ac, clientNext, clientRole))
+        , (0, False, Right (as, serverNext, serverRole))
+        , (1, False, Right (bc, clientNext, clientRole))
+        , (1, False, Right (bs, serverNext, serverRole))
+        , (2, False, Right (cc, clientNext, clientRole))
+        , (2, False, Right (cs, serverNext, serverRole)) ]
+      legalMixed [] _ = True
+      legalMixed ((pair, isPing, _) : remaining) started
+        | isPing = pair `notElem` started && legalMixed remaining (pair : started)
+        | otherwise = pair `elem` started && legalMixed remaining started
+      mixedOrders = filter (\events -> legalMixed events []) (permutations mixedEvents)
   assert (Map.size before == 6 && length rendezvousOrders == 6
           && length closeOrders == 720)
     "triple Ping process collision or incomplete order census"
@@ -2486,6 +2503,35 @@ sourcePingThreeDisjointTerminalSchedules accepted rejected = do
         "one of six rendezvous by 720 Close schedules differs")
       closeOrders)
     rendezvousOrders
+  -- A Close before its own Ping cannot consume a live Send/Receive
+  -- predecessor. Other pairs' committed Closes do not change that.
+  let rejectPremature label contexts p endpoint role expectedHead = do
+        current <- maybe (Left (label <> " missing process")) Right
+          (Map.lookup p contexts)
+        case checkProtocolAction
+            (ProtocolCloseRequest endpoint revision role done) current of
+          Left (ProtocolSessionError (UnexpectedSessionAction CloseAction actual)) ->
+            assert (actual == expectedHead)
+              (label <> " lost actual pre-Ping session head")
+          other -> Left (label <> " incorrectly closed predecessor: " <> show other)
+  rejectPremature "A Client initially" before ac clientOld clientRole (sourceClientHead plans)
+  rejectPremature "B Server initially" before bs serverOld serverRole (sourceServerHead plans)
+  onlyA <- mapLeft show (run before requestA)
+  aClientClosed <- closeOne onlyA (ac, clientNext, clientRole)
+  rejectPremature "B Client after A Close" aClientClosed
+    bc clientOld clientRole (sourceClientHead plans)
+  rejectPremature "C Server after A Close" aClientClosed
+    cs serverOld serverRole (sourceServerHead plans)
+  assert (length mixedOrders == 13440)
+    "three-pair Ping-before-own-Close partial-order census changed"
+  mapM_ (\events -> do
+    terminal <- foldM (\contexts (_, _, event) ->
+      case event of
+        Left req -> mapLeft show (run contexts req)
+        Right side -> closeOne contexts side) before events
+    assert (terminal == expected && Map.keysSet terminal == Map.keysSet before)
+      "mixed Ping/Close schedule altered owned endpoint or affine frame")
+    mixedOrders
   mapM_ (\(p, endpoint, role) -> do
     context <- maybe (Left "triple final process absent") Right
       (Map.lookup p expected)
