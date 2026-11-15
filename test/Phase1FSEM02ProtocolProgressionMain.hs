@@ -51,7 +51,7 @@ main = do
         (sourcePingDisjointPairCommutation accepted stale)
     , test "FSEM-02 disjoint Ping pairs complete all 24 terminal Close orders"
         (sourcePingDisjointTerminalInterleavings accepted stale)
-    , test "FSEM-02 13440 mixed Ping/Close schedules classify 806400 Close and 302400 stale joint Ping probes"
+    , test "FSEM-02 25920 externally selected partner terminal schedules and 13440 mixed-prefix fault schedules"
         (sourcePingThreeDisjointTerminalSchedules accepted stale)
     , test "FSEM-02 competing Ping sends sharing a Client predecessor refuse second use"
         (sourcePingSharedClientContention accepted stale)
@@ -2491,6 +2491,55 @@ sourcePingThreeDisjointTerminalSchedules accepted rejected = do
       ("triple progression lost exact typed successor at " <> show p))
     terminalSides
   expected <- foldM closeOne canonical terminalSides
+  -- External scheduler/instance authority selects a bijection; the source
+  -- witness checks Send/Receive types, but does not fix participant pairing.
+  -- All six typed partner choices must consume only the chosen two predecessors
+  -- and converge to the same six-process terminal map. This is not a claim
+  -- that source syntax provides architecture/partner-selection authority.
+  let selectedServerOrders = permutations [as, bs, cs]
+      selectedClientKeys = [ac, bc, cc]
+      selectedRequests selectedServers =
+        zipWith request selectedClientKeys selectedServers
+      rejectConsumed label expectedProcess expectedEndpoint contexts attempted =
+        case run contexts attempted of
+          Left (RendezvousEndpointNotOwnedByProcess actualProcess predecessor) ->
+            assert (actualProcess == expectedProcess && predecessor == expectedEndpoint)
+              (label <> ": exact consumed owner diagnostic changed")
+          other -> Left (label <> ": selected partner improperly reused: " <> show other)
+  assert (length selectedServerOrders == 6)
+    "three source-checked Ping partners lack all six external bijections"
+  mapM_ (\selectedServers -> do
+    let selected = selectedRequests selectedServers
+        firstServer = head selectedServers
+        freshServer = selectedServers !! 1
+    firstState <- mapLeft show (run before (head selected))
+    assert
+      (Map.lookup bc firstState == Map.lookup bc before
+        && Map.lookup cc firstState == Map.lookup cc before
+        && Map.lookup freshServer firstState == Map.lookup freshServer before
+        && Map.lookup (selectedServers !! 2) firstState
+          == Map.lookup (selectedServers !! 2) before)
+      "selected partner modified an unchosen Client/Server"
+    rejectConsumed "selected Client with unchosen Server" ac clientOld
+      firstState (request ac freshServer)
+    rejectConsumed "unchosen Client with selected Server" firstServer serverOld
+      firstState (request bc firstServer)
+    replayed <- foldM (\contexts req -> mapLeft show (run contexts req))
+      firstState (tail selected)
+    assert (replayed == canonical)
+      "retry after rejected partner rematching changed canonical endpoint owners"
+    mapM_ (\selectedOrder -> do
+      progressed <- foldM (\contexts req -> mapLeft show (run contexts req))
+        before selectedOrder
+      assert (progressed == canonical)
+        "source-typed alternative partner order changed final joint successors"
+      mapM_ (\closeOrder -> do
+        terminal <- foldM closeOne progressed closeOrder
+        assert (terminal == expected && Map.keysSet terminal == Map.keysSet before)
+          "selected partner/terminal Close order changed final linear owners or spectator")
+        closeOrders)
+      (permutations selected))
+    selectedServerOrders
   mapM_ (\order -> do
     progressed <- foldM (\contexts req -> mapLeft show (run contexts req))
       before order
