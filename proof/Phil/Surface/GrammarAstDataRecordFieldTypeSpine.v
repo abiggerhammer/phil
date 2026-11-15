@@ -1,10 +1,17 @@
-From Stdlib Require Import Lists.List.
+From Stdlib Require Import Lists.List Strings.String.
 
 From Phil.Surface Require Import
+  GrammarDerivation
+  GrammarAstSourceHeader
+  GrammarAstGenericParamsSpine
+  GrammarAstStructuralModeSpine
+  GrammarAstGenericRequirementsSpine
+  GrammarAstDataSpine
   GrammarAstVariantPayloadSpine
   GrammarAstVariantDeclRecordFieldTypeSpine.
 
 Import ListNotations.
+Open Scope string_scope.
 
 (*
   Lift the record-field-type-refined variant_decl carrier through the ordered
