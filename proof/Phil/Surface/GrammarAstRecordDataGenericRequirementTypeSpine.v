@@ -1,6 +1,19 @@
+From Stdlib Require Import Lists.List Strings.String.
+
 From Phil.Surface Require Import
+  GrammarDerivation
+  GrammarAstSourceHeader
+  GrammarAstStructuralModeSpine
+  GrammarAstFieldTypeListSpine
+  GrammarAstOptionalFieldTypeSpine
+  GrammarAstDataRecordFieldTypeSpine
+  GrammarAstVariantDeclRecordFieldTypeSpine
+  GrammarAstGenericParamKindTypeSpine
   GrammarAstRecordDataGenericKindTypeSpine
   GrammarAstGenericRequirementsTypeSpine.
+
+Import ListNotations.
+Open Scope string_scope.
 
 (*
   Lift the generic-requirement type refinement into the current end-of-chain
