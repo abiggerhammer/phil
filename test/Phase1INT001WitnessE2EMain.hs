@@ -67,6 +67,7 @@ import Phil.Systems.Phase1Stage
   , verifyPhase1StageBundle
   )
 import qualified Phil.Assurance.Types as A
+import qualified Phil.Handoff.Phase1AssuranceInputs as H
 import Phil.Assurance.Types
   ( ArtifactIdentity (..)
   , AssuranceManifest (..)
@@ -960,6 +961,48 @@ p9F1Upload clientSource serverSource = do
   (binding, context, ledger, useId) <- p9F1Selection production fact
   _ <- mapLeft show
     (acceptSelectedCheckedStaticUse stage binding context ledger useId)
+  -- The typed immutable handoff is a reversible schema, not a copied
+  -- authority token. Deliberately mutate the actual nested typed source fact.
+  let selectedIds = Map.keysSet (A.ledgerEvidence ledger)
+      p9Selection = ManifestClosureSelection
+        selectedIds Set.empty Map.empty (Set.singleton useId)
+      p9Policy = ApplicationAssurancePolicy
+        (AssurancePolicyRevision "p9.f1.handoff.v1")
+        (Set.singleton StaticallyDischarged)
+  inputs <- mapLeft show
+    (H.derivePhase1AssuranceInputs p9Policy ledger p9Selection)
+  let staticWire = H.renderPhase1AssuranceInputs inputs
+  decoded <- mapLeft show (H.decodePhase1AssuranceInputs staticWire)
+  assert (decoded == inputs) "P9-F1 typed static-use handoff round-trip changed fact"
+  assert ("use-static-v1\t" `Text.isInfixOf` staticWire)
+    "P9-F1 typed handoff lost static use variant"
+  let variantsWire =
+        [ ("unknown static use revision",
+           Text.replace "use-static-v1\t" "use-static-v2\t" staticWire)
+        , ("truncated checked-source-fact field",
+           Text.unlines (map truncateStaticFact (Text.lines staticWire)))
+        , ("deceptively encoded use variant",
+           Text.replace "use-static-v1\t" "use-runtime\t" staticWire)
+        ]
+      truncateStaticFact wireLine
+        | "use-static-v1\t" `Text.isPrefixOf` wireLine =
+            case Text.splitOn "\t" wireLine of
+              [tag, key, digest, revision, entries, factHex] ->
+                Text.intercalate "\t" [tag, key, digest, revision, entries,
+                  Text.dropEnd 2 factHex]
+              _ -> wireLine
+        | otherwise = wireLine
+  mapM_ (\(label, wire) -> case H.decodePhase1AssuranceInputs wire of
+    Left _ -> Right ()
+    Right _ -> Left ("P9-F1 decoded altered static handoff: " ++ label))
+    variantsWire
+  -- Loss of the entire use row is distinguishable from the original selected
+  -- manifest; a standalone empty selection remains valid for weaker APIs.
+  let missingUseWire = Text.unlines
+        (filter (not . Text.isPrefixOf "use-static-v1\t") (Text.lines staticWire))
+  lostInput <- mapLeft show (H.decodePhase1AssuranceInputs missingUseWire)
+  assert (lostInput /= inputs)
+    "P9-F1 missing selected use row silently matched original selection"
   -- The substituted fully rehashed selection passes ordinary immutable
   -- closure, but MUST be rejected at the real sealed source event consumer.
   let wrongFact = fact { A.staticUseOrdinal = A.staticUseOrdinal fact + 42 }
