@@ -1,17 +1,13 @@
 name: Phase 1 Wager Example Source Conformance
 
-# Read-only, non-normative example verification. The one-time maintainer
-# staging-branch run checks the exact original outside-contributor PR head;
-# ordinary pull requests check the Phil PR merge checkout.
+# The initial maintainer workflow PR checks the exact outside-contributor
+# snapshot before that example is merged. Later PRs check the PR merge source.
+# No privileged events, write tokens, or publishing steps.
 on:
   pull_request:
     paths:
       - 'examples/wager/**'
       - 'test/ExampleWagerRoundMain.hs'
-  push:
-    branches:
-      - ci/wager-example-hosted
-    paths:
       - '.github/workflows/phase1-wager-example.yml'
 
 permissions:
@@ -23,11 +19,10 @@ jobs:
     runs-on: ubuntu-24.04
     timeout-minutes: 45
     steps:
-      - name: Check out PR source (future contributions)
-        if: github.event_name == 'pull_request'
+      - name: Check out submitted PR merge
         uses: actions/checkout@v4
-      - name: Check out exact outside-contributor submission (one-time replay)
-        if: github.event_name == 'push'
+      - name: Bootstrap the exact external example before it lands
+        if: hashFiles('test/ExampleWagerRoundMain.hs') == ''
         uses: actions/checkout@v4
         with:
           repository: HigherMaestro/phil
