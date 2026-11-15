@@ -1,7 +1,17 @@
+From Stdlib Require Import Lists.List Strings.String.
+
 From Phil.Surface Require Import
+  GrammarDerivation
+  GrammarAstSourceHeader
+  GrammarAstStructuralModeSpine
+  GrammarAstGenericRequirementsSpine
+  GrammarAstFieldTypeListSpine
   GrammarAstRecordFieldTypeSpine
   GrammarAstDataRecordFieldTypeSpine
   GrammarAstGenericParamKindTypeSpine.
+
+Import ListNotations.
+Open Scope string_scope.
 
 (*
   Lift the typed generic-kind parameter refinement into the current end-of-chain
