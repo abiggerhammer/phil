@@ -9,6 +9,7 @@ From Phil.Surface Require Import
   GrammarAstOptionalFieldTypeSpine
   GrammarAstRecordFieldTypeSpine
   GrammarAstDataRecordFieldTypeSpine
+  GrammarAstVariantDeclRecordFieldTypeSpine
   GrammarAstGenericParamKindTypeSpine.
 
 Import ListNotations.
