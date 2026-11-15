@@ -2510,9 +2510,9 @@ sourcePingThreeDisjointTerminalSchedules accepted rejected = do
           (Map.lookup p contexts)
         case checkProtocolAction
             (ProtocolCloseRequest endpoint revision role done) current of
-          Left (ProtocolSessionError (UnexpectedSessionAction CloseAction actual)) ->
-            assert (actual == expectedHead)
-              (label <> " lost actual pre-Ping session head")
+          Left (ProtocolSessionError (UnexpectedSessionAction (CloseAction outcome) actual)) ->
+            assert (outcome == done && actual == expectedHead)
+              (label <> " lost exact attempted Close outcome or actual pre-Ping session head")
           other -> Left (label <> " incorrectly closed predecessor: " <> show other)
   rejectPremature "A Client initially" before ac clientOld clientRole (sourceClientHead plans)
   rejectPremature "B Server initially" before bs serverOld serverRole (sourceServerHead plans)
