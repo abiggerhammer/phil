@@ -90,7 +90,7 @@ Proof.
   destruct
     (phase1_surface_normalize_optional_generic_requirements_type requirements)
     as [actual |] eqn:Hrequirements; try discriminate Hnormalize.
-  inversion Hnormalize; subst refined.
+  inversion Hnormalize; subst.
   cbn.
   rewrite
     (phase1_surface_normalize_optional_generic_requirements_type_round_trip
@@ -202,7 +202,7 @@ Proof.
   destruct
     (phase1_surface_normalize_optional_generic_requirements_type requirements)
     as [actual |] eqn:Hrequirements; try discriminate Hnormalize.
-  inversion Hnormalize; subst refined.
+  inversion Hnormalize; subst.
   cbn.
   rewrite
     (phase1_surface_normalize_optional_generic_requirements_type_round_trip
