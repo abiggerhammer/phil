@@ -4,6 +4,8 @@
 -- This checks finite witnesses, not universal Surface-to-Rocq refinement.
 module Main (main) where
 
+import Control.Monad (foldM)
+import Data.List (permutations)
 import qualified Data.Map.Strict as Map
 import qualified Data.Text as Text
 import qualified Data.Text.IO as TextIO
@@ -47,6 +49,8 @@ main = do
         (sourcePingJointThreeProcessFrame accepted stale)
     , test "FSEM-02 two disjoint source Ping pairs commute and refuse independently"
         (sourcePingDisjointPairCommutation accepted stale)
+    , test "FSEM-02 disjoint Ping pairs complete all 24 terminal Close orders"
+        (sourcePingDisjointTerminalInterleavings accepted stale)
     , test "FSEM-02 competing Ping sends sharing a Client predecessor refuse second use"
         (sourcePingSharedClientContention accepted stale)
     , test "FSEM-02 competing Ping receivers sharing a Server predecessor refuse second use"
@@ -1197,6 +1201,152 @@ sourcePingDisjointPairCommutation accepted rejected = do
     "explicit B repair did not recover exact schedule-independent successor"
   expectStale "A after repaired B" ac clientOld afterRepair requestA
   expectStale "B after repaired B" bc clientOld afterRepair requestB
+
+
+-- Two disjoint, externally activated source-checked Ping pairs: the two
+-- rendezvous orders and all 24 four-End Close permutations converge. This
+-- finite test never infers architecture/disposal authority from the source.
+sourcePingDisjointTerminalInterleavings :: Text.Text -> Text.Text -> Either String ()
+sourcePingDisjointTerminalInterleavings accepted rejected = do
+  plans <- sourcePlans accepted
+  sourceStaleCloseRejected rejected
+  (network, ac, as, bc, bs) <- sourcePingDisjointPairNetwork
+  let revision = sourceProtocolInstance plans
+      sender = sourceClientPlan plans
+      receiver = sourceServerPlan plans
+      clientOld = grammarV1ResolvedBinderCoreName
+        (checkedComponentSendEndpoint sender)
+      clientNext = grammarV1ResolvedBinderCoreName
+        (checkedComponentSendSuccessor sender)
+      serverOld = grammarV1ResolvedBinderCoreName
+        (checkedComponentReceiveEndpoint receiver)
+      serverNext = grammarV1ResolvedBinderCoreName
+        (checkedComponentReceiveSuccessor receiver)
+      spectator = Name "fsem02.disjoint.terminal.loaned"
+      side p old next role =
+        ProcessRendezvousSide p old next revision role
+      request client server = JointProcessRendezvous
+        (SendReceiveRendezvous
+          (side client clientOld clientNext clientRole)
+          (side server serverOld serverNext serverRole))
+      requestA = request ac as
+      requestB = request bc bs
+      run contexts req = checkProcessCommunication
+        (sourceBinaryInstance plans) network contexts req
+      terminalSides =
+        [(ac, clientNext, clientRole), (as, serverNext, serverRole),
+         (bc, clientNext, clientRole), (bs, serverNext, serverRole)]
+      closeOne contexts (p, endpoint, role) = do
+        current <- maybe (Left "disjoint terminal Close missing process") Right
+          (Map.lookup p contexts)
+        step <- mapLeft show $ checkProtocolAction
+          (ProtocolCloseRequest endpoint revision role done) current
+        assert
+          (checkedProtocolPredecessor step
+             == ProtocolEndpointBinding endpoint revision role (End done)
+           && checkedProtocolSuccessor step == Nothing)
+          "disjoint terminal Close used the wrong typed End or made a successor"
+        let closed = checkedProtocolContext step
+        assert
+          (Map.notMember endpoint (protocolEndpoints closed)
+           && Map.notMember endpoint (linearBindings (protocolResources closed)))
+          "disjoint terminal Close kept a consumed endpoint/linear owner"
+        pure (Map.insert p closed contexts)
+      expectStale label process contexts req =
+        case run contexts req of
+          Left (RendezvousEndpointNotOwnedByProcess actual old) ->
+            assert (actual == process && old == clientOld)
+              (label <> ": stale refusal lost the exact Client predecessor")
+          other -> Left (label <> ": spent Ping request advanced: " <> show other)
+  assert
+    (sourceServerHead plans == dualSession (sourceClientHead plans)
+     && clientOld /= clientNext && serverOld /= serverNext
+     && length (Map.keys (Map.fromList
+          [(ac, ()), (as, ()), (bc, ()), (bs, ())])) == 4)
+    "disjoint terminal instances alias sites or protocol heads"
+  clientBefore <- mapLeft show $ insertProtocolEndpoint
+    clientOld revision clientRole (sourceClientHead plans) emptyProtocolContext
+  serverBefore <- mapLeft show $ insertProtocolEndpoint
+    serverOld revision serverRole (sourceServerHead plans) emptyProtocolContext
+  framed <- mapLeft show $ insertBinding Affine spectator
+    (TyUInt 8) (protocolResources serverBefore)
+  loaned <- mapLeft show $ startSharedLoan spectator framed
+  let serverBBefore = serverBefore { protocolResources = loaned }
+      before = Map.fromList
+        [(ac, clientBefore), (as, serverBefore),
+         (bc, clientBefore), (bs, serverBBefore)]
+  afterA <- mapLeft show $ run before requestA
+  afterAB <- mapLeft show $ run afterA requestB
+  afterB <- mapLeft show $ run before requestB
+  afterBA <- mapLeft show $ run afterB requestA
+  assert
+    (afterAB == afterBA && Map.keysSet afterAB == Map.keysSet before
+     && Map.lookup bc afterA == Just clientBefore
+     && Map.lookup bs afterA == Just serverBBefore
+     && Map.lookup ac afterB == Just clientBefore
+     && Map.lookup as afterB == Just serverBefore)
+    "disjoint Ping first-step schedule mutated the other pair"
+  mapM_ (\(p, endpoint, role) -> do
+    current <- maybe (Left "missing typed End process") Right
+      (Map.lookup p afterAB)
+    assert
+      (Map.lookup endpoint (protocolEndpoints current)
+        == Just (ProtocolEndpointBinding endpoint revision role (End done))
+       && Map.lookup endpoint (linearBindings (protocolResources current))
+        == Just (TyEndpoint (End done)))
+      ("disjoint progression lost exact End successor/owner " <> show p))
+    terminalSides
+  let schedules = permutations terminalSides
+  assert (length schedules == 24)
+    "four-End permutation enumeration is incomplete"
+  outcomes <- mapM (foldM closeOne afterAB) schedules
+  final <- case outcomes of
+    [] -> Left "no disjoint Close schedules executed"
+    first : rest -> do
+      assert (all (== first) rest
+           && Map.keysSet first == Map.keysSet before)
+        "24 terminal Close interleavings differ or change process population"
+      pure first
+  mapM_ (\(p, endpoint, role) -> do
+    current <- maybe (Left "missing disjoint final context") Right
+      (Map.lookup p final)
+    assert
+      (Map.null (protocolEndpoints current)
+       && Map.null (linearBindings (protocolResources current)))
+      ("terminal Close retained a live endpoint/linear owner " <> show p)
+    case checkProtocolAction
+        (ProtocolCloseRequest endpoint revision role done) current of
+      Left (ProtocolEndpointUnknown actual) ->
+        assert (actual == endpoint)
+          "repeated Close lost exact stale endpoint identity"
+      other -> Left ("repeated Close unexpectedly advanced: " <> show other))
+    terminalSides
+  finalB <- maybe (Left "missing borrowed Server B") Right (Map.lookup bs final)
+  assert
+    (affineBindings (protocolResources finalB) == affineBindings loaned
+     && sharedLoans (protocolResources finalB) == sharedLoans loaned)
+    "terminal Close schedules lost active-loan affine spectator"
+  expectStale "A terminal replay" ac final requestA
+  expectStale "B terminal replay" bc final requestB
+  -- A failed Close after one committed retirement is not a successor step.
+  afterCloseA <- closeOne afterAB (ac, clientNext, clientRole)
+  liveB <- maybe (Left "missing Server B after first Close") Right
+    (Map.lookup bs afterCloseA)
+  case checkProtocolAction
+      (ProtocolCloseRequest serverNext revision serverRole (Outcome "Wrong"))
+      liveB of
+    Left (ProtocolSessionError (CloseOutcomeMismatch expected actual)) ->
+      assert (expected == done && actual == Outcome "Wrong")
+        "half-closed wrong-outcome rejection lost its exact pair"
+    other -> Left ("half-closed wrong-outcome Close advanced: " <> show other)
+  expectStale "A after committed Close and refused B" ac afterCloseA requestA
+  retried <- foldM closeOne afterCloseA
+    [(bs, serverNext, serverRole), (as, serverNext, serverRole),
+     (bc, clientNext, clientRole)]
+  assert
+    (retried == final && run before requestA == Right afterA
+     && run before requestB == Right afterB)
+    "refusal/retry differed from terminal result or deterministic replay"
 
 -- Non-normative boundary of disjoint-pair commutation: both requests
 -- compete for exactly one source-derived Client linear predecessor.
