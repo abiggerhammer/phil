@@ -1,7 +1,7 @@
 name: Phase 1 Wager Example Source Conformance
 
-# The initial maintainer workflow PR checks the exact outside-contributor
-# snapshot before that example is merged. Later PRs check the PR merge source.
+# Verify the current PR merge-source example, never a fallback or pinned
+# copy. A deleted/renamed example or test must fail closed.
 # No privileged events, write tokens, or publishing steps.
 on:
   pull_request:
@@ -21,12 +21,12 @@ jobs:
     steps:
       - name: Check out submitted PR merge
         uses: actions/checkout@v4
-      - name: Bootstrap the exact external example before it lands
-        if: hashFiles('test/ExampleWagerRoundMain.hs') == ''
-        uses: actions/checkout@v4
-        with:
-          repository: HigherMaestro/phil
-          ref: f170969e16e197c6652115638f37381e4f1692af
+      - name: Require current example and its executable source-test driver
+        run: |
+          set -euo pipefail
+          test -s examples/wager/round.phil
+          test -s examples/wager/README.md
+          test -s test/ExampleWagerRoundMain.hs
       - uses: haskell-actions/setup@v2
         with:
           ghc-version: '9.6.7'
