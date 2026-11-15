@@ -175,30 +175,44 @@ Proof.
     (phase1_surface_normalize_record_field_type_variant_spines rest_variants)
     as [rest_refined |] eqn:Hrest; try discriminate Hnormalize.
   inversion Hnormalize; subst.
-  (* Reduce only the enclosing records and their projections.  Unrestricted
-     cbn would expand the child trees before their round-trip rewrites. *)
+  pose proof
+    (phase1_surface_normalize_record_field_type_variant_spine_round_trip
+      first_variant first_refined Hfirst) as Hfirst_tree.
+  pose proof
+    (phase1_surface_normalize_record_field_type_variant_spines_suffix_round_trip
+      rest_variants rest_refined Hrest) as Hrest_trees.
+  assert (Hitems :
+    [ PTLiteral "data";
+      phase1_surface_identifier_tree name;
+      phase1_surface_optional_generic_params_tree generic_params;
+      phase1_surface_optional_mode_tree mode;
+      phase1_surface_optional_generic_requirements_tree requirements;
+      PTLiteral "=";
+      phase1_surface_record_field_type_variant_spine_tree first_refined;
+      PTRepetition
+        (map phase1_surface_record_field_type_data_suffix_tree rest_refined);
+      PTLiteral ";" ] =
+    [ PTLiteral "data";
+      phase1_surface_identifier_tree name;
+      phase1_surface_optional_generic_params_tree generic_params;
+      phase1_surface_optional_mode_tree mode;
+      phase1_surface_optional_generic_requirements_tree requirements;
+      PTLiteral "=";
+      phase1_surface_variant_payload_variant_spine_tree first_variant;
+      PTRepetition
+        (map phase1_surface_variant_payload_data_suffix_tree rest_variants);
+      PTLiteral ";" ]).
+  {
+    rewrite Hfirst_tree.
+    rewrite Hrest_trees.
+    reflexivity.
+  }
   unfold phase1_surface_data_record_field_type_spine_tree,
     phase1_surface_data_variant_payload_spine_tree.
-  cbn [
-    phase1_data_record_field_type_spine_name
-    phase1_data_record_field_type_spine_generic_params
-    phase1_data_record_field_type_spine_mode
-    phase1_data_record_field_type_spine_requirements
-    phase1_data_record_field_type_spine_first_variant
-    phase1_data_record_field_type_spine_rest_variants
-    phase1_data_variant_payload_spine_name
-    phase1_data_variant_payload_spine_generic_params
-    phase1_data_variant_payload_spine_mode
-    phase1_data_variant_payload_spine_requirements
-    phase1_data_variant_payload_spine_first_variant
-    phase1_data_variant_payload_spine_rest_variants].
-  rewrite
-    (phase1_surface_normalize_record_field_type_variant_spine_round_trip
-      first_variant first_refined Hfirst).
-  rewrite
-    (phase1_surface_normalize_record_field_type_variant_spines_suffix_round_trip
-      rest_variants rest_refined Hrest).
-  reflexivity.
+  apply (f_equal
+    (fun items : list ParseTree =>
+      PTNonterminal "data_decl" (PTSequence items))).
+  exact Hitems.
 Qed.
 
 Definition phase1_surface_normalize_data_record_field_type_tree
