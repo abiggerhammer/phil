@@ -103,17 +103,18 @@ jobs:
             /tmp/atc-reader-ruleset.json >> "$GITHUB_STEP_SUMMARY"
       - name: Verify configured publisher App and bot identity (read-only)
         env:
+          GH_TOKEN: ${{ github.token }}
           PUBLISHER_APP_SLUG: ${{ vars.MHB_ATC_PUBLISHER_APP_SLUG }}
           PUBLISHER_APP_ID: ${{ vars.MHB_ATC_PUBLISHER_APP_ID }}
         shell: bash
         run: |
           set -euo pipefail
-          # Exact same public read-only identity helper used by the controller.
-          # GitHub's ordinary GITHUB_TOKEN gets 403 from /apps/{slug};
-          # this API route supports unauthenticated public metadata reads.
+          # Exact same read-only identity helper used by the controller.
+          # The private /apps/{slug} endpoint is NOT accessed. Bot user
+          # metadata is read with the ordinary scoped GITHUB_TOKEN.
           . scripts/mhb_atc_publisher_identity_snapshot.sh
           jq -r '[
             "- Publisher App: \(.app_slug) (App ID \(.app_id))",
             "- Bot account: \(.bot_login) (GitHub user ID \(.bot_id))",
-            "- Identity verified with public read-only metadata; no App key or token"
+            "- Identity verified via read-only GitHub Actions token; no App key or publisher token"
           ] | .[]' /tmp/atc-publisher-identity.json >> "$GITHUB_STEP_SUMMARY"
