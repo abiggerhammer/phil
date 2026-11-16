@@ -340,8 +340,31 @@ p9SteveStructuralGate putSource getSource = do
   fact <- mapLeft show (verifySteveGetStructural architecture steveCoreProgram)
   assert (steveGetSourceContentBinder fact == "contentId"
       && steveGetSourceOwnerBinder fact == "bytes"
-      && steveGetSourceViewBinder fact == "bytesView")
-    "P9 SteveGet structural source operands changed"
+      && steveGetSourceViewBinder fact == "bytesView"
+      && steveGetCheckedContentType fact == TyOpaque "ContentId[SHA256]"
+      && steveGetCheckedCallOrdinal fact >= 0)
+    "P9 SteveGet real checked typed source call observation changed"
+
+  -- The ordinary primitive permits readable arguments without a qualified
+  -- expected type vector. The new P9-only discriminator must reject a
+  -- genuine source recheck with the WRONG declared content-id type, even
+  -- when the source call name, argument names and Core are unchanged.
+  let wrongIdEnvironment = Map.adjust
+        (\environment -> environment
+          { surfaceInitialBindings = Map.insert "contentId"
+              (InitialBinding Unrestricted (TyOpaque "WrongContentId") PlainShape)
+              (surfaceInitialBindings environment) })
+        steveGetDeclaration steveEnvironments
+  wronglyTyped <- mapLeft show $ checkPortableSourceBundle
+    steveRoots wrongIdEnvironment (steveBundle putSource getSource)
+  wrongTypeArchitecture <- mapLeft show $
+    buildCheckedSourceArchitecture
+      (Map.singleton "program:steve" (InstanceLineageSiteId "instance.steve"))
+      wronglyTyped
+  case verifySteveGetStructural wrongTypeArchitecture steveCoreProgram of
+    Left SteveGetCheckedCallTypeMismatch -> Right ()
+    other -> Left
+      ("P9 accepted wrongly typed source ContentId: " <> show other)
 
   let changeTerminator transform core =
         core { coreProgramFunctions =
