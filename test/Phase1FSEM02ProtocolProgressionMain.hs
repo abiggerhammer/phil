@@ -2674,10 +2674,10 @@ sourcePingThreeDisjointTerminalSchedules accepted rejected = do
                   { linearBindings = Map.insert endpoint replacement
                       (linearBindings resources) } }
         pure (Map.insert peerKey malformed contexts)
-      expectFreePeerShapeRefusal label expectedSite expected contexts req =
+      expectFreePeerShapeRefusal label expectedSite expectedError contexts req =
         case run contexts req of
           Left (RendezvousProtocolError actual actualError) ->
-            assert (actual == expectedSite && actualError == expected)
+            assert (actual == expectedSite && actualError == expectedError)
               (label <> ": resource shape refusal lost exact site and class")
           other -> Left (label <> ": malformed resource advanced or misclassified: "
                          <> show other)
