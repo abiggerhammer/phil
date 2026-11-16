@@ -53,10 +53,15 @@ def machine_record(issue: dict) -> dict:
     return parsed
 
 
-def plan(issues: list, prs: list) -> dict:
+def plan(issues: list, prs: list, inventory: dict) -> dict:
     """Do not admit until *all* MHB-managed in-flight PRs are cleared."""
     if not isinstance(issues, list) or not isinstance(prs, list):
         raise ValueError("incomplete API snapshot")
+    if (not isinstance(inventory, dict) or
+        inventory.get("decision") != "inventory-validated" or
+        type(inventory.get("admission_clear")) is not bool or
+        not isinstance(inventory.get("active_refs"), list)):
+        raise ValueError("complete authenticated protected-ref inventory required")
     active_prs: list[int] = []
     active_branches: set[str] = set()
     for pr in prs:
@@ -83,6 +88,13 @@ def plan(issues: list, prs: list) -> dict:
             raise ValueError("unexpected issue in open-issue snapshot")
         labels = names(issue)
         if not ({STAGED_LABEL, ADMITTING_LABEL, ACTIVE_LABEL} & labels):
+            # A partial GitHub label update must not erase the final durable
+            # queue marker and silently allow the next PR admission.
+            title = issue.get("title")
+            body = issue.get("body")
+            if ((isinstance(title, str) and title.startswith("ATC candidate: ")) or
+                (isinstance(body, str) and body.startswith(MARKER + "\n"))):
+                raise ValueError("ATC candidate lost all lifecycle labels")
             continue
         if "pull_request" in issue:
             # PRs also appear in the GitHub Issues API. Admitted PRs are
@@ -120,10 +132,11 @@ def plan(issues: list, prs: list) -> dict:
 
     # An admitting/admitted issue may be awaiting recovery. Fail closed
     # rather than declaring the slot free simply because the PR disappeared.
-    if active_prs or admitted_issues:
+    if active_prs or admitted_issues or inventory['active_refs']:
         return {"decision": "hold", "reason": "active or unreconciled admissions",
                 "open_staged_prs": sorted(active_prs),
-                "unreconciled_issue_ids": sorted(admitted_issues)}
+                "unreconciled_issue_ids": sorted(admitted_issues),
+                "protected_active_refs": inventory["active_refs"]}
     if not candidates:
         return {"decision": "hold", "reason": "no staged candidates"}
     _, number, record = min(candidates, key=lambda v: (v[0], v[1]))
@@ -137,12 +150,16 @@ def main() -> int:
     p = argparse.ArgumentParser(description=__doc__)
     p.add_argument("--issues", required=True, help="JSON array of all open issues")
     p.add_argument("--prs", required=True, help="JSON array of all open PRs")
+    p.add_argument("--inventory", required=True,
+                   help="complete checked protected-ref issue/PR inventory")
     args = p.parse_args()
     with open(args.issues, encoding="utf-8") as f:
         issues = json.load(f)
     with open(args.prs, encoding="utf-8") as f:
         prs = json.load(f)
-    print(json.dumps(plan(issues, prs), sort_keys=True))
+    with open(args.inventory, encoding="utf-8") as f:
+        inventory = json.load(f)
+    print(json.dumps(plan(issues, prs, inventory), sort_keys=True))
     return 0
 
 
