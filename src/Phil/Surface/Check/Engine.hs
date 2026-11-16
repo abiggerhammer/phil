@@ -2106,16 +2106,17 @@ evalPrimitive environment state located name arguments =
   case Map.lookup name (surfacePrimitives environment) of
     Nothing -> throw located UnknownPrimitive
       ("primitive is not declared in Sigma: " <> name)
-    Just primitive -> evalPrimitiveRule environment state located primitive arguments
+    Just primitive -> evalPrimitiveRule environment state located name primitive arguments
 
 evalPrimitiveRule
   :: SurfaceEnvironment
   -> SurfaceState
   -> Located SurfaceExpression
+  -> Text
   -> PrimitiveSemantics
   -> [Located SurfaceExpression]
   -> Either SurfaceCheckError [SurfacePath]
-evalPrimitiveRule environment state located primitive arguments =
+evalPrimitiveRule environment state located name primitive arguments =
   case primitive of
     PrimitiveSupportedVersions -> do
       arity 0
@@ -2187,8 +2188,20 @@ evalPrimitiveRule environment state located primitive arguments =
       unless (Set.size (Set.fromList labels) == length labels) $
         throw located TypeMismatch "provider decision outcome labels are not unique"
       next <- foldM applyProviderArgument state (zip disciplines arguments)
+      -- Record only the actual type/shape observations returned by the
+      -- ordinary checker, at their source occurrence and static branch.
+      -- The spelling digest_check grants NO provider competence or evidence.
+      observed <- if name == "digest_check"
+           && disciplines == [PrimitiveReadOnly, PrimitiveReadOnly]
+        then do
+          scalars <- mapM (inferReadOnlyScalar environment state) arguments
+          Right (recordSourceEvidence (locatedSpan located)
+            (SourceCheckedProviderCall name
+              [ (scalarType scalar, scalarShape scalar) | scalar <- scalars ])
+            next)
+        else Right next
       Right
-        [ valuePath next (RuntimeScalar
+        [ valuePath observed (RuntimeScalar
             (ScalarValue Unrestricted
               (TyOpaque "ProviderDecision")
               (DecisionShape (ProviderDecision outcomes))))

@@ -28,6 +28,13 @@ import Phil.Compiler.SourceBundle
   , CheckedSourceUnit (..)
   )
 import Phil.Surface.Syntax
+import Phil.Surface.Check.Types
+  ( SourceEvidenceEvent (..)
+  , SourceEvidenceBranch (..)
+  , SourceEvidenceUse (..)
+  , SurfaceShape (..)
+  )
+import Phil.Core.Syntax (Name (..), Ty (..))
 import Phil.Systems.GenericLowering
   ( CoreSystemsBlock (..)
   , CoreSystemsValue (..)
@@ -427,6 +434,9 @@ data SteveGetStructuralFact = SteveGetStructuralFact
   , steveGetSourceReadSite :: SourceSpan
   , steveGetSourceBorrowSite :: SourceSpan
   , steveGetSourceDigestSite :: SourceSpan
+  , steveGetCheckedCallOrdinal :: Int
+  , steveGetCheckedContentType :: Ty
+  , steveGetCheckedBorrowedType :: Ty
   } deriving (Eq, Show)
 
 data SteveGetStructuralError
@@ -436,6 +446,9 @@ data SteveGetStructuralError
   | SteveGetBorrowNotUnique
   | SteveGetDigestNotUnique
   | SteveGetDigestOperandsMismatch
+  | SteveGetCheckedCallObservationMissing
+  | SteveGetCheckedCallTypeMismatch
+  | SteveGetCheckedCallBranchMismatch
   | SteveGetCoreFunctionMissing
   | SteveGetCoreValueRolesMismatch
   | SteveGetCoreReadPredecessorMismatch
@@ -498,6 +511,46 @@ verifySteveGetStructural architecture program = do
       && locatedSpan (head allDigestSites) == locatedSpan digest)
     SteveGetDigestNotUnique
 
+  -- The checked observation is minted at the ORIGINAL ordinary primitive
+  -- transition, not reconstructed from presentation syntax or a copied map.
+  -- It establishes typed source arguments ONLY; no qualified source-owner
+  -- incarnation or runtime loan is inferred from a static binder.
+  (checkedTypes, checkedRoute, checkedOrdinal) <-
+    exactlyOne SteveGetCheckedCallObservationMissing
+      [ (arguments, sourceEvidenceBranchRoute event,
+          sourceEvidenceOrdinal event)
+      | u <- checkedSourceUnits (checkedSourceArchitectureBundle architecture)
+      , componentName (locatedValue (checkedSourceComponent u)) == "SteveGet"
+      , event <- checkedSourceEvidenceEvents u
+      , sourceEvidenceSite event == locatedSpan digest
+      , SourceCheckedProviderCall "digest_check" arguments <-
+          [sourceEvidenceUse event]
+      ]
+  (checkedId, checkedView) <- case checkedTypes of
+    [first, second] -> Right (first, second)
+    _ -> Left SteveGetCheckedCallTypeMismatch
+  let (idType, idShape) = checkedId
+      (viewType, viewShape) = checkedView
+  unlessSource
+    (idType == TyOpaque "ContentId[SHA256]"
+      && idShape == PlainShape
+      && case viewType of
+           TyOpaqueSorted "SharedBytes" _ -> True
+           _ -> False)
+    SteveGetCheckedCallTypeMismatch
+  unlessSource
+    (case viewShape of
+       BorrowedViewShape (Name actualOwner) _ -> actualOwner == ownerName
+       _ -> False)
+    SteveGetCheckedCallTypeMismatch
+  unlessSource
+    (checkedOrdinal >= 0
+      && any (\branch ->
+           sourceBranchLabel branch == "found"
+           && sourceBranchSpan branch == locatedSpan foundArm)
+         checkedRoute)
+    SteveGetCheckedCallBranchMismatch
+
   function <- maybe (Left SteveGetCoreFunctionMissing) Right
     (Map.lookup "SteveGet" (coreProgramFunctions program))
   let roles = coreFunctionValues function
@@ -554,6 +607,9 @@ verifySteveGetStructural architecture program = do
     , steveGetSourceReadSite = readSite
     , steveGetSourceBorrowSite = borrowSite
     , steveGetSourceDigestSite = locatedSpan digest
+    , steveGetCheckedCallOrdinal = checkedOrdinal
+    , steveGetCheckedContentType = idType
+    , steveGetCheckedBorrowedType = viewType
     }
   where
     exactlyOne problem xs = case xs of
