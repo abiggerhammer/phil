@@ -18,7 +18,7 @@ import qualified Data.Text.IO as TextIO
 import Numeric (showHex)
 import Phil.Core.Static (DeclarationKey (..), emptyStaticContext)
 import qualified Phil.Core.Context as Core
-import Phil.Core.Syntax (Control (..), Name (..), RefTerm (..), Ty (..))
+import Phil.Core.Syntax (Control (Return), Name (..), RefTerm (..), Ty (..))
 import Phil.Surface.Check.Engine (SourceIfJoinRun (..))
 import Phil.Surface.Check.Types
   ( RejectionClass (..), SurfaceCheckError (..), SurfaceCheckResult (..) )
