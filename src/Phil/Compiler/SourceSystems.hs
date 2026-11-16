@@ -29,6 +29,7 @@ module Phil.Compiler.SourceSystems
   , VerifiedSteveGetModeledABI
   , VerifiedSteveGetModeledABIError (..)
   , verifyOriginalSteveGetModeledABI
+  , verifiedSteveGetModeledLLVMText
   , SteveGetLLVMPointerFlowError (..)
   , verifySteveGetLLVMPointerFlow
   ) where
@@ -408,6 +409,12 @@ data VerifiedSteveGetModeledABI = VerifiedSteveGetModeledABI
   RuntimeChoiceABIPlan
   RuntimeChoiceLLVMArtifact
   deriving (Eq, Show)
+
+-- | Diagnostic projection of the exact rederived LLVM text, not an
+-- independently trusted ABI certificate.
+verifiedSteveGetModeledLLVMText :: VerifiedSteveGetModeledABI -> Text
+verifiedSteveGetModeledLLVMText
+  (VerifiedSteveGetModeledABI _ _ llvm) = runtimeChoiceLLVMText llvm
 
 data VerifiedSteveGetModeledABIError
   = SteveModeledABIBindingRejected RuntimeChoiceSystemsError
