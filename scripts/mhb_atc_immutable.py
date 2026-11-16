@@ -7,6 +7,7 @@ The trusted workflow does each GitHub read/write and rechecks these contracts.
 from __future__ import annotations
 
 import argparse
+import datetime as dt
 import json
 import re
 import sys
@@ -95,6 +96,18 @@ def _load_owner_attestation() -> dict:
         return json.load(fp)
 
 
+def _timestamp(value) -> dt.datetime:
+    if not isinstance(value, str):
+        raise ValueError("ruleset timestamp absent")
+    try:
+        result = dt.datetime.fromisoformat(value.replace("Z", "+00:00"))
+    except ValueError as exc:
+        raise ValueError("invalid GitHub ruleset timestamp") from exc
+    if result.tzinfo is None:
+        raise ValueError("ruleset timestamp missing timezone")
+    return result.astimezone(dt.timezone.utc)
+
+
 def check_ruleset(rule: dict, repo: str, app_id: int, ruleset_id: int,
                   attestation: dict | None = None) -> dict:
     """Fail closed on a missing/changed live policy or unreviewed bypass.
@@ -116,10 +129,10 @@ def check_ruleset(rule: dict, repo: str, app_id: int, ruleset_id: int,
             "actor_type": "Integration", "actor_id": app_id,
             "bypass_mode": "always"}]):
         raise ValueError("reviewed owner ruleset attestation missing or inconsistent")
-    if (not isinstance(policy.get("ruleset_created_at"), str) or
-        not isinstance(policy.get("ruleset_updated_at"), str) or
-        rule.get("created_at") != policy["ruleset_created_at"] or
-        rule.get("updated_at") != policy["ruleset_updated_at"]):
+    if (_timestamp(rule.get("created_at")) !=
+        _timestamp(policy.get("ruleset_created_at")) or
+        _timestamp(rule.get("updated_at")) !=
+        _timestamp(policy.get("ruleset_updated_at"))):
         raise ValueError("live ruleset version differs from reviewed owner attestation")
     if rule.get("id") != ruleset_id or rule.get("target") != "branch" or rule.get("enforcement") != "active":
         raise ValueError("wrong/inactive ruleset")
