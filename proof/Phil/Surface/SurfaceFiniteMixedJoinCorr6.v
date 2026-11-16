@@ -188,7 +188,10 @@ Proof.
   induction entries as [|[head ty] tail IH]; intros predicate name Hunique.
   - reflexivity.
   - simpl in Hunique.
-    inversion Hunique as [|_ _ Hnot Hrest]; subst.
+    assert (Hnot : ~ In head (keys tail)).
+    { inversion Hunique. assumption. }
+    assert (Hrest : NoDup (keys tail)).
+    { inversion Hunique. assumption. }
     simpl.
     destruct (String.eqb name head) eqn:Heq.
     + apply String.eqb_eq in Heq. subst name.
