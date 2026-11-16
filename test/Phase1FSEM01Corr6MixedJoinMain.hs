@@ -23,10 +23,10 @@ import qualified Phil.Core.Context as Core
 import Phil.Core.Generic.StaticActual (GenericStaticActual (..))
 import Phil.Core.NominalDataMode (NominalRestrictionJustification (..))
 import Phil.Core.Static (DeclarationKey (..), InterfaceRevision (..),emptyStaticContext)
-import Phil.Core.Syntax (Control (..), Mode (..), Name (..), RefTerm (..), Ty (..))
+import Phil.Core.Syntax (Name (..), RefTerm (..), Ty (..))
 import Phil.Surface.Check.Engine (SourceScopedIfJoinRun (..))
 import Phil.Surface.Check.Types
-  ( RejectionClass (..), SurfaceCheckError (..), SurfaceCheckResult (..) )
+  ( RejectionClass (..), SurfaceCheckError (..) )
 import Phil.Surface.GrammarV1.BinderScope (GrammarV1ResolvedBinder (..))
 import Phil.Surface.GrammarV1.CheckedType (GrammarV1CheckedTypeModeOrigin (..))
 import Phil.Surface.GrammarV1.Parser
@@ -261,7 +261,6 @@ checkSource kind trace = do
                "unknown or consumed binding: " <> unName permit)
             "stale affine use did not fail after real join"
           Right _ -> Left "stale affine use incorrectly passed"
-        LinearLeak -> Left "unreachable"
 
 reject :: String -> Either String a -> Either String ()
 reject label value =
