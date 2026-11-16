@@ -25,7 +25,7 @@ PROFILES = (
     ("escape-right", "-", "BSEX", "1", "0", "SOURCE_BORROW"),
     ("escape-alias", "BSEX", "-", "0", "0", "SOURCE_BORROW"),
     ("move-while-loaned", "BS", "-", "0", "0", "SOURCE_STRUCTURAL"),
-    ("return-inside-borrow", "BSR", "-", "0", "0", "SOURCE_LINEAR"),
+    ("return-inside-borrow", "BS", "-", "0", "0", "SOURCE_LINEAR"),
     ("borrow-unrestricted", "B", "-", "0", "0", "SOURCE_BORROW"),
 )
 
