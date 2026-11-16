@@ -10,6 +10,8 @@ on:
       - formal-semantics/fsem01-corr6-mixed-join-exec
     paths:
       - 'proof/Phil/Surface/SurfaceFiniteMixedJoinCorr6.v'
+      - 'proof/Phil/Surface/SurfaceSourceMixedJoinWireCorr6.v'
+      - 'scripts/fsem01_corr6_source_join_witness.py'
       - 'test/Phase1FSEM01Corr6MixedJoinMain.hs'
       - '.github/workflows/fsem01-corr6-mixed-join-preflight.yml'
   pull_request:
@@ -80,6 +82,128 @@ jobs:
             cabal exec -- ghc -isrc -Wall -Werror -fno-code "test/$test.hs"
             cabal exec -- runghc -isrc -Wall -Werror "test/$test.hs"
           done
+          cabal exec -- runghc -isrc -Wall -Werror \
+            test/Phase1FSEM01Corr6MixedJoinMain.hs --emit corr6-artifacts
+          python3 scripts/fsem01_corr6_source_join_witness.py \
+            --artifact-dir corr6-artifacts \
+            --rocq-witness corr6-generated/GeneratedCorr6SourceWitness.v
           sha256sum test/Phase1FSEM01Corr6MixedJoinMain.hs \
                      src/Phil/Core/Context.hs \
-                     src/Phil/Surface/GrammarV1/SourceAffineIfJoinResource.hs
+                     src/Phil/Surface/GrammarV1/SourceAffineIfJoinResource.hs \
+                     corr6-artifacts/*.mix
+      - uses: actions/upload-artifact@v4
+        with:
+          name: fsem01-corr6-real-source-mixed-joins
+          path: corr6-artifacts/*.mix
+          if-no-files-found: error
+          retention-days: 30
+
+
+  rocq-source-wire:
+    name: Rocq strict canonical source mixed-join wire decoder
+    runs-on: ubuntu-24.04
+    container:
+      image: rocq/rocq-prover:9.2.0
+      options: --user root
+    steps:
+      - uses: actions/checkout@v4
+      - name: Compile source version/framing and computed-join replay decoder
+        shell: bash
+        run: |
+          set -euo pipefail
+          export PATH="/home/rocq/.opam/$COMPILER/bin:$PATH"
+          for file in \
+            proof/Phil/Core/Syntax.v \
+            proof/Phil/Core/Context.v \
+            proof/Phil/Core/BindingSemantics.v \
+            proof/Phil/Core/ContextJoin.v \
+            proof/Phil/Core/ProcessJoin.v \
+            proof/Phil/Core/ResourceJoin.v \
+            proof/Phil/Core/ResourceScope.v \
+            proof/Phil/Surface/SurfaceBinderScopeCore.v \
+            proof/Phil/Surface/SurfaceLetPatternScope.v \
+            proof/Phil/Surface/SurfaceBorrowViewScope.v \
+            proof/Phil/Surface/SurfaceBorrowLoanStateCorrespondence.v \
+            proof/Phil/Surface/SurfaceBinderNameEncoding.v \
+            proof/Phil/Surface/SurfaceDeclarationIdentityBridge.v \
+            proof/Phil/Surface/SurfaceRepresentedBorrowTrace.v \
+            proof/Phil/Surface/SurfaceBorrowStepErrorBridge.v \
+            proof/Phil/Surface/SurfaceObservationWire.v \
+            proof/Phil/Surface/SurfaceFiniteContextFrame.v \
+            proof/Phil/Surface/SurfaceFiniteMixedJoinCorr6.v \
+            proof/Phil/Surface/SurfaceSourceMixedJoinWireCorr6.v
+          do
+            rocq c -Q proof/Phil Phil "$file"
+          done
+          rocq check -Q proof/Phil Phil Phil.Surface.SurfaceSourceMixedJoinWireCorr6
+          if grep -nE '^[[:space:]]*(Admitted[.]|Axiom[[:space:]]|Parameter[[:space:]])' \
+            proof/Phil/Surface/SurfaceFiniteMixedJoinCorr6.v \
+            proof/Phil/Surface/SurfaceSourceMixedJoinWireCorr6.v; then
+            echo "Unproved CORR-6 mixed-join theorem/decoder" >&2
+            exit 1
+          fi
+          sha256sum proof/Phil/Surface/SurfaceSourceMixedJoinWireCorr6.v \
+                     proof/Phil/Surface/SurfaceSourceMixedJoinWireCorr6.vo
+
+  rocq-exact-source-join:
+    name: Rocq independently replay exact original Haskell mixed-join source bytes
+    needs: [rocq-computed-join, native-source-mixed-join, rocq-source-wire]
+    runs-on: ubuntu-24.04
+    container:
+      image: rocq/rocq-prover:9.2.0
+      options: --user root
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          name: fsem01-corr6-real-source-mixed-joins
+          path: corr6-artifacts
+      - name: Recheck real source identity and generate literal Rocq artifact witness
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 scripts/fsem01_corr6_source_join_witness.py \
+            --artifact-dir corr6-artifacts \
+            --rocq-witness corr6-generated/GeneratedCorr6SourceWitness.v
+      - name: Compile model, exact decoded wire and real artifact witness
+        shell: bash
+        run: |
+          set -euo pipefail
+          export PATH="/home/rocq/.opam/$COMPILER/bin:$PATH"
+          for file in \
+            proof/Phil/Core/Syntax.v \
+            proof/Phil/Core/Context.v \
+            proof/Phil/Core/BindingSemantics.v \
+            proof/Phil/Core/ContextJoin.v \
+            proof/Phil/Core/ProcessJoin.v \
+            proof/Phil/Core/ResourceJoin.v \
+            proof/Phil/Core/ResourceScope.v \
+            proof/Phil/Surface/SurfaceBinderScopeCore.v \
+            proof/Phil/Surface/SurfaceLetPatternScope.v \
+            proof/Phil/Surface/SurfaceBorrowViewScope.v \
+            proof/Phil/Surface/SurfaceBorrowLoanStateCorrespondence.v \
+            proof/Phil/Surface/SurfaceBinderNameEncoding.v \
+            proof/Phil/Surface/SurfaceDeclarationIdentityBridge.v \
+            proof/Phil/Surface/SurfaceRepresentedBorrowTrace.v \
+            proof/Phil/Surface/SurfaceBorrowStepErrorBridge.v \
+            proof/Phil/Surface/SurfaceObservationWire.v \
+            proof/Phil/Surface/SurfaceFiniteContextFrame.v \
+            proof/Phil/Surface/SurfaceFiniteMixedJoinCorr6.v \
+            proof/Phil/Surface/SurfaceSourceMixedJoinWireCorr6.v
+          do
+            rocq c -Q proof/Phil Phil "$file"
+          done
+          rocq c -Q proof/Phil Phil corr6-generated/GeneratedCorr6SourceWitness.v
+          rocq check -Q proof/Phil Phil Phil.Surface.SurfaceSourceMixedJoinWireCorr6
+          if grep -nE '^[[:space:]]*(Admitted[.]|Axiom[[:space:]]|Parameter[[:space:]])' \
+            proof/Phil/Surface/SurfaceFiniteMixedJoinCorr6.v \
+            proof/Phil/Surface/SurfaceSourceMixedJoinWireCorr6.v \
+            corr6-generated/GeneratedCorr6SourceWitness.v; then
+            echo "Unproved source mixed-join witness" >&2
+            exit 1
+          fi
+          sha256sum corr6-artifacts/*.mix \
+            corr6-generated/GeneratedCorr6SourceWitness.v \
+            corr6-generated/GeneratedCorr6SourceWitness.vo \
+            proof/Phil/Surface/SurfaceFiniteMixedJoinCorr6.vo \
+            proof/Phil/Surface/SurfaceSourceMixedJoinWireCorr6.vo
