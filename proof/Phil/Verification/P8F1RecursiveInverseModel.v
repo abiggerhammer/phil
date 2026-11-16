@@ -282,6 +282,105 @@ Proof.
     lia.
 Qed.
 
+
+(*
+ These are genuine general prefix inverses for the atom and zero-arity
+ constructor cases, not replacements for E1's parser. They establish the
+ base cases needed by the still-outstanding mutual structural induction.
+ The fuel is explicit, and the proofs use E1's actual executable parser.
+*)
+Theorem p8_f1_atom_prefix_all_fuel :
+  forall fuel txt suffix,
+    p8_d2_text_valid txt = true ->
+    p8_e1_parse_form_fuel (S fuel)
+      (p8_e1_put_form (P8D2Atom txt) ++ suffix) =
+    Some (P8D2Atom txt, suffix).
+Proof.
+  intros fuel txt suffix Valid.
+  change
+    (match p8_e1_parse_text (p8_e1_put_text txt ++ suffix) with
+     | Some (parsed, remaining) => Some (P8D2Atom parsed, remaining)
+     | None => None
+     end = Some (P8D2Atom txt, suffix)).
+  rewrite (p8_f1_text_prefix_roundtrip txt suffix Valid).
+  reflexivity.
+Qed.
+
+Theorem p8_f1_empty_ordered_prefix :
+  forall fuel suffix,
+    p8_e1_parse_form_fuel (S fuel)
+      (p8_e1_put_form (P8D2Ordered P8D2Nil) ++ suffix) =
+    Some (P8D2Ordered P8D2Nil, suffix).
+Proof. intros fuel suffix; reflexivity. Qed.
+
+Theorem p8_f1_empty_unordered_prefix :
+  forall fuel suffix,
+    p8_e1_parse_form_fuel (S fuel)
+      (p8_e1_put_form (P8D2Unordered P8D2Nil) ++ suffix) =
+    Some (P8D2Unordered P8D2Nil, suffix).
+Proof. intros fuel suffix; reflexivity. Qed.
+
+Theorem p8_f1_empty_record_prefix :
+  forall fuel suffix,
+    p8_e1_parse_form_fuel (S fuel)
+      (p8_e1_put_form (P8D2Record P8D2FieldNil) ++ suffix) =
+    Some (P8D2Record P8D2FieldNil, suffix).
+Proof. intros fuel suffix; reflexivity. Qed.
+
+Theorem p8_f1_atom_decode_roundtrip :
+  forall txt,
+    p8_d2_text_valid txt = true ->
+    p8_e1_decode_form (p8_e1_put_form (P8D2Atom txt)) =
+    Some (P8D2Atom txt).
+Proof.
+  intros txt Valid.
+  pose proof
+    (p8_f1_atom_prefix_all_fuel
+      (length (p8_e1_put_form (P8D2Atom txt))) txt [] Valid)
+    as Prefix.
+  rewrite app_nil_r in Prefix.
+  unfold p8_e1_decode_form, p8_e1_parse_form_prefix.
+  rewrite Prefix. reflexivity.
+Qed.
+
+Theorem p8_f1_atom_trailing_rejected :
+  forall txt trailing,
+    p8_d2_text_valid txt = true ->
+    trailing <> [] ->
+    p8_e1_decode_form
+      (p8_e1_put_form (P8D2Atom txt) ++ trailing) = None.
+Proof.
+  intros txt trailing Valid Nonempty.
+  unfold p8_e1_decode_form, p8_e1_parse_form_prefix.
+  rewrite (p8_f1_atom_prefix_all_fuel
+    (length (p8_e1_put_form (P8D2Atom txt) ++ trailing))
+    txt trailing Valid).
+  destruct trailing as [|b rest]; [contradiction|reflexivity].
+Qed.
+
+Theorem p8_f1_atom_wire_injective :
+  forall x y,
+    p8_d2_text_valid x = true ->
+    p8_d2_text_valid y = true ->
+    p8_e1_put_form (P8D2Atom x) =
+    p8_e1_put_form (P8D2Atom y) ->
+    x = y.
+Proof.
+  intros x y ValidX ValidY Wire.
+  pose proof (p8_f1_atom_decode_roundtrip x ValidX) as X.
+  pose proof (p8_f1_atom_decode_roundtrip y ValidY) as Y.
+  rewrite Wire in X. rewrite Y in X.
+  congruence.
+Qed.
+
+Print Assumptions p8_f1_atom_prefix_all_fuel.
+Print Assumptions p8_f1_empty_ordered_prefix.
+Print Assumptions p8_f1_empty_unordered_prefix.
+Print Assumptions p8_f1_empty_record_prefix.
+Print Assumptions p8_f1_atom_decode_roundtrip.
+Print Assumptions p8_f1_atom_trailing_rejected.
+Print Assumptions p8_f1_atom_wire_injective.
+
 Print Assumptions p8_f1_digit_value_append.
 Print Assumptions p8_f1_count_scan_suffix.
 Print Assumptions p8_f1_read_canonical_digits.
