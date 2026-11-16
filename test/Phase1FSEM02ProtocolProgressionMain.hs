@@ -2622,9 +2622,9 @@ sourcePingThreeDisjointTerminalSchedules accepted rejected = do
       -- This is intentionally hostile externally supplied state. Change the
       -- *typed* live head consistently in both maps; preserve all other
       -- process resources, including the borrowed affine spectator.
-      poisonFreePeer contexts site endpoint endpointRole = do
+      poisonFreePeer contexts peerKey endpoint endpointRole = do
         original <- maybe (Left "adaptive poisoned free peer missing") Right
-          (Map.lookup site contexts)
+          (Map.lookup peerKey contexts)
         let resources = protocolResources original
             poisoned = original
               { protocolEndpoints = Map.insert endpoint
@@ -2634,7 +2634,7 @@ sourcePingThreeDisjointTerminalSchedules accepted rejected = do
                   { linearBindings = Map.insert endpoint (TyEndpoint (End done))
                       (linearBindings resources) }
               }
-        pure (Map.insert site poisoned contexts)
+        pure (Map.insert peerKey poisoned contexts)
       expectFreePeerHeadRefusal label expectedSite expectedHead contexts req =
         case run contexts req of
           Left (RendezvousProjectionSessionMismatch actual wanted observed) ->
@@ -2728,9 +2728,9 @@ sourcePingThreeDisjointTerminalSchedules accepted rejected = do
               spectatorLoanUnchanged malformed =
                 case Map.lookup cs malformed of
                   Nothing -> False
-                  Just framed ->
-                    affineBindings (protocolResources framed) == affineBindings loaned
-                    && sharedLoans (protocolResources framed) == sharedLoans loaned
+                  Just spectatorContext ->
+                    affineBindings (protocolResources spectatorContext) == affineBindings loaned
+                    && sharedLoans (protocolResources spectatorContext) == sharedLoans loaned
           assert (committedUnchanged poisonedClient && committedUnchanged poisonedServer
                   && spectatorLoanUnchanged poisonedClient
                   && spectatorLoanUnchanged poisonedServer)
