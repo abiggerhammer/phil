@@ -86,6 +86,16 @@ The design limits **Phase 2 worker-induced** extra CI waves. It does **not** glo
 
 A label-swap failure may leave both the old and new state labels. The planner **fails closed** on dual labels; manual recovery must inspect the issue/events/PR/ref before restoring one consistent state. The publisher never auto-deletes or reuses protected orphan refs. All live platform permissions, App slug, metadata shape, ref/PR lifecycle and worker-denial checks remain a separate deployment gate.
 
+## Astra activation readiness re-review (R1–R3, 2026-11-16)
+
+[Astra's activation re-review](https://chatgpt.com/library/share/libfile_fde3_f-6c54970017a88191ae08deba02b791f5_1f438c6a20f081919fa023e16ee02d05?account_id=personal) examined an earlier head `4606fccf0a959ba2552e091ffbea0ca7de7103c0` and returned **REQUEST CHANGES**:
+
+- **R1 (P1, App identity read)**: private App `GET /apps/{slug}` returned 403 to both Actions and unauthenticated requests. A later revision source-pins exact `phil-atc-publisher` slug and App ID `5782193`, verifies its GitHub bot profile, and requires the protected publisher token action's authenticated slug to agree. [Live ATC identity read](https://github.com/abiggerhammer/phil/actions/runs/43864966394) passed on the post-review head. There is **no App-administration credential** in the read-only path.
+- **R2 (P2, outsider issue availability)**: admission and reconciliation now share the **same creator-aware open-issue classifier** in `scripts/mhb_atc_admit.py`. Unlabelled human-authored issues quoting `ATC candidate: ` or the public staging marker are ordinary issues and are ignored. Unlabelled **trusted-stage-bot** issues remain hard errors; every lifecycle-labelled claim is still inspected and untrusted/dual-state claims fail closed. The protected-ref census independently loads each referenced original issue, regardless of its labels or closure; this filter never reduces protected-ref coverage.
+- **R3 (P3, prefix-matched sibling branches)**: GitHub `matching-refs/heads/hamster/admitted` may return unprotected siblings such as `hamster/admitted-not-atc` or the exact branch `hamster/admitted`. The census ignores only those **outside** `hamster/admitted/`. Unknown, malformed or drifted refs **inside** the protected namespace still hard-stop.
+
+Regressions cover both benign outsider issue forms, trusted lost-label and dual-label cases, labelled foreign claims, shared workflow use, protected siblings, unknown inside-namespace refs, and valid closed historical records. These are source changes subject to **fresh exact-head CI and independent re-review**; they do not grant deployment, merge or unattended automation authority.
+
 ## Required live negative commissioning (not covered by offline unit tests)
 
 1. Verify App installation scope, environment secret main-only access, actual active ruleset and unique App bypass.
