@@ -40,8 +40,8 @@ Theorem data05a_accepted_stages_preserve_exact_arity :
   forall outerElements outerNames innerElements innerNames,
     D.ProductEliminationAccepted outerElements outerNames ->
     D.ProductEliminationAccepted innerElements innerNames ->
-    length outerNames = length outerElements /\
-    length innerNames = length innerElements.
+    List.length outerNames = List.length outerElements /\
+    List.length innerNames = List.length innerElements.
 Proof.
   intros outerElements outerNames innerElements innerNames Houter Hinner.
   split.
