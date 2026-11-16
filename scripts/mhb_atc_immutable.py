@@ -160,12 +160,19 @@ def check_ruleset(rule: dict, repo: str, app_id: int, ruleset_id: int,
                          else "redacted-live-plus-pinned-owner-version"),
             "pinned_updated_at": policy["ruleset_updated_at"]}
 
-def verified_publisher(app: dict, bot: dict, slug: str, app_id: int) -> dict:
+def verified_publisher(app: dict, bot: dict, slug: str, app_id: int,
+                       attestation: dict | None = None) -> dict:
     """Require GitHub's authenticated App and bot-user identities to agree."""
     if (not isinstance(slug, str) or
         not re.fullmatch(r"[a-zA-Z0-9][a-zA-Z0-9-]*", slug) or
         type(app_id) is not int or app_id <= 0):
         raise ValueError("publisher App slug/id not configured")
+    policy = _load_owner_attestation() if attestation is None else attestation
+    if (not isinstance(policy, dict) or
+        policy.get("format") != "MHB-ATC-OWNER-RULESET-ATTESTATION-V1" or
+        policy.get("publisher_app_id") != app_id or
+        not isinstance(policy.get("repository"), str)):
+        raise ValueError("publisher App ID differs from source-reviewed ruleset identity")
     if (not isinstance(app, dict) or app.get("id") != app_id or
         app.get("slug") != slug):
         raise ValueError("publisher App slug does not resolve to pinned App ID")
