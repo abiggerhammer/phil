@@ -1,0 +1,25 @@
+name: P9 F2 native FFI owner gate (temporary)
+on:
+  push:
+    branches:
+      - 'p9-native-only/f2-20261116'
+permissions:
+  contents: read
+jobs:
+  native-ffi:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: haskell-actions/setup@v2
+        with:
+          ghc-version: '9.6.7'
+          cabal-version: 'latest'
+      - name: Compile real Steve native provider ABI and A/B owner-swap runner
+        run: |
+          cabal exec -- ghc -isrc -iruntime/phase1 -itest -Wall -Werror \
+            -package directory -package unix \
+            test/P9SteveGetNativeOwnerGateMain.hs runtime/phase1/SteveProviderBridge.hs \
+            -o "$RUNNER_TEMP/p9-native-ffi-owner-gate"
+      - name: Execute independent equal-root/equal-content native owner substitution negatives
+        run: "$RUNNER_TEMP/p9-native-ffi-owner-gate"
