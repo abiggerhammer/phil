@@ -1,0 +1,205 @@
+name: Phase 1 P8-H1 one-shot native admission discriminator
+
+# Temporary, unprivileged PR-only evidence vehicle. Do NOT merge or enable
+# scheduled/release execution. No repository sources or normative tests are changed.
+on:
+  pull_request:
+    paths:
+      - '.github/workflows/phase1-p8-h1-native-one-shot.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  h1-native-admission:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    steps:
+      - name: Check out exact PR tree
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          persist-credentials: false
+
+      - name: Set up native GHC 9.6.7
+        uses: haskell-actions/setup@0f8e8c99d88aeb3fbfd523f1ef2c6f762d10d64d
+        with:
+          ghc-version: '9.6.7'
+          cabal-version: 'latest'
+
+      - name: Record actual execution tree and strictly build
+        shell: bash
+        run: |
+          set -euo pipefail
+          git rev-parse HEAD
+          git rev-parse HEAD^{tree}
+          git status --porcelain=v1
+          ghc --numeric-version
+          cabal --numeric-version
+          cabal build all --enable-tests --ghc-options=-Werror
+
+      - name: Generate ephemeral H1 harness from original INT-001 fixture
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+
+          original = Path("test/Phase1INT001WitnessE2EMain.hs").read_text()
+          replacements = [
+              (
+                  "  , InstanceKey (..)\n  )\n",
+                  "  , InstanceKey (..)\n  , InterfaceRevision (..)\n  , SemanticForm (..)\n  )\n",
+              ),
+              (
+                  "  , GenericRealizationContext\n",
+                  "  , GenericRealizationContext (..)\n",
+              ),
+              (
+                  "import System.Exit (exitFailure)\n",
+                  "import Phil.Verification.P8SemanticFormCodec\n"
+                  "  ( encodeP8SemanticForm, decodeP8SemanticForm )\n"
+                  "import System.Exit (exitFailure)\n",
+              ),
+              (
+                  "  results <- sequence\n",
+                  "  p8H1Probe uploadClient uploadServer\n"
+                  "  results <- sequence\n",
+              ),
+          ]
+          for old, new in replacements:
+              if original.count(old) != 1:
+                  raise SystemExit(f"Fixture drift: expected one occurrence of {old!r}, got {original.count(old)}")
+              original = original.replace(old, new, 1)
+
+          probe = r'''
+          -- H1 generated in /tmp: every existing source, policy, Core and
+          -- P2/P6/P7 fixture parameter is unchanged except context semantics.
+          p8H1Probe :: Text -> Text -> IO ()
+          p8H1Probe clientSource serverSource = do
+            let u0 = SemanticUnordered Set.empty
+                r0 = SemanticRecord Map.empty
+                bad = SemanticUnordered (Set.fromDistinctAscList [r0, u0])
+                good = SemanticUnordered (Set.fromList [r0, u0])
+                public = deriveGenericApplicationIdentity
+                  (DeclarationKey "d") (InterfaceRevision "v")
+                  [(GenericStaticParameterKey "q", bad)]
+                badWire = encodeP8SemanticForm bad
+                goodWire = encodeP8SemanticForm good
+            putStrLn ("H1_NATIVE_ORDER " <> show (compare u0 r0))
+            putStrLn ("H1_PUBLIC_GENERIC " <>
+              either (\e -> "LEFT " <> show e) (const "RIGHT") public)
+            putStrLn ("H1_BAD_WIRE " <> show badWire)
+            putStrLn ("H1_BAD_DIAGNOSTIC " <>
+              either (\e -> "LEFT " <> show e) (const "RIGHT")
+                (decodeP8SemanticForm badWire))
+            putStrLn ("H1_GOOD_WIRE " <> show goodWire)
+            putStrLn ("H1_GOOD_DIAGNOSTIC " <>
+              either (\e -> "LEFT " <> show e) (const "RIGHT")
+                (decodeP8SemanticForm goodWire))
+
+            case verifiedUploadProduction clientSource serverSource of
+              Left err -> fail ("H1_VALID_CONTROL_P2_LEFT " <> err)
+              Right control -> putStrLn ("H1_VALID_CONTROL_P2_RIGHT " <>
+                show (verifiedSourceSystemsArchitectureIdentity control))
+
+            case p8H1UploadProduction
+                (uploadRealizationContext { genericContextSemantics = bad })
+                clientSource serverSource of
+              Left err -> putStrLn ("H1_BAD_P2_LEFT " <> err)
+              Right production -> do
+                putStrLn ("H1_BAD_P2_RIGHT " <>
+                  show (verifiedSourceSystemsArchitectureIdentity production))
+                case uploadStageClosureBundle of
+                  Left err -> fail ("H1_P6_FIXTURE_LEFT " <> err)
+                  Right template ->
+                    case produceVerifiedStageClosure production
+                        uploadProviderCallExpectations template of
+                      Left err -> putStrLn ("H1_BAD_P6_LEFT " <> show err)
+                      Right stageProduction -> do
+                        putStrLn "H1_BAD_P6_RIGHT"
+                        p8H1P7 production stageProduction
+
+          -- Literal copy of the original valid P2 fixture's source/lineage/Core
+          -- inputs. The last argument alone is parameterized.
+          p8H1UploadProduction
+            :: GenericRealizationContext
+            -> Text -> Text -> Either String VerifiedSourceSystemsProduction
+          p8H1UploadProduction context clientSource serverSource = do
+            clientEnvironment <- mapLeft show (phase0EnvironmentFor "client.phil")
+            serverEnvironment <- mapLeft show (phase0EnvironmentFor "server.phil")
+            mapLeft show $ produceVerifiedSourceSystems
+              uploadRoots
+              (Map.fromList
+                [ (uploadClientDeclaration, clientEnvironment)
+                , (uploadServerDeclaration, serverEnvironment) ])
+              (Map.singleton "program:upload"
+                (InstanceLineageSiteId "instance.upload"))
+              uploadPolicy (uploadBundle clientSource serverSource)
+              uploadCoreProgram context
+
+          -- Use the *same* P6 object in P7 rather than re-minting the stage.
+          -- Other P7 parameters duplicate the existing makeP7Fixture exactly.
+          p8H1P7
+            :: VerifiedSourceSystemsProduction
+            -> VerifiedStageClosureProduction
+            -> IO ()
+          p8H1P7 production stageProduction = do
+            let stage = verifiedStageClosureSelected stageProduction
+                descriptor = verifiedSourceSystemsArchitectureDescriptor production
+                systems = phase1StageSystemsArtifact
+                  (verifiedSourceSystemsStage production)
+                llvm = lowerSystemsConservative phase0LLVMTarget systems
+            case makeP7Source descriptor
+                (ArtifactRef "p7.ordinary-source-proof") of
+              Left err -> putStrLn ("H1_BAD_P7_SOURCE_ASSURANCE_LEFT " <> err)
+              Right source ->
+                case makeP7Binding source descriptor stage
+                    (digestText "p7.accepted.phil-core") of
+                  Left err -> putStrLn ("H1_BAD_P7_MANIFEST_LEFT " <> err)
+                  Right (binding, context) -> do
+                    let profile = CertifiedReleaseProfile
+                          { releaseProfileRevision =
+                              ReleaseProfileRevision "p7.conventional.v1"
+                          , releaseProfileManifestTarget = "phase1-p7-conventional"
+                          , releaseProfileManifestCompilationProfile = "phase1-p7-checked"
+                          , releaseProfileLLVMTarget = phase0LLVMTarget
+                          , releaseProfileRequiredTrustKinds = Set.fromList
+                              [ CompilerCheckerTrust, LLVMToolchainTrust, RuntimeTrust
+                              , ProviderTrust, ExternalCheckerTrust, TargetAssumptionTrust ]
+                          }
+                        trust =
+                          [ p7TrustValue "compiler" CompilerCheckerTrust
+                          , p7TrustValue "llvm" LLVMToolchainTrust
+                          , p7TrustValue "runtime" RuntimeTrust
+                          , p7TrustValue "provider" ProviderTrust
+                          , p7TrustValue "checker" ExternalCheckerTrust
+                          , p7TrustValue "target" TargetAssumptionTrust ]
+                        ledger = emptyLedger
+                    case produceVerifiedFinalOrigin stageProduction binding
+                        context ledger profile llvm trust of
+                      Left err -> putStrLn ("H1_BAD_P7_PRODUCE_LEFT " <> show err)
+                      Right produced -> do
+                        putStrLn "H1_BAD_P7_PRODUCE_RIGHT"
+                        case acceptVerifiedFinalOrigin produced
+                            (verifiedFinalOriginSourceBinding produced)
+                            (verifiedFinalOriginSourceArtifact produced)
+                            (verifiedFinalOriginRelease produced) of
+                          Left err ->
+                            putStrLn ("H1_BAD_P7_ACCEPT_LEFT " <> show err)
+                          Right _ -> putStrLn
+                            "H1_BAD_P7_ACCEPT_RIGHT (native only; NOT P10 certification)"
+          '''
+          Path("/tmp/PhilP8H1WitnessMain.hs").write_text(original + "\n" + probe)
+          print("Original test intact; temporary harness: /tmp/PhilP8H1WitnessMain.hs")
+          PY
+          git diff --exit-code
+          test -z "$(git status --porcelain=v1)"
+
+      - name: Typecheck and execute native controls plus real P2-P6-P7 discriminator
+        shell: bash
+        run: |
+          set -euo pipefail
+          cabal exec -- ghc -isrc -itest -Wall -Werror -fno-code /tmp/PhilP8H1WitnessMain.hs
+          cabal exec -- runghc -isrc -itest -Wall -Werror /tmp/PhilP8H1WitnessMain.hs
+          git diff --exit-code
+          test -z "$(git status --porcelain=v1)"
