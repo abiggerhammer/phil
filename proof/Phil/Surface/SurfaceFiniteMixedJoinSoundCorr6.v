@@ -37,14 +37,15 @@ Proof.
   destruct (F.lookupFinite right name) as [other|] eqn:Hright.
   - pose proof (M.affine_compatible_types
        typeEq left right Hcompat name ty Hleft) as Hsame.
-    rewrite Hright in Hsame.
+    try rewrite Hright in Hsame.
     apply Hreflect in Hsame.
     subst other.
     unfold M.affineKeep.
     simpl.
-    rewrite Hright.
-    now rewrite (proj2 (Hreflect ty ty) eq_refl).
-  - unfold M.affineKeep. simpl. now rewrite Hright.
+    try rewrite Hright.
+    try rewrite (proj2 (Hreflect ty ty) eq_refl).
+    reflexivity.
+  - unfold M.affineKeep. simpl. try rewrite Hright. reflexivity.
 Qed.
 
 Lemma corr6_successful_finite_affine_is_valid_model_fold :
