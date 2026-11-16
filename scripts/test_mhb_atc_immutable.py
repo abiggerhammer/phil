@@ -187,7 +187,7 @@ class ImmutablePublisherTests(unittest.TestCase):
         identity = verified_publisher(
             {"id": APP, "slug": "test-publisher"},
             {"id": 71234, "login": "test-publisher[bot]", "type": "Bot"},
-            "test-publisher", APP)
+            "test-publisher", APP, policy())
         self.assertEqual(identity, PUBLISHER)
         for app, bot in (
             ({"id": APP + 1, "slug": "test-publisher"},
@@ -198,7 +198,7 @@ class ImmutablePublisherTests(unittest.TestCase):
              {"id": 71234, "login": "test-publisher[bot]", "type": "User"}),
         ):
             with self.subTest(app=app, bot=bot), self.assertRaises(ValueError):
-                verified_publisher(app, bot, "test-publisher", APP)
+                verified_publisher(app, bot, "test-publisher", APP, policy())
 
     def test_f3_copied_receipt_never_authenticates_foreign_app(self):
         for change in (
