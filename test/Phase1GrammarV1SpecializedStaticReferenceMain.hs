@@ -2,6 +2,7 @@
 
 module Main (main) where
 
+import qualified Data.Map.Strict as Map
 import qualified Data.Set as Set
 import qualified Data.Text as Text
 import Phil.Core.Generic
@@ -43,6 +44,10 @@ main = do
         referenceResolutionFailures
     , test "SURF-008 bare targets and nested specializations stay outside unsupported competence"
         competenceBoundaries
+    , test "P8-H4 source-tied direct and referenced malformed semantic evidence rejects"
+        h4MalformedSpecializedArgumentsReject
+    , test "P8-H4 source-tied valid nested static actuals remain accepted"
+        h4ValidSpecializedArgumentsAccept
     ]
   if and results then pure () else exitFailure
 
@@ -251,6 +256,79 @@ competenceBoundaries = do
         "nested specialization was flattened or guessed without checked semantic evidence"
     arguments -> Left
       ("expected one nested specialized argument, got " <> show (length arguments))
+
+-- H3 accepted both of these malformed native inputs. They must now be
+-- rejected by Core's checked-static boundary, before generic identity.
+h4MalformedSpecializedArgumentsReject :: Either String ()
+h4MalformedSpecializedArgumentsReject = do
+  reference <- aliasReference "type T = pkg.Box[U32, Shared];"
+  (directArgument, _) <- exactlyTwoArguments reference
+  let u0 = SemanticUnordered Set.empty
+      r0 = SemanticRecord Map.empty
+      badSet = SemanticUnordered (Set.fromDistinctAscList [r0, u0])
+      badMap = SemanticRecord (Map.fromDistinctAscList
+        [("z", SemanticAtom "last"), ("a", SemanticAtom "first")])
+      directKey = GenericStaticParameterKey "T"
+      referenceKey = GenericStaticParameterKey "P"
+      parameters =
+        [ GenericStaticParameter directKey GenericTypeKind
+        , GenericStaticParameter referenceKey GenericProviderContractKind
+        ]
+      goodDirect = SemanticAtom "type.U32.checked"
+      goodReferenced = SemanticAtom "provider.Shared.checked"
+      check directForm referencedForm =
+        grammarV1CheckedSpecializedStaticReference
+          (DeclarationKey "decl.pkg.Box")
+          (InterfaceRevision "iface.pkg.Box.v1")
+          parameters
+          [ GrammarV1ResolvedDirectStaticArgument
+              directArgument GenericTypeKind directForm ]
+          [ GenericStaticReferenceCandidate
+              "Shared" GenericProviderContractKind referencedForm ]
+          reference
+      assertRejected label expected result = case result of
+        Just (Left (GrammarV1SpecializedStaticKindError
+          (GenericStaticMalformedSemanticForm actualKey))) ->
+            assert (actualKey == expected)
+              ("H4 " <> label <> " blamed the wrong parameter")
+        other -> Left ("H4 " <> label <> " was accepted: " <> show other)
+  assertRejected "direct bad Set" directKey (check badSet goodReferenced)
+  assertRejected "referenced bad Set" referenceKey (check goodDirect badSet)
+  assertRejected "nested direct bad Set" directKey
+    (check (SemanticOrdered [badSet]) goodReferenced)
+  assertRejected "nested referenced bad Map" referenceKey
+    (check goodDirect (SemanticRecord (Map.singleton "child" badMap)))
+
+h4ValidSpecializedArgumentsAccept :: Either String ()
+h4ValidSpecializedArgumentsAccept = do
+  reference <- aliasReference "type T = pkg.Box[U32, Shared];"
+  (directArgument, _) <- exactlyTwoArguments reference
+  let r0 = SemanticRecord Map.empty
+      u0 = SemanticUnordered Set.empty
+      valid = SemanticRecord (Map.fromList
+        [ ("unicode", SemanticAtom "é / é / 🙂")
+        , ("nested", SemanticOrdered
+            [SemanticUnordered (Set.fromList [u0, r0])])
+        ])
+      parameters =
+        [ GenericStaticParameter (GenericStaticParameterKey "T") GenericTypeKind
+        , GenericStaticParameter
+            (GenericStaticParameterKey "P") GenericProviderContractKind
+        ]
+  case grammarV1CheckedSpecializedStaticReference
+      (DeclarationKey "decl.pkg.Box")
+      (InterfaceRevision "iface.pkg.Box.v1")
+      parameters
+      [GrammarV1ResolvedDirectStaticArgument
+        directArgument GenericTypeKind valid]
+      [GenericStaticReferenceCandidate
+        "Shared" GenericProviderContractKind valid]
+      reference of
+    Just (Right result) ->
+      assert (map checkedGenericStaticSemanticForm
+        (checkedSpecializedStaticArguments result) == [valid, valid])
+        "valid nested native actuals changed across Grammar-v1 source bridge"
+    other -> Left ("valid nested Grammar-v1 actuals rejected: " <> show other)
 
 aliasReference :: Text.Text -> Either String GrammarV1StaticReference
 aliasReference source = do
