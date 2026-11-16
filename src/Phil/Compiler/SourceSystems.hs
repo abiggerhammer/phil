@@ -25,6 +25,7 @@ module Phil.Compiler.SourceSystems
   , VerifiedSteveGetCanonicalError (..)
   , produceVerifiedSteveGetCanonicalSource
   , verifiedSteveGetCanonicalSourceProduction
+  , verifiedSteveGetCanonicalSelectedAssumptions
   ) where
 
 import qualified Data.Map.Strict as Map
@@ -33,10 +34,13 @@ import Data.Text (Text)
 import Phil.Core.Syntax (Mode (..), Ty (..))
 import Phil.Examples.Steve.ApplicationShell (steveGetShellEnvironment)
 import Phil.Examples.Steve.ProviderQualifications
-  ( SteveProviderQualifications
+  ( SteveProviderQualifications (..)
+  , SteveProviderQualificationArtifact (..)
   , SteveProviderQualificationError
   , materializeSteveProviderQualifications
   )
+import Phil.Core.ProviderQualificationIdentity
+  ( ProviderQualificationClaimIdentityInput (..))
 import Phil.Surface.Check.Types
   ( InitialBinding (..)
   , SurfaceEnvironment (..)
@@ -288,6 +292,7 @@ data VerifiedSteveGetCanonicalSource = VerifiedSteveGetCanonicalSource
   VerifiedSourceSystemsProduction
   VerifiedSteveGetStructural
   SteveProviderQualifications
+  (Set.Set Text)
   deriving (Eq, Show)
 
 data VerifiedSteveGetCanonicalError
@@ -296,6 +301,7 @@ data VerifiedSteveGetCanonicalError
   | SteveGetCanonicalPrimitiveMissing Text
   | SteveGetCanonicalEnvironmentMissing
   | SteveGetCanonicalEnvironmentMismatch
+  | SteveGetCanonicalMissingSelectedShaProfile
   | SteveGetCanonicalSourceRejected VerifiedSourceSystemsProductionError
   | SteveGetCanonicalStructureRejected VerifiedSteveGetStructuralError
   deriving (Eq, Show)
@@ -303,7 +309,14 @@ data VerifiedSteveGetCanonicalError
 verifiedSteveGetCanonicalSourceProduction
   :: VerifiedSteveGetCanonicalSource -> VerifiedSourceSystemsProduction
 verifiedSteveGetCanonicalSourceProduction
-  (VerifiedSteveGetCanonicalSource production _ _) = production
+  (VerifiedSteveGetCanonicalSource production _ _ _) = production
+
+-- | Canonical selected provider CONDITION inventory, never a discharge.
+-- Includes both SHA-256 and independently selected Blob provider assumptions.
+verifiedSteveGetCanonicalSelectedAssumptions
+  :: VerifiedSteveGetCanonicalSource -> Set.Set Text
+verifiedSteveGetCanonicalSelectedAssumptions
+  (VerifiedSteveGetCanonicalSource _ _ _ conditions) = conditions
 
 -- | Re-check the real raw source with a fixed selected SteveGet checker
 -- environment, rather than accepting a supplied outcome telescope or
@@ -326,6 +339,16 @@ produceVerifiedSteveGetCanonicalSource roots environments sites policy
     portable program context = do
   qualifications <- mapLeft SteveGetCanonicalQualificationRejected
     materializeSteveProviderQualifications
+  let digestConditions = qualificationClaimConditions
+        (steveProviderIdentityClaim
+          (steveDigestProviderQualification qualifications))
+      blobConditions = qualificationClaimConditions
+        (steveProviderIdentityClaim
+          (steveBlobProviderQualification qualifications))
+      selectedConditions = Set.union digestConditions blobConditions
+  if Set.member "assumption:sha256-semantic-profile.v1" digestConditions
+    then Right ()
+    else Left SteveGetCanonicalMissingSelectedShaProfile
   shell <- mapLeft SteveGetCanonicalShellRejected steveGetShellEnvironment
   let selectedNames = Set.fromList ["blob_read", "digest_check"]
       selectedPrimitives =
@@ -354,4 +377,5 @@ produceVerifiedSteveGetCanonicalSource roots environments sites policy
       roots environments sites policy portable program context
   checked <- mapLeft SteveGetCanonicalStructureRejected
     (verifyOriginalSteveGetStructural production)
-  Right (VerifiedSteveGetCanonicalSource production checked qualifications)
+  Right (VerifiedSteveGetCanonicalSource
+    production checked qualifications selectedConditions)
