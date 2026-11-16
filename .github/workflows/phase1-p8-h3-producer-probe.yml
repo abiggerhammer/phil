@@ -1,0 +1,200 @@
+name: P8-H3 one-shot native producer-boundary probe
+
+# Disposable PR-only execution vehicle; must NOT merge into main.
+on:
+  pull_request:
+    paths:
+      - '.github/workflows/phase1-p8-h3-producer-probe.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  native-producer-probe:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          persist-credentials: false
+      - uses: haskell-actions/setup@0f8e8c99d88aeb3fbfd523f1ef2c6f762d10d64d
+        with:
+          ghc-version: '9.6.7'
+          cabal-version: 'latest'
+      - name: Strict build and exact source identity
+        shell: bash
+        run: |
+          set -euo pipefail
+          git rev-parse HEAD
+          git rev-parse HEAD^{tree}
+          ghc --numeric-version
+          cabal build all --enable-tests --ghc-options=-Werror
+
+      - name: Construct external-only H3 source and specialized probes
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+          path = Path("test/Phase1INT001WitnessE2EMain.hs")
+          text = path.read_text()
+          replacements = [
+            ("  ( CoreSystemsProgram (..)\n", "  ( CoreSystemsProgram (..)\n  , CoreSystemsFunction (..)\n"),
+            ("  results <- sequence\n", "  p8H3CoreProbe uploadClient uploadServer\n  results <- sequence\n"),
+          ]
+          for before, after in replacements:
+            if text.count(before) != 1:
+              raise SystemExit(f"Core fixture drift for {before!r}: {text.count(before)}")
+            text = text.replace(before, after, 1)
+          text += r'''
+          -- H3: scratch-only native test; never mutate checked Phil source.
+          p8H3CoreProbe :: Text -> Text -> IO ()
+          p8H3CoreProbe clientSource serverSource = do
+            let originalClient = coreProgramFunctions uploadCoreProgram Map.! "UploadClient"
+                originalValues = Map.toAscList (coreFunctionValues originalClient)
+                originalFacts = Map.toAscList (coreProgramFacts uploadCoreProgram)
+                swapHead (x:y:rest) = y:x:rest
+                swapHead xs = xs
+                malformedValues = Map.fromDistinctAscList (swapHead originalValues)
+                malformedFacts = Map.fromDistinctAscList (swapHead originalFacts)
+                changedClient = originalClient
+                  { coreFunctionValues = malformedValues }
+                changedFunctions = Map.insert "UploadClient" changedClient
+                  (coreProgramFunctions uploadCoreProgram)
+                coreBadValues = uploadCoreProgram
+                  { coreProgramFunctions = changedFunctions }
+                coreBadFacts = uploadCoreProgram
+                  { coreProgramFacts = malformedFacts }
+            putStrLn ("H3_CORE_VALUE_MAP_VALID " <> show (Map.valid malformedValues))
+            putStrLn ("H3_CORE_FACT_MAP_VALID " <> show (Map.valid malformedFacts))
+            report "VALUES" coreBadValues
+            report "FACTS" coreBadFacts
+            where
+              report tag program = do
+                clientEnvironment <- either (fail . show) pure
+                  (phase0EnvironmentFor "client.phil")
+                serverEnvironment <- either (fail . show) pure
+                  (phase0EnvironmentFor "server.phil")
+                let result = produceVerifiedSourceSystems
+                      uploadRoots
+                      (Map.fromList
+                        [ (uploadClientDeclaration, clientEnvironment)
+                        , (uploadServerDeclaration, serverEnvironment) ])
+                      (Map.singleton "program:upload"
+                        (InstanceLineageSiteId "instance.upload"))
+                      uploadPolicy (uploadBundle clientSource serverSource)
+                      program uploadRealizationContext
+                case result of
+                  Left e -> putStrLn ("H3_CORE_" <> tag <> "_P2_LEFT " <>
+                    take 600 (show e))
+                  Right production -> do
+                    putStrLn ("H3_CORE_" <> tag <> "_P2_RIGHT")
+                    case uploadStageClosureBundle of
+                      Left e -> fail ("H3 source template rejected " <> e)
+                      Right template -> case produceVerifiedStageClosure production
+                          uploadProviderCallExpectations template of
+                        Left e -> putStrLn ("H3_CORE_" <> tag <> "_P6_LEFT " <>
+                          take 600 (show e))
+                        Right _ -> do
+                          putStrLn ("H3_CORE_" <> tag <> "_P6_RIGHT")
+                          case makeP7Fixture production
+                              uploadProviderCallExpectations template of
+                            Left e -> putStrLn ("H3_CORE_" <> tag <>
+                              "_P7_FIXTURE_LEFT " <> take 600 e)
+                            Right fixture -> case p7AcceptsExact fixture of
+                              Left e -> putStrLn ("H3_CORE_" <> tag <>
+                                "_P7_ACCEPT_LEFT " <> take 600 e)
+                              Right () -> putStrLn ("H3_CORE_" <> tag <>
+                                "_P7_ACCEPT_RIGHT (native test only)")
+          '''
+          Path("/tmp/PhilP8H3CoreMain.hs").write_text(text)
+
+          static_path = Path("test/Phase1GrammarV1SpecializedStaticReferenceMain.hs")
+          static = static_path.read_text()
+          replacements = [
+            ("import qualified Data.Set as Set\n",
+             "import qualified Data.Set as Set\nimport qualified Data.Map.Strict as Map\n"),
+            ("  , GenericStaticReferenceCandidate (..)\n",
+             "  , GenericStaticReferenceCandidate (..)\n  , GenericStaticActual (..)\n"
+             "  , checkGenericStaticActuals\n"),
+            ("  results <- sequence\n",
+             "  p8H3StaticProbe\n  results <- sequence\n"),
+          ]
+          for before, after in replacements:
+            if static.count(before) != 1:
+              raise SystemExit(f"Static fixture drift for {before!r}: {static.count(before)}")
+            static = static.replace(before, after, 1)
+          static += r'''
+          -- The kind checker is a public source-adjacent boundary, not P2/P7.
+          p8H3StaticProbe :: IO ()
+          p8H3StaticProbe = do
+            let unordered = SemanticUnordered Set.empty
+                record = SemanticRecord Map.empty
+                bad = SemanticUnordered
+                  (Set.fromDistinctAscList [record, unordered])
+                key = GenericStaticParameterKey "T"
+                params = [GenericStaticParameter key GenericTypeKind]
+                direct = [DirectGenericStaticActual GenericTypeKind bad]
+                genericResult = checkGenericStaticActuals params direct []
+            putStrLn ("H3_STATIC_BAD_SET_VALID " <> show
+              (case bad of SemanticUnordered members -> Set.valid members
+                           _ -> True))
+            putStrLn ("H3_STATIC_PUBLIC_KIND " <>
+              either (\e -> "LEFT " <> show e)
+                (const "RIGHT") genericResult)
+            case aliasReference "type T = pkg.Box[U32, Shared];" of
+              Left e -> fail ("H3 static fixture source parse: " <> e)
+              Right reference -> case exactlyTwoArguments reference of
+                Left e -> fail ("H3 static fixture args: " <> e)
+                Right (arg, _) -> do
+                  let pars =
+                        [ GenericStaticParameter key GenericTypeKind
+                        , GenericStaticParameter
+                            (GenericStaticParameterKey "P")
+                            GenericProviderContractKind
+                        ]
+                      goodProvider = SemanticAtom "provider.Shared.checked"
+                      referenceCandidate = GenericStaticReferenceCandidate
+                        "Shared" GenericProviderContractKind goodProvider
+                      directEvidence =
+                        [ GrammarV1ResolvedDirectStaticArgument
+                            arg GenericTypeKind bad ]
+                      run input refs =
+                        grammarV1CheckedSpecializedStaticReference
+                          (DeclarationKey "decl.pkg.Box")
+                          (InterfaceRevision "iface.pkg.Box.v1")
+                          pars input refs reference
+                      directChecked = run directEvidence [referenceCandidate]
+                      badReference = GenericStaticReferenceCandidate
+                        "Shared" GenericProviderContractKind bad
+                      referenceChecked = run
+                        [GrammarV1ResolvedDirectStaticArgument
+                          arg GenericTypeKind (SemanticAtom "type.U32.checked")]
+                        [badReference]
+                      report label result =
+                        case result of
+                          Nothing -> putStrLn ("H3_STATIC_" <> label <> "_NONE")
+                          Just (Left e) -> putStrLn
+                            ("H3_STATIC_" <> label <> "_LEFT " <> show e)
+                          Just (Right accepted) ->
+                            putStrLn ("H3_STATIC_" <> label <> "_RIGHT " <>
+                              show (length (checkedSpecializedStaticArguments accepted)))
+                  report "GRAMMAR_DIRECT" directChecked
+                  report "GRAMMAR_REFERENCE" referenceChecked
+          '''
+          Path("/tmp/PhilP8H3StaticMain.hs").write_text(static)
+          print("H3 generated 2 temporary probes in /tmp; original test files untouched.")
+          PY
+          git diff --exit-code
+          test -z "$(git status --porcelain=v1)"
+
+      - name: Strict compile and execute Core P2 and specialized native probes
+        shell: bash
+        run: |
+          set -euo pipefail
+          for probe in /tmp/PhilP8H3CoreMain.hs /tmp/PhilP8H3StaticMain.hs; do
+            cabal exec -- ghc -isrc -itest -Wall -Werror -fno-code "$probe"
+            cabal exec -- runghc -isrc -itest -Wall -Werror "$probe"
+          done
+          git diff --exit-code
+          test -z "$(git status --porcelain=v1)"
