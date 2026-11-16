@@ -231,12 +231,12 @@ p8H5Probe clientSource serverSource putSource getSource = do
           putBlocks = coreFunctionBlocks putFunction
           installBlock = putBlocks Map.! "put.install"
       case coreBlockTerminator installBlock of
-        CoreSystemsRuntimeChoice name inputs site arms -> do
+        CoreSystemsRuntimeChoice name inputs maybeSite arms -> do
           let badArms = p8H5CorruptMap arms
           p8H5MapWitness "CORE_RUNTIME_CHOICE_ARMS" arms badArms
           let changedInstall = installBlock
                 { coreBlockTerminator =
-                    CoreSystemsRuntimeChoice name inputs site badArms }
+                    CoreSystemsRuntimeChoice name inputs maybeSite badArms }
               changedPut = putFunction { coreFunctionBlocks =
                 Map.insert "put.install" changedInstall putBlocks }
               changedSteve = steveProgram { coreProgramFunctions =
