@@ -6,14 +6,14 @@ on:
       - formal-semantics/fsem02-adaptive-free-peer-resource-shape-retry
     paths:
       - 'test/Phase1FSEM02ProtocolProgressionMain.hs'
-      - 'proof/Phil/Core/FSEM02PingAdaptiveFreePeerHeadRetry.v'
+      - 'proof/Phil/Core/FSEM02PingAdaptiveFreePeerResourceShapeRetry.v'
       - 'docs/phase-1/formal-semantics-source-ping-adaptive-free-peer-resource-shape-retry-fsem02-v1.md'
       - 'docs/phase-1/typing-and-semantics-reader-guide-v1.md'
       - '.github/workflows/fsem02-adaptive-free-peer-resource-shape-retry-preflight.yml'
   pull_request:
     paths:
       - 'test/Phase1FSEM02ProtocolProgressionMain.hs'
-      - 'proof/Phil/Core/FSEM02PingAdaptiveFreePeerHeadRetry.v'
+      - 'proof/Phil/Core/FSEM02PingAdaptiveFreePeerResourceShapeRetry.v'
       - 'docs/phase-1/formal-semantics-source-ping-adaptive-free-peer-resource-shape-retry-fsem02-v1.md'
       - 'docs/phase-1/typing-and-semantics-reader-guide-v1.md'
       - '.github/workflows/fsem02-adaptive-free-peer-resource-shape-retry-preflight.yml'
