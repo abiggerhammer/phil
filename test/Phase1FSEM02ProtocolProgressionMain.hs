@@ -51,7 +51,7 @@ main = do
         (sourcePingDisjointPairCommutation accepted stale)
     , test "FSEM-02 disjoint Ping pairs complete all 24 terminal Close orders"
         (sourcePingDisjointTerminalInterleavings accepted stale)
-    , test "FSEM-02 25920 terminal schedules, 144 partner prefixes, 288 refused rematches, 1512 adaptive suffixes, 10368 half-Close completions, 288 poisoned-head, 288 missing-owner, 576 wrong-resource-shape and 576 combined-head/resource fault diagnostic/retries"
+    , test "FSEM-02 25920 terminal schedules, 144 partner prefixes, 288 refused rematches, 1512 adaptive suffixes, 10368 half-Close completions, 288 poisoned-head, 288 missing-owner, 576 wrong-resource-shape, 576 combined-head/resource, 288 cross-peer head/missing-owner and 144 two-head fault diagnostic/retries"
         (sourcePingThreeDisjointTerminalSchedules accepted stale)
     , test "FSEM-02 competing Ping sends sharing a Client predecessor refuse second use"
         (sourcePingSharedClientContention accepted stale)
@@ -2857,6 +2857,64 @@ sourcePingThreeDisjointTerminalSchedules accepted rejected = do
           assert (afterMissingClientRepair == afterSuffix
                   && afterMissingServerRepair == afterSuffix)
             "adaptive missing-owner retry changed authorized suffix successor"
+          -- Two distinct free peers may be faulty at once. BOTH projected
+          -- heads are validated before EITHER linear predecessor resource.
+          -- In particular a Server head mismatch masks even a Client
+          -- missing owner; this is cross-peer precedence, not merely the
+          -- same-peer head/resource behavior checked below.
+          clientHeadServerMissing <- removeFreePeerOwner poisonedClient
+            freeServer serverOld
+          serverHeadClientMissing <- removeFreePeerOwner poisonedServer
+            freeClient clientOld
+          bothHeads <- poisonFreePeer poisonedClient freeServer serverOld serverRole
+          let crossPeerCases =
+                [ ("Client head / Server owner", clientHeadServerMissing
+                  , freeClient, clientOriginal, sourceClientHead plans
+                  , freeServer, serverOriginal, serverOld)
+                , ("Server head / Client owner", serverHeadClientMissing
+                  , freeServer, serverOriginal, sourceServerHead plans
+                  , freeClient, clientOriginal, clientOld) ]
+          assert (length crossPeerCases == 2
+                  && (9 * 4 * 4 * length crossPeerCases :: Int) == 288
+                  && (9 * 4 * 4 :: Int) == 144)
+            "adaptive cross-peer head/owner ladder census changed"
+          mapM_ (\(label, faulty, headPeer, headOriginal, expectedHead
+                   , missingPeer, missingOriginal, missingEndpoint) -> do
+            assert (committedUnchanged faulty && spectatorLoanUnchanged faulty)
+              (label <> ": unrelated committed Close/loan was corrupted")
+            expectFreePeerHeadRefusal (label <> ": projected-head-first")
+              headPeer expectedHead faulty firstRequest
+            -- Restore the one poisoned typed head (both maps) but deliberately
+            -- leave the OTHER peer's missing linear owner uncorrected.
+            let restoredHead = Map.insert headPeer headOriginal faulty
+            expectFreePeerOwnerRefusal (label <> ": exposed other owner")
+              missingPeer missingEndpoint restoredHead firstRequest
+            let fullyRestored = Map.insert missingPeer missingOriginal restoredHead
+            assert (fullyRestored == closedPrefix)
+              (label <> ": repairing both sites did not restore exact prefix")
+            replay <- foldM
+              (\contexts req -> mapLeft show (run contexts req))
+              fullyRestored suffix
+            assert (replay == afterSuffix)
+              (label <> ": cross-peer repair changed authorized suffix"))
+            crossPeerCases
+          assert (committedUnchanged bothHeads && spectatorLoanUnchanged bothHeads)
+            "two malformed projected heads disturbed committed state"
+          expectFreePeerHeadRefusal "both free heads: Client first" freeClient
+            (sourceClientHead plans) bothHeads firstRequest
+          let restoredFirstHead = Map.insert freeClient clientOriginal bothHeads
+          assert (restoredFirstHead == poisonedServer)
+            "Client head repair accidentally restored the Server head"
+          expectFreePeerHeadRefusal "both free heads: Server after Client"
+            freeServer (sourceServerHead plans) restoredFirstHead firstRequest
+          let restoredBothHeads = Map.insert freeServer serverOriginal restoredFirstHead
+          assert (restoredBothHeads == closedPrefix)
+            "both projected heads repair failed exact prefix reconstruction"
+          replayBothHeads <- foldM
+            (\contexts req -> mapLeft show (run contexts req))
+            restoredBothHeads suffix
+          assert (replayBothHeads == afterSuffix)
+            "two-head repair changed authorized successor/replay"
           -- Projection/session refusal is checked before the same peer's
           -- resource shape. Repairing just its typed head must expose the
           -- still-malformed linear owner, not silently admit the rendezvous.

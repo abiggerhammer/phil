@@ -497,3 +497,5 @@ The bounded [FSEM-02 adaptive free-peer resource-shape refusal/retry slice](form
 
 
 The bounded [FSEM-02 adaptive projected-head/resource diagnostic-priority slice](formal-semantics-source-ping-adaptive-head-resource-priority-retry-fsem02-v1.md) adds 576 simultaneous malformed-head/linear-resource free-peer states after authorized partial terminal Closes. Haskell checks exact head refusal, residual resource error after head-only repair, and complete-state restoration before authorized suffix replay. Six conditional Rocq lemmas model the ordering and recovery; no universal Haskell refinement is claimed.
+
+The bounded [FSEM-02 adaptive cross-peer projected-head/missing-owner diagnostic-priority slice](formal-semantics-source-ping-adaptive-cross-peer-head-owner-retry-fsem02-v1.md) adds 288 distinct-peer head/owner error ladders and 144 two-bad-head cases after already committed authorized Close prefixes, with strict native Haskell checks and conditional Rocq repair/replay proofs, not general implementation refinement.
