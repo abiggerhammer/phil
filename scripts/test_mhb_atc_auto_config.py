@@ -52,7 +52,11 @@ class ScheduledAdmissionGuardTests(unittest.TestCase):
         self.assertIn("test \"$live\" = \"$expected\"", self.source)
         self.assertIn("gh issue edit \"$issue\" --repo \"$GH_REPO\" \\", self.source)
         self.assertIn("--add-label \"atc: admitting\"", self.source)
-        self.assertIn("HAMSTER_PR_TOKEN: ${{ secrets.HAMSTER_PR_TOKEN }}",
+        self.assertNotIn("HAMSTER_PR_TOKEN", self.source)
+        self.assertIn("uses: actions/create-github-app-token@v3", self.source)
+        self.assertIn("IMMUTABLE_ENABLED: ${{ vars.MHB_ATC_IMMUTABLE_HEADS_ENABLED }}",
+                      self.source)
+        self.assertIn("PUBLISHER_TOKEN: ${{ steps.publisher_token.outputs.token }}",
                       self.source)
 
 
