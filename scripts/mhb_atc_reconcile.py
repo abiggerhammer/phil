@@ -54,11 +54,11 @@ def candidate(issue: dict) -> dict:
             "created_at": timestamp(issue.get("created_at"))}
 
 
-def pr_for_issue(pr: dict, item: dict, repo: str) -> dict:
+def pr_for_issue(pr: dict, item: dict, repo: str, publisher: dict) -> dict:
     """Bind a PR to the canonical protected admitted head, never staged ref."""
     binding = contract(item["issue"], item["lane"], item["branch"],
                        item["head_sha"], repo)
-    check = verify_pr(pr, binding)
+    check = verify_pr(pr, binding, publisher)
     label_set = names(pr)
     lane_labels = {l for l in label_set if l.startswith("lane: ")}
     if lane_labels and lane_labels != {"lane: " + item["lane"]}:
@@ -69,7 +69,7 @@ def pr_for_issue(pr: dict, item: dict, repo: str) -> dict:
             "needs_label": ACTIVE_LABEL not in label_set or
                            "lane: " + item["lane"] not in label_set}
 
-def plan(issues: list, prs: list, refs: list, repo: str, now: dt.datetime) -> dict:
+def plan(issues: list, prs: list, refs: list, repo: str, now: dt.datetime, publisher: dict) -> dict:
     """Return at most one idempotent write or a diagnostic hold.
 
     All candidates are validated before any action is returned. Unknown or
@@ -83,6 +83,8 @@ def plan(issues: list, prs: list, refs: list, repo: str, now: dt.datetime) -> di
     if now.tzinfo is None:
         raise ValueError("now must be timezone-aware")
     now = now.astimezone(dt.timezone.utc)
+    if not isinstance(publisher, dict) or not isinstance(publisher.get("bot_login"), str):
+        raise ValueError("authenticated publisher identity is required")
     candidates = [candidate(issue) for issue in issues]
     branches = [i["branch"] for i in candidates]
     if len(branches) != len(set(branches)):
@@ -112,7 +114,7 @@ def plan(issues: list, prs: list, refs: list, repo: str, now: dt.datetime) -> di
             raise ValueError("admitted protected ref SHA drift")
         if related and ref_sha is None:
             raise ValueError("linked PR exists but admitted ref is missing")
-        pr = pr_for_issue(related[0], item, repo) if related else None
+        pr = pr_for_issue(related[0], item, repo, publisher) if related else None
         if pr is None and ref_sha is not None:
             # An interrupted create-ref -> create-PR transaction must never
             # be auto-requeued: another attempt would reuse/squat the ref.
@@ -157,6 +159,8 @@ def main() -> int:
     p.add_argument("--prs", required=True)
     p.add_argument("--repo", required=True)
     p.add_argument("--refs", required=True, help="complete admitted-ref API snapshot")
+    p.add_argument("--publisher-json", required=True,
+                   help="verified GitHub App/bot platform identity snapshot")
     p.add_argument("--branches-only", action="store_true",
                    help="emit validated candidate branch list and no actions")
     args = p.parse_args()
@@ -175,8 +179,10 @@ def main() -> int:
         prs = json.load(handle)
     with open(args.refs, encoding="utf-8") as handle:
         refs = json.load(handle)
+    with open(args.publisher_json, encoding="utf-8") as handle:
+        publisher = json.load(handle)
     print(json.dumps(plan(issues, prs, refs, args.repo,
-                          dt.datetime.now(dt.timezone.utc)), sort_keys=True))
+                          dt.datetime.now(dt.timezone.utc), publisher), sort_keys=True))
     return 0
 
 
