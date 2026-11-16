@@ -14,7 +14,7 @@ import qualified Phil.Core.DataMode as ProductMode
 import Phil.Core.CheckedBindingMode (CheckedTypeMode (..))
 import Phil.Core.Static (DeclarationKey (..), emptyStaticContext)
 import Phil.Core.Syntax
-  ( Control (..), Mode (..), Name (..), ProductElementType (..)
+  ( Control (..), Mode (..), ProductElementType (..)
   , RefTerm (..), Ty (..) )
 import Phil.Surface.Check.Engine (ProductEliminationRun (..))
 import Phil.Surface.Check.Types (SurfaceCheckResult (..))

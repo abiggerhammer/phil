@@ -16,7 +16,6 @@ module Phil.Surface.GrammarV1.SourceNestedProductElimination
 import qualified Data.Map.Strict as Map
 import qualified Data.Set as Set
 import Data.Text (Text)
-import qualified Data.Text as Text
 import Phil.Core.CheckedBindingMode (CheckedTypeMode (..))
 import qualified Phil.Core.Context as Core
 import qualified Phil.Core.DataMode as ProductMode
@@ -139,9 +138,15 @@ checkedPair static (Located _ sourceType) = case sourceType of
       pure (CheckedTypeMode
         (TyProduct elements) (ProductMode.productMode elements))
   GrammarV1TupleType _ -> Nothing
-  _ -> do
-    checked <- grammarV1CheckedTypeMode static emptySurfaceState sourceType
-    pure (fst <$> checked)
+  GrammarV1BoolType -> checkedPrimitive
+  GrammarV1UnitType -> checkedPrimitive
+  GrammarV1BytesType _ -> checkedPrimitive
+  -- Aliases, refinements, proof-carrying and unrelated named forms stay out.
+  _ -> Nothing
+  where
+    checkedPrimitive = do
+      checked <- grammarV1CheckedTypeMode static emptySurfaceState sourceType
+      pure (fst <$> checked)
 
 namePattern :: SourceSpan -> Name -> Located Pattern
 namePattern span' owner = Located span' (BindPattern (unName owner))
