@@ -23,6 +23,7 @@ def policy():
     return {"format": "MHB-ATC-OWNER-RULESET-ATTESTATION-V1",
             "repository": REPO, "ruleset_id": RULESET,
             "publisher_app_id": APP,
+            "publisher_app_slug": "test-publisher",
             "ruleset_created_at": CREATED, "ruleset_updated_at": UPDATED,
             "attested_bypass_actors": [{"actor_type": "Integration",
                                         "actor_id": APP, "bypass_mode": "always"}]}
@@ -189,6 +190,17 @@ class ImmutablePublisherTests(unittest.TestCase):
             {"id": 71234, "login": "test-publisher[bot]", "type": "Bot"},
             "test-publisher", APP, policy())
         self.assertEqual(identity, PUBLISHER)
+        # Private GitHub Apps return 403 from public /apps/{slug};
+        # the owner-reviewed slug/ID pin plus real bot profile must suffice.
+        self.assertEqual(verified_publisher(
+            None,
+            {"id": 71234, "login": "test-publisher[bot]", "type": "Bot"},
+            "test-publisher", APP, policy()), PUBLISHER)
+        with self.assertRaisesRegex(ValueError, "source-reviewed"):
+            verified_publisher(
+                None,
+                {"id": 71234, "login": "wrong[bot]", "type": "Bot"},
+                "wrong", APP, policy())
         for app, bot in (
             ({"id": APP + 1, "slug": "test-publisher"},
              {"id": 71234, "login": "test-publisher[bot]", "type": "Bot"}),
