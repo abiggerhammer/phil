@@ -31,6 +31,10 @@ main = do
         twoLegalRealizations
     , test "SYS-GENERIC missing decision rejects"
         missingDecisionRejects
+    , test "P8-H2 malformed native Set/Map contexts are rejected recursively"
+        malformedContextSemanticsReject
+    , test "P8-H2 valid nested Set/Map/Unicode context remains admissible"
+        validNestedContextSemanticsAccept
     , test "SYS-GENERIC target-only ABI choice remains explicit"
         steveAbiChoiceExplicit
     ]
@@ -132,6 +136,43 @@ missingDecisionRejects = do
     Left (GenericLoweringMissingDecision "sample.call") -> Right ()
     other -> Left
       ("missing decision was not rejected exactly: " <> show other)
+
+malformedContextSemanticsReject :: Either String ()
+malformedContextSemanticsReject = do
+  checked <- checkedInstance "Sample"
+  let unordered = SemanticUnordered Set.empty
+      record = SemanticRecord Map.empty
+      badSet = SemanticUnordered
+        (Set.fromDistinctAscList [record, unordered])
+      badMap = SemanticRecord (Map.fromDistinctAscList
+        [("z", SemanticAtom "last"), ("a", SemanticAtom "first")])
+      cases =
+        [ ("direct unordered", badSet)
+        , ("nested ordered", SemanticOrdered [SemanticAtom "ok", badSet])
+        , ("nested record", SemanticRecord (Map.singleton "child" badSet))
+        , ("nested set", SemanticUnordered (Set.singleton badSet))
+        , ("direct record", badMap)
+        , ("nested map", SemanticOrdered [badMap])
+        ]
+      checkBad (label, form) =
+        case lowerGenericSystems checked sampleProgram
+            (contextA { genericContextSemantics = form }) of
+          Left GenericLoweringMalformedContextSemantics -> Right ()
+          other -> Left ("invalid " <> label <> " admitted: " <> show other)
+  mapM_ checkBad cases
+
+validNestedContextSemanticsAccept :: Either String ()
+validNestedContextSemanticsAccept = do
+  checked <- checkedInstance "Sample"
+  let unordered = SemanticUnordered (Set.fromList
+        [SemanticRecord Map.empty, SemanticUnordered Set.empty])
+      valid = SemanticRecord (Map.fromList
+        [ ("unicode", SemanticAtom "é / e\x0301 / 🙂")
+        , ("nested", SemanticOrdered [unordered, SemanticAtom "\0"])
+        ])
+  bundle <- mapLeft show (lowerGenericSystems checked sampleProgram
+    (contextA { genericContextSemantics = valid }))
+  mapLeft show (verifyPhase1StageBundle bundle)
 
 steveAbiChoiceExplicit :: Either String ()
 steveAbiChoiceExplicit = do
