@@ -187,7 +187,7 @@ class AdmissionTests(unittest.TestCase):
         outsider = {
             "number": 1999, "state": "open",
             "title": "Question about the staging marker",
-            "body": MARKER + "\\nThis is quoted documentation.",
+            "body": MARKER + "\nThis is quoted documentation.",
             "labels": [], "user": {"login": "ordinary-outsider"},
         }
         self.assertEqual(plan([outsider, issue()], [])["candidate_issue"], 101)
