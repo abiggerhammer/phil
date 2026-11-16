@@ -16,7 +16,7 @@ CORR-8 uses existing production traces and independently checked Grammar-v1 orig
 | escape-right.phil | none / B-S-E-X | 1 / 0 | BorrowEscape; earlier arm does not imply a join |
 | escape-alias.phil | B-S-E-X / none | 0 / 0 | BorrowEscape through borrowed view alias |
 | move-while-loaned.phil | B-S / none | 0 / 0 | StructuralUse, failed move |
-| return-inside-borrow.phil | reached return failure prefix / none | 0 / 0 | LinearCompletion, no successful loan closure |
+| return-inside-borrow.phil | B-S / none | 0 / 0 | LinearCompletion, no successful loan closure |
 | borrow-unrestricted.phil | B / none | 0 / 0 | BorrowEscape, no loan started |
 
 B = BeforeLoan, S = LoanStarted, V = BodyResult without escaping view, E = BodyResult containing escaping view, X = EscapeRejected, C = LoanClosed, R = OwnerReturned. The exact original-source return-in-borrow prefix must be confirmed in CI; the proof never invents a loan-close transition.
