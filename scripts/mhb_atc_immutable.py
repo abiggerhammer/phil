@@ -147,7 +147,25 @@ def check_ruleset(rule: dict, repo: str, app_id: int, ruleset_id: int,
                          else "redacted-live-plus-pinned-owner-version"),
             "pinned_updated_at": policy["ruleset_updated_at"]}
 
-def verify_pr(pr: dict, binding: dict) -> dict:
+def verified_publisher(app: dict, bot: dict, slug: str, app_id: int) -> dict:
+    """Require GitHub's authenticated App and bot-user identities to agree."""
+    if (not isinstance(slug, str) or
+        not re.fullmatch(r"[a-zA-Z0-9][a-zA-Z0-9-]*", slug) or
+        type(app_id) is not int or app_id <= 0):
+        raise ValueError("publisher App slug/id not configured")
+    if (not isinstance(app, dict) or app.get("id") != app_id or
+        app.get("slug") != slug):
+        raise ValueError("publisher App slug does not resolve to pinned App ID")
+    login = slug + "[bot]"
+    if (not isinstance(bot, dict) or bot.get("login") != login or
+        bot.get("type") != "Bot" or type(bot.get("id")) is not int or
+        bot.get("id") <= 0):
+        raise ValueError("publisher bot user identity missing or inconsistent")
+    return {"app_id": app_id, "app_slug": slug,
+            "bot_login": login, "bot_id": bot["id"]}
+
+
+def verify_pr(pr: dict, binding: dict, publisher: dict) -> dict:
     if not isinstance(pr, dict) or pr.get("state") not in ("open", "closed"):
         raise ValueError("bad PR state")
     head, base = pr.get("head"), pr.get("base")
@@ -161,6 +179,21 @@ def verify_pr(pr: dict, binding: dict) -> dict:
         hrepo.get("full_name") != binding["repo"] or
         base.get("ref") != "main" or brepo.get("full_name") != binding["repo"]):
         raise ValueError("PR immutable head/base/repository mismatch")
+    if (not isinstance(publisher, dict) or
+        type(publisher.get("app_id")) is not int or
+        not isinstance(publisher.get("bot_login"), str) or
+        type(publisher.get("bot_id")) is not int):
+        raise ValueError("verified publisher identity is required")
+    author = pr.get("user")
+    if (not isinstance(author, dict) or
+        author.get("login") != publisher["bot_login"] or
+        author.get("id") != publisher["bot_id"] or
+        author.get("type") != "Bot"):
+        raise ValueError("PR was not created by the authenticated publisher bot")
+    via = pr.get("performed_via_github_app")
+    if via is not None and (not isinstance(via, dict) or
+                            via.get("id") != publisher["app_id"]):
+        raise ValueError("GitHub-reported PR App attribution contradicts publisher")
     if pr.get("title") != binding["title"]:
         raise ValueError("PR canonical title mismatch")
     if not isinstance(pr.get("body"), str) or pr["body"].rstrip("\n") != binding["body"].rstrip("\n"):
@@ -187,6 +220,12 @@ def _args():
             s.add_argument("--expect", choices=["absent", "present"], required=True)
         if name == "verify-pr":
             s.add_argument("--pr-json", required=True)
+            s.add_argument("--publisher-json", required=True)
+    s = sub.add_parser("publisher")
+    s.add_argument("--app-json", required=True)
+    s.add_argument("--bot-json", required=True)
+    s.add_argument("--app-slug", required=True)
+    s.add_argument("--app-id", type=int, required=True)
     s = sub.add_parser("ruleset")
     s.add_argument("--ruleset-json", required=True)
     s.add_argument("--repo", required=True)
@@ -200,6 +239,12 @@ def main() -> int:
     if args.command == "ruleset":
         with open(args.ruleset_json, encoding="utf-8") as f:
             result = check_ruleset(json.load(f), args.repo, args.app_id, args.ruleset_id)
+    elif args.command == "publisher":
+        with open(args.app_json, encoding="utf-8") as f:
+            app = json.load(f)
+        with open(args.bot_json, encoding="utf-8") as f:
+            bot = json.load(f)
+        result = verified_publisher(app, bot, args.app_slug, args.app_id)
     else:
         binding = contract(args.issue, args.lane, args.staged, args.sha, args.repo)
         if args.command == "contract":
@@ -209,7 +254,9 @@ def main() -> int:
                 result = check_ref(json.load(f), binding, args.expect)
         else:
             with open(args.pr_json, encoding="utf-8") as f:
-                result = verify_pr(json.load(f), binding)
+                with open(args.publisher_json, encoding="utf-8") as identity_file:
+                    publisher = json.load(identity_file)
+                result = verify_pr(json.load(f), binding, publisher)
     print(json.dumps(result, sort_keys=True))
     return 0
 
