@@ -9,7 +9,8 @@ import sys
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 from mhb_atc_stage import parse_intent
-from mhb_atc_reconcile import ADMITTING_LABEL, plan
+from mhb_atc_reconcile import ADMITTING_LABEL, plan as production_plan
+from mhb_atc_immutable import contract
 from mhb_atc_admit import ACTIVE_LABEL, STAGED_LABEL
 
 A = "a" * 40
@@ -36,18 +37,37 @@ def issue(n=1701, branch=BRANCH, sha=A, state=ACTIVE_LABEL,
 def pr(n=1702, issue_number=1701, branch=BRANCH, sha=A,
        state="closed", labels=True):
     lane = branch.split("/")[2]
-    return {"number": n, "state": state, "title": "MHB-ATC admission: " + lane
-            + " / " + str(issue_number),
-            "body": "\n".join([
-                "MHB-ATC admitted staged candidate; this PR is **not** merge clearance.",
-                "", "- Candidate issue: #" + str(issue_number),
-                "- Lane: " + lane, "- Staged branch: " + branch,
-                "- Exact registered head: " + sha,
-                "", "Required checks and integration safety must still be verified before any merge."]),
-            "head": {"ref": branch, "sha": sha,
+    binding = contract(issue_number, lane, branch, sha, REPO)
+    return {"number": n, "state": state, "title": binding["title"],
+            "body": binding["body"],
+            "head": {"ref": binding["admitted_branch"], "sha": sha,
                      "repo": {"full_name": REPO}},
             "base": {"ref": "main", "repo": {"full_name": REPO}},
             "labels": [label(ACTIVE_LABEL), label("lane: " + lane)] if labels else []}
+
+
+def ref_for(binding):
+    return {"ref": "refs/heads/" + binding["admitted_branch"],
+            "object": {"sha": binding["head_sha"]}}
+
+
+def plan(issues, prs, repo, now, *, refs_override=None):
+    # Adapt historical fixture calls to the explicitly complete new ref API
+    # snapshot; tests can pass refs_override to model absent/drifted/orphan refs.
+    refs = []
+    if isinstance(prs, list):
+        found = set()
+        for p in prs:
+            if not isinstance(p, dict) or not isinstance(p.get("head"), dict):
+                continue
+            head = p["head"]
+            name, sha = head.get("ref"), head.get("sha")
+            if (isinstance(name, str) and name.startswith("hamster/admitted/")
+                    and name not in found and isinstance(sha, str)):
+                refs.append({"ref": "refs/heads/" + name, "object": {"sha": sha}})
+                found.add(name)
+    return production_plan(issues, prs, refs if refs_override is None else refs_override,
+                           repo, now)
 
 
 class RecoveryTests(unittest.TestCase):
@@ -100,7 +120,7 @@ class RecoveryTests(unittest.TestCase):
                     plan([issue(state=STAGED_LABEL)], [pr(state=state)], REPO, NOW)
 
     def test_mismatched_sha_fails_closed(self):
-        with self.assertRaisesRegex(ValueError, "identity mismatch"):
+        with self.assertRaisesRegex(ValueError, "unknown admitted|immutable head"):
             plan([issue()], [pr(sha=B)], REPO, NOW)
 
     def test_modified_pr_link_fails_closed(self):
@@ -142,6 +162,39 @@ class RecoveryTests(unittest.TestCase):
                  REPO, NOW)
         self.assertEqual(r["action"], "release")
         self.assertEqual(r["issue"], 1703)
+
+    def test_orphan_ref_without_pr_never_auto_requeues(self):
+        binding = contract(1701, "mhb-atc", BRANCH, A, REPO)
+        with self.assertRaisesRegex(ValueError, "orphan admitted ref"):
+            plan([issue(state=ADMITTING_LABEL)], [], REPO, NOW,
+                 refs_override=[ref_for(binding)])
+
+    def test_existing_unlabelled_admitted_ref_with_no_pr_fails_closed(self):
+        binding = contract(1701, "mhb-atc", BRANCH, A, REPO)
+        with self.assertRaisesRegex(ValueError, "orphan admitted ref"):
+            plan([issue(state=STAGED_LABEL)], [], REPO, NOW,
+                 refs_override=[ref_for(binding)])
+
+    def test_pr_without_protected_ref_fails_closed(self):
+        with self.assertRaisesRegex(ValueError, "admitted ref is missing"):
+            plan([issue()], [pr()], REPO, NOW, refs_override=[])
+
+    def test_protected_ref_sha_drift_fails_closed(self):
+        binding = contract(1701, "mhb-atc", BRANCH, A, REPO)
+        ref = ref_for(binding)
+        ref["object"]["sha"] = B
+        with self.assertRaisesRegex(ValueError, "SHA drift"):
+            plan([issue()], [pr()], REPO, NOW,
+                 refs_override=[ref])
+
+    def test_staged_ref_push_does_not_change_admitted_identity(self):
+        binding = contract(1701, "mhb-atc", BRANCH, A, REPO)
+        self.assertEqual(binding["admitted_branch"],
+                         contract(1701, "mhb-atc", BRANCH, A, REPO)["admitted_branch"])
+        # Pushing a new staged branch revision must never mutate an already
+        # issued admitted-ref contract.
+        self.assertNotEqual(binding["admitted_branch"],
+                            contract(1701, "mhb-atc", BRANCH, B, REPO)["admitted_branch"])
 
     def test_timezone_required(self):
         with self.assertRaises(ValueError):
