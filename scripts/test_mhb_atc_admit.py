@@ -52,6 +52,12 @@ class AdmissionTests(unittest.TestCase):
         live["labels"].append(label(ACTIVE_LABEL))
         self.assertEqual(plan([issue()], [live])["decision"], "hold")
 
+    def test_unlabelled_immutable_admitted_pr_blocks_slot(self):
+        # A crashed publisher may leave an open PR before labels are written.
+        live = pr(branch="hamster/admitted/atc-101-mhb-atc-" + A)
+        self.assertEqual(plan([issue()], [live])["decision"], "hold")
+        self.assertEqual(plan([issue()], [live])["open_staged_prs"], [555])
+
     def test_admitted_pr_seen_in_issues_api_is_not_a_candidate_issue(self):
         live = pr()
         live["labels"] = [label(ACTIVE_LABEL)]
