@@ -332,54 +332,58 @@ Proof.
         ])
       Hbody)
     as [trees [Hsequence_tree Hitems]].
-  inversion Hsequence_tree; subst trees.
-  repeat match goal with
-  | Hseq : DerivesSequence phase1_surface_rules _ _ (_ :: _) _ _ _ |- _ =>
-      inversion Hseq; subst; clear Hseq
-  end.
-  match goal with
-  | Hnil : DerivesSequence phase1_surface_rules _ _ [] _ _ _ |- _ =>
-      inversion Hnil; subst; clear Hnil
-  end.
-  match goal with
-  | Hfirst : Derives phase1_surface_rules _ (ENonterminal "generic_param")
-      _ _ (phase1_surface_generic_param_spine_tree first),
-    Hrepeat : Derives phase1_surface_rules _
-      (ERepetition
-        (ESequence [ELiteral ","; ENonterminal "generic_param"]))
+  (* Decompose the four grammar-derived sequence items explicitly.  The
+     indiscriminate inversion loop previously erased the item evidence
+     before the generic-parameter and repetition premises could be used. *)
+  destruct
+    (derives_sequence_cons_exposes_head_exact _ _ _ _ _ _ _ _ Hitems)
+    as [after_open [open_tree [tail1
+      [Htrees [Hopen Htail1]]]]].
+  destruct
+    (derives_sequence_cons_exposes_head_exact _ _ _ _ _ _ _ _ Htail1)
+    as [after_first [first_tree [tail2
+      [Htail1_trees [Hfirst Htail2]]]]].
+  destruct
+    (derives_sequence_cons_exposes_head_exact _ _ _ _ _ _ _ _ Htail2)
+    as [after_repeat [repeat_tree [tail3
+      [Htail2_trees [Hrepeat Htail3]]]]].
+  destruct
+    (derives_sequence_cons_exposes_head_exact _ _ _ _ _ _ _ _ Htail3)
+    as [after_close [close_tree [nil_trees
+      [Htail3_trees [Hclose Hnil]]]]].
+  rewrite Htrees, Htail1_trees, Htail2_trees, Htail3_trees
+    in Hsequence_tree.
+  inversion Hsequence_tree; subst.
+  inversion Hnil; subst.
+  destruct
+    (phase1_surface_normalize_generic_param_kind_type_spine_total_from_spine_derivation
+      first _ _ _ Hfirst)
+    as [refined_first Hrefined_first].
+  destruct
+    (phase1_surface_repetition_derivation_exposes
+      _
+      (ESequence [ELiteral ","; ENonterminal "generic_param"])
       _ _
       (PTRepetition
-        (map phase1_surface_generic_param_suffix_tree rest_parameters)) |- _ =>
-      destruct
-        (phase1_surface_normalize_generic_param_kind_type_spine_total_from_spine_derivation
-          first _ _ _ Hfirst)
-        as [refined_first Hrefined_first];
-      destruct
-        (phase1_surface_repetition_derivation_exposes
-          _
-          (ESequence [ELiteral ","; ENonterminal "generic_param"])
-          _ _
-          (PTRepetition
-            (map phase1_surface_generic_param_suffix_tree rest_parameters))
-          Hrepeat)
-        as [rest_trees [Hrest_tree Hrest_body]];
-      inversion Hrest_tree; subst rest_trees;
-      destruct
-        (phase1_surface_normalize_generic_param_kind_type_values_total_from_spine_repetition
-          _
-          (ESequence [ELiteral ","; ENonterminal "generic_param"])
-          _ _
-          (map phase1_surface_generic_param_suffix_tree rest_parameters)
-          Hrest_body eq_refl
-          rest_parameters eq_refl)
-        as [refined_rest Hrefined_rest];
-      exists
-        {| phase1_generic_params_kind_type_spine_first := refined_first;
-           phase1_generic_params_kind_type_spine_rest := refined_rest |};
-      cbn;
-      rewrite Hrefined_first, Hrefined_rest;
-      reflexivity
-  end.
+        (map phase1_surface_generic_param_suffix_tree rest_parameters))
+      Hrepeat)
+    as [rest_trees [Hrest_tree Hrest_body]].
+  inversion Hrest_tree; subst rest_trees.
+  destruct
+    (phase1_surface_normalize_generic_param_kind_type_values_total_from_spine_repetition
+      _
+      (ESequence [ELiteral ","; ENonterminal "generic_param"])
+      _ _
+      (map phase1_surface_generic_param_suffix_tree rest_parameters)
+      Hrest_body eq_refl
+      rest_parameters eq_refl)
+    as [refined_rest Hrefined_rest].
+  exists
+    {| phase1_generic_params_kind_type_spine_first := refined_first;
+       phase1_generic_params_kind_type_spine_rest := refined_rest |}.
+  cbn.
+  rewrite Hrefined_first, Hrefined_rest.
+  reflexivity.
 Qed.
 
 Lemma
