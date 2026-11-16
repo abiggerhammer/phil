@@ -96,8 +96,26 @@ def check_trace(
         fail("invented alternative source owner")
     if len(set(names)) != len(names):
         fail("source owner/header identity aliased")
+    # This bounded corpus has source parameters allocated at ordinals 0/1,
+    # an optional third source parameter at 2, and one loop header at 2/3.
+    # Check these independently of the emitted Haskell field order.
+    ordinals = [int(name.rsplit(":", 1)[1]) for name in names]
+    expected_ordinals = [0, 1, 3, 2] if has_alt else [0, 1, 2]
+    if ordinals != expected_ordinals:
+        fail("source binder roles/ordinals swapped or forged")
     if actual_kind != kind or actual_expected != expected:
         fail("source kind, predecessor or outcome was replaced")
+    source_text = source_bytes.decode("utf-8", errors="strict")
+    if "fn cycle(flag : Bool, payload : Bytes[8]" not in source_text or (
+        ("alternate : Bytes[8]" in source_text) != has_alt
+    ):
+        fail("unrecognized source parameter telescope")
+    if (kind == "ST" and "continue(payload)" not in source_text) or (
+        kind == "DU" and "continue(alternate)" not in source_text
+    ) or (kind == "GA" and "invariant false" not in source_text) or (
+        kind == "LO" and "borrow owner as" not in source_text
+    ):
+        fail("source transition shape does not match declared kind")
     return fields
 
 
