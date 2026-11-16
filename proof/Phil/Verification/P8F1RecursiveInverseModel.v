@@ -161,7 +161,7 @@ Proof.
   induction fuel as [|fuel IH]; intros n Bound.
   - assert (n = 0) by lia. subst n.
     exists 48, []. split; [reflexivity|split].
-    + intro _. split; reflexivity.
+    + intro Ignored. split; reflexivity.
     + lia.
   - cbn [p8_e1_decimal_fuel].
     destruct (n <? 10) eqn:Small.
@@ -178,7 +178,7 @@ Proof.
       rewrite Shape. simpl [app].
       split; [reflexivity|split].
       * intros Impossible. lia.
-      * intros _. apply Nonzero. lia.
+      * intros Positive. apply Nonzero. lia.
 Qed.
 
 Theorem p8_f1_frame_count_roundtrip :
