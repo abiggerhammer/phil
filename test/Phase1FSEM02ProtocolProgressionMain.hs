@@ -51,7 +51,7 @@ main = do
         (sourcePingDisjointPairCommutation accepted stale)
     , test "FSEM-02 disjoint Ping pairs complete all 24 terminal Close orders"
         (sourcePingDisjointTerminalInterleavings accepted stale)
-    , test "FSEM-02 25920 terminal schedules, 144 partner prefixes, 288 refused rematches, 1512 adaptive suffixes, 10368 half-Close completions, 288 poisoned free-peer refusal/retries"
+    , test "FSEM-02 25920 terminal schedules, 144 partner prefixes, 288 refused rematches, 1512 adaptive suffixes, 10368 half-Close completions, 288 poisoned free-peer head and 288 missing-owner refusal/retries"
         (sourcePingThreeDisjointTerminalSchedules accepted stale)
     , test "FSEM-02 competing Ping sends sharing a Client predecessor refuse second use"
         (sourcePingSharedClientContention accepted stale)
@@ -2642,6 +2642,25 @@ sourcePingThreeDisjointTerminalSchedules accepted rejected = do
                      && observed == End done)
               (label <> ": wrong source projection/process/head diagnostic")
           other -> Left (label <> ": poisoned free peer advanced: " <> show other)
+      -- The endpoint metadata is deliberately left untouched while the
+      -- original linear owner is removed from only one still-free peer.
+      -- This is an explicitly hostile input, not a successful transition.
+      removeFreePeerOwner contexts peerKey endpoint = do
+        original <- maybe (Left "adaptive owner-deficient free peer missing") Right
+          (Map.lookup peerKey contexts)
+        let resources = protocolResources original
+            missingOwner = original
+              { protocolResources = resources
+                  { linearBindings = Map.delete endpoint (linearBindings resources) } }
+        pure (Map.insert peerKey missingOwner contexts)
+      expectFreePeerOwnerRefusal label expectedSite endpoint contexts req =
+        case run contexts req of
+          Left (RendezvousProtocolError actual
+              (ProtocolEndpointResourceMissing missing)) ->
+            assert (actual == expectedSite && missing == endpoint)
+              (label <> ": missing linear owner lost exact process/endpoint/class")
+          other -> Left (label <> ": missing owner advanced or was misclassified: "
+                         <> show other)
   assert (length firstPairChoices == 9
           && (9 * (2 * 120 + 2 * 24) * 4 :: Int) == 10368)
     "adaptive half-Close/suffix schedule census changed"
@@ -2721,6 +2740,8 @@ sourcePingThreeDisjointTerminalSchedules accepted rejected = do
             (Map.lookup freeServer closedPrefix)
           poisonedClient <- poisonFreePeer closedPrefix freeClient clientOld clientRole
           poisonedServer <- poisonFreePeer closedPrefix freeServer serverOld serverRole
+          missingClient <- removeFreePeerOwner closedPrefix freeClient clientOld
+          missingServer <- removeFreePeerOwner closedPrefix freeServer serverOld
           let committedUnchanged malformed =
                 Map.lookup firstClient malformed == Map.lookup firstClient closedPrefix
                 && Map.lookup firstServer malformed == Map.lookup firstServer closedPrefix
@@ -2732,13 +2753,25 @@ sourcePingThreeDisjointTerminalSchedules accepted rejected = do
                     affineBindings (protocolResources spectatorContext) == affineBindings loaned
                     && sharedLoans (protocolResources spectatorContext) == sharedLoans loaned
           assert (committedUnchanged poisonedClient && committedUnchanged poisonedServer
+                  && committedUnchanged missingClient && committedUnchanged missingServer
                   && spectatorLoanUnchanged poisonedClient
-                  && spectatorLoanUnchanged poisonedServer)
-            "adaptive free-peer injected head changed committed half-Close or loan"
+                  && spectatorLoanUnchanged poisonedServer
+                  && spectatorLoanUnchanged missingClient
+                  && spectatorLoanUnchanged missingServer)
+            "adaptive free-peer faults changed committed half-Close or active loan"
           expectFreePeerHeadRefusal "adaptive free Client wrong head" freeClient
             (sourceClientHead plans) poisonedClient firstRequest
           expectFreePeerHeadRefusal "adaptive free Server wrong head" freeServer
             (sourceServerHead plans) poisonedServer firstRequest
+          expectFreePeerOwnerRefusal "adaptive free Client missing owner" freeClient
+            clientOld missingClient firstRequest
+          expectFreePeerOwnerRefusal "adaptive free Server missing owner" freeServer
+            serverOld missingServer firstRequest
+          let repairedMissingClient = Map.insert freeClient clientOriginal missingClient
+              repairedMissingServer = Map.insert freeServer serverOriginal missingServer
+          assert (repairedMissingClient == closedPrefix
+                  && repairedMissingServer == closedPrefix)
+            "adaptive missing owner repair did not restore exact committed state"
           let repairedClient = Map.insert freeClient clientOriginal poisonedClient
               repairedServer = Map.insert freeServer serverOriginal poisonedServer
           assert (repairedClient == closedPrefix && repairedServer == closedPrefix)
@@ -2749,6 +2782,15 @@ sourcePingThreeDisjointTerminalSchedules accepted rejected = do
             repairedServer suffix
           assert (afterServerRepair == afterSuffix)
             "adaptive repaired peer choice changed legal successor replay"
+          afterMissingClientRepair <- foldM
+            (\contexts req -> mapLeft show (run contexts req))
+            repairedMissingClient suffix
+          afterMissingServerRepair <- foldM
+            (\contexts req -> mapLeft show (run contexts req))
+            repairedMissingServer suffix
+          assert (afterMissingClientRepair == afterSuffix
+                  && afterMissingServerRepair == afterSuffix)
+            "adaptive missing-owner retry changed authorized suffix successor"
           assert (afterSuffix == canonicalClosed)
             "adaptive half-Close suffix failed exact End/owner replay"
           mapM_ (\closeOrder -> do
