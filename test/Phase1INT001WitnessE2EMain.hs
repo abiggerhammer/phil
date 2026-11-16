@@ -358,6 +358,15 @@ p9SteveStructuralGate putSource getSource = do
   case verifySteveGetLLVMPointerFlow wrongOwnerLLVM of
     Left SteveGetLLVMDigestOwnerSubstituted -> Right ()
     other -> Left ("P9 accepted wrong LLVM native owner: " <> show other)
+  let wrongReadInvocation = Text.replace
+        "@phil_runtime_choice_SteveGet_get_entry_BlobProvider_read(ptr %get_id, ptr %phil_runtime_choice_payload_slot_SteveGet_get_entry_get_bytes)"
+        "@phil_runtime_choice_SteveGet_get_entry_BlobProvider_read(ptr %get_bytes, ptr %phil_runtime_choice_payload_slot_SteveGet_get_entry_get_bytes)"
+        originalLLVM
+  assert (wrongReadInvocation /= originalLLVM)
+    "P9 wrong read invocation did not mutate selected LLVM"
+  case verifySteveGetLLVMPointerFlow wrongReadInvocation of
+    Left SteveGetLLVMReadResultSlotMissing -> Right ()
+    other -> Left ("P9 accepted wrong LLVM native read invocation: " <> show other)
   let withoutLoad = Text.replace
         "get_check:\n  %get_bytes = load ptr, ptr %phil_runtime_choice_payload_slot_SteveGet_get_entry_get_bytes"
         "get_check:\n  %get_bytes = inttoptr i64 0 to ptr"
