@@ -51,7 +51,8 @@ class ScheduledAdmissionGuardTests(unittest.TestCase):
             "MODE: ${{ github.event_name == 'schedule' && 'admit-one' || inputs.mode }}",
             self.source)
         self.assertIn("test \"$live\" = \"$expected\"", self.source)
-        self.assertIn("gh issue edit \"$issue\" --repo \"$GH_REPO\" \\", self.source)
+        self.assertIn('gh issue edit "$issue" --repo "$GH_REPO" --add-label "atc: admitting"', self.source)
+        self.assertIn('gh issue edit "$issue" --repo "$GH_REPO" --remove-label "atc: staged"', self.source)
         self.assertIn("--add-label \"atc: admitting\"", self.source)
         self.assertNotIn("HAMSTER_PR_TOKEN", self.source)
         self.assertIn("    environment: atc-publisher", self.source)
