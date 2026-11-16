@@ -2570,11 +2570,11 @@ sourcePingThreeDisjointTerminalSchedules accepted rejected = do
               spentServer serverOld prefixState (request freeClient spentServer))
             unmatched)
           committed
-        spectator <- maybe (Left "partial-prefix affine spectator missing") Right
+        spectatorContext <- maybe (Left "partial-prefix affine spectator missing") Right
           (Map.lookup cs prefixState)
         assert
-          (affineBindings (protocolResources spectator) == affineBindings loaned
-           && sharedLoans (protocolResources spectator) == sharedLoans loaned)
+          (affineBindings (protocolResources spectatorContext) == affineBindings loaned
+           && sharedLoans (protocolResources spectatorContext) == sharedLoans loaned)
           "partial external partner selection altered the independent active loan"
         replayedPrefix <- foldM
           (\contexts (_, _, req) -> mapLeft show (run contexts req))
