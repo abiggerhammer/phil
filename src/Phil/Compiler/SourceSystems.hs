@@ -21,8 +21,29 @@ module Phil.Compiler.SourceSystems
   , VerifiedSteveGetStructural
   , VerifiedSteveGetStructuralError (..)
   , verifyOriginalSteveGetStructural
+  , VerifiedSteveGetCanonicalSource
+  , VerifiedSteveGetCanonicalError (..)
+  , produceVerifiedSteveGetCanonicalSource
+  , verifiedSteveGetCanonicalSourceProduction
   ) where
 
+import qualified Data.Map.Strict as Map
+import qualified Data.Set as Set
+import Data.Text (Text)
+import Phil.Core.Static (DeclarationKey (..), emptyStaticContext)
+import Phil.Core.Syntax (Mode (..), Ty (..))
+import Phil.Examples.Steve.ApplicationShell (steveGetShellEnvironment)
+import Phil.Examples.Steve.ProviderQualifications
+  ( SteveProviderQualifications
+  , SteveProviderQualificationError
+  , materializeSteveProviderQualifications
+  )
+import Phil.Surface.Check.Types
+  ( InitialBinding (..)
+  , SurfaceEnvironment (..)
+  , SurfaceShape (..)
+  , emptySurfaceEnvironment
+  )
 import Phil.Compiler.SourceArchitecture
   ( CheckedSourceArchitecture (..)
   , SourceArchitectureError
@@ -256,3 +277,80 @@ verifyOriginalSteveGetStructural production@(VerifiedSourceSystemsProduction
   fact <- mapLeft VerifiedSteveGetStructuralRejected
     (verifySteveGetStructural architecture program)
   pure (VerifiedSteveGetStructural production fact)
+
+
+-- | Private checked *source-qualification envelope*, not a runtime/ABI,
+-- fresh allocation, original named proof-use or P9 final authority.
+-- The constructor is deliberately not exported. The selected normal source
+-- result and the actual canonical PROV-016 claims are rederived together.
+data VerifiedSteveGetCanonicalSource = VerifiedSteveGetCanonicalSource
+  VerifiedSourceSystemsProduction
+  VerifiedSteveGetStructural
+  SteveProviderQualifications
+  deriving (Eq, Show)
+
+data VerifiedSteveGetCanonicalError
+  = SteveGetCanonicalQualificationRejected SteveProviderQualificationError
+  | SteveGetCanonicalShellRejected Text
+  | SteveGetCanonicalPrimitiveMissing Text
+  | SteveGetCanonicalEnvironmentMissing
+  | SteveGetCanonicalEnvironmentMismatch
+  | SteveGetCanonicalSourceRejected VerifiedSourceSystemsProductionError
+  | SteveGetCanonicalStructureRejected VerifiedSteveGetStructuralError
+  deriving (Eq, Show)
+
+verifiedSteveGetCanonicalSourceProduction
+  :: VerifiedSteveGetCanonicalSource -> VerifiedSourceSystemsProduction
+verifiedSteveGetCanonicalSourceProduction
+  (VerifiedSteveGetCanonicalSource production _ _) = production
+
+-- | Re-check the real raw source with a fixed selected SteveGet checker
+-- environment, rather than accepting a supplied outcome telescope or
+-- a publicly constructible "checked" provider-qualification record.
+--
+-- This proves only that the *static original source* was checked using the
+-- existing canonical Blob/Digest signatures and that their abstract provider
+-- qualifications were independently rederived. The actual linked native ABI,
+-- stable dynamic owner incarnation and SHA-256 outcome law are still unproved.
+produceVerifiedSteveGetCanonicalSource
+  :: SourceRootMap
+  -> SourceEnvironmentMap
+  -> SourceArchitectureRootMap
+  -> SourceCoreCorrespondencePolicy
+  -> PortableSourceBundle
+  -> CoreSystemsProgram
+  -> GenericRealizationContext
+  -> Either VerifiedSteveGetCanonicalError VerifiedSteveGetCanonicalSource
+produceVerifiedSteveGetCanonicalSource roots environments sites policy
+    portable program context = do
+  qualifications <- mapLeft SteveGetCanonicalQualificationRejected
+    materializeSteveProviderQualifications
+  shell <- mapLeft SteveGetCanonicalShellRejected steveGetShellEnvironment
+  let selectedNames = Set.fromList ["blob_read", "digest_check"]
+      selectedPrimitives =
+        Map.restrictKeys (surfacePrimitives shell) selectedNames
+  if Map.keysSet selectedPrimitives == selectedNames
+    then Right ()
+    else case Set.lookupMin
+        (Set.difference selectedNames (Map.keysSet selectedPrimitives)) of
+      Just missing -> Left (SteveGetCanonicalPrimitiveMissing missing)
+      Nothing -> Left (SteveGetCanonicalPrimitiveMissing "unknown")
+  let canonical = (emptySurfaceEnvironment emptyStaticContext)
+        { surfaceInitialBindings = Map.singleton "contentId"
+            (InitialBinding Unrestricted (TyOpaque "ContentId[SHA256]")
+              PlainShape)
+        , surfacePrimitives = selectedPrimitives
+        , surfaceExpectedProvides = Just TyUnit
+        , surfaceReleaseTransitions = surfaceReleaseTransitions shell
+        }
+  actual <- maybe (Left SteveGetCanonicalEnvironmentMissing) Right
+    (Map.lookup (DeclarationKey "decl:steve.get") environments)
+  if actual == canonical
+    then Right ()
+    else Left SteveGetCanonicalEnvironmentMismatch
+  production <- mapLeft SteveGetCanonicalSourceRejected $
+    produceVerifiedSourceSystems
+      roots environments sites policy portable program context
+  checked <- mapLeft SteveGetCanonicalStructureRejected
+    (verifyOriginalSteveGetStructural production)
+  Right (VerifiedSteveGetCanonicalSource production checked qualifications)
