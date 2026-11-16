@@ -26,8 +26,8 @@ Qed.
 (* Concrete Q/M framing associativity, independent of any parser tactic. *)
 Lemma p8_h7_qm_concat :
   forall (prefix value suffix : list nat),
-    ((prefix ++ [77]) ++ value) ++ suffix =
-    prefix ++ (77 :: (value ++ suffix)).
+    prefix ++ (77 :: (value ++ suffix)) =
+    (prefix ++ (77 :: value)) ++ suffix.
 Proof.
   intros prefix value suffix.
   induction prefix as [|byte rest IH].
