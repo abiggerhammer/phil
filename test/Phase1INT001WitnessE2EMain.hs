@@ -59,6 +59,9 @@ import Phil.Surface.Phase0 (phase0EnvironmentFor)
 import Phil.Surface.Syntax (SourcePoint (..), SourceSpan (..))
 import Phil.Systems.GenericLowering
   ( CoreSystemsProgram (..)
+  , CoreSystemsBlock (..)
+  , CoreSystemsFunction (..)
+  , CoreSystemsTerminator (..)
   , GenericRealizationContext (..)
   , GenericLoweringError (..)
   , coreSystemsProgramSemanticForm
@@ -178,6 +181,8 @@ main = do
         (uploadVerifiedProducer uploadClient uploadServer)
     , test "INT-001 Steve source-owned producer retains exact K/I and whole stage"
         (steveVerifiedProducer stevePut steveGet)
+    , test "P9-F2 SteveGet private structural read/borrow/call discriminator"
+        (p9SteveStructuralGate stevePut steveGet)
     , test "INT-001 source-owned producer refuses unlisted occurrence site"
         (verifiedProducerRejectsWrongSite uploadClient uploadServer)
     , test "P8-H2 actual Upload P2 rejects malformed realization semantics"
@@ -323,6 +328,70 @@ steveVerifiedProducer putSource getSource = do
     "source-owned producer lost Steve occurrence I"
   assert (fullStage == original)
     "source-owned producer changed complete Steve stage"
+
+
+-- P9-F2 G1 is a bounded structural discriminator only. It does NOT establish
+-- the dynamic read owner, live source loan, selected linked ABI or proof.
+p9SteveStructuralGate :: Text -> Text -> Either String ()
+p9SteveStructuralGate putSource getSource = do
+  produced <- verifiedSteveProduction putSource getSource
+  _ <- mapLeft show (verifyOriginalSteveGetStructural produced)
+  architecture <- checkedSteveArchitecture putSource getSource
+  fact <- mapLeft show (verifySteveGetStructural architecture steveCoreProgram)
+  assert (steveGetSourceContentBinder fact == "contentId"
+      && steveGetSourceOwnerBinder fact == "bytes"
+      && steveGetSourceViewBinder fact == "bytesView")
+    "P9 SteveGet structural source operands changed"
+
+  let changeTerminator transform core =
+        core { coreProgramFunctions =
+          Map.adjust
+            (\function -> function
+              { coreFunctionBlocks =
+                  Map.adjust
+                    (\block -> block
+                      { coreBlockTerminator =
+                          transform (coreBlockTerminator block) })
+                    "get.check" (coreFunctionBlocks function) })
+            "SteveGet" (coreProgramFunctions core)
+          }
+      swapOperands terminator = case terminator of
+        CoreSystemsRuntimeChoice name [first, second] site arms ->
+          CoreSystemsRuntimeChoice name [second, first] site arms
+        other -> other
+      wrongCore = changeTerminator swapOperands steveCoreProgram
+  case verifySteveGetStructural architecture wrongCore of
+    Left SteveGetCoreDigestSiteMismatch -> Right ()
+    other -> Left ("P9 accepted swapped Core arguments: " <> show other)
+
+  let duplicate = steveCoreProgram
+        { coreProgramFunctions =
+            Map.adjust
+              (\function -> function
+                { coreFunctionBlocks =
+                    Map.insert "get.unrelated-duplicate"
+                      (CoreSystemsBlock "get.unrelated-duplicate" []
+                        (CoreSystemsRuntimeChoice "DigestProvider.check"
+                          ["get.id", "get.bytes-view"] Nothing
+                          (Map.fromList
+                            [("accepted", "get.ok")
+                            ,("rejected", "get.integrity-failure")])))
+                      (coreFunctionBlocks function) })
+              "SteveGet" (coreProgramFunctions steveCoreProgram)
+        }
+  case verifySteveGetStructural architecture duplicate of
+    Left SteveGetCoreDigestNotUnique -> Right ()
+    other -> Left ("P9 accepted duplicate Core digest-check site: " <> show other)
+
+  let swappedSource = Text.replace
+        "digest_check(contentId, bytesView)"
+        "digest_check(bytesView, contentId)" getSource
+  assert (swappedSource /= getSource)
+    "P9 source operand negative did not change source text"
+  swappedArchitecture <- checkedSteveArchitecture putSource swappedSource
+  case verifySteveGetStructural swappedArchitecture steveCoreProgram of
+    Left SteveGetDigestOperandsMismatch -> Right ()
+    other -> Left ("P9 accepted swapped source digest operands: " <> show other)
 
 verifiedProducerRejectsWrongSite :: Text -> Text -> Either String ()
 verifiedProducerRejectsWrongSite clientSource serverSource = do
