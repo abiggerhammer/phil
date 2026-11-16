@@ -123,7 +123,7 @@ profileExpectation EscapeAlias = ("BSEX","-",0,0,"SOURCE_BORROW")
 profileExpectation MoveWhileLoaned = ("BS","-",0,0,"SOURCE_STRUCTURAL")
 -- The return prefix is checked by its owner-start, no-loan-close and
 -- native LinearCompletion class; it is not asserted to be a generic loop.
-profileExpectation ReturnInsideLoan = ("BSR","-",0,0,"SOURCE_LINEAR")
+profileExpectation ReturnInsideLoan = ("BS","-",0,0,"SOURCE_LINEAR")
 profileExpectation BorrowUnrestricted = ("B","-",0,0,"SOURCE_BORROW")
 
 outcomeTag :: Either SurfaceCheckError SurfaceCheckResult -> Text
