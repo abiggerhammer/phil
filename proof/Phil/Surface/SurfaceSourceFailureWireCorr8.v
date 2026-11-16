@@ -81,7 +81,7 @@ Definition expectedPrefix (profile : string)
   else if String.eqb profile "move-while-loaned" then
     Some ("BS","-","0","0","SOURCE_STRUCTURAL")
   else if String.eqb profile "return-inside-borrow" then
-    Some ("BSR","-","0","0","SOURCE_LINEAR")
+    Some ("BS","-","0","0","SOURCE_LINEAR")
   else if String.eqb profile "borrow-unrestricted" then
     Some ("B","-","0","0","SOURCE_BORROW")
   else None.
