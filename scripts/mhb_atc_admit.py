@@ -13,6 +13,7 @@ import re
 import sys
 
 from mhb_atc_stage import MARKER, parse_intent
+from mhb_atc_immutable import ADMITTED_PREFIX
 
 MARKER_FENCE = re.compile(r"~~~json\n(\{.*?\})\n~~~", re.DOTALL)
 SHA = re.compile(r"[a-f0-9]{40}\Z")
@@ -66,7 +67,8 @@ def plan(issues: list, prs: list) -> dict:
             raise ValueError("PR missing head ref")
         branch = head["ref"]
         label_names = names(pr)
-        if branch.startswith("hamster/staged/") or ACTIVE_LABEL in label_names:
+        if (branch.startswith("hamster/staged/") or
+            branch.startswith(ADMITTED_PREFIX) or ACTIVE_LABEL in label_names):
             number = pr.get("number")
             if type(number) is not int or number < 1:
                 raise ValueError("invalid active PR number")
