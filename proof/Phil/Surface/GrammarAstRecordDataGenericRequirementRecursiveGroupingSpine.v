@@ -1,6 +1,11 @@
+From Stdlib Require Import Lists.List Strings.String.
+
 From Phil.Surface Require Import
   GrammarAstRecordDataGenericRequirementPropositionSpine
   GrammarAstGenericRequirementsRecursiveGroupingSpine.
+
+Import ListNotations.
+Open Scope string_scope.
 
 (*
   Lift the recursively-grouped generic-requirements carrier into the current
