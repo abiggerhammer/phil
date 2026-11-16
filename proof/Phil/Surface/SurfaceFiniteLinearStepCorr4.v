@@ -40,8 +40,7 @@ Proof.
     + simpl.
       destruct (String.eqb query key) eqn:Hquery.
       * apply String.eqb_eq in Hquery. subst query.
-        rewrite Hkey. simpl.
-        now rewrite String.eqb_refl.
+        rewrite Hkey. simpl. reflexivity.
       * rewrite (IH owner query).
         now destruct (String.eqb query owner).
 Qed.
