@@ -442,9 +442,12 @@ Proof.
     { cbn [p8_e1_put_forms] in Bound.
       rewrite app_length in Bound. lia. }
     cbn [p8_f1_forms_loop p8_e1_forms_count p8_e1_put_forms].
-    (* The emitter's right-associated append is already in prefix form. *)
-    rewrite (Child form (p8_e1_put_forms rest ++ suffix)
-                   ValidForm BoundForm).
+    (* The unchanged E1 emitter and count loop may retain opposite
+       association after reduction; orient the child equation explicitly. *)
+    pose proof (Child form (p8_e1_put_forms rest ++ suffix)
+      ValidForm BoundForm) as ParsedChild.
+    first [rewrite ParsedChild |
+           rewrite <- app_assoc in ParsedChild; rewrite ParsedChild].
     rewrite (IH suffix ValidRest BoundRest).
     reflexivity.
 Qed.
