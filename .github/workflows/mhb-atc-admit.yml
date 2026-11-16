@@ -50,7 +50,7 @@ jobs:
         if: >-
           vars.MHB_ATC_IMMUTABLE_HEADS_ENABLED == 'true' &&
           (github.event_name == 'schedule' || inputs.mode == 'admit-one')
-        uses: actions/create-github-app-token@v3
+        uses: actions/create-github-app-token@64ab729a6294000f5aa4a4bc0b73d1f32bc45510 # v3
         with:
           client-id: ${{ vars.MHB_ATC_PUBLISHER_APP_CLIENT_ID }}
           private-key: ${{ secrets.MHB_ATC_PUBLISHER_APP_PRIVATE_KEY }}
