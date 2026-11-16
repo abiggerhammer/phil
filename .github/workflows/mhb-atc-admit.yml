@@ -65,6 +65,8 @@ jobs:
           IMMUTABLE_ENABLED: ${{ vars.MHB_ATC_IMMUTABLE_HEADS_ENABLED }}
           PUBLISHER_TOKEN: ${{ steps.publisher_token.outputs.token }}
           PUBLISHER_APP_ID: ${{ vars.MHB_ATC_PUBLISHER_APP_ID }}
+          PUBLISHER_APP_SLUG: ${{ vars.MHB_ATC_PUBLISHER_APP_SLUG }}
+          PUBLISHER_ACTION_SLUG: ${{ steps.publisher_token.outputs.app-slug }}
           PUBLISHER_RULESET_ID: ${{ vars.MHB_ATC_PUBLISHER_RULESET_ID }}
         shell: bash
         run: |
@@ -75,9 +77,20 @@ jobs:
               | jq -s 'add // []' > /tmp/atc-open-issues.json
             gh api --paginate "repos/$GH_REPO/pulls?state=open&per_page=100" \
               | jq -s 'add // []' > /tmp/atc-open-prs.json
+            # The no-write dry-run stays available before App provisioning.
+            # Actual publish attempts MUST account for ALL protected refs,
+            # including old closed issues and unlabelled orphan refs.
+            if [ "$MODE" = "admit-one" ] && [ "$IMMUTABLE_ENABLED" = "true" ]; then
+              . scripts/mhb_atc_inventory_snapshot.sh
+            else
+              # Non-authoritative dry-run; no admission allowed from this plan.
+              printf '{"decision":"inventory-validated","admission_clear":true,"active_refs":[]}\n' \
+                > /tmp/atc-inventory.json
+            fi
             python3 scripts/mhb_atc_admit.py \
               --issues /tmp/atc-open-issues.json \
-              --prs /tmp/atc-open-prs.json > /tmp/atc-plan.json
+              --prs /tmp/atc-open-prs.json \
+              --inventory /tmp/atc-inventory.json > /tmp/atc-plan.json
           }
 
           # A missing or inactive ruleset must never fall back to a mutable PR head.
@@ -101,6 +114,7 @@ jobs:
               echo "- mode: dry-run"
               echo "- decision: $decision"
               echo "- immutable publishing: NOT attempted"
+              echo "- protected namespace census: NOT authoritative in disabled dry-run"
               echo "- no PR created; no queue state changed"
             } >> "$GITHUB_STEP_SUMMARY"
             exit 0
@@ -112,6 +126,11 @@ jobs:
           }
           test -n "$PUBLISHER_TOKEN" || {
             echo "Dedicated publisher GitHub App token missing" >&2
+            exit 1
+          }
+          test -n "$PUBLISHER_APP_SLUG" && \
+            test "$PUBLISHER_ACTION_SLUG" = "$PUBLISHER_APP_SLUG" || {
+            echo "Authenticated publisher token App slug does not match expected" >&2
             exit 1
           }
           if [ "$decision" = "hold" ]; then
@@ -167,8 +186,10 @@ jobs:
             fi
           done
 
-          gh issue edit "$issue" --repo "$GH_REPO" \
-            --remove-label "atc: staged" --add-label "atc: admitting"
+          # Add first, then remove: a partial failure leaves a blocking
+          # dual-state record, never an unlabelled reservation.
+          gh issue edit "$issue" --repo "$GH_REPO" --add-label "atc: admitting"
+          gh issue edit "$issue" --repo "$GH_REPO" --remove-label "atc: staged"
           gh issue comment "$issue" --repo "$GH_REPO" \
             --body "ATC immutable admission reserved: staged $branch at $expected, protected PR head $admitted. An orphan ref blocks automatic requeue."
 
@@ -208,12 +229,13 @@ jobs:
           python3 scripts/mhb_atc_immutable.py verify-pr \
             --issue "$issue" --lane "$lane" --staged "$branch" \
             --sha "$expected" --repo "$GH_REPO" \
+            --publisher-json /tmp/atc-publisher-identity.json \
             --pr-json /tmp/atc-created-pr.json
 
           gh pr edit "$number" --repo "$GH_REPO" \
             --add-label "atc: admitted" --add-label "lane: $lane"
-          gh issue edit "$issue" --repo "$GH_REPO" \
-            --remove-label "atc: admitting" --add-label "atc: admitted"
+          gh issue edit "$issue" --repo "$GH_REPO" --add-label "atc: admitted"
+          gh issue edit "$issue" --repo "$GH_REPO" --remove-label "atc: admitting"
 
           {
             echo "### MHB-ATC immutable admission"
