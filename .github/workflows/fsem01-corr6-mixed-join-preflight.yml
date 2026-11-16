@@ -135,6 +135,7 @@ jobs:
             proof/Phil/Surface/SurfaceObservationWire.v \
             proof/Phil/Surface/SurfaceFiniteContextFrame.v \
             proof/Phil/Surface/SurfaceFiniteMixedJoinCorr6.v \
+            proof/Phil/Surface/SurfaceFiniteMixedJoinSoundCorr6.v \
             proof/Phil/Surface/SurfaceSourceMixedJoinWireCorr6.v
           do
             rocq c -Q proof/Phil Phil "$file"
@@ -194,6 +195,7 @@ jobs:
             proof/Phil/Surface/SurfaceObservationWire.v \
             proof/Phil/Surface/SurfaceFiniteContextFrame.v \
             proof/Phil/Surface/SurfaceFiniteMixedJoinCorr6.v \
+            proof/Phil/Surface/SurfaceFiniteMixedJoinSoundCorr6.v \
             proof/Phil/Surface/SurfaceSourceMixedJoinWireCorr6.v
           do
             rocq c -Q proof/Phil Phil "$file"
