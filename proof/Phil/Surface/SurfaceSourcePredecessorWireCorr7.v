@@ -53,8 +53,8 @@ Proof. intros [a b c d e f g h]; reflexivity. Qed.
 
 Definition ofFields (fields : list string) : option SourcePred :=
   match fields with
-  | [sha;root;flag;payload;profile;left;right;outcome] =>
-      Some (mkSourcePred sha root flag payload profile left right outcome)
+  | [sha;root;flag;payload;profile;lhsView;rhsView;disposition] =>
+      Some (mkSourcePred sha root flag payload profile lhsView rhsView disposition)
   | _ => None
   end.
 
@@ -115,9 +115,9 @@ Definition categoryAndOutcomeValid (ty : Syntax.Ty) (item : SourcePred)
     : bool :=
   match expectedCategories (sourceProfile item) with
   | None => false
-  | Some (left,right) =>
-      String.eqb (sourceLeft item) left &&
-      String.eqb (sourceRight item) right &&
+  | Some (lhsView,rhsView) =>
+      String.eqb (sourceLeft item) lhsView &&
+      String.eqb (sourceRight item) rhsView &&
       String.eqb (sourceDisposition item)
         (predictedDisposition ty (sourceProfile item))
   end.
