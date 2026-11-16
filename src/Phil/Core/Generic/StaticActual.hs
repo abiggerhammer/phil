@@ -11,6 +11,7 @@ module Phil.Core.Generic.StaticActual
   ) where
 
 import Data.List (foldl')
+import qualified Data.Map.Strict as Map
 import qualified Data.Set as Set
 import Data.Text (Text)
 import Phil.Core.Generic (GenericStaticParameterKey)
@@ -22,7 +23,7 @@ import Phil.Core.GenericStaticKindKernelBridge
   , certifiedDirectStaticActualDecision
   , certifiedReferencedStaticActualDecision
   )
-import Phil.Core.Static (SemanticForm)
+import Phil.Core.Static (SemanticForm (..))
 
 data GenericStaticKind
   = GenericTypeKind
@@ -85,6 +86,7 @@ data GenericStaticKindError
       GenericStaticKind
       Text
       [SemanticForm]
+  | GenericStaticMalformedSemanticForm GenericStaticParameterKey
   | GenericStaticKindKernelDisagreement
   deriving (Eq, Show)
 
@@ -134,6 +136,9 @@ checkActual references parameter actual =
     parameterKey = genericStaticParameterKey parameter
     expectedKind = genericStaticParameterKind parameter
     checked semanticForm = do
+      if nativeSemanticFormValid semanticForm
+        then Right ()
+        else Left (GenericStaticMalformedSemanticForm parameterKey)
       let result = CheckedGenericStaticActual
             { checkedGenericStaticParameterKey = parameterKey
             , checkedGenericStaticKind = expectedKind
@@ -144,6 +149,22 @@ checkActual references parameter actual =
       case certifiedCheckedStaticActualShapeDecision parameterKeyExact kindExact of
         CertifiedCheckedStaticActualShapeAccepted -> Right result
         _ -> Left GenericStaticKindKernelDisagreement
+
+-- | Ensure a selected caller-supplied static actual has a recursively valid
+-- native representation before returning any checked evidence. This tests the
+-- ORIGINAL Set/Map trees (including their cached sizes and ordering); it does
+-- not repair malformed trees via re-sorting. As in P8-H2, correctness of the
+-- selected containers validators remains an external library obligation.
+-- Totality and resource limits apply only to finite, successfully evaluated
+-- native values; this is not a native-to-Rocq equivalence theorem.
+nativeSemanticFormValid :: SemanticForm -> Bool
+nativeSemanticFormValid form = case form of
+  SemanticAtom _ -> True
+  SemanticOrdered values -> all nativeSemanticFormValid values
+  SemanticUnordered values ->
+    all nativeSemanticFormValid (Set.toAscList values) && Set.valid values
+  SemanticRecord fields ->
+    all nativeSemanticFormValid (Map.elems fields) && Map.valid fields
 
 resolveReference
   :: GenericStaticParameterKey
