@@ -3,7 +3,9 @@
 module Main (main) where
 
 import qualified Data.Map.Strict as Map
+import qualified Data.Map.Internal as MapInternal
 import qualified Data.Set as Set
+import qualified Data.Set.Internal as SetInternal
 import Data.Text (Text)
 import qualified Data.Text as Text
 import qualified Data.Text.IO as TextIO
@@ -59,6 +61,9 @@ import Phil.Surface.Phase0 (phase0EnvironmentFor)
 import Phil.Surface.Syntax (SourcePoint (..), SourceSpan (..))
 import Phil.Systems.GenericLowering
   ( CoreSystemsProgram (..)
+  , CoreSystemsFunction (..)
+  , CoreSystemsBlock (..)
+  , CoreSystemsTerminator (..)
   , GenericRealizationContext (..)
   , GenericLoweringError (..)
   , coreSystemsProgramSemanticForm
@@ -182,6 +187,10 @@ main = do
         (verifiedProducerRejectsWrongSite uploadClient uploadServer)
     , test "P8-H2 actual Upload P2 rejects malformed realization semantics"
         (p8H2UploadRejectsMalformedContext uploadClient uploadServer)
+    , test "P8-H6 Upload P2 rejects nine original malformed Core/context trees"
+        (p8H6UploadNativeIntakeRejects uploadClient uploadServer)
+    , test "P8-H6 Steve P2 rejects original malformed runtime-choice arms"
+        (p8H6SteveNativeIntakeRejects stevePut steveGet)
     , test "P6 Upload whole StageClosure built from sealed ordinary source"
         (uploadVerifiedStageClosure uploadClient uploadServer)
     , test "P6 Steve whole StageClosure built from sealed ordinary source"
@@ -383,6 +392,190 @@ p8H2UploadRejectsMalformedContext clientSource serverSource = do
       (SourceSystemsLoweringRejected GenericLoweringMalformedContextSemantics)) ->
         Right ()
     other -> Left ("malformed Upload context crossed P2: " <> show other)
+
+-- Regression for H5: the original native Map/Set trees have false cached
+-- sizes but identical ascending entries and EVERY original lookup. This
+-- guards against the incidental lookup failures observed in H3.
+p8H6CorruptCachedMap :: Map.Map k v -> Map.Map k v
+p8H6CorruptCachedMap tree = case tree of
+  MapInternal.Tip -> tree
+  MapInternal.Bin n key value left right ->
+    MapInternal.Bin (n + 1) key value left right
+
+p8H6CorruptCachedSet :: Set.Set a -> Set.Set a
+p8H6CorruptCachedSet tree = case tree of
+  SetInternal.Tip -> tree
+  SetInternal.Bin n key left right ->
+    SetInternal.Bin (n + 1) key left right
+
+p8H6MapWitness
+  :: (Ord k, Eq v) => String -> Map.Map k v -> Map.Map k v -> Either String ()
+p8H6MapWitness label original invalid = do
+  assert (Map.valid original && not (Map.valid invalid))
+    (label <> " did not have a malformed native tree")
+  assert (Map.toAscList original == Map.toAscList invalid)
+    (label <> " changed the original sorted entries")
+  assert (all (\(key, value) -> Map.lookup key invalid == Just value)
+      (Map.toAscList original))
+    (label <> " changed an original lookup")
+
+p8H6SetWitness
+  :: Ord a => String -> Set.Set a -> Set.Set a -> Either String ()
+p8H6SetWitness label original invalid = do
+  assert (Set.valid original && not (Set.valid invalid))
+    (label <> " did not have a malformed native tree")
+  assert (Set.toAscList original == Set.toAscList invalid)
+    (label <> " changed the original sorted entries")
+  assert (all (\key -> Set.member key invalid) (Set.toAscList original))
+    (label <> " changed original membership")
+
+p8H6UploadNativeIntakeRejects :: Text -> Text -> Either String ()
+p8H6UploadNativeIntakeRejects clientSource serverSource = do
+  _ <- verifiedUploadProduction clientSource serverSource
+  clientEnvironment <- mapLeft show (phase0EnvironmentFor "client.phil")
+  serverEnvironment <- mapLeft show (phase0EnvironmentFor "server.phil")
+  let originalCore = uploadCoreProgram
+      originalContext = uploadRealizationContext
+      originalFunctions = coreProgramFunctions originalCore
+      originalClient = originalFunctions Map.! "UploadClient"
+      originalValues = coreFunctionValues originalClient
+      originalBlocks = coreFunctionBlocks originalClient
+      originalFacts = coreProgramFacts originalCore
+
+      badDecisions = p8H6CorruptCachedMap
+        (genericContextDecisions originalContext)
+      badSites = p8H6CorruptCachedMap
+        (genericContextRuntimeSites originalContext)
+      badRealizationRefs = p8H6CorruptCachedSet
+        (genericContextRealizationRefs originalContext)
+      qualifiedContext = originalContext
+        { genericContextQualificationRefs = Set.singleton "h6.qualification.control" }
+      badQualifiedRefs = p8H6CorruptCachedSet
+        (genericContextQualificationRefs qualifiedContext)
+      assumedContext = originalContext
+        { genericContextAssumptions = Set.singleton "h6.assumption.control" }
+      badAssumptions = p8H6CorruptCachedSet
+        (genericContextAssumptions assumedContext)
+
+      badFacts = p8H6CorruptCachedMap originalFacts
+      badFunctions = p8H6CorruptCachedMap originalFunctions
+      badValues = p8H6CorruptCachedMap originalValues
+      badBlocks = p8H6CorruptCachedMap originalBlocks
+      withBadValues = originalCore
+        { coreProgramFunctions = Map.insert "UploadClient"
+            (originalClient { coreFunctionValues = badValues }) originalFunctions }
+      withBadBlocks = originalCore
+        { coreProgramFunctions = Map.insert "UploadClient"
+            (originalClient { coreFunctionBlocks = badBlocks }) originalFunctions }
+
+      uploadP2 program context = produceVerifiedSourceSystems
+        uploadRoots
+        (Map.fromList
+          [ (uploadClientDeclaration, clientEnvironment)
+          , (uploadServerDeclaration, serverEnvironment) ])
+        (Map.singleton "program:upload" (InstanceLineageSiteId "instance.upload"))
+        uploadPolicy (uploadBundle clientSource serverSource)
+        program context
+      expectReject path validCore validContext invalidCore invalidContext = do
+        case uploadP2 validCore validContext of
+          Right _ -> Right ()
+          Left err -> Left ("H6 valid Upload control failed for " <>
+            show path <> ": " <> show err)
+        case uploadP2 invalidCore invalidContext of
+          Left (VerifiedSourceLoweringRejected
+            (SourceSystemsLoweringRejected
+              (GenericLoweringMalformedNativeContainer actualPath))) ->
+                assert (actualPath == path)
+                  ("H6 P2 rejected wrong original field: " <> show actualPath)
+          other -> Left ("H6 P2 admitted malformed " <>
+            show path <> ": " <> show other)
+
+  p8H6MapWitness "context.decisions"
+    (genericContextDecisions originalContext) badDecisions
+  p8H6MapWitness "context.runtime_sites"
+    (genericContextRuntimeSites originalContext) badSites
+  p8H6SetWitness "context.realization_refs"
+    (genericContextRealizationRefs originalContext) badRealizationRefs
+  p8H6SetWitness "context.qualification_refs"
+    (genericContextQualificationRefs qualifiedContext) badQualifiedRefs
+  p8H6SetWitness "context.assumptions"
+    (genericContextAssumptions assumedContext) badAssumptions
+  p8H6MapWitness "core.facts" originalFacts badFacts
+  p8H6MapWitness "core.functions" originalFunctions badFunctions
+  p8H6MapWitness "core.functions.UploadClient.values" originalValues badValues
+  p8H6MapWitness "core.functions.UploadClient.blocks" originalBlocks badBlocks
+
+  let cases =
+        [ ("context.decisions", originalCore, originalContext,
+            originalCore, originalContext { genericContextDecisions = badDecisions })
+        , ("context.runtime_sites", originalCore, originalContext,
+            originalCore, originalContext { genericContextRuntimeSites = badSites })
+        , ("context.realization_refs", originalCore, originalContext,
+            originalCore, originalContext { genericContextRealizationRefs = badRealizationRefs })
+        , ("context.qualification_refs", originalCore, qualifiedContext,
+            originalCore, qualifiedContext { genericContextQualificationRefs = badQualifiedRefs })
+        , ("context.assumptions", originalCore, assumedContext,
+            originalCore, assumedContext { genericContextAssumptions = badAssumptions })
+        , ("core.facts", originalCore, originalContext,
+            originalCore { coreProgramFacts = badFacts }, originalContext)
+        , ("core.functions", originalCore, originalContext,
+            originalCore { coreProgramFunctions = badFunctions }, originalContext)
+        , ("core.functions.UploadClient.values", originalCore, originalContext,
+            withBadValues, originalContext)
+        , ("core.functions.UploadClient.blocks", originalCore, originalContext,
+            withBadBlocks, originalContext)
+        ]
+  mapM_ (\(path, validCore, validContext, invalidCore, invalidContext) ->
+    expectReject path validCore validContext invalidCore invalidContext) cases
+
+  -- The public prepared-source producer also rejects malformed Core before
+  -- invoking its source/Core equivalence or branch policy checks.
+  architecture <- checkedUploadArchitecture clientSource serverSource
+  case prepareSourceSystemsAdmission uploadPolicy architecture
+      (originalCore { coreProgramFunctions = badFunctions }) of
+    Left (SourceSystemsLoweringRejected
+      (GenericLoweringMalformedNativeContainer "core.functions")) -> Right ()
+    other -> Left ("H6 prepared admission mishandled malformed functions: " <>
+      show other)
+
+p8H6SteveNativeIntakeRejects :: Text -> Text -> Either String ()
+p8H6SteveNativeIntakeRejects putSource getSource = do
+  context <- steveQualifiedRealizationContext
+  _ <- verifiedSteveProduction putSource getSource
+  let program = steveCoreProgram
+      functions = coreProgramFunctions program
+      putFunction = functions Map.! "StevePut"
+      blocks = coreFunctionBlocks putFunction
+      installBlock = blocks Map.! "put.install"
+      steveP2 core = produceVerifiedSourceSystems
+        steveRoots steveEnvironments
+        (Map.singleton "program:steve" (InstanceLineageSiteId "instance.steve"))
+        stevePolicy (steveBundle putSource getSource)
+        core context
+  case coreBlockTerminator installBlock of
+    CoreSystemsRuntimeChoice runtimeName inputs maybeSite arms -> do
+      let invalidArms = p8H6CorruptCachedMap arms
+          modifiedInstall = installBlock
+            { coreBlockTerminator =
+                CoreSystemsRuntimeChoice runtimeName inputs maybeSite invalidArms }
+          modifiedPut = putFunction
+            { coreFunctionBlocks = Map.insert "put.install" modifiedInstall blocks }
+          modifiedCore = program
+            { coreProgramFunctions = Map.insert "StevePut" modifiedPut functions }
+      p8H6MapWitness "core.functions.StevePut.blocks.put.install.runtime_choice_arms"
+        arms invalidArms
+      case steveP2 program of
+        Right _ -> Right ()
+        other -> Left ("H6 original Steve control rejected: " <> show other)
+      case steveP2 modifiedCore of
+        Left (VerifiedSourceLoweringRejected
+          (SourceSystemsLoweringRejected
+            (GenericLoweringMalformedNativeContainer actualPath))) ->
+              assert (actualPath ==
+                "core.functions.StevePut.blocks.put.install.runtime_choice_arms")
+                ("H6 Steve P2 rejected wrong native field: " <> show actualPath)
+        other -> Left ("H6 malformed Steve arms reached P2: " <> show other)
+    other -> Left ("H6 expected original Steve runtime choice: " <> show other)
 
 verifiedSteveProduction
   :: Text -> Text -> Either String VerifiedSourceSystemsProduction
