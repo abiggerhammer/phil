@@ -99,3 +99,34 @@ jobs:
           jq -r '("Ruleset live revision: " + (.updated_at // "MISSING")),
                  ("Bypass field visible to workflow token: " + (has("bypass_actors")|tostring))' \
             /tmp/atc-reader-ruleset.json >> "$GITHUB_STEP_SUMMARY"
+      - name: Verify configured publisher App and bot identity (read-only)
+        env:
+          GH_TOKEN: ${{ github.token }}
+          APP_SLUG: ${{ vars.MHB_ATC_PUBLISHER_APP_SLUG }}
+          APP_ID: ${{ vars.MHB_ATC_PUBLISHER_APP_ID }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          # This is ordinary read-only GITHUB_TOKEN, never the App private key.
+          [[ "$APP_SLUG" =~ ^[a-zA-Z0-9][a-zA-Z0-9-]*$ ]] || {
+            echo "Missing or malformed MHB_ATC_PUBLISHER_APP_SLUG" >&2; exit 1;
+          }
+          [[ "$APP_ID" =~ ^[0-9]+$ ]] || {
+            echo "Missing or malformed MHB_ATC_PUBLISHER_APP_ID" >&2; exit 1;
+          }
+          gh api "apps/$APP_SLUG" > /tmp/atc-verified-app-metadata.json
+          encoded_bot="$(BOT="${APP_SLUG}[bot]" python3 -c 'import os, urllib.parse; print(urllib.parse.quote(os.environ["BOT"], safe=""))')"
+          gh api "users/$encoded_bot" > /tmp/atc-verified-bot-metadata.json
+          # Use the exact validation also used by admission/reconciliation.
+          # It pins numeric App ID to the reviewed owner ruleset attestation
+          # and authenticates GitHub's actual App slug and bot account.
+          python3 scripts/mhb_atc_immutable.py publisher \
+            --app-json /tmp/atc-verified-app-metadata.json \
+            --bot-json /tmp/atc-verified-bot-metadata.json \
+            --app-slug "$APP_SLUG" --app-id "$APP_ID" \
+            > /tmp/atc-verified-publisher.json
+          jq -r '[
+            "- Publisher App: \(.app_slug) (App ID \(.app_id))",
+            "- Bot account: \(.bot_login) (GitHub user ID \(.bot_id))",
+            "- Probe used read-only GitHub metadata; no App key or publisher token"
+          ] | .[]' /tmp/atc-verified-publisher.json >> "$GITHUB_STEP_SUMMARY"
