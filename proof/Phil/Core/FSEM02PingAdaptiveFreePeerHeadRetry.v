@@ -1,5 +1,5 @@
 From Stdlib Require Import Arith.PeanoNat.
-From Phil.Core Require Import FSEM02PingAdaptiveHalfCloseSuffix.
+From Phil.Core Require Import FSEM02PingMixedPrefixFault FSEM02PingAdaptiveHalfCloseSuffix.
 
 (* FSEM-02, non-normative finite phase bridge. Deliberately injected End
    on a still-free peer does not make a source-checked Ping admissible.
