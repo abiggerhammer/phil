@@ -1,0 +1,121 @@
+name: MHB ATC Publisher Token Preflight (Manual, No Writes)
+
+# Bounded commissioning diagnostic. This workflow performs ONLY reads; the
+# minted App installation token has the exact future publisher's scopes,
+# but no ref, PR, issue, label, ruleset or setting mutation is performed.
+# Keep this on main only and never call it from untrusted staged branches.
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: mhb-atc-publisher-token-preflight
+  cancel-in-progress: false
+
+jobs:
+  publisher-token-readonly-check:
+    if: >-
+      github.event_name == 'workflow_dispatch' &&
+      github.ref == 'refs/heads/main'
+    runs-on: ubuntu-24.04
+    # The key is an environment secret and this environment permits main only.
+    environment: atc-publisher
+    steps:
+      - name: Checkout trusted main
+        uses: actions/checkout@v4
+        with:
+          ref: main
+          persist-credentials: false
+
+      - name: Confirm automation OFF and pinned policy/bot identity
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          PUBLISHER_APP_ID: ${{ vars.MHB_ATC_PUBLISHER_APP_ID }}
+          PUBLISHER_APP_SLUG: ${{ vars.MHB_ATC_PUBLISHER_APP_SLUG }}
+          PUBLISHER_RULESET_ID: ${{ vars.MHB_ATC_PUBLISHER_RULESET_ID }}
+          AUTO_ADMIT_ENABLED: ${{ vars.MHB_ATC_AUTO_ADMIT_ENABLED }}
+          STAGE_BRIDGE_ENABLED: ${{ vars.MHB_ATC_PHASE2_STAGE_BRIDGE_ENABLED }}
+          IMMUTABLE_ENABLED: ${{ vars.MHB_ATC_IMMUTABLE_HEADS_ENABLED }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          # A preflight never doubles as authorization to activate admission.
+          for enabled in "$AUTO_ADMIT_ENABLED" "$STAGE_BRIDGE_ENABLED" "$IMMUTABLE_ENABLED"; do
+            test "$enabled" != "true" || {
+              echo "Stop: ATC runtime activation must remain OFF for this preflight." >&2
+              exit 1
+            }
+          done
+
+          # Use exactly the same bot-identity helper as the trusted controller;
+          # ordinary GITHUB_TOKEN reads user metadata, NOT the private App API.
+          . scripts/mhb_atc_publisher_identity_snapshot.sh
+
+          # Version-pinned owner ruleset attestation; no admin token necessary.
+          test -n "$PUBLISHER_RULESET_ID"
+          gh api "repos/$GH_REPO/rulesets/$PUBLISHER_RULESET_ID" \
+            > /tmp/atc-publisher-preflight-ruleset.json
+          python3 scripts/mhb_atc_immutable.py ruleset \
+            --ruleset-json /tmp/atc-publisher-preflight-ruleset.json \
+            --repo "$GH_REPO" --app-id "$PUBLISHER_APP_ID" \
+            --ruleset-id "$PUBLISHER_RULESET_ID" \
+            > /tmp/atc-publisher-preflight-policy-result.json
+
+      - name: Mint the exact scoped dedicated App installation token
+        id: publisher_token
+        uses: actions/create-github-app-token@64ab729a6294000f5aa4a4bc0b73d1f32bc45510 # v3
+        with:
+          # Intentionally omit owner/repositories: scope defaults to this repo.
+          client-id: ${{ vars.MHB_ATC_PUBLISHER_APP_CLIENT_ID }}
+          private-key: ${{ secrets.MHB_ATC_PUBLISHER_APP_PRIVATE_KEY }}
+          permission-contents: write
+          permission-pull-requests: write
+
+      - name: Verify authenticated App slug and *only* Phil installation scope
+        env:
+          GH_TOKEN: ${{ steps.publisher_token.outputs.token }}
+          GH_REPO: ${{ github.repository }}
+          ACTION_APP_SLUG: ${{ steps.publisher_token.outputs.app-slug }}
+          PINNED_APP_SLUG: ${{ vars.MHB_ATC_PUBLISHER_APP_SLUG }}
+          INSTALLATION_ID: ${{ steps.publisher_token.outputs.installation-id }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -n "$GH_TOKEN"
+          test -n "$ACTION_APP_SLUG" && test "$ACTION_APP_SLUG" = "$PINNED_APP_SLUG" || {
+            echo "The authenticated App token belongs to the wrong GitHub App." >&2
+            exit 1
+          }
+          [[ "$INSTALLATION_ID" =~ ^[1-9][0-9]*$ ]] || {
+            echo "The token action did not authenticate an installation ID." >&2
+            exit 1
+          }
+
+          # This is a read-only operation performed WITH the actual publisher
+          # installation token. It must enumerate this one repository only.
+          gh api "installation/repositories" > /tmp/atc-publisher-preflight-repositories.json
+          jq -e --arg repo "$GH_REPO" '
+            .total_count == 1 and
+            (.repositories | type == "array" and length == 1) and
+            .repositories[0].full_name == $repo
+          ' /tmp/atc-publisher-preflight-repositories.json > /dev/null || {
+            echo "Publisher token repository scope is not exactly the Phil repository." >&2
+            exit 1
+          }
+          {
+            echo "### MHB ATC protected publisher — credential preflight"
+            echo "- source: trusted main"
+            echo "- repository: $GH_REPO (sole token-accessible repository)"
+            echo "- authenticated publisher App slug: $ACTION_APP_SLUG"
+            echo "- installation ID: $INSTALLATION_ID"
+            echo "- ruleset: pinned source version validated"
+            echo "- token: minted with publisher Contents/PR write scopes, automatically revoked at job end"
+            echo "- GitHub operations performed: READ ONLY"
+            echo "- protected refs created/modified/deleted: 0"
+            echo "- PRs created/modified: 0"
+            echo "- runtime switches: OFF"
+            echo "- commissioning status: credential preflight only; worker and live publication tests still required"
+          } >> "$GITHUB_STEP_SUMMARY"
