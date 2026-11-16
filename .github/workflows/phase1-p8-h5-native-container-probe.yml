@@ -1,0 +1,48 @@
+name: P8-H5 one-shot preserved-lookup native container probe
+
+# Draft PR only. Never merge this experimental workflow or generator.
+on:
+  pull_request:
+    paths:
+      - '.github/workflows/phase1-p8-h5-native-container-probe.yml'
+      - 'scripts/ci/p8h5_generate_probe.py'
+
+permissions:
+  contents: read
+
+jobs:
+  native-admission:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 70
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          persist-credentials: false
+      - uses: haskell-actions/setup@0f8e8c99d88aeb3fbfd523f1ef2c6f762d10d64d
+        with:
+          ghc-version: '9.6.7'
+          cabal-version: 'latest'
+      - name: Record exact checkout and strict build
+        shell: bash
+        run: |
+          set -euo pipefail
+          git rev-parse HEAD
+          git rev-parse HEAD^{tree}
+          ghc --numeric-version
+          cabal --numeric-version
+          cabal build all --enable-tests --ghc-options=-Werror
+      - name: Generate actual Upload and Steve temp harness without repo edits
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 scripts/ci/p8h5_generate_probe.py
+          git diff --exit-code
+          test -z "$(git status --porcelain=v1)"
+      - name: Compile and run native P2-P6-P7 preserved-lookup probes
+        shell: bash
+        run: |
+          set -euo pipefail
+          cabal exec -- ghc -isrc -itest -Wall -Werror -fno-code /tmp/PhilP8H5NativeMain.hs
+          cabal exec -- runghc -isrc -itest -Wall -Werror /tmp/PhilP8H5NativeMain.hs
+          git diff --exit-code
+          test -z "$(git status --porcelain=v1)"
