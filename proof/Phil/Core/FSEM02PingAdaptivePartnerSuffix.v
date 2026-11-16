@@ -1,5 +1,5 @@
 From Stdlib Require Import Arith.PeanoNat Bool.Bool.
-From Phil.Core Require Import FSEM02PingPartialPartnerPrefix.
+From Phil.Core Require Import FSEM02PingMixedPrefixStalePing FSEM02PingPartialPartnerPrefix.
 
 (* FSEM-02 NON-NORMATIVE. Dual source-checked heads, activated participants,
    root/protocol/partner-selection authority, scheduler and disposal are
