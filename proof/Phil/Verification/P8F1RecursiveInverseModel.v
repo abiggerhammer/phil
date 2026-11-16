@@ -522,6 +522,20 @@ Proof.
          length (p8_e1_put_forms xs ++ suffix)) = true).
       { apply Nat.leb_le.
         apply p8_f1_forms_count_fits_canonical_wire. }
+      (* Associate the emitted frame with its payload before exposing
+         the immutable E1 parser branch by definitional conversion. *)
+      replace (p8_e1_put_form (P8D2Ordered xs) ++ suffix)
+        with (111 :: (p8_e1_frame_count (p8_e1_forms_count xs) ++
+                       (p8_e1_put_forms xs ++ suffix))).
+      2: { cbn [p8_e1_put_form app].
+           rewrite <- app_assoc. reflexivity. }
+      (* Associate the emitted frame with its payload before exposing
+         the immutable E1 parser branch by definitional conversion. *)
+      replace (p8_e1_put_form (P8D2Unordered xs) ++ suffix)
+        with (117 :: (p8_e1_frame_count (p8_e1_forms_count xs) ++
+                       (p8_e1_put_forms xs ++ suffix))).
+      2: { cbn [p8_e1_put_form app].
+           rewrite <- app_assoc. reflexivity. }
       change
         (match p8_e1_read_count
           (p8_e1_frame_count (p8_e1_forms_count xs) ++
@@ -585,6 +599,13 @@ Proof.
          length (p8_e1_put_fields fields ++ suffix)) = true).
       { apply Nat.leb_le.
         apply p8_f1_fields_count_fits_canonical_wire. }
+      (* Associate the emitted frame with its payload before exposing
+         the immutable E1 parser branch by definitional conversion. *)
+      replace (p8_e1_put_form (P8D2Record fields) ++ suffix)
+        with (114 :: (p8_e1_frame_count (p8_e1_fields_count fields) ++
+                       (p8_e1_put_fields fields ++ suffix))).
+      2: { cbn [p8_e1_put_form app].
+           rewrite <- app_assoc. reflexivity. }
       change
         (match p8_e1_read_count
           (p8_e1_frame_count (p8_e1_fields_count fields) ++
