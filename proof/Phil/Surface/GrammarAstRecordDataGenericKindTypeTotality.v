@@ -382,7 +382,9 @@ Proof.
   exists
     {| phase1_generic_params_kind_type_spine_first := refined_first;
        phase1_generic_params_kind_type_spine_rest := refined_rest |}.
-  cbn.
+  unfold phase1_surface_normalize_generic_params_kind_type_spine.
+  cbn [phase1_generic_params_spine_first
+       phase1_generic_params_spine_rest].
   rewrite Hrefined_first, Hrefined_rest.
   reflexivity.
 Qed.
