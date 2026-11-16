@@ -30,7 +30,6 @@ module Phil.Compiler.SourceSystems
 import qualified Data.Map.Strict as Map
 import qualified Data.Set as Set
 import Data.Text (Text)
-import Phil.Core.Static (DeclarationKey (..), emptyStaticContext)
 import Phil.Core.Syntax (Mode (..), Ty (..))
 import Phil.Examples.Steve.ApplicationShell (steveGetShellEnvironment)
 import Phil.Examples.Steve.ProviderQualifications
@@ -74,7 +73,9 @@ import Phil.Compiler.SourceCorePolicy
   , verifySteveGetStructural
   )
 import Phil.Core.Static
-  ( ArchitectureInstanceDescriptor
+  ( DeclarationKey (..)
+  , emptyStaticContext
+  , ArchitectureInstanceDescriptor
   , ArchitectureInstanceIdentity
   , SemanticForm
   , checkedArchitectureDescriptor
