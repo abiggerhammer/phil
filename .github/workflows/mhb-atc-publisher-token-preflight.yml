@@ -44,7 +44,7 @@ jobs:
           set -euo pipefail
           # A preflight never doubles as authorization to activate admission.
           for enabled in "$AUTO_ADMIT_ENABLED" "$STAGE_BRIDGE_ENABLED" "$IMMUTABLE_ENABLED"; do
-            test "$enabled" != "true" || {
+            test "${enabled,,}" != "true" || {
               echo "Stop: ATC runtime activation must remain OFF for this preflight." >&2
               exit 1
             }
@@ -112,7 +112,7 @@ jobs:
             echo "- authenticated publisher App slug: $ACTION_APP_SLUG"
             echo "- installation ID: $INSTALLATION_ID"
             echo "- ruleset: pinned source version validated"
-            echo "- token: minted with publisher Contents/PR write scopes, automatically revoked at job end"
+            echo "- token: minted with publisher Contents/PR write scopes; automatic revocation enabled, confirm post-action cleanup log"
             echo "- GitHub operations performed: READ ONLY"
             echo "- protected refs created/modified/deleted: 0"
             echo "- PRs created/modified: 0"
