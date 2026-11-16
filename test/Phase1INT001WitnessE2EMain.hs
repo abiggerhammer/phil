@@ -341,6 +341,16 @@ p9SteveStructuralGate putSource getSource = do
     stevePolicy (steveBundle putSource getSource)
     steveCoreProgram context
   let produced = verifiedSteveGetCanonicalSourceProduction checkedCanonical
+      conditions = verifiedSteveGetCanonicalSelectedAssumptions checkedCanonical
+      expectedConditions = Set.fromList
+        [ "assumption:sha256-semantic-profile.v1"
+        , "assumption:steve.blob.backing-authority-confined.v1"
+        , "assumption:steve.blob.no-out-of-band-mutation.v1"
+        , "assumption:steve.blob.atomic-no-replace-publication.v1"
+        , "assumption:steve.blob.complete-copy-before-candidate-borrow-end.v1"
+        ]
+  assert (conditions == expectedConditions)
+    "P9 selected canonical provider assumption lineage changed"
   _ <- mapLeft show (verifyOriginalSteveGetStructural produced)
   architecture <- checkedSteveArchitecture putSource getSource
   fact <- mapLeft show (verifySteveGetStructural architecture steveCoreProgram)
