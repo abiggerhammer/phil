@@ -487,6 +487,184 @@ Proof.
     reflexivity.
 Qed.
 
+
+(*
+ Main F1 induction on the parser's *actual fuel*. The inductive invariant
+ is byte-size bounded: the outer constructor contributes at least one
+ octet, so every nested child fits the strictly smaller parser fuel.
+ The list/field lemmas above prove the E1 count loops from this invariant.
+ The following 'change' goals rely on definitional conversion of those
+ aliases with E1's original local recursors, not an assumed equivalence.
+*)
+Theorem p8_f1_form_prefix_fuel_bound :
+  forall fuel form suffix,
+    p8_d2_valid_form form = true ->
+    length (p8_e1_put_form form) <= fuel ->
+    p8_e1_parse_form_fuel fuel
+      (p8_e1_put_form form ++ suffix) = Some (form, suffix).
+Proof.
+  induction fuel as [|fuel IH]; intros form suffix Valid Bound.
+  - pose proof (p8_f1_put_form_has_tag form). lia.
+  - destruct form as [txt|xs|xs|fields].
+    + apply p8_f1_atom_prefix_all_fuel. exact Valid.
+    + cbn [p8_d2_valid_form] in Valid.
+      assert (ListBound : length (p8_e1_put_forms xs) <= fuel).
+      { cbn [p8_e1_put_form] in Bound.
+        repeat rewrite app_length in Bound. simpl in Bound. lia. }
+      assert (Guard :
+        (p8_e1_forms_count xs <=?
+         length (p8_e1_put_forms xs ++ suffix)) = true).
+      { apply Nat.leb_le.
+        apply p8_f1_forms_count_fits_canonical_wire. }
+      change
+        (match p8_e1_read_count
+          (p8_e1_frame_count (p8_e1_forms_count xs) ++
+            (p8_e1_put_forms xs ++ suffix)) with
+         | None => None
+         | Some (n, after) =>
+             if n <=? length after then
+               match p8_f1_forms_loop fuel n after with
+               | None => None
+               | Some (parsed, trailing) =>
+                   Some (P8D2Ordered parsed, trailing)
+               end
+             else None
+         end = Some (P8D2Ordered xs, suffix)).
+      rewrite p8_f1_frame_count_roundtrip, Guard.
+      rewrite (p8_f1_forms_loop_complete_from_children
+        fuel IH xs suffix Valid ListBound).
+      reflexivity.
+    + cbn [p8_d2_valid_form] in Valid.
+      apply andb_true_iff in Valid as [Strict ValidChildren].
+      assert (ListBound : length (p8_e1_put_forms xs) <= fuel).
+      { cbn [p8_e1_put_form] in Bound.
+        repeat rewrite app_length in Bound. simpl in Bound. lia. }
+      assert (Guard :
+        (p8_e1_forms_count xs <=?
+         length (p8_e1_put_forms xs ++ suffix)) = true).
+      { apply Nat.leb_le.
+        apply p8_f1_forms_count_fits_canonical_wire. }
+      change
+        (match p8_e1_read_count
+          (p8_e1_frame_count (p8_e1_forms_count xs) ++
+            (p8_e1_put_forms xs ++ suffix)) with
+         | None => None
+         | Some (n, after) =>
+             if n <=? length after then
+               match p8_f1_forms_loop fuel n after with
+               | None => None
+               | Some (parsed, trailing) =>
+                   if p8_d2_strict_members parsed &&
+                      p8_d2_valid_forms parsed then
+                     Some (P8D2Unordered parsed, trailing)
+                   else None
+               end
+             else None
+         end = Some (P8D2Unordered xs, suffix)).
+      rewrite p8_f1_frame_count_roundtrip, Guard.
+      rewrite (p8_f1_forms_loop_complete_from_children
+        fuel IH xs suffix ValidChildren ListBound).
+      rewrite Strict, ValidChildren. reflexivity.
+    + cbn [p8_d2_valid_form] in Valid.
+      apply andb_true_iff in Valid as [Strict ValidFields].
+      assert (ListBound : length (p8_e1_put_fields fields) <= fuel).
+      { cbn [p8_e1_put_form] in Bound.
+        repeat rewrite app_length in Bound. simpl in Bound. lia. }
+      assert (Guard :
+        (p8_e1_fields_count fields <=?
+         length (p8_e1_put_fields fields ++ suffix)) = true).
+      { apply Nat.leb_le.
+        apply p8_f1_fields_count_fits_canonical_wire. }
+      change
+        (match p8_e1_read_count
+          (p8_e1_frame_count (p8_e1_fields_count fields) ++
+            (p8_e1_put_fields fields ++ suffix)) with
+         | None => None
+         | Some (n, after) =>
+             if n <=? length after then
+               match p8_f1_fields_loop fuel n after with
+               | None => None
+               | Some (parsed, trailing) =>
+                   if p8_d2_strict_keys parsed &&
+                      p8_d2_valid_fields parsed then
+                     Some (P8D2Record parsed, trailing)
+                   else None
+               end
+             else None
+         end = Some (P8D2Record fields, suffix)).
+      rewrite p8_f1_frame_count_roundtrip, Guard.
+      rewrite (p8_f1_fields_loop_complete_from_children
+        fuel IH fields suffix ValidFields ListBound).
+      rewrite Strict, ValidFields. reflexivity.
+Qed.
+
+Theorem p8_f1_universal_model_roundtrip :
+  forall form,
+    p8_d2_valid_form form = true ->
+    p8_e1_decode_form (p8_e1_put_form form) = Some form.
+Proof.
+  intros form Valid.
+  assert (Enough :
+    length (p8_e1_put_form form) <=
+    S (length (p8_e1_put_form form))) by lia.
+  pose proof (p8_f1_form_prefix_fuel_bound
+    (S (length (p8_e1_put_form form))) form [] Valid Enough)
+    as Prefix.
+  rewrite app_nil_r in Prefix.
+  unfold p8_e1_decode_form, p8_e1_parse_form_prefix.
+  rewrite Prefix. reflexivity.
+Qed.
+
+Theorem p8_f1_universal_model_injective :
+  forall left right,
+    p8_d2_valid_form left = true ->
+    p8_d2_valid_form right = true ->
+    p8_e1_put_form left = p8_e1_put_form right ->
+    left = right.
+Proof.
+  intros left right ValidLeft ValidRight Equal.
+  pose proof (p8_f1_universal_model_roundtrip left ValidLeft) as L.
+  pose proof (p8_f1_universal_model_roundtrip right ValidRight) as R.
+  rewrite Equal in L. rewrite R in L. congruence.
+Qed.
+
+Theorem p8_f1_universal_model_trailing_rejected :
+  forall form trailing,
+    p8_d2_valid_form form = true ->
+    trailing <> [] ->
+    p8_e1_decode_form (p8_e1_put_form form ++ trailing) = None.
+Proof.
+  intros form trailing Valid Nonempty.
+  assert (Enough :
+    length (p8_e1_put_form form) <=
+    S (length (p8_e1_put_form form ++ trailing))).
+  { rewrite app_length. lia. }
+  pose proof (p8_f1_form_prefix_fuel_bound
+    (S (length (p8_e1_put_form form ++ trailing)))
+    form trailing Valid Enough) as Prefix.
+  unfold p8_e1_decode_form, p8_e1_parse_form_prefix.
+  rewrite Prefix.
+  destruct trailing as [|b rest]; [contradiction|reflexivity].
+Qed.
+
+Theorem p8_f1_universal_normalized_wire_roundtrip :
+  forall form,
+    p8_d2_valid_form form = true ->
+    p8_e2_normalize_form (p8_e1_put_form form) = Some form.
+Proof.
+  intros form Valid.
+  apply (proj2 (p8_e2_normalized_form_exact_characterization
+    (p8_e1_put_form form) form)).
+  repeat split; try assumption; try reflexivity.
+  apply p8_f1_universal_model_roundtrip. exact Valid.
+Qed.
+
+Print Assumptions p8_f1_form_prefix_fuel_bound.
+Print Assumptions p8_f1_universal_model_roundtrip.
+Print Assumptions p8_f1_universal_model_injective.
+Print Assumptions p8_f1_universal_model_trailing_rejected.
+Print Assumptions p8_f1_universal_normalized_wire_roundtrip.
+
 Print Assumptions p8_f1_forms_loop_complete_from_children.
 Print Assumptions p8_f1_fields_loop_complete_from_children.
 
