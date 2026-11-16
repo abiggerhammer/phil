@@ -1,0 +1,88 @@
+name: FSEM-01 CORR-2 Join Loop Source Replay Preflight
+
+concurrency:
+  group: ${{ github.workflow_ref }}-${{ github.event.pull_request.number || github.run_id }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+on:
+  push:
+    branches:
+      - formal-semantics/fsem01-corr2-join-loop-error-replay
+    paths:
+      - 'test/Phase1FSEM01JoinLoopCorr2Main.hs'
+      - 'proof/Phil/Surface/SurfaceSourceJoinLoopCorr2.v'
+      - '.github/workflows/fsem01-corr2-join-loop-preflight.yml'
+  pull_request:
+    paths:
+      - 'test/Phase1FSEM01JoinLoopCorr2Main.hs'
+      - 'proof/Phil/Surface/SurfaceSourceJoinLoopCorr2.v'
+      - 'docs/phase-1/formal-semantics-join-loop-corr2-fsem01-v1.md'
+      - 'docs/phase-1/formal-semantics-fsem01-exit-matrix-v1.md'
+      - '.github/workflows/fsem01-corr2-join-loop-preflight.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  strict-source-join-loop:
+    name: Independent native join, loop, loan and error-prefix replay
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: haskell-actions/setup@v2
+        with:
+          ghc-version: '9.6.7'
+          cabal-version: 'latest'
+          cabal-update: false
+      - name: Bounded Hackage HTTP1 retry
+        run: bash scripts/ci/cabal-update-retry.sh
+      - name: Strict warning-free production Haskell
+        run: cabal build lib:phil-core --ghc-options=-Werror
+      - name: Compile and replay source-checked CORR-2 with predecessor regressions
+        shell: bash
+        run: |
+          set -euo pipefail
+          for test in \
+            Phase1FSEM01ScopedBorrowJoinMain \
+            Phase1FSEM01LinearLoopTransferMain \
+            Phase1FSEM01ScopedLinearLoopLoanMain \
+            Phase1FSEM01JoinLoopCorr2Main
+          do
+            cabal exec -- ghc -isrc -Wall -Werror -fno-code "test/$test.hs"
+            cabal exec -- runghc -isrc -Wall -Werror "test/$test.hs"
+          done
+          sha256sum test/Phase1FSEM01JoinLoopCorr2Main.hs \
+            src/Phil/Surface/GrammarV1/SourceScopedBorrowJoin.hs \
+            src/Phil/Surface/GrammarV1/SourceLinearLoopTransfer.hs
+
+  rocq-conditional-join-loop:
+    name: Rocq conditional joined-owner and error-boundary model
+    runs-on: ubuntu-24.04
+    container:
+      image: rocq/rocq-prover:9.2.0
+      options: --user root
+    steps:
+      - uses: actions/checkout@v4
+      - name: Check exact branch/loop proof dependencies and new composition
+        shell: bash
+        run: |
+          set -euo pipefail
+          export PATH="/home/rocq/.opam/$COMPILER/bin:$PATH"
+          for file in \
+            proof/Phil/Core/Syntax.v \
+            proof/Phil/Core/Context.v \
+            proof/Phil/Core/ContextJoin.v \
+            proof/Phil/Surface/SurfaceSourceScopedBorrowJoin.v \
+            proof/Phil/Surface/SurfaceSourceLinearLoopTransfer.v \
+            proof/Phil/Surface/SurfaceSourceJoinLoopCorr2.v
+          do
+            rocq c -Q proof/Phil Phil "$file"
+          done
+          if grep -nE '^[[:space:]]*(Admitted[.]|Axiom[[:space:]]|Parameter[[:space:]])' \
+              proof/Phil/Surface/SurfaceSourceJoinLoopCorr2.v; then
+            echo "Unproved FSEM-01 CORR-2 theorem" >&2
+            exit 1
+          fi
+          rocq check -Q proof/Phil Phil Phil.Surface.SurfaceSourceJoinLoopCorr2
+          sha256sum proof/Phil/Surface/SurfaceSourceJoinLoopCorr2.v \
+            proof/Phil/Surface/SurfaceSourceJoinLoopCorr2.vo
