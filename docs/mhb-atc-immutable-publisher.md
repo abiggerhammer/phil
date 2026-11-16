@@ -37,7 +37,8 @@ Create GitHub Actions environment **`atc-publisher`** under repository Settings 
 
 - Environment secret: `MHB_ATC_PUBLISHER_APP_PRIVATE_KEY` = complete generated private key; no Base64 required.
 - Repository variable: `MHB_ATC_PUBLISHER_APP_CLIENT_ID` = App Client ID.
-- Repository variable: `MHB_ATC_PUBLISHER_APP_ID` = numeric App ID.
+- Repository variable: `MHB_ATC_PUBLISHER_APP_ID` = numeric App ID (verified ruleset actor ID `5782193`).
+- Repository variable: `MHB_ATC_PUBLISHER_APP_SLUG` = **the exact App slug** from its GitHub App settings URL (e.g. `phil-atc-publisher` if that is the actual slug). This is required for publisher-authored PR verification; missing or incorrect slug fails closed. It is not the client ID or installation ID.
 - Repository variable: `MHB_ATC_PUBLISHER_RULESET_ID` = numeric protected-ref ruleset ID (after creating it).
 - Repository variable: `MHB_ATC_IMMUTABLE_HEADS_ENABLED` = **unset/false until negative commissioning**.
 
@@ -52,7 +53,7 @@ In repository Settings → Rules → Rulesets create a **branch** ruleset:
 - Target: **only** `hamster/admitted/*` (in the REST API, `refs/heads/hamster/admitted/*`); **no exclusions**. The suffix `atc-<issue>-<lane>-<sha>` has no nested slashes.
 - Rules: **Restrict creations**, **Restrict updates**, **Restrict deletions**, and **Block force pushes**.
 - Bypass list: **only the exact new GitHub App**, **Always**. Do **not** add administrator, personal-account, team, generic Write or RepositoryRole bypasses. This App technically has bypass power, so the trusted workflow must remain create-only and its private key isolated.
-- Record ruleset ID in `MHB_ATC_PUBLISHER_RULESET_ID`. The workflow reads the full live ruleset and checks exact target, `active`, required restrictions, repo scope and its **sole** `Integration` bypass matching `MHB_ATC_PUBLISHER_APP_ID`. Failure blocks publishing before reservation.
+- Record ruleset ID in `MHB_ATC_PUBLISHER_RULESET_ID`. The owner-reviewed ruleset **#27365284** and sole-App bypass **#5782193** are pinned in [the source-reviewed policy attestation](../.github/atc-publisher-policy.json). The unprivileged workflow token may see GitHub's ruleset response **without `bypass_actors`** (GitHub restricts that sensitive field). It checks the live `created_at` and `updated_at` timestamps and all other visible rules against the owner-approved exact version. If `bypass_actors` is visible, it must also match. **Any edit to the ruleset invalidates the attestation and stops admission.** A maintainer with ruleset-write access must re-read the full unredacted policy, independently review the sole-App bypass, and land a new exact-version attestation through a protected PR before resuming. Do not grant repository administration to the publisher to solve a read-visibility problem.
 
 GitHub branch rules use pathname-style `fnmatch`, where `*` does not cover a slash. Test one valid `hamster/admitted/atc-...` branch against **actual** effective rules, not only against the text of the pattern.
 
@@ -64,20 +65,26 @@ The design limits **Phase 2 worker-induced** extra CI waves. It does **not** glo
 
 ## Trusted workflow transaction
 
-1. Require the immutable publisher opt-in flag, real App token and live matching ruleset. Manual `dry-run` remains usable while the flag is off.
-2. Verify a bot-created staged candidate issue, the exact SHA and an empty single-slot admission snapshot. Re-read the snapshot and branch SHA.
+1. Require the immutable publisher opt-in flag, real App token and live matching **owner-attested ruleset revision**. Manual `dry-run` remains usable while the flag is off, but its summary explicitly says the protected namespace was not fully verified. The main-only App action's reported slug must match `MHB_ATC_PUBLISHER_APP_SLUG`.
+2. Resolve `GET /apps/<publisher-slug>` and `GET /users/<publisher-slug>[bot]` under the lower-privilege Actions token, checking the numeric App ID against the ruleset's pinned actor and the GitHub bot ID. Enumerate **every** `hamster/admitted/*` ref; look up each original issue (including closed and unlabelled) and each exact-head PR (including closed) and verify authoritative publisher origin. An unknown, modified, orphaned or mismatched ref blocks admission. A fully verified closed PR plus closed issue is permitted historical state. Re-read complete state and exact staged SHA before writing.
 3. Derive deterministic `hamster/admitted/atc-<issue>-<lane>-<sha>` and canonical receipt. Reject a pre-existing ref (including one with a matching SHA).
-4. Persist `atc: admitting` **before** protected ref/PR creation. Revalidate ruleset and staged head. Using only the App token, **create** the new admitted ref at the recorded SHA; read back the ref and exact SHA.
-5. Create a PR from the **admitted ref** with the canonical binding receipt. Read back PR head/base/identity/body. Apply `atc: admitted` to issue and PR. Ordinary required checks run on this immutable head before any separate merge decision.
-6. Reconcile from canonical admitted ref, not the original staged branch. Positive exact-head PR closure releases the issue; incomplete but valid PR/labels are repaired. A protected ref with **no** matching PR holds/fails closed as an orphan, even after 15 minutes.
+4. Persist `atc: admitting` **before** protected ref/PR creation. Add the new lifecycle label first, then remove the old label: interruption may leave **two** labels (a manual-recovery hard stop) but never silently erase the last state marker. Revalidate ruleset and staged head. Using only the App token, **create** the admitted ref at the recorded SHA; read back ref and SHA.
+5. Create a PR from the **admitted ref** with the canonical binding receipt. Read back the PR's GitHub-reported `user.login`, `user.id`, `user.type`, plus `performed_via_github_app.id` when present, against the independently resolved publisher App/bot. Require exact head/base/body correspondence **and** authenticated origin. Copying the receipt cannot create valid provenance. Apply `atc: admitted` to issue and PR; use add-before-remove lifecycle transitions. Ordinary required checks run before any separate merge decision.
+6. Reconcile **all protected refs** before any repair/release. The global census finds unknown or orphan refs even if their issue has lost labels, changed body/SHA or been closed. Authenticated publisher origin is mandatory before automatic PR repair or release; a canonical body alone is insufficient. Positive exact-head PR closure releases the issue; valid incomplete labels can be repaired. A protected ref with no genuine matching PR stops the controller, even after 15 minutes.
 7. An `atc: admitting` issue without an admitted ref or PR can still be requeued after the original 15-minute grace and complete no-PR evidence. A missing/drifted ref linked to any PR is a hard stop.
 
 ## Migration/order and compatibility
 
-- This PR is **stacked on draft #1836** (disabled scheduled pump). Review/merge #1836 first, then retarget this A3 draft to main after its protected merge. Do not merge A3 directly in a way that loses A1's safety tests and scheduling opt-in.
+- The opt-in admission scheduler [#1836](https://github.com/abiggerhammer/phil/pull/1836) has **merged** into `main` at `3aadc713db8abe51d27a2148b5d776c88e634889`; this A3 PR [#1849](https://github.com/abiggerhammer/phil/pull/1849) was subsequently **retargeted to `main`**. Review and execute the repaired final integration against the current `main` tree before approving.
 - A2 [#1838](https://github.com/abiggerhammer/phil/pull/1838) remains a separate, default-OFF PR; its Phase 2 staging WIP guard does not grant admission or merge authority.
 - The old commissioning C2 [#1834](https://github.com/abiggerhammer/phil/issues/1834) used staged PR heads; those specific PRs and issues are already closed. **After this code is merged, the manual `admit-one` route no longer falls back to that legacy behavior.** Without the App/ruleset gate, it fails closed.
 - `MHB_ATC_AUTO_ADMIT_ENABLED` (scheduled pump), `MHB_ATC_PHASE2_STAGE_BRIDGE_ENABLED` (worker staging bridge), and `MHB_ATC_IMMUTABLE_HEADS_ENABLED` (publisher route) are distinct switches. Keep all off until deliberate commissioning.
+
+## Independent review remediations (Astra, 2026-11-16)
+
+[Astra's technical review](https://chatgpt.com/library/share/libfile_fde3_f-6b6ec9e585a8819193e7ccc3a1185fc7_1f438c6a20f081919fa023e16ee02d05?account_id=personal) requests changes F1–F3 and fresh current-base integration checks. The fixes above implement a **version-pinned owner attestation**, **full namespace/history accounting**, and **authenticated App PR origin**. The path-filtered replay workflow also exercises the actual lower-privilege Actions policy-reader identity on this PR, rather than assuming the owner-connected GitHub API response has the same visibility.
+
+A label-swap failure may leave both the old and new state labels. The planner **fails closed** on dual labels; manual recovery must inspect the issue/events/PR/ref before restoring one consistent state. The publisher never auto-deletes or reuses protected orphan refs. All live platform permissions, App slug, metadata shape, ref/PR lifecycle and worker-denial checks remain a separate deployment gate.
 
 ## Required live negative commissioning (not covered by offline unit tests)
 
