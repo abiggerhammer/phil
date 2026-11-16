@@ -254,9 +254,15 @@ Proof.
   unfold finiteJoin in H.
   destruct (F.finiteLoans left) as [|l ls]; try discriminate.
   destruct (F.finiteLoans right) as [|r rs]; try discriminate.
-  destruct (sameBindings typeEq _ _) eqn:Hu; try discriminate.
-  destruct (sameBindings typeEq _ _) eqn:Hl; try discriminate.
-  destruct (affineCompatible typeEq _ _) eqn:Ha; try discriminate.
+  destruct (sameBindings typeEq
+    (F.finiteUnrestricted left) (F.finiteUnrestricted right))
+    eqn:Hu; try discriminate.
+  destruct (sameBindings typeEq
+    (F.finiteLinear left) (F.finiteLinear right))
+    eqn:Hl; try discriminate.
+  destruct (affineCompatible typeEq
+    (F.finiteAffine left) (F.finiteAffine right))
+    eqn:Ha; try discriminate.
   inversion H; subst. repeat split; reflexivity.
 Qed.
 
