@@ -1,5 +1,7 @@
 # FSEM-01 resource and local typing: exit-evidence matrix (v1)
 
+> **CORR-7 status note (2026-11-16):** CORR-6 [#1820](https://github.com/abiggerhammer/phil/pull/1820) is protected-merged with checked original-source replay. [CORR-7](formal-semantics-terminal-predecessors-corr7-fsem01-v1.md) now proposes a total finite terminal/continuing/source-failure classifier and globally ordered arbitrary-finite mixed-resource joins, with six original-source controls. These new witnesses are NOT audited or merged at this note's creation; R10/R11/R15 and the general FSEM-01 exit remain open.
+
 > **Review finding: FSEM-01 remains OPEN.** This is a non-normative
 > coverage/acceptance audit, not a new language rule, a proof of the general
 > Haskell implementation, or an FSEM-01 completion claim.
@@ -200,7 +202,7 @@ any result discharged.
 **Current decision: bounded J-1/J-2 joins, #1703/#1705 Bool controls,
 #1708 Linear owner transfer and #1710 scoped loan closure before reentry
 and #1712 bounded C-1, plus #1718 CORR-1 closure capture are merged.
-CORR-2 #1813, CORR-3 #1815, CORR-4 #1817 and CORR-5 #1819 are protected-merged; CORR-6 executable mixed-resource two-predecessor join and source checkpoints is proposed, not yet merged. COVERAGE-1 indexes
+CORR-2 #1813, CORR-3 #1815, CORR-4 #1817 and CORR-5 #1819 are protected-merged; CORR-6 #1820 mixed-resource two-predecessor join and original-source literal replay is protected-merged. CORR-7 terminal-aware arbitrary-finite predecessor join is proposed, not yet verified or merged. COVERAGE-1 indexes
 open grammatical/semantic families without closing them; dependent joins,
 multi-slot loops, nested aggregates, general scoped loans/captures and full
 source-to-model correspondence remain open.**
