@@ -56,11 +56,13 @@ jobs:
           set -euo pipefail
 
           read_snapshot() {
-            # Snapshot ALL candidate-looking issues, including those which
-            # lost every lifecycle label in a partial GitHub label transition.
+            # Share the admission planner's creator-aware classifier.
+            # Untrusted, unlabelled issue text is NOT a reservation; trusted
+            # lost-label issues and ANY lifecycle-labelled claim still block.
             gh api --paginate "repos/$GH_REPO/issues?state=open&per_page=100" \
-              | jq -s 'add // [] | map(select((has("pull_request") | not) and ((.title // "" | startswith("ATC candidate: ")) or (.body // "" | startswith("<!-- MHB-ATC-STAGED-V1 -->")))))' \
-              > /tmp/atc-issues.json
+              | jq -s 'add // []' > /tmp/atc-all-open-issues.json
+            python3 scripts/mhb_atc_admit.py --filter-candidates \
+              --issues /tmp/atc-all-open-issues.json > /tmp/atc-issues.json
             # Reconcile the ENTIRE protected namespace, including refs whose
             # original issue is now closed or has missing lifecycle labels.
             . scripts/mhb_atc_inventory_snapshot.sh
