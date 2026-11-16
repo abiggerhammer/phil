@@ -26,6 +26,9 @@ module Phil.Compiler.SourceSystems
   , produceVerifiedSteveGetCanonicalSource
   , verifiedSteveGetCanonicalSourceProduction
   , verifiedSteveGetCanonicalSelectedAssumptions
+  , VerifiedSteveGetModeledABI
+  , VerifiedSteveGetModeledABIError (..)
+  , verifyOriginalSteveGetModeledABI
   ) where
 
 import qualified Data.Map.Strict as Map
@@ -86,6 +89,19 @@ import Phil.Core.Static
   , checkedArchitectureIdentity
   , identityInstanceRevision
   )
+import Phil.Compiler.RuntimeChoicePayload
+  ( RuntimeChoicePayloadPlan, RuntimeChoiceSite (..) )
+import Phil.Compiler.RuntimeChoiceSystems
+  ( RuntimeChoiceSystemsError, bindRuntimeChoicePayloadPlan )
+import Phil.Compiler.RuntimeChoiceABI
+  ( RuntimeChoiceABIError, RuntimeChoiceABICarrier (..)
+  , RuntimeChoiceABIInput (..), RuntimeChoiceABIArm (..)
+  , RuntimeChoiceABIPlan, RuntimeChoiceABISite (..)
+  , certifyRuntimeChoiceABIPlan, runtimeChoiceABISites )
+import Phil.Compiler.RuntimeChoiceLLVM
+  ( RuntimeChoiceLLVMError, RuntimeChoiceLLVMArtifact (..)
+  , phase1RuntimeChoiceLLVMTarget, lowerRuntimeChoiceABIToLLVM )
+import Phil.Systems.IR (ValueId (..), BlockId (..))
 import Phil.Systems.GenericLowering
   ( CoreSystemsProgram
   , GenericLoweringError
@@ -379,3 +395,81 @@ produceVerifiedSteveGetCanonicalSource roots environments sites policy
     (verifyOriginalSteveGetStructural production)
   Right (VerifiedSteveGetCanonicalSource
     production checked qualifications selectedConditions)
+
+
+-- | Private selected MODEL-ABI rederivation from the original checked source
+-- and admitted Core. Not an attestation of linked machine code, a dynamic
+-- source owner, a live source loan or the accepted provider law.
+data VerifiedSteveGetModeledABI = VerifiedSteveGetModeledABI
+  VerifiedSteveGetCanonicalSource
+  RuntimeChoiceABIPlan
+  RuntimeChoiceLLVMArtifact
+  deriving (Eq, Show)
+
+data VerifiedSteveGetModeledABIError
+  = SteveModeledABIBindingRejected RuntimeChoiceSystemsError
+  | SteveModeledABICertificationRejected RuntimeChoiceABIError
+  | SteveModeledABILoweringRejected RuntimeChoiceLLVMError
+  | SteveModeledABIMissingReadSite
+  | SteveModeledABIMissingDigestSite
+  | SteveModeledABIReadMismatch
+  | SteveModeledABIDigestMismatch
+  | SteveModeledABILinkedArtifactUnproved
+  deriving (Eq, Show)
+
+-- | Recompute from the private source/Core stage instead of taking a supplied
+-- ABI certificate or label at face value. For a true P9-F2 proof this modeled
+-- result must NEXT be bound to the actual linked native artifact and runtime
+-- allocation/loan incarnation through an independently accepted refinement.
+verifyOriginalSteveGetModeledABI
+  :: VerifiedSteveGetCanonicalSource
+  -> RuntimeChoicePayloadPlan
+  -> Either VerifiedSteveGetModeledABIError VerifiedSteveGetModeledABI
+verifyOriginalSteveGetModeledABI canonical@(VerifiedSteveGetCanonicalSource
+    (VerifiedSourceSystemsProduction
+      (SourceSystemsAdmission _ core _) originalStage _) _ _ _) payload = do
+  stage <- mapLeft SteveModeledABIBindingRejected
+    (bindRuntimeChoicePayloadPlan core payload originalStage)
+  abi <- mapLeft SteveModeledABICertificationRejected
+    (certifyRuntimeChoiceABIPlan core payload stage)
+  llvm <- mapLeft SteveModeledABILoweringRejected
+    (lowerRuntimeChoiceABIToLLVM phase1RuntimeChoiceLLVMTarget abi stage)
+  let sites = runtimeChoiceABISites abi
+      readSite = RuntimeChoiceSite "SteveGet" "get.entry"
+      checkSite = RuntimeChoiceSite "SteveGet" "get.check"
+  readChoice <- maybe (Left SteveModeledABIMissingReadSite) Right
+    (Map.lookup readSite sites)
+  checkChoice <- maybe (Left SteveModeledABIMissingDigestSite) Right
+    (Map.lookup checkSite sites)
+  let expectedRead = Map.fromList
+        [ ("found", (0, BlockId "get.check",
+            Just (ValueId "get.bytes", ABIOwnedBuffer "OwnedBytes")))
+        , ("not-found", (1, BlockId "get.not-found", Nothing))
+        , ("storage-failure", (2, BlockId "get.failure", Nothing))
+        ]
+      expectedCheck = Map.fromList
+        [ ("accepted", (0, BlockId "get.ok", Nothing))
+        , ("rejected", (1, BlockId "get.integrity-failure", Nothing))
+        ]
+      actualArms choice = Map.map
+        (\arm -> (runtimeChoiceABIArmTag arm,
+          runtimeChoiceABIArmTarget arm, runtimeChoiceABIArmPayload arm))
+        (runtimeChoiceABIArms choice)
+      readOk =
+        runtimeChoiceABIName readChoice == "BlobProvider.read"
+        && runtimeChoiceABIInputs readChoice ==
+          [RuntimeChoiceABIInput (ValueId "get.id")
+             (ABIRuntimeScalar "ContentId[SHA256]")]
+        && actualArms readChoice == expectedRead
+      checkOk =
+        runtimeChoiceABIName checkChoice == "DigestProvider.check"
+        && runtimeChoiceABIInputs checkChoice ==
+          [ RuntimeChoiceABIInput (ValueId "get.id")
+              (ABIRuntimeScalar "ContentId[SHA256]")
+          , RuntimeChoiceABIInput (ValueId "get.bytes-view")
+              (ABIBorrowedSlice (ValueId "get.bytes"))
+          ]
+        && actualArms checkChoice == expectedCheck
+  if readOk then Right () else Left SteveModeledABIReadMismatch
+  if checkOk then Right () else Left SteveModeledABIDigestMismatch
+  pure (VerifiedSteveGetModeledABI canonical abi llvm)
