@@ -94,7 +94,7 @@ Proof.
     (phase1_surface_normalize_optional_generic_requirements_proposition
       requirements)
     as [actual |] eqn:Hrequirements; try discriminate Hnormalize.
-  inversion Hnormalize; subst refined.
+  inversion Hnormalize; subst.
   cbn.
   rewrite
     (phase1_surface_normalize_optional_generic_requirements_proposition_round_trip
@@ -222,7 +222,7 @@ Proof.
     (phase1_surface_normalize_optional_generic_requirements_proposition
       requirements)
     as [actual |] eqn:Hrequirements; try discriminate Hnormalize.
-  inversion Hnormalize; subst refined.
+  inversion Hnormalize; subst.
   cbn.
   rewrite
     (phase1_surface_normalize_optional_generic_requirements_proposition_round_trip
