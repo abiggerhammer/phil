@@ -20,7 +20,7 @@ Lemma p8_h7_argument_payload_length_bound :
 Proof.
   intros key value.
   unfold p8_e2_put_argument.
-  repeat rewrite app_length. simpl. lia.
+  repeat rewrite length_app. simpl. lia.
 Qed.
 
 Lemma p8_h7_argument_prefix :
@@ -34,13 +34,9 @@ Lemma p8_h7_argument_prefix :
 Proof.
   intros fuel key value suffix KeyValid ValueValid Bound.
   unfold p8_e2_put_argument.
-  replace (([81] ++ p8_e1_put_text key ++ [77] ++
-            p8_e1_put_form value) ++ suffix)
-    with (81 :: (p8_e1_put_text key ++
-          (77 :: (p8_e1_put_form value ++ suffix)))).
-  2: { cbn [app]. repeat rewrite app_assoc. reflexivity. }
+  repeat rewrite app_assoc.
   unfold p8_e2_parse_argument.
-  cbn [p8_e2_expect].
+  cbn [app p8_e2_expect].
   rewrite (p8_f1_text_prefix_roundtrip key
     (77 :: (p8_e1_put_form value ++ suffix)) KeyValid).
   cbn [p8_e2_expect].
@@ -66,7 +62,7 @@ Proof.
     pose proof (p8_h7_argument_payload_length_bound key value)
       as ValueSize.
     cbn [p8_e2_put_arguments] in Bound.
-    rewrite app_length in Bound.
+    rewrite length_app in Bound.
     assert (ValueBound : length (p8_e1_put_form value) <= fuel)
       by lia.
     assert (RestBound : length (p8_e2_put_arguments rest) <= fuel)
@@ -89,9 +85,9 @@ Proof.
   induction fields as [|key value rest IH].
   - reflexivity.
   - cbn [p8_e1_fields_count p8_e2_put_arguments].
-    rewrite app_length.
+    rewrite length_app.
     unfold p8_e2_put_argument.
-    repeat rewrite app_length.
+    repeat rewrite length_app.
     simpl. lia.
 Qed.
 
@@ -103,7 +99,7 @@ Proof.
   intros [declaration interface fields] suffix.
   unfold p8_e2_put_application.
   cbn [p8_d2_declaration p8_d2_interface p8_d2_arguments].
-  repeat rewrite app_length.
+  repeat rewrite length_app.
   simpl. lia.
 Qed.
 
@@ -123,7 +119,7 @@ Proof.
     (p8_e1_fields_count fields <=?
      length (p8_e2_put_arguments fields ++ suffix)) = true).
   { apply Nat.leb_le.
-    rewrite app_length.
+    rewrite length_app.
     pose proof (p8_h7_arguments_count_fits_wire fields).
     lia. }
   assert (Enough :
