@@ -212,6 +212,14 @@ class AdmissionTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "not created by trusted"):
             plan([outsider], [])
 
+    def test_r2_reconciler_uses_the_same_trusted_classifier(self):
+        workflow = (Path(__file__).resolve().parents[1] /
+                    ".github/workflows/mhb-atc-reconcile.yml").read_text(encoding="utf-8")
+        self.assertIn("python3 scripts/mhb_atc_admit.py --filter-candidates", workflow)
+        self.assertIn("--issues /tmp/atc-all-open-issues.json > /tmp/atc-issues.json",
+                      workflow)
+        self.assertNotIn("map(select((has(\"pull_request\") | not) and", workflow)
+
     def test_r2_duplicate_lifecycle_labels_are_not_filtered(self):
         damaged = issue()
         damaged["labels"].append(label("atc: admitting"))
