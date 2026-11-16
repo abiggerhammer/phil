@@ -5,6 +5,9 @@ No workflow run or GitHub mutation occurs here. GitHub itself validates YAML;
 these tests pin the narrow opt-in decision and existing manual behavior.
 """
 from pathlib import Path
+import os
+import subprocess
+import textwrap
 import unittest
 
 WORKFLOW = (Path(__file__).resolve().parents[1]
@@ -61,6 +64,97 @@ class ScheduledAdmissionGuardTests(unittest.TestCase):
                       self.source)
         self.assertIn("PUBLISHER_TOKEN: ${{ steps.publisher_token.outputs.token }}",
                       self.source)
+
+
+class ManualPublisherCredentialPreflightTests(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls):
+        cls.source = (Path(__file__).resolve().parents[1] /
+                      ".github/workflows/mhb-atc-publisher-token-preflight.yml").read_text(
+                          encoding="utf-8")
+
+    def test_manual_only_trusted_main_protected_environment(self):
+        self.assertIn("  workflow_dispatch:\n", self.source)
+        self.assertNotIn("\n  push:", self.source)
+        self.assertNotIn("\n  schedule:", self.source)
+        self.assertNotIn("\n  pull_request:", self.source)
+        self.assertIn("github.ref == 'refs/heads/main'", self.source)
+        self.assertIn("environment: atc-publisher", self.source)
+        self.assertIn("ref: main", self.source)
+        self.assertIn("persist-credentials: false", self.source)
+
+    def test_preflight_requires_all_three_runtime_switches_off(self):
+        for var in ("MHB_ATC_AUTO_ADMIT_ENABLED",
+                    "MHB_ATC_PHASE2_STAGE_BRIDGE_ENABLED",
+                    "MHB_ATC_IMMUTABLE_HEADS_ENABLED"):
+            self.assertIn("vars." + var, self.source)
+        self.assertIn('test "${enabled,,}" != "true"', self.source)
+
+    def test_mixed_case_true_is_rejected_by_actual_shell_guard(self):
+        # Execute the exact checked-in precheck loop, not a Python
+        # approximation: GitHub Actions expression equality ignores case.
+        first = '          for enabled in "$AUTO_ADMIT_ENABLED" "$STAGE_BRIDGE_ENABLED" "$IMMUTABLE_ENABLED"; do'
+        start = self.source.index(first)
+        stop = self.source.index("          done\n", start) + len("          done\n")
+        guard = textwrap.dedent(self.source[start:stop])
+        for variable in ("AUTO_ADMIT_ENABLED", "STAGE_BRIDGE_ENABLED",
+                         "IMMUTABLE_ENABLED"):
+            for enabled in ("true", "TRUE", "True", "tRuE"):
+                env = dict(os.environ, AUTO_ADMIT_ENABLED="",
+                           STAGE_BRIDGE_ENABLED="", IMMUTABLE_ENABLED="")
+                env[variable] = enabled
+                with self.subTest(variable=variable, enabled=enabled):
+                    ran = subprocess.run(
+                        ["bash", "-c", "set -euo pipefail\n" + guard],
+                        text=True, capture_output=True, env=env, check=False)
+                    self.assertNotEqual(ran.returncode, 0, ran.stdout)
+                    self.assertIn("must remain OFF", ran.stderr)
+        for enabled in ("", "false", "FALSE", "False"):
+            env = dict(os.environ, AUTO_ADMIT_ENABLED=enabled,
+                       STAGE_BRIDGE_ENABLED="", IMMUTABLE_ENABLED="")
+            with self.subTest(inactive=enabled):
+                ran = subprocess.run(
+                    ["bash", "-c", "set -euo pipefail\n" + guard],
+                    text=True, capture_output=True, env=env, check=False)
+                self.assertEqual(ran.returncode, 0, ran.stderr)
+
+    def test_receipt_distinguishes_enabled_revoke_from_completed_cleanup(self):
+        self.assertIn("automatic revocation enabled, confirm post-action cleanup log",
+                      self.source)
+        self.assertNotIn("automatically revoked at job end", self.source)
+
+    def test_mint_matches_actual_publisher_but_performs_only_reads(self):
+        self.assertIn(
+            "actions/create-github-app-token@64ab729a6294000f5aa4a4bc0b73d1f32bc45510",
+            self.source)
+        self.assertIn("permission-contents: write", self.source)
+        self.assertIn("permission-pull-requests: write", self.source)
+        self.assertIn("private-key: ${{ secrets.MHB_ATC_PUBLISHER_APP_PRIVATE_KEY }}",
+                      self.source)
+        self.assertIn("client-id: ${{ vars.MHB_ATC_PUBLISHER_APP_CLIENT_ID }}",
+                      self.source)
+        self.assertIn("steps.publisher_token.outputs.app-slug", self.source)
+        self.assertIn('test "$ACTION_APP_SLUG" = "$PINNED_APP_SLUG"', self.source)
+        self.assertIn('gh api "installation/repositories"', self.source)
+        self.assertIn(".total_count == 1", self.source)
+        self.assertIn('.repositories[0].full_name == $repo', self.source)
+        self.assertIn("scripts/mhb_atc_publisher_identity_snapshot.sh", self.source)
+        self.assertIn("scripts/mhb_atc_immutable.py ruleset", self.source)
+        # The action mints a write-capable installation token, but every
+        # actual GitHub command in this workflow must be a read.
+        for line in self.source.splitlines():
+            stripped = line.strip()
+            if stripped.startswith("gh api "):
+                self.assertNotIn(" --method POST", stripped)
+                self.assertNotIn(" --method PATCH", stripped)
+                self.assertNotIn(" --method PUT", stripped)
+                self.assertNotIn(" --method DELETE", stripped)
+                self.assertNotIn(" -X ", stripped)
+        self.assertNotIn("gh pr create", self.source)
+        self.assertNotIn("gh issue edit", self.source)
+        self.assertNotIn("gh issue close", self.source)
+        self.assertNotIn("gh label create", self.source)
+        self.assertNotIn("git push", self.source)
 
 
 if __name__ == "__main__":

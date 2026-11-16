@@ -100,6 +100,18 @@ Regressions cover both benign outsider issue forms, trusted lost-label and dual-
 
 The first `main` run after #1849 merged surfaced a **403 on the unauthenticated bot-profile request** in `policy-reader-visibility`. The pinned ruleset check still passed, and the exact PR-head identity check had previously succeeded. A 403 from unauthenticated GitHub REST may also indicate rate limiting by the shared runner IP; its meaning cannot be inferred from the status alone. The bounded repair switches **only** `GET /users/<slug>[bot]` from anonymous `curl` to `gh api` under the existing ordinary Actions `GH_TOKEN`, keeping the private App `GET /apps/{slug}` out of the path. No publisher App private key, new permissions, ruleset mutation or activation flag is involved. The same helper remains shared by PR CI, admission and reconciliation; verify its actual hosted result before considering this resolved.
 
+## Controlled publisher-credential preflight (manual, no writes)
+
+Before enabling a one-slot `admit-one` transaction, run the dedicated **manually dispatched** [publisher token preflight](../.github/workflows/mhb-atc-publisher-token-preflight.yml) on trusted `main`:
+
+```bash
+gh workflow run mhb-atc-publisher-token-preflight.yml --repo abiggerhammer/phil --ref main
+```
+
+The run is guarded by `github.ref == 'refs/heads/main'`, the main-only `atc-publisher` environment, and the requirement that **all three activation switches remain OFF** (including mixed-case values such as `TRUE`, matching GitHub expression semantics). It checks the owner-pinned ruleset and GitHub bot identity using the ordinary scoped `GITHUB_TOKEN`, then uses the **actual protected App environment key** to mint a publisher installation token with the expected Contents and Pull requests write permissions. The check uses that write-capable token for **read operations only**: it verifies the authenticated action-reported App slug and `GET /installation/repositories` returns exactly `abiggerhammer/phil`. The upstream action **attempts** to revoke the temporary token at job end. Its cleanup is best effort: the pre-cleanup job summary is not proof of revocation, so inspect the action's post-job logs and record any warning. No branch/ref/PR/issue mutation is performed.
+
+A passing run establishes that this particular key can mint an appropriately scoped publisher token on trusted main. It **does not** authorize publishing: the real worker-denial, disposable PR, staged-push isolation, orphan recovery and closeout tests below remain separate gates. Save the exact run and job IDs and the version of `main` used, and record the credential preflight in [#1839](https://github.com/abiggerhammer/phil/issues/1839). If the preflight fails, do not broaden permissions or bypass the error: diagnose the exact failing credential/API step first.
+
 ## Required live negative commissioning (not covered by offline unit tests)
 
 1. Verify App installation scope, environment secret main-only access, actual active ruleset and unique App bypass.
