@@ -187,8 +187,12 @@ Theorem p8_f1_frame_count_roundtrip :
       Some (n, suffix).
 Proof.
   intros n suffix.
-  unfold p8_e1_frame_count, p8_e1_decimal.
-  simpl [app].
+  assert (Frame :
+    p8_e1_frame_count n ++ suffix =
+      p8_e1_decimal_fuel (S n) n ++ 58 :: suffix).
+  { unfold p8_e1_frame_count, p8_e1_decimal.
+    exact (app_assoc (p8_e1_decimal_fuel (S n) n) [58] suffix). }
+  rewrite Frame.
   destruct (p8_f1_decimal_fuel_canonical (S n) n)
     as [first [rest [Shape [Zero Nonzero]]]]; [lia|].
   pose proof (p8_f1_decimal_fuel_digits (S n) n) as Digits.
