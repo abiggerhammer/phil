@@ -489,8 +489,8 @@ p9SteveStructuralGate putSource getSource = do
             "SteveGet" (coreProgramFunctions core)
           }
       swapOperands terminator = case terminator of
-        CoreSystemsRuntimeChoice name [first, second] site arms ->
-          CoreSystemsRuntimeChoice name [second, first] site arms
+        CoreSystemsRuntimeChoice name [first, second] runtimeSite arms ->
+          CoreSystemsRuntimeChoice name [second, first] runtimeSite arms
         other -> other
       wrongCore = changeTerminator swapOperands steveCoreProgram
   case verifySteveGetStructural architecture wrongCore of
@@ -530,25 +530,25 @@ p9SteveStructuralGate putSource getSource = do
 -- application. This is a test fixture, not evidence of linked native code.
 steveP9PayloadSpecs :: [RuntimeChoicePayloadSpec]
 steveP9PayloadSpecs =
-  [ site "StevePut" "put.entry"
+  [ payloadSite "StevePut" "put.entry"
       [ arm "computed" "put.install" (Just "put.id") ]
-  , site "StevePut" "put.install"
+  , payloadSite "StevePut" "put.install"
       [ arm "installed" "put.ok" Nothing
       , arm "already-exists" "put.ok" Nothing
       , arm "storage-failure" "put.failure" Nothing
       ]
-  , site "SteveGet" "get.entry"
+  , payloadSite "SteveGet" "get.entry"
       [ arm "found" "get.check" (Just "get.bytes")
       , arm "not-found" "get.not-found" Nothing
       , arm "storage-failure" "get.failure" Nothing
       ]
-  , site "SteveGet" "get.check"
+  , payloadSite "SteveGet" "get.check"
       [ arm "accepted" "get.ok" Nothing
       , arm "rejected" "get.integrity-failure" Nothing
       ]
   ]
   where
-    site functionName blockName arms = RuntimeChoicePayloadSpec
+    payloadSite functionName blockName arms = RuntimeChoicePayloadSpec
       (RuntimeChoiceSite functionName blockName) (Map.fromList arms)
     arm label target value =
       (label, RuntimeChoicePayloadArm target value)
