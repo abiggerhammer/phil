@@ -14,14 +14,14 @@ set -euo pipefail
   echo "Invalid MHB_ATC_PUBLISHER_APP_ID" >&2; exit 1;
 }
 
-# GET /users/{username} supports unauthenticated public user metadata;
-# the bot's numeric ID and type must match the GitHub-authored PR identity.
+# The public unauthenticated API is rate-limited by GitHub Actions runner
+# IP, and the same bot read has returned HTTP 403 on main after green PR CI.
+# Use the already-scoped ordinary GitHub Actions GITHUB_TOKEN for this *user*
+# metadata read. It is NOT the publisher App key or installation token.
+# The response is checked against the owner-reviewed App ID/slug binding.
+: "${GH_TOKEN:?Read-only GITHUB_TOKEN required for bot identity lookup}"
 encoded_bot="$(BOT="${PUBLISHER_APP_SLUG}[bot]" python3 -c 'import os, urllib.parse; print(urllib.parse.quote(os.environ["BOT"], safe=""))')"
-curl --fail --silent --show-error --max-time 20 --proto '=https' \
-  -H 'Accept: application/vnd.github+json' \
-  -H 'X-GitHub-Api-Version: 2022-11-28' \
-  "https://api.github.com/users/$encoded_bot" \
-  > /tmp/atc-publisher-bot.json
+gh api "users/$encoded_bot" > /tmp/atc-publisher-bot.json
 
 # No untrusted App metadata substitutes for the protected ruleset's App ID.
 # The authentic App token's app-slug output is checked during publication.
