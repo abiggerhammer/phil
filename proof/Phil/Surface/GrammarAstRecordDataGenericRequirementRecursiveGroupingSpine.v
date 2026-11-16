@@ -95,7 +95,18 @@ Proof.
       requirements)
     as [actual |] eqn:Hrequirements; try discriminate Hnormalize.
   inversion Hnormalize; subst.
-  cbn.
+  unfold phase1_surface_record_generic_requirement_recursive_grouping_spine_tree,
+    phase1_surface_record_generic_requirement_proposition_spine_tree.
+  cbn [phase1_record_generic_requirement_recursive_grouping_spine_name
+       phase1_record_generic_requirement_recursive_grouping_spine_generic_params
+       phase1_record_generic_requirement_recursive_grouping_spine_mode
+       phase1_record_generic_requirement_recursive_grouping_spine_requirements
+       phase1_record_generic_requirement_recursive_grouping_spine_fields
+       phase1_record_generic_requirement_proposition_spine_name
+       phase1_record_generic_requirement_proposition_spine_generic_params
+       phase1_record_generic_requirement_proposition_spine_mode
+       phase1_record_generic_requirement_proposition_spine_requirements
+       phase1_record_generic_requirement_proposition_spine_fields].
   rewrite
     (phase1_surface_normalize_optional_generic_requirements_recursive_grouping_round_trip
       requirements actual Hrequirements).
@@ -223,7 +234,20 @@ Proof.
       requirements)
     as [actual |] eqn:Hrequirements; try discriminate Hnormalize.
   inversion Hnormalize; subst.
-  cbn.
+  unfold phase1_surface_data_generic_requirement_recursive_grouping_spine_tree,
+    phase1_surface_data_generic_requirement_proposition_spine_tree.
+  cbn [phase1_data_generic_requirement_recursive_grouping_spine_name
+       phase1_data_generic_requirement_recursive_grouping_spine_generic_params
+       phase1_data_generic_requirement_recursive_grouping_spine_mode
+       phase1_data_generic_requirement_recursive_grouping_spine_requirements
+       phase1_data_generic_requirement_recursive_grouping_spine_first_variant
+       phase1_data_generic_requirement_recursive_grouping_spine_rest_variants
+       phase1_data_generic_requirement_proposition_spine_name
+       phase1_data_generic_requirement_proposition_spine_generic_params
+       phase1_data_generic_requirement_proposition_spine_mode
+       phase1_data_generic_requirement_proposition_spine_requirements
+       phase1_data_generic_requirement_proposition_spine_first_variant
+       phase1_data_generic_requirement_proposition_spine_rest_variants].
   rewrite
     (phase1_surface_normalize_optional_generic_requirements_recursive_grouping_round_trip
       requirements actual Hrequirements).
