@@ -1,0 +1,210 @@
+name: FSEM-01 CORR-5 Source-Derived Finite Trace Replay
+
+concurrency:
+  group: ${{ github.workflow_ref }}-${{ github.event.pull_request.number || github.run_id }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+on:
+  push:
+    branches:
+      - formal-semantics/fsem01-corr5-source-trace-replay
+    paths:
+      - 'proof/Phil/Surface/SurfaceFiniteLinearTraceCorr5.v'
+      - 'proof/Phil/Surface/SurfaceSourceLinearTraceWireCorr5.v'
+      - 'test/Phase1FSEM01Corr5ReplayMain.hs'
+      - 'scripts/fsem01_corr5_source_witness.py'
+      - '.github/workflows/fsem01-corr5-source-trace-preflight.yml'
+  pull_request:
+    paths:
+      - 'proof/Phil/Surface/SurfaceFiniteLinearTraceCorr5.v'
+      - 'proof/Phil/Surface/SurfaceSourceLinearTraceWireCorr5.v'
+      - 'test/Phase1FSEM01Corr5ReplayMain.hs'
+      - 'scripts/fsem01_corr5_source_witness.py'
+      - 'docs/phase-1/formal-semantics-linear-trace-corr5-fsem01-v1.md'
+      - '.github/workflows/fsem01-corr5-source-trace-preflight.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  rocq-universal-replay:
+    name: Rocq universal finite-step simulation and sticky first-failure theorem
+    runs-on: ubuntu-24.04
+    container:
+      image: rocq/rocq-prover:9.2.0
+      options: --user root
+    steps:
+      - uses: actions/checkout@v4
+      - name: Compile and check composed finite source model
+        shell: bash
+        run: |
+          set -euo pipefail
+          export PATH="/home/rocq/.opam/$COMPILER/bin:$PATH"
+          for file in \
+            proof/Phil/Core/Syntax.v \
+            proof/Phil/Core/Context.v \
+            proof/Phil/Surface/SurfaceFiniteContextFrame.v \
+            proof/Phil/Surface/SurfaceFiniteLinearStepCorr4.v \
+            proof/Phil/Surface/SurfaceFiniteLinearTraceCorr5.v
+          do
+            rocq c -Q proof/Phil Phil "$file"
+          done
+          if grep -nE '^[[:space:]]*(Admitted[.]|Axiom[[:space:]]|Parameter[[:space:]])' \
+               proof/Phil/Surface/SurfaceFiniteLinearTraceCorr5.v; then
+            echo "Unproved CORR-5 model" >&2
+            exit 1
+          fi
+          rocq check -Q proof/Phil Phil Phil.Surface.SurfaceFiniteLinearTraceCorr5
+          sha256sum proof/Phil/Surface/SurfaceFiniteLinearTraceCorr5.v \
+                     proof/Phil/Surface/SurfaceFiniteLinearTraceCorr5.vo
+
+  rocq-wire-preflight:
+    name: Rocq canonical source-trace wire decoder and replay interface
+    runs-on: ubuntu-24.04
+    container:
+      image: rocq/rocq-prover:9.2.0
+      options: --user root
+    steps:
+      - uses: actions/checkout@v4
+      - name: Compile the strict decoder independently before Hackage producer
+        shell: bash
+        run: |
+          set -euo pipefail
+          export PATH="/home/rocq/.opam/$COMPILER/bin:$PATH"
+          for file in \
+            proof/Phil/Core/Syntax.v \
+            proof/Phil/Core/Context.v \
+            proof/Phil/Core/BindingSemantics.v \
+            proof/Phil/Core/ContextJoin.v \
+            proof/Phil/Core/ProcessJoin.v \
+            proof/Phil/Core/ResourceJoin.v \
+            proof/Phil/Core/ResourceScope.v \
+            proof/Phil/Surface/SurfaceBinderScopeCore.v \
+            proof/Phil/Surface/SurfaceLetPatternScope.v \
+            proof/Phil/Surface/SurfaceBorrowViewScope.v \
+            proof/Phil/Surface/SurfaceBorrowLoanStateCorrespondence.v \
+            proof/Phil/Surface/SurfaceBinderNameEncoding.v \
+            proof/Phil/Surface/SurfaceDeclarationIdentityBridge.v \
+            proof/Phil/Surface/SurfaceRepresentedBorrowTrace.v \
+            proof/Phil/Surface/SurfaceBorrowStepErrorBridge.v \
+            proof/Phil/Surface/SurfaceObservationWire.v \
+            proof/Phil/Surface/SurfaceFiniteContextFrame.v \
+            proof/Phil/Surface/SurfaceFiniteLinearStepCorr4.v \
+            proof/Phil/Surface/SurfaceFiniteLinearTraceCorr5.v \
+            proof/Phil/Surface/SurfaceSourceLinearTraceWireCorr5.v
+          do
+            rocq c -Q proof/Phil Phil "$file"
+          done
+          rocq check -Q proof/Phil Phil Phil.Surface.SurfaceSourceLinearTraceWireCorr5
+          sha256sum proof/Phil/Surface/SurfaceSourceLinearTraceWireCorr5.v \
+                     proof/Phil/Surface/SurfaceSourceLinearTraceWireCorr5.vo
+
+  native-source-transcript:
+    name: Strict native source-trace producer, exact-core replay and independent byte validator
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: haskell-actions/setup@v2
+        with:
+          ghc-version: '9.6.7'
+          cabal-version: 'latest'
+          cabal-update: false
+      - name: Bounded Hackage HTTP1 retry
+        run: bash scripts/ci/cabal-update-retry.sh
+      - name: Strict production Haskell
+        run: cabal build lib:phil-core --ghc-options=-Werror
+      - name: Recheck original CORR-3/CORR-4 source and new CORR-5 producer
+        shell: bash
+        run: |
+          set -euo pipefail
+          for test in \
+            Phase1FSEM01Corr3FiniteProjectionMain \
+            Phase1FSEM01Corr4LinearStepMain \
+            Phase1FSEM01Corr5ReplayMain
+          do
+            cabal exec -- ghc -isrc -Wall -Werror -fno-code "test/$test.hs"
+            cabal exec -- runghc -isrc -Wall -Werror "test/$test.hs"
+          done
+      - name: Emit exact source-derived canonical v1 traces and negative controls
+        shell: bash
+        run: |
+          set -euo pipefail
+          cabal exec -- runghc -isrc -Wall -Werror \
+            test/Phase1FSEM01Corr5ReplayMain.hs --emit corr5-artifacts
+          python3 scripts/fsem01_corr5_source_witness.py \
+            --artifact-dir corr5-artifacts \
+            --rocq-witness corr5-generated/GeneratedCorr5Witness.v
+          sha256sum test/fixtures/fsem01-linear-loop-transfer-v1/*.phil \
+            test/fixtures/fsem01-scoped-linear-loop-loan-v1/accepted-closed.phil \
+            corr5-artifacts/*.trace
+      - uses: actions/upload-artifact@v4
+        with:
+          name: fsem01-corr5-actual-source-traces
+          path: corr5-artifacts/*.trace
+          if-no-files-found: error
+          retention-days: 30
+
+  rocq-exact-source-replay:
+    name: Rocq decoded real source transcript bytes and independently checked replay
+    needs: [rocq-universal-replay, native-source-transcript]
+    runs-on: ubuntu-24.04
+    container:
+      image: rocq/rocq-prover:9.2.0
+      options: --user root
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          name: fsem01-corr5-actual-source-traces
+          path: corr5-artifacts
+      - name: Independently revalidate emitted source bytes and generate Rocq witness
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 scripts/fsem01_corr5_source_witness.py \
+            --artifact-dir corr5-artifacts \
+            --rocq-witness corr5-generated/GeneratedCorr5Witness.v
+      - name: Compile exact raw transcript decoder, model and source witnesses
+        shell: bash
+        run: |
+          set -euo pipefail
+          export PATH="/home/rocq/.opam/$COMPILER/bin:$PATH"
+          for file in \
+            proof/Phil/Core/Syntax.v \
+            proof/Phil/Core/Context.v \
+            proof/Phil/Core/BindingSemantics.v \
+            proof/Phil/Core/ContextJoin.v \
+            proof/Phil/Core/ProcessJoin.v \
+            proof/Phil/Core/ResourceJoin.v \
+            proof/Phil/Core/ResourceScope.v \
+            proof/Phil/Surface/SurfaceBinderScopeCore.v \
+            proof/Phil/Surface/SurfaceLetPatternScope.v \
+            proof/Phil/Surface/SurfaceBorrowViewScope.v \
+            proof/Phil/Surface/SurfaceBorrowLoanStateCorrespondence.v \
+            proof/Phil/Surface/SurfaceBinderNameEncoding.v \
+            proof/Phil/Surface/SurfaceDeclarationIdentityBridge.v \
+            proof/Phil/Surface/SurfaceRepresentedBorrowTrace.v \
+            proof/Phil/Surface/SurfaceBorrowStepErrorBridge.v \
+            proof/Phil/Surface/SurfaceObservationWire.v \
+            proof/Phil/Surface/SurfaceFiniteContextFrame.v \
+            proof/Phil/Surface/SurfaceFiniteLinearStepCorr4.v \
+            proof/Phil/Surface/SurfaceFiniteLinearTraceCorr5.v \
+            proof/Phil/Surface/SurfaceSourceLinearTraceWireCorr5.v
+          do
+            rocq c -Q proof/Phil Phil "$file"
+          done
+          rocq c -Q proof/Phil Phil corr5-generated/GeneratedCorr5Witness.v
+          rocq check -Q proof/Phil Phil Phil.Surface.SurfaceSourceLinearTraceWireCorr5
+          if grep -nE '^[[:space:]]*(Admitted[.]|Axiom[[:space:]]|Parameter[[:space:]])' \
+              proof/Phil/Surface/SurfaceFiniteLinearTraceCorr5.v \
+              proof/Phil/Surface/SurfaceSourceLinearTraceWireCorr5.v \
+              corr5-generated/GeneratedCorr5Witness.v; then
+            echo "Unproved CORR-5 model or generated real-source witness" >&2
+            exit 1
+          fi
+          sha256sum \
+            proof/Phil/Surface/SurfaceFiniteLinearTraceCorr5.vo \
+            proof/Phil/Surface/SurfaceSourceLinearTraceWireCorr5.vo \
+            corr5-generated/GeneratedCorr5Witness.v \
+            corr5-generated/GeneratedCorr5Witness.vo \
+            corr5-artifacts/*.trace
