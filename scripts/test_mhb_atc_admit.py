@@ -8,7 +8,9 @@ import sys
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 from mhb_atc_stage import parse_intent
-from mhb_atc_admit import plan as production_plan, STAGED_LABEL, ACTIVE_LABEL
+from mhb_atc_admit import (plan as production_plan, STAGED_LABEL, ACTIVE_LABEL,
+                              filter_reconciliation_issues)
+from mhb_atc_stage import MARKER
 
 EMPTY_VERIFIED_INVENTORY = {
     "decision": "inventory-validated", "admission_clear": True,
@@ -166,6 +168,56 @@ class AdmissionTests(unittest.TestCase):
         x["labels"].append(label("atc: admitting"))
         with self.assertRaisesRegex(ValueError, "ambiguous"):
             plan([x], [])
+
+    def test_r2_untrusted_unlabelled_title_is_not_damaged_reservation(self):
+        outsider = {
+            "number": 1999, "state": "open",
+            "title": "ATC candidate: please investigate",
+            "body": "An ordinary issue", "labels": [],
+            "user": {"login": "ordinary-outsider", "id": 12345, "type": "User"},
+        }
+        selected = plan([outsider, issue()], [])
+        self.assertEqual(selected["decision"], "would-admit")
+        self.assertEqual(selected["candidate_issue"], 101)
+        # The reconciling workflow uses this exact shared classifier.
+        self.assertEqual(filter_reconciliation_issues([outsider, issue()]),
+                         [issue()])
+
+    def test_r2_untrusted_unlabelled_marker_quote_is_not_candidate(self):
+        outsider = {
+            "number": 1999, "state": "open",
+            "title": "Question about the staging marker",
+            "body": MARKER + "\\nThis is quoted documentation.",
+            "labels": [], "user": {"login": "ordinary-outsider"},
+        }
+        self.assertEqual(plan([outsider, issue()], [])["candidate_issue"], 101)
+        self.assertEqual(filter_reconciliation_issues([outsider, issue()]),
+                         [issue()])
+
+    def test_r2_actual_trusted_lost_label_still_blocks_both_planners(self):
+        trusted = issue()
+        trusted["labels"] = [{"name": "lane: mhb-atc"}]
+        with self.assertRaisesRegex(ValueError, "lost all lifecycle"):
+            plan([trusted], [])
+        self.assertEqual(filter_reconciliation_issues([trusted]), [trusted])
+
+    def test_r2_untrusted_labelled_candidate_still_fails_closed(self):
+        outsider = {
+            "number": 1999, "state": "open",
+            "title": "ordinary issue", "body": "not an ATC candidate",
+            "labels": [label("atc: staged")],
+            "user": {"login": "ordinary-outsider"},
+        }
+        self.assertEqual(filter_reconciliation_issues([outsider]), [outsider])
+        with self.assertRaisesRegex(ValueError, "not created by trusted"):
+            plan([outsider], [])
+
+    def test_r2_duplicate_lifecycle_labels_are_not_filtered(self):
+        damaged = issue()
+        damaged["labels"].append(label("atc: admitting"))
+        self.assertEqual(filter_reconciliation_issues([damaged]), [damaged])
+        with self.assertRaisesRegex(ValueError, "ambiguous"):
+            plan([damaged], [])
 
     def test_only_staged_issues_are_candidates(self):
         arbitrary = {"state": "open", "number": 2, "labels": [],
