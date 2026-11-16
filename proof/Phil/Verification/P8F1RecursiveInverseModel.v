@@ -154,8 +154,8 @@ Qed.
 Lemma p8_f1_decimal_fuel_canonical :
   forall fuel n, n <= fuel ->
     exists first rest,
-      p8_e1_decimal_fuel fuel n = first :: rest /\\
-      (n = 0 -> first = 48 /\\ rest = []) /\\
+      p8_e1_decimal_fuel fuel n = first :: rest /\
+      (n = 0 -> first = 48 /\ rest = []) /\
       (0 < n -> first <> 48).
 Proof.
   induction fuel as [|fuel IH]; intros n Bound.
