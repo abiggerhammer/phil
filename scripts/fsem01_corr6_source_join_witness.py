@@ -165,11 +165,20 @@ def main() -> int:
             encode([fields[0],fields[1],fields[3],fields[2],*fields[4:]]),
             source,(left,right,outcome)
         ))
-        reject("reversed predecessor cut",lambda: check_source_fields(
-            encode([*fields[:5],right,left,outcome]),source,(left,right,outcome)
-        ) if left != right else check_source_fields(
-            encode([*fields[:5],"UNREACHED",right,outcome]),
-            source,(left,right,outcome)
+        if left != right:
+            altered_left, altered_right = right, left
+            cut_label = "reversed predecessor cut"
+        else:
+            # Swapping equal cuts is a no-op; forge a genuinely distinct
+            # but well-formed profile, including the pre-join UNREACHED case.
+            altered_left = "U1A0L1N0" if left != "U1A0L1N0" else "U1A1L1N0"
+            altered_right = right
+            cut_label = "forged predecessor cut"
+        altered_wire = encode([*fields[:5],altered_left,altered_right,outcome])
+        if altered_wire == wire:
+            fail(f"adversarial mutation did not change transcript: {cut_label}")
+        reject(cut_label,lambda: check_source_fields(
+            altered_wire,source,(left,right,outcome)
         ))
         reject("fabricated result",lambda: check_source_fields(
             encode([*fields[:7],"JOIN_PERMIT" if outcome!="JOIN_PERMIT"
