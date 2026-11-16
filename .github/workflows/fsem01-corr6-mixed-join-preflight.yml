@@ -10,6 +10,7 @@ on:
       - formal-semantics/fsem01-corr6-mixed-join-exec
     paths:
       - 'proof/Phil/Surface/SurfaceFiniteMixedJoinCorr6.v'
+      - 'proof/Phil/Surface/SurfaceFiniteMixedJoinSoundCorr6.v'
       - 'proof/Phil/Surface/SurfaceSourceMixedJoinWireCorr6.v'
       - 'scripts/fsem01_corr6_source_join_witness.py'
       - 'test/Phase1FSEM01Corr6MixedJoinMain.hs'
@@ -17,6 +18,7 @@ on:
   pull_request:
     paths:
       - 'proof/Phil/Surface/SurfaceFiniteMixedJoinCorr6.v'
+      - 'proof/Phil/Surface/SurfaceFiniteMixedJoinSoundCorr6.v'
       - 'test/Phase1FSEM01Corr6MixedJoinMain.hs'
       - 'docs/phase-1/formal-semantics-mixed-join-corr6-fsem01-v1.md'
       - '.github/workflows/fsem01-corr6-mixed-join-preflight.yml'
@@ -43,7 +45,8 @@ jobs:
             proof/Phil/Core/Context.v \
             proof/Phil/Core/ContextJoin.v \
             proof/Phil/Surface/SurfaceFiniteContextFrame.v \
-            proof/Phil/Surface/SurfaceFiniteMixedJoinCorr6.v
+            proof/Phil/Surface/SurfaceFiniteMixedJoinCorr6.v \
+            proof/Phil/Surface/SurfaceFiniteMixedJoinSoundCorr6.v
           do
             rocq c -Q proof/Phil Phil "$file"
           done
@@ -53,6 +56,7 @@ jobs:
             exit 1
           fi
           rocq check -Q proof/Phil Phil Phil.Surface.SurfaceFiniteMixedJoinCorr6
+          rocq check -Q proof/Phil Phil Phil.Surface.SurfaceFiniteMixedJoinSoundCorr6
           sha256sum proof/Phil/Surface/SurfaceFiniteMixedJoinCorr6.v \
                      proof/Phil/Surface/SurfaceFiniteMixedJoinCorr6.vo
 
@@ -136,6 +140,7 @@ jobs:
             rocq c -Q proof/Phil Phil "$file"
           done
           rocq check -Q proof/Phil Phil Phil.Surface.SurfaceSourceMixedJoinWireCorr6
+          rocq check -Q proof/Phil Phil Phil.Surface.SurfaceFiniteMixedJoinSoundCorr6
           if grep -nE '^[[:space:]]*(Admitted[.]|Axiom[[:space:]]|Parameter[[:space:]])' \
             proof/Phil/Surface/SurfaceFiniteMixedJoinCorr6.v \
             proof/Phil/Surface/SurfaceSourceMixedJoinWireCorr6.v; then
@@ -195,6 +200,7 @@ jobs:
           done
           rocq c -Q proof/Phil Phil corr6-generated/GeneratedCorr6SourceWitness.v
           rocq check -Q proof/Phil Phil Phil.Surface.SurfaceSourceMixedJoinWireCorr6
+          rocq check -Q proof/Phil Phil Phil.Surface.SurfaceFiniteMixedJoinSoundCorr6
           if grep -nE '^[[:space:]]*(Admitted[.]|Axiom[[:space:]]|Parameter[[:space:]])' \
             proof/Phil/Surface/SurfaceFiniteMixedJoinCorr6.v \
             proof/Phil/Surface/SurfaceSourceMixedJoinWireCorr6.v \
