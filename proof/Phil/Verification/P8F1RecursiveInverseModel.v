@@ -442,7 +442,7 @@ Proof.
     { cbn [p8_e1_put_forms] in Bound.
       rewrite app_length in Bound. lia. }
     cbn [p8_f1_forms_loop p8_e1_forms_count p8_e1_put_forms].
-    rewrite app_assoc.
+    (* The emitter's right-associated append is already in prefix form. *)
     rewrite (Child form (p8_e1_put_forms rest ++ suffix)
                    ValidForm BoundForm).
     rewrite (IH suffix ValidRest BoundRest).
