@@ -111,10 +111,12 @@ Proof.
   apply ContextJoin.ContextJoin_nonempty.
   - constructor.
     + unfold ContextJoin.NoLoans.
-      intros name. reflexivity.
+      intros name. unfold F.reifyFinite. simpl.
+      rewrite HloansL. reflexivity.
     + constructor.
       * unfold ContextJoin.NoLoans.
-        intros name. reflexivity.
+        intros name. unfold F.reifyFinite. simpl.
+        rewrite HloansR. reflexivity.
       * constructor.
   - constructor.
     + unfold ContextJoin.SameUnrestricted, ContextJoin.SameBindingMap.
