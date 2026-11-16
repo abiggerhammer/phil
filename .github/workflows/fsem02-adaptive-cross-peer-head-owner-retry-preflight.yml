@@ -9,14 +9,14 @@ on:
       - 'proof/Phil/Core/FSEM02PingAdaptiveCrossPeerHeadOwnerRetry.v'
       - 'docs/phase-1/formal-semantics-source-ping-adaptive-cross-peer-head-owner-retry-fsem02-v1.md'
       - 'docs/phase-1/typing-and-semantics-reader-guide-v1.md'
-      - '.github/workflows/fsem02-adaptive-head-resource-priority-retry-preflight.yml'
+      - '.github/workflows/fsem02-adaptive-cross-peer-head-owner-retry-preflight.yml'
   pull_request:
     paths:
       - 'test/Phase1FSEM02ProtocolProgressionMain.hs'
       - 'proof/Phil/Core/FSEM02PingAdaptiveCrossPeerHeadOwnerRetry.v'
       - 'docs/phase-1/formal-semantics-source-ping-adaptive-cross-peer-head-owner-retry-fsem02-v1.md'
       - 'docs/phase-1/typing-and-semantics-reader-guide-v1.md'
-      - '.github/workflows/fsem02-adaptive-head-resource-priority-retry-preflight.yml'
+      - '.github/workflows/fsem02-adaptive-cross-peer-head-owner-retry-preflight.yml'
 
 permissions:
   contents: read
