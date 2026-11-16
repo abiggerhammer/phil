@@ -69,6 +69,8 @@ The [JSON register](fsem01-coverage1-register.json) is the single row source. [T
 | `X-09` | `component_decl` — Source to target resource realization | **handoff** | Owner: **FSEM-06** | FSEM-06 owns translation/differential execution correspondence. |
 <!-- COVERAGE-1-REGISTER-END -->
 
+**J-5 proposed bounded update (2026-11-16):** The new [Linear source join-state slice](formal-semantics-linear-join-j5-fsem01-v1.md) targets one checked Linear Bytes[N] slot and real predecessor moves, but `JOIN-05` stays classified **gap** until the PR is independently checked and merged, and even afterward the general dependent/multiple restricted-slot domain needs a separate semantic bridge. The static source adapter's noncompetence is not normative rejection.
+
 ## Decisions and subsequent implementation work
 
 1. **Aggregates and patterns (R08/R09/R14).** Determine accepted semantic domain for nested/recursive tuples, record/sum payloads, record destructuring and projection. For each admitted shape, add a positive and diagnostically isolated negative executable source witness, real owner transitions and a matching bounded Rocq bridge. Existing nested fixtures are *adapter-noncompetence* evidence, never universal source rejection.
