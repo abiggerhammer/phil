@@ -10,6 +10,10 @@ on:
       - 'scripts/mhb_atc_admit.py'
       - 'scripts/test_mhb_atc_admit.py'
       - 'scripts/mhb_atc_immutable.py'
+      - 'scripts/mhb_atc_inventory.py'
+      - 'scripts/test_mhb_atc_inventory.py'
+      - 'scripts/mhb_atc_inventory_snapshot.sh'
+      - '.github/atc-publisher-policy.json'
       - 'scripts/test_mhb_atc_immutable.py'
       - 'scripts/test_mhb_atc_auto_config.py'
       - 'scripts/mhb_atc_reconcile.py'
@@ -29,6 +33,10 @@ on:
       - 'scripts/mhb_atc_admit.py'
       - 'scripts/test_mhb_atc_admit.py'
       - 'scripts/mhb_atc_immutable.py'
+      - 'scripts/mhb_atc_inventory.py'
+      - 'scripts/test_mhb_atc_inventory.py'
+      - 'scripts/mhb_atc_inventory_snapshot.sh'
+      - '.github/atc-publisher-policy.json'
       - 'scripts/test_mhb_atc_immutable.py'
       - 'scripts/test_mhb_atc_auto_config.py'
       - 'scripts/mhb_atc_reconcile.py'
@@ -52,7 +60,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - name: Syntax
-        run: python3 -m py_compile scripts/mhb_atc.py scripts/test_mhb_atc.py scripts/mhb_atc_stage.py scripts/test_mhb_atc_stage.py scripts/mhb_atc_admit.py scripts/test_mhb_atc_admit.py scripts/mhb_atc_immutable.py scripts/test_mhb_atc_immutable.py scripts/test_mhb_atc_auto_config.py scripts/mhb_atc_reconcile.py scripts/test_mhb_atc_reconcile.py
+        run: python3 -m py_compile scripts/mhb_atc.py scripts/test_mhb_atc.py scripts/mhb_atc_stage.py scripts/test_mhb_atc_stage.py scripts/mhb_atc_admit.py scripts/test_mhb_atc_admit.py scripts/mhb_atc_immutable.py scripts/test_mhb_atc_immutable.py scripts/mhb_atc_inventory.py scripts/test_mhb_atc_inventory.py scripts/test_mhb_atc_auto_config.py scripts/mhb_atc_reconcile.py scripts/test_mhb_atc_reconcile.py
       - name: Offline radar and admission-policy tests
         run: python3 scripts/test_mhb_atc.py
       - name: Offline durable staging-intent tests
@@ -63,5 +71,31 @@ jobs:
         run: python3 scripts/test_mhb_atc_auto_config.py
       - name: Immutable publisher, ruleset and receipt negative replay tests
         run: python3 scripts/test_mhb_atc_immutable.py
+      - name: Full protected-ref census and authenticated history replays
+        run: python3 scripts/test_mhb_atc_inventory.py
       - name: Offline slot-release and recovery tests
         run: python3 scripts/test_mhb_atc_reconcile.py
+
+  policy-reader-visibility:
+    # Confirm the SAME low-privilege GITHUB_TOKEN class used by the actual
+    # controller can validate the pinned owner-authenticated version even if
+    # GitHub redacts bypass_actors. No admin App token is ever granted here.
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+      - name: Verify live policy evidence through ordinary workflow identity
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          gh api "repos/$GH_REPO/rulesets/27365284" > /tmp/atc-reader-ruleset.json
+          python3 scripts/mhb_atc_immutable.py ruleset \
+            --ruleset-json /tmp/atc-reader-ruleset.json \
+            --repo "$GH_REPO" --app-id 5782193 --ruleset-id 27365284
+          jq -r '("Ruleset live revision: " + (.updated_at // "MISSING")),
+                 ("Bypass field visible to workflow token: " + (has("bypass_actors")|tostring))' \
+            /tmp/atc-reader-ruleset.json >> "$GITHUB_STEP_SUMMARY"
