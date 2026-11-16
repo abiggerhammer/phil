@@ -1,0 +1,90 @@
+name: FSEM-01 J-6A Two-Affine Source Foundation Preflight
+
+on:
+  push:
+    branches:
+      - formal-semantics/fsem01-j6a-two-affine-source-foundation
+    paths:
+      - 'test/Phase1FSEM01J6TwoAffineFoundationMain.hs'
+      - 'test/fixtures/fsem01-j6-two-affine-source-v1/**'
+      - 'proof/Phil/Surface/SurfaceTwoAffineJoinFoundationJ6.v'
+      - '.github/workflows/fsem01-j6a-affine-foundation-preflight.yml'
+  pull_request:
+    paths:
+      - 'test/Phase1FSEM01J6TwoAffineFoundationMain.hs'
+      - 'test/fixtures/fsem01-j6-two-affine-source-v1/**'
+      - 'proof/Phil/Surface/SurfaceTwoAffineJoinFoundationJ6.v'
+      - 'docs/phase-1/formal-semantics-two-affine-join-j6a-fsem01-v1.md'
+      - '.github/workflows/fsem01-j6a-affine-foundation-preflight.yml'
+
+concurrency:
+  group: ${{ github.workflow_ref }}-${{ github.event.pull_request.number || github.run_id }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+permissions:
+  contents: read
+
+jobs:
+  native-two-owner-source-admission:
+    name: Strict GHC two distinct nominal Affine source owners and Core move/join controls
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: haskell-actions/setup@v2
+        with:
+          ghc-version: '9.6.7'
+          cabal-version: 'latest'
+          cabal-update: false
+      - name: Retry bounded Hackage HTTP1 update
+        run: bash scripts/ci/cabal-update-retry.sh
+      - name: Strict checker substrate and source/Core foundation
+        shell: bash
+        run: |
+          set -euo pipefail
+          cabal build lib:phil-core --ghc-options=-Werror
+          for test in \
+            Phase1FSEM01AffineJoinScopeMain \
+            Phase1FSEM01LinearJoinTelescopeMain \
+            Phase1FSEM01J6TwoAffineFoundationMain
+          do
+            cabal exec -- ghc -isrc -itest -Wall -Werror -fno-code "test/$test.hs"
+            cabal exec -- runghc -isrc -itest -Wall -Werror "test/$test.hs"
+          done
+          sha256sum \
+            test/Phase1FSEM01J6TwoAffineFoundationMain.hs \
+            test/fixtures/fsem01-j6-two-affine-source-v1/*.phil \
+            src/Phil/Core/Context.hs \
+            src/Phil/Surface/GrammarV1/JoinStateScope.hs \
+            src/Phil/Surface/GrammarV1/DataVariants.hs
+
+  rocq-affine-join-groundwork:
+    name: Rocq conditional distinct-owner Affine move, intersection and slot freshness
+    runs-on: ubuntu-24.04
+    container:
+      image: rocq/rocq-prover:9.2.0
+      options: --user root
+    steps:
+      - uses: actions/checkout@v4
+      - name: Compile complete Core/scoped-Affine imports and check assumptions
+        shell: bash
+        run: |
+          set -euo pipefail
+          export PATH="/home/rocq/.opam/$COMPILER/bin:$PATH"
+          for file in \
+            proof/Phil/Core/Syntax.v \
+            proof/Phil/Core/Context.v \
+            proof/Phil/Core/ContextJoin.v \
+            proof/Phil/Surface/SurfaceSourceAffineJoinScopeBridge.v \
+            proof/Phil/Surface/SurfaceTwoAffineJoinFoundationJ6.v
+          do
+            rocq c -Q proof/Phil Phil "$file"
+          done
+          rocq check -Q proof/Phil Phil Phil.Surface.SurfaceTwoAffineJoinFoundationJ6
+          if grep -nE '^[[:space:]]*(Admitted[.]|Axiom[[:space:]]|Parameter[[:space:]])' \
+            proof/Phil/Surface/SurfaceTwoAffineJoinFoundationJ6.v; then
+            echo "Unproved J-6A source/core Affine theorem" >&2
+            exit 1
+          fi
+          sha256sum \
+            proof/Phil/Surface/SurfaceTwoAffineJoinFoundationJ6.v \
+            proof/Phil/Surface/SurfaceTwoAffineJoinFoundationJ6.vo
