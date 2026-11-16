@@ -334,7 +334,13 @@ steveVerifiedProducer putSource getSource = do
 -- the dynamic read owner, live source loan, selected linked ABI or proof.
 p9SteveStructuralGate :: Text -> Text -> Either String ()
 p9SteveStructuralGate putSource getSource = do
-  produced <- verifiedSteveProduction putSource getSource
+  context <- steveQualifiedRealizationContext
+  checkedCanonical <- mapLeft show $ produceVerifiedSteveGetCanonicalSource
+    steveRoots steveEnvironments
+    (Map.singleton "program:steve" (InstanceLineageSiteId "instance.steve"))
+    stevePolicy (steveBundle putSource getSource)
+    steveCoreProgram context
+  let produced = verifiedSteveGetCanonicalSourceProduction checkedCanonical
   _ <- mapLeft show (verifyOriginalSteveGetStructural produced)
   architecture <- checkedSteveArchitecture putSource getSource
   fact <- mapLeft show (verifySteveGetStructural architecture steveCoreProgram)
@@ -363,6 +369,30 @@ p9SteveStructuralGate putSource getSource = do
         ]
   assert (length originalFound == 1 && length originalCall == 1)
     "P9 private P2 graph omitted the real checked provider-result/call events"
+
+  -- Matching a source spelling and constructing an accepted Proof payload
+  -- is not authority: the private qualifier must rederive the canonical
+  -- Blob/Digest source environment rather than trusting the supplied map.
+  let forgedEnvironment = Map.adjust
+        (\environment -> environment
+          { surfacePrimitives = Map.insert "digest_check"
+              (PrimitiveProviderDecision
+                [PrimitiveReadOnly, PrimitiveReadOnly]
+                [ ProviderOutcomeSpec "accepted"
+                    [(Unrestricted, TyProof (Atom "DigestMatches" []))]
+                , ProviderOutcomeSpec "rejected"
+                    [(Unrestricted, TyOpaque "DigestFailure")]
+                ])
+              (surfacePrimitives environment) })
+        steveGetDeclaration steveEnvironments
+  case produceVerifiedSteveGetCanonicalSource
+      steveRoots forgedEnvironment
+      (Map.singleton "program:steve" (InstanceLineageSiteId "instance.steve"))
+      stevePolicy (steveBundle putSource getSource)
+      steveCoreProgram context of
+    Left SteveGetCanonicalEnvironmentMismatch -> Right ()
+    other -> Left
+      ("P9 source qualification accepted caller-minted TyProof: " <> show other)
 
   -- The ordinary primitive permits readable arguments without a qualified
   -- expected type vector. The new P9-only discriminator must reject a
