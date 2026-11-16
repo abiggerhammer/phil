@@ -430,9 +430,15 @@ p9SteveStructuralGate putSource getSource = do
                 Just "get.id" }) "found" (runtimeChoicePayloadArms spec) }
           else spec)
         steveP9PayloadSpecs
+  -- The GENERIC payload planner admits any declared Core value here;
+  -- it is the SPECIALIZED selected P9 ABI consumer that must refuse this
+  -- false read.found owner-result association.
   case certifyRuntimeChoicePayloadPlan steveCoreProgram forgedPayload of
     Left _ -> Right ()
-    other -> Left ("P9 accepted substituted found-result payload: " <> show other)
+    Right substituted -> case
+        verifyOriginalSteveGetModeledABI checkedCanonical substituted of
+      Left _ -> Right ()
+      Right _ -> Left "P9 selected ABI accepted substituted found-result owner"
 
   let forgedEnvironment = Map.adjust
         (\environment -> environment
