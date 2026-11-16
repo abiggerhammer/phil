@@ -132,16 +132,20 @@ Proof.
   | Hnil : DerivesSequence phase1_surface_rules _ _ [] _ _ _ |- _ =>
       inversion Hnil; subst; clear Hnil
   end.
-  match goal with
-  | Hrequirements : Derives phase1_surface_rules _
-      (EOptional (ENonterminal "generic_requirements"))
-      _ _ (phase1_surface_optional_generic_requirements_type_tree requirements)
-      |- _ =>
-      destruct
-        (phase1_surface_normalize_optional_generic_requirements_proposition_total_from_spine_derivation
-          requirements _ _ _ Hrequirements)
-        as [refined_requirements Hrefined_requirements];
-      let refined := constr:(
+  assert (Hrequirements_total :
+    exists refined_requirements,
+      phase1_surface_normalize_optional_generic_requirements_proposition
+        requirements = Some refined_requirements).
+  { eapply
+      phase1_surface_normalize_optional_generic_requirements_proposition_total_from_spine_derivation;
+    eassumption. }
+  destruct Hrequirements_total as
+    [refined_requirements Hrefined_requirements].
+  let original_tree :=
+    match goal with
+    | |- context[phase1_surface_normalize_record_generic_requirement_proposition_tree ?t] => t
+    end in
+  let refined := constr:(
         {| phase1_record_generic_requirement_proposition_spine_name := name;
            phase1_record_generic_requirement_proposition_spine_generic_params :=
              generic_params;
@@ -152,7 +156,7 @@ Proof.
              fields |}) in
       assert (Hnormalize :
         phase1_surface_normalize_record_generic_requirement_proposition_tree
-          tree = Some refined);
+          original_tree = Some refined);
       [ unfold
           phase1_surface_normalize_record_generic_requirement_proposition_tree;
         rewrite Hbase;
@@ -166,8 +170,7 @@ Proof.
         [ exact Hnormalize
         | eapply
             phase1_surface_normalize_record_generic_requirement_proposition_tree_round_trip;
-          exact Hnormalize ] ]
-  end.
+          exact Hnormalize ] ].
 Qed.
 
 Theorem
@@ -254,16 +257,20 @@ Proof.
   | Hnil : DerivesSequence phase1_surface_rules _ _ [] _ _ _ |- _ =>
       inversion Hnil; subst; clear Hnil
   end.
-  match goal with
-  | Hrequirements : Derives phase1_surface_rules _
-      (EOptional (ENonterminal "generic_requirements"))
-      _ _ (phase1_surface_optional_generic_requirements_type_tree requirements)
-      |- _ =>
-      destruct
-        (phase1_surface_normalize_optional_generic_requirements_proposition_total_from_spine_derivation
-          requirements _ _ _ Hrequirements)
-        as [refined_requirements Hrefined_requirements];
-      let refined := constr:(
+  assert (Hrequirements_total :
+    exists refined_requirements,
+      phase1_surface_normalize_optional_generic_requirements_proposition
+        requirements = Some refined_requirements).
+  { eapply
+      phase1_surface_normalize_optional_generic_requirements_proposition_total_from_spine_derivation;
+    eassumption. }
+  destruct Hrequirements_total as
+    [refined_requirements Hrefined_requirements].
+  let original_tree :=
+    match goal with
+    | |- context[phase1_surface_normalize_data_generic_requirement_proposition_tree ?t] => t
+    end in
+  let refined := constr:(
         {| phase1_data_generic_requirement_proposition_spine_name := name;
            phase1_data_generic_requirement_proposition_spine_generic_params :=
              generic_params;
@@ -276,7 +283,7 @@ Proof.
              rest_variants |}) in
       assert (Hnormalize :
         phase1_surface_normalize_data_generic_requirement_proposition_tree
-          tree = Some refined);
+          original_tree = Some refined);
       [ unfold
           phase1_surface_normalize_data_generic_requirement_proposition_tree;
         rewrite Hbase;
@@ -290,6 +297,5 @@ Proof.
         [ exact Hnormalize
         | eapply
             phase1_surface_normalize_data_generic_requirement_proposition_tree_round_trip;
-          exact Hnormalize ] ]
-  end.
+          exact Hnormalize ] ].
 Qed.
