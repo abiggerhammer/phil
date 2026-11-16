@@ -5,6 +5,9 @@ No workflow run or GitHub mutation occurs here. GitHub itself validates YAML;
 these tests pin the narrow opt-in decision and existing manual behavior.
 """
 from pathlib import Path
+import os
+import subprocess
+import textwrap
 import unittest
 
 WORKFLOW = (Path(__file__).resolve().parents[1]
@@ -85,7 +88,40 @@ class ManualPublisherCredentialPreflightTests(unittest.TestCase):
                     "MHB_ATC_PHASE2_STAGE_BRIDGE_ENABLED",
                     "MHB_ATC_IMMUTABLE_HEADS_ENABLED"):
             self.assertIn("vars." + var, self.source)
-        self.assertIn('test "$enabled" != "true"', self.source)
+        self.assertIn('test "${enabled,,}" != "true"', self.source)
+
+    def test_mixed_case_true_is_rejected_by_actual_shell_guard(self):
+        # Execute the exact checked-in precheck loop, not a Python
+        # approximation: GitHub Actions expression equality ignores case.
+        first = '          for enabled in "$AUTO_ADMIT_ENABLED" "$STAGE_BRIDGE_ENABLED" "$IMMUTABLE_ENABLED"; do'
+        start = self.source.index(first)
+        stop = self.source.index("          done\\n", start) + len("          done\\n")
+        guard = textwrap.dedent(self.source[start:stop])
+        for variable in ("AUTO_ADMIT_ENABLED", "STAGE_BRIDGE_ENABLED",
+                         "IMMUTABLE_ENABLED"):
+            for enabled in ("true", "TRUE", "True", "tRuE"):
+                env = dict(os.environ, AUTO_ADMIT_ENABLED="",
+                           STAGE_BRIDGE_ENABLED="", IMMUTABLE_ENABLED="")
+                env[variable] = enabled
+                with self.subTest(variable=variable, enabled=enabled):
+                    ran = subprocess.run(
+                        ["bash", "-c", "set -euo pipefail\\n" + guard],
+                        text=True, capture_output=True, env=env, check=False)
+                    self.assertNotEqual(ran.returncode, 0, ran.stdout)
+                    self.assertIn("must remain OFF", ran.stderr)
+        for enabled in ("", "false", "FALSE", "False"):
+            env = dict(os.environ, AUTO_ADMIT_ENABLED=enabled,
+                       STAGE_BRIDGE_ENABLED="", IMMUTABLE_ENABLED="")
+            with self.subTest(inactive=enabled):
+                ran = subprocess.run(
+                    ["bash", "-c", "set -euo pipefail\\n" + guard],
+                    text=True, capture_output=True, env=env, check=False)
+                self.assertEqual(ran.returncode, 0, ran.stderr)
+
+    def test_receipt_distinguishes_enabled_revoke_from_completed_cleanup(self):
+        self.assertIn("automatic revocation enabled, confirm post-action cleanup log",
+                      self.source)
+        self.assertNotIn("automatically revoked at job end", self.source)
 
     def test_mint_matches_actual_publisher_but_performs_only_reads(self):
         self.assertIn(
