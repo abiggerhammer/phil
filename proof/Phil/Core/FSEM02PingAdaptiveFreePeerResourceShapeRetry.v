@@ -1,5 +1,5 @@
 From Stdlib Require Import Arith.PeanoNat.
-From Phil.Core Require Import FSEM02PingAdaptiveHalfCloseSuffix.
+From Phil.Core Require Import FSEM02PingMixedPrefixFault FSEM02PingAdaptiveHalfCloseSuffix.
 
 (* FSEM-02, non-normative: an additional FINITE resource-shape observation
    gate around the already-conditional adaptive Ping phase relation.
