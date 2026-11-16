@@ -191,7 +191,7 @@ Proof.
     p8_e1_frame_count n ++ suffix =
       p8_e1_decimal_fuel (S n) n ++ 58 :: suffix).
   { unfold p8_e1_frame_count, p8_e1_decimal.
-    exact (app_assoc (p8_e1_decimal_fuel (S n) n) [58] suffix). }
+    symmetry. exact (app_assoc (p8_e1_decimal_fuel (S n) n) [58] suffix). }
   rewrite Frame.
   destruct (p8_f1_decimal_fuel_canonical (S n) n)
     as [first [rest [Shape [Zero Nonzero]]]]; [lia|].
