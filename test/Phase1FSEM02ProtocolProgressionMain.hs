@@ -51,7 +51,7 @@ main = do
         (sourcePingDisjointPairCommutation accepted stale)
     , test "FSEM-02 disjoint Ping pairs complete all 24 terminal Close orders"
         (sourcePingDisjointTerminalInterleavings accepted stale)
-    , test "FSEM-02 25920 partner terminal schedules, 144 partial prefixes, 288 stale cross-partner refusals"
+    , test "FSEM-02 25920 terminal schedules, 144 partner prefixes, 288 refused rematches, 1512 adaptive suffix replays"
         (sourcePingThreeDisjointTerminalSchedules accepted stale)
     , test "FSEM-02 competing Ping sends sharing a Client predecessor refuse second use"
         (sourcePingSharedClientContention accepted stale)
@@ -2500,6 +2500,12 @@ sourcePingThreeDisjointTerminalSchedules accepted rejected = do
       selectedClientKeys = [ac, bc, cc]
       selectedRequests selectedServers =
         zipWith request selectedClientKeys selectedServers
+      -- Every committed prefix permits separate external choices among
+      -- still-unconsumed participants, never among spent participants.
+      alternateSuffixChoices =
+        sum [length (permutations (drop committedCount [ac, bc, cc]))
+            * length (permutations (drop committedCount [as, bs, cs]))
+            | committedCount <- [0..3]]
       rejectConsumed label expectedProcess expectedEndpoint contexts attempted =
         case run contexts attempted of
           Left (RendezvousEndpointNotOwnedByProcess actualProcess predecessor) ->
@@ -2508,6 +2514,8 @@ sourcePingThreeDisjointTerminalSchedules accepted rejected = do
           other -> Left (label <> ": selected partner improperly reused: " <> show other)
   assert (length selectedServerOrders == 6)
     "three source-checked Ping partners lack all six external bijections"
+  assert (length selectedServerOrders * length rendezvousOrders * alternateSuffixChoices == 1512)
+    "adaptive external partner-suffix selection census changed"
   mapM_ (\selectedServers -> do
     let selected = selectedRequests selectedServers
         firstServer = head selectedServers
@@ -2551,6 +2559,8 @@ sourcePingThreeDisjointTerminalSchedules accepted rejected = do
       mapM_ (\prefixLength -> do
         let committed = take prefixLength chosenOrder
             unmatched = drop prefixLength chosenOrder
+            freeClientKeys = [remainingClientKey | (remainingClientKey, _, _) <- unmatched]
+            freeServerKeys = [remainingServerKey | (_, remainingServerKey, _) <- unmatched]
         prefixState <- foldM
           (\contexts (_, _, req) -> mapLeft show (run contexts req))
           before committed
@@ -2582,7 +2592,22 @@ sourcePingThreeDisjointTerminalSchedules accepted rejected = do
         assert
           (replayedPrefix == canonical
            && Map.keysSet replayedPrefix == Map.keysSet before)
-          "partial-prefix rejected rematch changed valid suffix replay or owners")
+          "partial-prefix rejected rematch changed valid suffix replay or owners"
+        -- An initial matching is not fixed by source syntax. From this
+        -- committed prefix, enumerate every externally selected bijection
+        -- and order of the unmatched, independently live participants.
+        mapM_ (\alternateServerOrder ->
+          mapM_ (\alternateClientOrder -> do
+            let alternateRequests = zipWith request alternateClientOrder alternateServerOrder
+            alternateFinal <- foldM
+              (\contexts req -> mapLeft show (run contexts req))
+              prefixState alternateRequests
+            assert
+              (alternateFinal == canonical
+               && Map.keysSet alternateFinal == Map.keysSet before)
+              "adaptive selected suffix changed typed End owners or the affine spectator")
+            (permutations freeClientKeys))
+          (permutations freeServerKeys))
         [0..3])
       (permutations chosenPairs))
     selectedServerOrders
