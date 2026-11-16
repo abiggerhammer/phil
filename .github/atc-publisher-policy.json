@@ -13,5 +13,6 @@
     }
   ],
   "evidence_url": "https://github.com/abiggerhammer/phil/issues/1839#issuecomment-6913947260",
-  "verified_by": "Repository-owner-connected GitHub API ruleset read; bypass list visible to owner. Pin updated_at against lower-privileged Actions reader; rotate via reviewed PR after ANY ruleset edit."
+  "verified_by": "Repository-owner-connected GitHub API ruleset read; bypass list visible to owner. Pin updated_at against lower-privileged Actions reader; rotate via reviewed PR after ANY ruleset edit. The publisher slug is source-pinned from maintainer-provisioned GitHub Actions variable; only the protected publish token's app-slug output can authenticate the actual App installation at deployment.",
+  "publisher_app_slug": "phil-atc-publisher"
 }
