@@ -20,15 +20,15 @@ on:
       - '.github/workflows/fsem01-corr8-source-failure-preflight.yml'
 
 concurrency:
-  group: corr8-${{ github.event.pull_request.number || github.run_id }}
-  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+  group: corr8-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
 
 permissions:
   contents: read
 
 jobs:
   rocq-predecessor-model:
-    name: Rocq finite terminal-aware predecessor classification and global priority
+    name: Rocq first-source-failure precedence and no-successor model
     runs-on: ubuntu-24.04
     container:
       image: rocq/rocq-prover:9.2.0
@@ -62,7 +62,7 @@ jobs:
                      proof/Phil/Surface/SurfaceSourceFailureCorr8.vo
 
   native-predecessor-source:
-    name: Strict native source terminal/continuing finite join replay and negative controls
+    name: Strict native original-source prejoin failure and no-successor controls
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v4
@@ -103,7 +103,7 @@ jobs:
           retention-days: 30
 
   rocq-source-decoder:
-    name: Rocq strict finite original-source predecessor decoder
+    name: Rocq strict original-source failure-prefix decoder
     runs-on: ubuntu-24.04
     container:
       image: rocq/rocq-prover:9.2.0
@@ -152,7 +152,7 @@ jobs:
                      proof/Phil/Surface/SurfaceSourceFailureWireCorr8.vo
 
   rocq-exact-source-replay:
-    name: Rocq replay exact six original Haskell-produced predecessor bytes
+    name: Rocq replay eight exact Haskell-produced source-failure prefixes
     needs: [rocq-predecessor-model, native-predecessor-source, rocq-source-decoder]
     runs-on: ubuntu-24.04
     container:
