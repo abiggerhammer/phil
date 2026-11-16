@@ -151,6 +151,7 @@ data GenericRealizationContext = GenericRealizationContext
 data GenericLoweringError
   = GenericLoweringEmptyVerifierProfile
   | GenericLoweringEmptyContextRevision
+  | GenericLoweringMalformedContextSemantics
   | GenericLoweringEmptyRealizationRefs
   | GenericLoweringEmptyFacts
   | GenericLoweringEmptyFunctions
@@ -246,6 +247,10 @@ validateInputs program context = do
     GenericLoweringEmptyVerifierProfile
   require (not (Text.null (genericContextRevision context)))
     GenericLoweringEmptyContextRevision
+  -- Public SemanticForm constructors can carry invalid native Set/Map trees.
+  -- Refuse them before any digest or revision canonicalizes their contents.
+  require (nativeSemanticFormValid (genericContextSemantics context))
+    GenericLoweringMalformedContextSemantics
   require (not (Set.null (genericContextRealizationRefs context)))
     GenericLoweringEmptyRealizationRefs
   require (not (Map.null (coreProgramFacts program)))
@@ -255,6 +260,20 @@ validateInputs program context = do
   mapM_ (validateRuntimeFact program)
     (Map.toAscList (genericContextRuntimeSites context))
   mapM_ (validateFunction context) (Map.toAscList (coreProgramFunctions program))
+
+-- | Check original recursive native shape, not equality with a repaired or
+-- re-sorted representation. The public containers validators inspect tree
+-- order, balance and cached sizes; descendants are checked before comparing
+-- SemanticForm keys. This is for finite, successfully evaluated native values;
+-- it is not an independent proof of the selected libraries' implementation.
+nativeSemanticFormValid :: SemanticForm -> Bool
+nativeSemanticFormValid form = case form of
+  SemanticAtom _ -> True
+  SemanticOrdered children -> all nativeSemanticFormValid children
+  SemanticUnordered members ->
+    all nativeSemanticFormValid (Set.toAscList members) && Set.valid members
+  SemanticRecord fields ->
+    all nativeSemanticFormValid (Map.elems fields) && Map.valid fields
 
 validateRuntimeFact
   :: CoreSystemsProgram

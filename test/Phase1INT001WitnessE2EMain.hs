@@ -15,6 +15,7 @@ import Phil.Core.Static
   ( DeclarationKey (..)
   , emptyStaticContext
   , InstanceKey (..)
+  , SemanticForm (..)
   )
 import Phil.Core.Syntax (Mode (..), Name (..), Proposition (..), Obligation (..), ObligationId (..), Ty (..))
 import Phil.Examples.Phase1.StageClosureWitnesses
@@ -58,7 +59,8 @@ import Phil.Surface.Phase0 (phase0EnvironmentFor)
 import Phil.Surface.Syntax (SourcePoint (..), SourceSpan (..))
 import Phil.Systems.GenericLowering
   ( CoreSystemsProgram (..)
-  , GenericRealizationContext
+  , GenericRealizationContext (..)
+  , GenericLoweringError (..)
   , coreSystemsProgramSemanticForm
   )
 import Phil.Systems.Phase1Stage
@@ -178,6 +180,8 @@ main = do
         (steveVerifiedProducer stevePut steveGet)
     , test "INT-001 source-owned producer refuses unlisted occurrence site"
         (verifiedProducerRejectsWrongSite uploadClient uploadServer)
+    , test "P8-H2 actual Upload P2 rejects malformed realization semantics"
+        (p8H2UploadRejectsMalformedContext uploadClient uploadServer)
     , test "P6 Upload whole StageClosure built from sealed ordinary source"
         (uploadVerifiedStageClosure uploadClient uploadServer)
     , test "P6 Steve whole StageClosure built from sealed ordinary source"
@@ -355,6 +359,30 @@ verifiedUploadProduction clientSource serverSource = do
     (Map.singleton "program:upload" (InstanceLineageSiteId "instance.upload"))
     uploadPolicy (uploadBundle clientSource serverSource)
     uploadCoreProgram uploadRealizationContext
+
+-- Real source-path regression for the H1 native witness. Unlike the public
+-- generic/diagnostic controls, this must reject at P2 before sealing a stage.
+p8H2UploadRejectsMalformedContext :: Text -> Text -> Either String ()
+p8H2UploadRejectsMalformedContext clientSource serverSource = do
+  _ <- verifiedUploadProduction clientSource serverSource
+  clientEnvironment <- mapLeft show (phase0EnvironmentFor "client.phil")
+  serverEnvironment <- mapLeft show (phase0EnvironmentFor "server.phil")
+  let bad = SemanticUnordered (Set.fromDistinctAscList
+        [SemanticRecord Map.empty, SemanticUnordered Set.empty])
+      context = uploadRealizationContext { genericContextSemantics = bad }
+      result = produceVerifiedSourceSystems
+        uploadRoots
+        (Map.fromList
+          [ (uploadClientDeclaration, clientEnvironment)
+          , (uploadServerDeclaration, serverEnvironment) ])
+        (Map.singleton "program:upload" (InstanceLineageSiteId "instance.upload"))
+        uploadPolicy (uploadBundle clientSource serverSource)
+        uploadCoreProgram context
+  case result of
+    Left (VerifiedSourceLoweringRejected
+      (SourceSystemsLoweringRejected GenericLoweringMalformedContextSemantics)) ->
+        Right ()
+    other -> Left ("malformed Upload context crossed P2: " <> show other)
 
 verifiedSteveProduction
   :: Text -> Text -> Either String VerifiedSourceSystemsProduction
