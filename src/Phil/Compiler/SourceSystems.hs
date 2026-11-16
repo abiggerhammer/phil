@@ -29,11 +29,14 @@ module Phil.Compiler.SourceSystems
   , VerifiedSteveGetModeledABI
   , VerifiedSteveGetModeledABIError (..)
   , verifyOriginalSteveGetModeledABI
+  , SteveGetLLVMPointerFlowError (..)
+  , verifySteveGetLLVMPointerFlow
   ) where
 
 import qualified Data.Map.Strict as Map
 import qualified Data.Set as Set
 import Data.Text (Text)
+import qualified Data.Text as Text
 import Phil.Core.Syntax (Mode (..), Ty (..))
 import Phil.Examples.Steve.ApplicationShell (steveGetShellEnvironment)
 import Phil.Examples.Steve.ProviderQualifications
@@ -415,6 +418,7 @@ data VerifiedSteveGetModeledABIError
   | SteveModeledABIReadMismatch
   | SteveModeledABIDigestMismatch
   | SteveModeledABILinkedArtifactUnproved
+  | SteveModeledABIPointerFlowRejected SteveGetLLVMPointerFlowError
   deriving (Eq, Show)
 
 -- | Recompute from the private source/Core stage instead of taking a supplied
@@ -472,4 +476,41 @@ verifyOriginalSteveGetModeledABI canonical@(VerifiedSteveGetCanonicalSource
         && actualArms checkChoice == expectedCheck
   if readOk then Right () else Left SteveModeledABIReadMismatch
   if checkOk then Right () else Left SteveModeledABIDigestMismatch
+  mapLeft SteveModeledABIPointerFlowRejected
+    (verifySteveGetLLVMPointerFlow (runtimeChoiceLLVMText llvm))
   pure (VerifiedSteveGetModeledABI canonical abi llvm)
+
+
+-- | This checker deliberately authenticates only the CLOSED, generated
+-- SteveGet LLVM pointer flow: read.found payload slot -> get_check load ->
+-- digest-check borrowed-owner argument -> release on both successors.
+-- It is not a linked-binary verifier, execution trace, or source-loan proof.
+data SteveGetLLVMPointerFlowError
+  = SteveGetLLVMReadResultSlotMissing
+  | SteveGetLLVMPayloadLoadMissing
+  | SteveGetLLVMDigestOwnerSubstituted
+  | SteveGetLLVMReleaseMissing
+  deriving (Eq, Show)
+
+verifySteveGetLLVMPointerFlow
+  :: Text -> Either SteveGetLLVMPointerFlowError ()
+verifySteveGetLLVMPointerFlow emitted = do
+  let readSlot =
+        "%phil_runtime_choice_payload_slot_SteveGet_get_entry_get_bytes = alloca ptr"
+      readCall =
+        "@phil_runtime_choice_SteveGet_get_entry_BlobProvider_read("
+      payloadLoad =
+        "get_check:\n  %get_bytes = load ptr, ptr %phil_runtime_choice_payload_slot_SteveGet_get_entry_get_bytes"
+      digestCall =
+        "@phil_runtime_choice_SteveGet_get_check_DigestProvider_check(ptr %get_id, ptr %get_bytes)"
+      releaseCall = "call void @phil_runtime_release(ptr %get_bytes)"
+      count textValue = Text.count textValue emitted
+  if count readSlot == 1 && count readCall == 2
+    then Right () else Left SteveGetLLVMReadResultSlotMissing
+  if count payloadLoad == 1
+    then Right () else Left SteveGetLLVMPayloadLoadMissing
+  if count digestCall == 1
+    then Right () else Left SteveGetLLVMDigestOwnerSubstituted
+  -- Both accepted and rejected cleanup blocks release the SAME load.
+  if count releaseCall == 2
+    then Right () else Left SteveGetLLVMReleaseMissing
