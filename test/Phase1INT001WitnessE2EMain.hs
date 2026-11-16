@@ -345,7 +345,28 @@ p9SteveStructuralGate putSource getSource = do
     steveCoreProgram context
   payload <- mapLeft show $
     certifyRuntimeChoicePayloadPlan steveCoreProgram steveP9PayloadSpecs
-  _ <- mapLeft show (verifyOriginalSteveGetModeledABI checkedCanonical payload)
+  modeled <- mapLeft show (verifyOriginalSteveGetModeledABI checkedCanonical payload)
+  let originalLLVM = verifiedSteveGetModeledLLVMText modeled
+  mapLeft show (verifySteveGetLLVMPointerFlow originalLLVM)
+  -- Mutate the *rederived* real LLVM artifact, never a dummy success string.
+  let wrongOwnerLLVM = Text.replace
+        "@phil_runtime_choice_SteveGet_get_check_DigestProvider_check(ptr %get_id, ptr %get_bytes)"
+        "@phil_runtime_choice_SteveGet_get_check_DigestProvider_check(ptr %get_id, ptr %get_id)"
+        originalLLVM
+  assert (wrongOwnerLLVM /= originalLLVM)
+    "P9 LLVM owner swap did not actually change the selected call"
+  case verifySteveGetLLVMPointerFlow wrongOwnerLLVM of
+    Left SteveGetLLVMDigestOwnerSubstituted -> Right ()
+    other -> Left ("P9 accepted wrong LLVM native owner: " <> show other)
+  let withoutLoad = Text.replace
+        "get_check:\n  %get_bytes = load ptr, ptr %phil_runtime_choice_payload_slot_SteveGet_get_entry_get_bytes"
+        "get_check:\n  %get_bytes = inttoptr i64 0 to ptr"
+        originalLLVM
+  assert (withoutLoad /= originalLLVM)
+    "P9 LLVM payload-load negative did not change selected artifact"
+  case verifySteveGetLLVMPointerFlow withoutLoad of
+    Left SteveGetLLVMPayloadLoadMissing -> Right ()
+    other -> Left ("P9 accepted forged LLVM owner load: " <> show other)
   let produced = verifiedSteveGetCanonicalSourceProduction checkedCanonical
       conditions = verifiedSteveGetCanonicalSelectedAssumptions checkedCanonical
       expectedConditions = Set.fromList
