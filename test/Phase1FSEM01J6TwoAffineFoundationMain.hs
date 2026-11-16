@@ -172,7 +172,7 @@ sourceAdmission admitted dat fn
               checkedTypes <- types
               case sequence checkedTypes of
                 Left err -> Just (Left (J6TypeError err))
-                Right [flag,a,b,payload,result]
+                Right [(flag,_),(a,_),(b,_),(payload,_),(result,_)]
                   | checkedResolvedTypeMode flag ==
                         CheckedTypeMode TyBool Unrestricted
                   , checkedResolvedTypeMode a ==
@@ -203,7 +203,7 @@ sourceAdmission admitted dat fn
           (grammarV1StateSlotType (locatedValue locatedSlot)))
       case slotChecked of
         Left err -> Just (Left (J6TypeError err))
-        Right resolvedSlot
+        Right (resolvedSlot,_)
           | checkedResolvedTypeMode resolvedSlot /=
                 CheckedTypeMode nominal Affine
             || checkedResolvedTypeModeOrigin resolvedSlot /= origin -> Nothing
