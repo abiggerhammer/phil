@@ -1,11 +1,25 @@
-From Stdlib Require Import Lists.List.
+From Stdlib Require Import Lists.List Strings.String.
 
 From Phil.Surface Require Import
+  GrammarDerivation
+  GrammarDeterminacySimpleResolverSoundness
+  GrammarAstSourceHeader
+  GrammarAstSourceHeaderTotality
+  GrammarAstTopLevelSpine
+  GrammarAstDataSpine
+  GrammarAstVariantSpine
+  GrammarAstVariantPayloadSpine
+  GrammarAstVariantDeclRecordFieldTypeSpine
+  GrammarAstGenericRequirementsSpine
+  GrammarAstGenericRequirementsTotality
+  GrammarAstGenericParamsTotality
+  GrammarAstStructuralModeTotality
   GrammarAstDataRecordFieldTypeSpine
   GrammarAstVariantDeclRecordFieldTypeTotality
   GrammarAstDataTotality.
 
 Import ListNotations.
+Open Scope string_scope.
 
 (* Converse for the data-level record-field-type refinement from #1184. *)
 

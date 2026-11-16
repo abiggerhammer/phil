@@ -1,9 +1,12 @@
-From Stdlib Require Import Lists.List.
+From Stdlib Require Import Lists.List Strings.String.
 
 From Phil.Surface Require Import
+  GrammarDerivation
+  GrammarAstRecordFieldsSpine
   GrammarAstFieldTypeSpine.
 
 Import ListNotations.
+Open Scope string_scope.
 
 (*
   Lift the refined field_decl type-expression payload from #1161/#1162
@@ -55,7 +58,7 @@ Proof.
     + eapply phase1_surface_normalize_field_type_spine_round_trip.
       exact Hfield.
     + eapply IH.
-      exact Hrest.
+      reflexivity.
 Qed.
 
 Theorem phase1_surface_normalize_field_type_suffix_values_round_trip :
@@ -84,7 +87,7 @@ Proof.
           field actual Hfield).
       reflexivity.
     + eapply IH.
-      exact Hrest.
+      reflexivity.
 Qed.
 
 Record Phase1SurfaceFieldTypeListSpine : Type := {
@@ -130,13 +133,25 @@ Theorem phase1_surface_normalize_field_type_list_spine_round_trip :
       phase1_surface_field_list_spine_tree fields.
 Proof.
   intros [first rest trailing] refined Hnormalize.
-  cbn in Hnormalize.
+  unfold phase1_surface_normalize_field_type_list_spine in Hnormalize.
+  cbn [phase1_field_list_spine_first
+            phase1_field_list_spine_rest
+            phase1_field_list_spine_trailing_comma] in Hnormalize.
   destruct (phase1_surface_normalize_field_type_spine first)
     as [actual_first |] eqn:Hfirst; try discriminate Hnormalize.
   destruct (phase1_surface_normalize_field_type_values rest)
     as [actual_rest |] eqn:Hrest; try discriminate Hnormalize.
-  inversion Hnormalize; subst refined.
-  cbn.
+  injection Hnormalize as Hrefined.
+  symmetry in Hrefined.
+  subst refined.
+  unfold phase1_surface_field_type_list_spine_tree,
+    phase1_surface_field_list_spine_tree.
+  cbn [phase1_field_type_list_spine_first
+            phase1_field_type_list_spine_rest
+            phase1_field_type_list_spine_trailing_comma
+            phase1_field_list_spine_first
+            phase1_field_list_spine_rest
+            phase1_field_list_spine_trailing_comma].
   rewrite
     (phase1_surface_normalize_field_type_spine_round_trip
       first actual_first Hfirst).

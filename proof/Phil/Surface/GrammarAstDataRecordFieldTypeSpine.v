@@ -1,10 +1,17 @@
-From Stdlib Require Import Lists.List.
+From Stdlib Require Import Lists.List Strings.String.
 
 From Phil.Surface Require Import
+  GrammarDerivation
+  GrammarAstSourceHeader
+  GrammarAstGenericParamsSpine
+  GrammarAstStructuralModeSpine
+  GrammarAstGenericRequirementsSpine
+  GrammarAstDataSpine
   GrammarAstVariantPayloadSpine
   GrammarAstVariantDeclRecordFieldTypeSpine.
 
 Import ListNotations.
+Open Scope string_scope.
 
 (*
   Lift the record-field-type-refined variant_decl carrier through the ordered
@@ -52,7 +59,7 @@ Proof.
     + eapply phase1_surface_normalize_record_field_type_variant_spine_round_trip.
       exact Hvariant.
     + eapply IH.
-      exact Hrest.
+      reflexivity.
 Qed.
 
 Definition phase1_surface_record_field_type_data_suffix_tree
@@ -88,7 +95,7 @@ Proof.
           variant actual Hvariant).
       reflexivity.
     + eapply IH.
-      exact Hrest.
+      reflexivity.
 Qed.
 
 Record Phase1SurfaceDataRecordFieldTypeSpine : Type := {
@@ -160,6 +167,7 @@ Proof.
   intros
     [name generic_params mode requirements first_variant rest_variants]
     refined Hnormalize.
+  unfold phase1_surface_normalize_data_record_field_type_spine in Hnormalize.
   cbn in Hnormalize.
   destruct
     (phase1_surface_normalize_record_field_type_variant_spine first_variant)
@@ -167,15 +175,45 @@ Proof.
   destruct
     (phase1_surface_normalize_record_field_type_variant_spines rest_variants)
     as [rest_refined |] eqn:Hrest; try discriminate Hnormalize.
-  inversion Hnormalize; subst refined.
-  cbn.
-  rewrite
+  inversion Hnormalize; subst.
+  pose proof
     (phase1_surface_normalize_record_field_type_variant_spine_round_trip
-      first_variant first_refined Hfirst).
-  rewrite
+      first_variant first_refined Hfirst) as Hfirst_tree.
+  pose proof
     (phase1_surface_normalize_record_field_type_variant_spines_suffix_round_trip
-      rest_variants rest_refined Hrest).
-  reflexivity.
+      rest_variants rest_refined Hrest) as Hrest_trees.
+  assert (Hitems :
+    [ PTLiteral "data";
+      phase1_surface_identifier_tree name;
+      phase1_surface_optional_generic_params_tree generic_params;
+      phase1_surface_optional_mode_tree mode;
+      phase1_surface_optional_generic_requirements_tree requirements;
+      PTLiteral "=";
+      phase1_surface_record_field_type_variant_spine_tree first_refined;
+      PTRepetition
+        (map phase1_surface_record_field_type_data_suffix_tree rest_refined);
+      PTLiteral ";" ] =
+    [ PTLiteral "data";
+      phase1_surface_identifier_tree name;
+      phase1_surface_optional_generic_params_tree generic_params;
+      phase1_surface_optional_mode_tree mode;
+      phase1_surface_optional_generic_requirements_tree requirements;
+      PTLiteral "=";
+      phase1_surface_variant_payload_variant_spine_tree first_variant;
+      PTRepetition
+        (map phase1_surface_variant_payload_data_suffix_tree rest_variants);
+      PTLiteral ";" ]).
+  {
+    rewrite Hfirst_tree.
+    rewrite Hrest_trees.
+    reflexivity.
+  }
+  unfold phase1_surface_data_record_field_type_spine_tree,
+    phase1_surface_data_variant_payload_spine_tree.
+  apply (f_equal
+    (fun items : list ParseTree =>
+      PTNonterminal "data_decl" (PTSequence items))).
+  exact Hitems.
 Qed.
 
 Definition phase1_surface_normalize_data_record_field_type_tree

@@ -1,6 +1,14 @@
+From Stdlib Require Import Lists.List Strings.String.
+
 From Phil.Surface Require Import
+  GrammarDerivation
   GrammarAstVariantPayloadSpine
+  GrammarAstRecordFieldsSpine
+  GrammarAstFieldTypeListSpine
   GrammarAstOptionalFieldTypeSpine.
+
+Import ListNotations.
+Open Scope string_scope.
 
 (*
   Refine only the record-shaped variant payload field list.
@@ -73,10 +81,23 @@ Proof.
     destruct (phase1_surface_normalize_optional_field_type_list fields)
       as [actual |] eqn:Hfields; try discriminate Hnormalize.
     inversion Hnormalize; subst refined.
-    cbn.
-    rewrite
+    pose proof
       (phase1_surface_normalize_optional_field_type_list_round_trip
-        fields actual Hfields).
+        fields actual Hfields) as Htree.
+    change
+      (PTNonterminal "variant_payload"
+        (PTAlternative 0
+          (PTSequence
+            [ PTLiteral "{";
+              phase1_surface_optional_field_type_list_tree actual;
+              PTLiteral "}" ])) =
+       PTNonterminal "variant_payload"
+        (PTAlternative 0
+          (PTSequence
+            [ PTLiteral "{";
+              phase1_surface_optional_fields_tree fields;
+              PTLiteral "}" ]))).
+    rewrite Htree.
     reflexivity.
   - inversion Hnormalize; subst refined.
     reflexivity.

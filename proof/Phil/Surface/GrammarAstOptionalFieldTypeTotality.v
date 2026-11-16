@@ -1,4 +1,8 @@
 From Phil.Surface Require Import
+  GrammarDerivation
+  GrammarDeterminacySimpleResolverSoundness
+  GrammarAstSourceHeader
+  GrammarAstRecordFieldsSpine
   GrammarAstOptionalFieldTypeSpine
   GrammarAstFieldTypeListTotality
   GrammarAstRecordFieldsTotality.

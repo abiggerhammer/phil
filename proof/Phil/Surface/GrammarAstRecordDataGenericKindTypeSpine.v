@@ -1,7 +1,19 @@
+From Stdlib Require Import Lists.List Strings.String.
+
 From Phil.Surface Require Import
+  GrammarDerivation
+  GrammarAstSourceHeader
+  GrammarAstStructuralModeSpine
+  GrammarAstGenericRequirementsSpine
+  GrammarAstFieldTypeListSpine
+  GrammarAstOptionalFieldTypeSpine
   GrammarAstRecordFieldTypeSpine
   GrammarAstDataRecordFieldTypeSpine
+  GrammarAstVariantDeclRecordFieldTypeSpine
   GrammarAstGenericParamKindTypeSpine.
+
+Import ListNotations.
+Open Scope string_scope.
 
 (*
   Lift the typed generic-kind parameter refinement into the current end-of-chain
@@ -73,16 +85,40 @@ Theorem phase1_surface_normalize_record_generic_kind_type_spine_round_trip :
       phase1_surface_record_field_type_spine_tree record.
 Proof.
   intros [name generic_params mode requirements fields] refined Hnormalize.
-  cbn in Hnormalize.
+  unfold phase1_surface_normalize_record_generic_kind_type_spine in Hnormalize.
+  cbn [phase1_record_field_type_spine_generic_params] in Hnormalize.
   destruct
     (phase1_surface_normalize_optional_generic_params_kind_type generic_params)
     as [actual |] eqn:Hgeneric; try discriminate Hnormalize.
-  inversion Hnormalize; subst refined.
-  cbn.
-  rewrite
-    (phase1_surface_normalize_optional_generic_params_kind_type_round_trip
-      generic_params actual Hgeneric).
-  reflexivity.
+  inversion Hnormalize; subst.
+  unfold phase1_surface_record_generic_kind_type_spine_tree,
+    phase1_surface_record_field_type_spine_tree.
+  cbn [phase1_record_generic_kind_type_spine_name
+       phase1_record_generic_kind_type_spine_generic_params
+       phase1_record_generic_kind_type_spine_mode
+       phase1_record_generic_kind_type_spine_requirements
+       phase1_record_generic_kind_type_spine_fields
+       phase1_record_field_type_spine_name
+       phase1_record_field_type_spine_generic_params
+       phase1_record_field_type_spine_mode
+       phase1_record_field_type_spine_requirements
+       phase1_record_field_type_spine_fields].
+  exact
+    (f_equal
+      (fun generic_tree : ParseTree =>
+        PTNonterminal "record_decl"
+          (PTSequence
+            [ PTLiteral "record";
+              phase1_surface_identifier_tree name;
+              generic_tree;
+              phase1_surface_optional_mode_tree mode;
+              phase1_surface_optional_generic_requirements_tree requirements;
+              PTLiteral "{";
+              phase1_surface_optional_field_type_list_tree fields;
+              PTLiteral "}"
+            ]))
+      (phase1_surface_normalize_optional_generic_params_kind_type_round_trip
+        generic_params actual Hgeneric)).
 Qed.
 
 Definition phase1_surface_normalize_record_generic_kind_type_tree
@@ -180,16 +216,45 @@ Proof.
   intros
     [name generic_params mode requirements first_variant rest_variants]
     refined Hnormalize.
-  cbn in Hnormalize.
+  unfold phase1_surface_normalize_data_generic_kind_type_spine in Hnormalize.
+  cbn [phase1_data_record_field_type_spine_generic_params] in Hnormalize.
   destruct
     (phase1_surface_normalize_optional_generic_params_kind_type generic_params)
     as [actual |] eqn:Hgeneric; try discriminate Hnormalize.
-  inversion Hnormalize; subst refined.
-  cbn.
-  rewrite
-    (phase1_surface_normalize_optional_generic_params_kind_type_round_trip
-      generic_params actual Hgeneric).
-  reflexivity.
+  inversion Hnormalize; subst.
+  unfold phase1_surface_data_generic_kind_type_spine_tree,
+    phase1_surface_data_record_field_type_spine_tree.
+  cbn [phase1_data_generic_kind_type_spine_name
+       phase1_data_generic_kind_type_spine_generic_params
+       phase1_data_generic_kind_type_spine_mode
+       phase1_data_generic_kind_type_spine_requirements
+       phase1_data_generic_kind_type_spine_first_variant
+       phase1_data_generic_kind_type_spine_rest_variants
+       phase1_data_record_field_type_spine_name
+       phase1_data_record_field_type_spine_generic_params
+       phase1_data_record_field_type_spine_mode
+       phase1_data_record_field_type_spine_requirements
+       phase1_data_record_field_type_spine_first_variant
+       phase1_data_record_field_type_spine_rest_variants].
+  exact
+    (f_equal
+      (fun generic_tree : ParseTree =>
+        PTNonterminal "data_decl"
+          (PTSequence
+            [ PTLiteral "data";
+              phase1_surface_identifier_tree name;
+              generic_tree;
+              phase1_surface_optional_mode_tree mode;
+              phase1_surface_optional_generic_requirements_tree requirements;
+              PTLiteral "=";
+              phase1_surface_record_field_type_variant_spine_tree first_variant;
+              PTRepetition
+                (map phase1_surface_record_field_type_data_suffix_tree
+                  rest_variants);
+              PTLiteral ";"
+            ]))
+      (phase1_surface_normalize_optional_generic_params_kind_type_round_trip
+        generic_params actual Hgeneric)).
 Qed.
 
 Definition phase1_surface_normalize_data_generic_kind_type_tree

@@ -1,6 +1,19 @@
+From Stdlib Require Import Lists.List Strings.String.
+
 From Phil.Surface Require Import
+  GrammarDerivation
+  GrammarAstSourceHeader
+  GrammarAstStructuralModeSpine
+  GrammarAstFieldTypeListSpine
+  GrammarAstOptionalFieldTypeSpine
+  GrammarAstDataRecordFieldTypeSpine
+  GrammarAstVariantDeclRecordFieldTypeSpine
+  GrammarAstGenericParamKindTypeSpine
   GrammarAstRecordDataGenericRequirementTypeSpine
   GrammarAstGenericRequirementsPropositionSpine.
+
+Import ListNotations.
+Open Scope string_scope.
 
 (*
   Lift the proposition-refined generic-requirements carrier into the current
@@ -76,17 +89,42 @@ Theorem
       phase1_surface_record_generic_requirement_type_spine_tree record.
 Proof.
   intros [name generic_params mode requirements fields] refined Hnormalize.
-  cbn in Hnormalize.
+  unfold phase1_surface_normalize_record_generic_requirement_proposition_spine
+    in Hnormalize.
+  cbn [phase1_record_generic_requirement_type_spine_requirements] in Hnormalize.
   destruct
     (phase1_surface_normalize_optional_generic_requirements_proposition
       requirements)
     as [actual |] eqn:Hrequirements; try discriminate Hnormalize.
-  inversion Hnormalize; subst refined.
-  cbn.
-  rewrite
-    (phase1_surface_normalize_optional_generic_requirements_proposition_round_trip
-      requirements actual Hrequirements).
-  reflexivity.
+  inversion Hnormalize; subst.
+  unfold phase1_surface_record_generic_requirement_proposition_spine_tree,
+    phase1_surface_record_generic_requirement_type_spine_tree.
+  cbn [phase1_record_generic_requirement_proposition_spine_name
+       phase1_record_generic_requirement_proposition_spine_generic_params
+       phase1_record_generic_requirement_proposition_spine_mode
+       phase1_record_generic_requirement_proposition_spine_requirements
+       phase1_record_generic_requirement_proposition_spine_fields
+       phase1_record_generic_requirement_type_spine_name
+       phase1_record_generic_requirement_type_spine_generic_params
+       phase1_record_generic_requirement_type_spine_mode
+       phase1_record_generic_requirement_type_spine_requirements
+       phase1_record_generic_requirement_type_spine_fields].
+  exact
+    (f_equal
+      (fun requirements_tree : ParseTree =>
+        PTNonterminal "record_decl"
+          (PTSequence
+            [ PTLiteral "record";
+              phase1_surface_identifier_tree name;
+              phase1_surface_optional_generic_params_kind_type_tree generic_params;
+              phase1_surface_optional_mode_tree mode;
+              requirements_tree;
+              PTLiteral "{";
+              phase1_surface_optional_field_type_list_tree fields;
+              PTLiteral "}"
+            ]))
+      (phase1_surface_normalize_optional_generic_requirements_proposition_round_trip
+        requirements actual Hrequirements)).
 Qed.
 
 Definition
@@ -204,17 +242,47 @@ Proof.
   intros
     [name generic_params mode requirements first_variant rest_variants]
     refined Hnormalize.
-  cbn in Hnormalize.
+  unfold phase1_surface_normalize_data_generic_requirement_proposition_spine
+    in Hnormalize.
+  cbn [phase1_data_generic_requirement_type_spine_requirements] in Hnormalize.
   destruct
     (phase1_surface_normalize_optional_generic_requirements_proposition
       requirements)
     as [actual |] eqn:Hrequirements; try discriminate Hnormalize.
-  inversion Hnormalize; subst refined.
-  cbn.
-  rewrite
-    (phase1_surface_normalize_optional_generic_requirements_proposition_round_trip
-      requirements actual Hrequirements).
-  reflexivity.
+  inversion Hnormalize; subst.
+  unfold phase1_surface_data_generic_requirement_proposition_spine_tree,
+    phase1_surface_data_generic_requirement_type_spine_tree.
+  cbn [phase1_data_generic_requirement_proposition_spine_name
+       phase1_data_generic_requirement_proposition_spine_generic_params
+       phase1_data_generic_requirement_proposition_spine_mode
+       phase1_data_generic_requirement_proposition_spine_requirements
+       phase1_data_generic_requirement_proposition_spine_first_variant
+       phase1_data_generic_requirement_proposition_spine_rest_variants
+       phase1_data_generic_requirement_type_spine_name
+       phase1_data_generic_requirement_type_spine_generic_params
+       phase1_data_generic_requirement_type_spine_mode
+       phase1_data_generic_requirement_type_spine_requirements
+       phase1_data_generic_requirement_type_spine_first_variant
+       phase1_data_generic_requirement_type_spine_rest_variants].
+  exact
+    (f_equal
+      (fun requirements_tree : ParseTree =>
+        PTNonterminal "data_decl"
+          (PTSequence
+            [ PTLiteral "data";
+              phase1_surface_identifier_tree name;
+              phase1_surface_optional_generic_params_kind_type_tree generic_params;
+              phase1_surface_optional_mode_tree mode;
+              requirements_tree;
+              PTLiteral "=";
+              phase1_surface_record_field_type_variant_spine_tree first_variant;
+              PTRepetition
+                (map phase1_surface_record_field_type_data_suffix_tree
+                  rest_variants);
+              PTLiteral ";"
+            ]))
+      (phase1_surface_normalize_optional_generic_requirements_proposition_round_trip
+        requirements actual Hrequirements)).
 Qed.
 
 Definition

@@ -1,7 +1,21 @@
+From Stdlib Require Import Lists.List Strings.String.
+
 From Phil.Surface Require Import
+  GrammarDerivation
+  GrammarDeterminacySimpleResolverSoundness
+  GrammarAstSourceHeader
+  GrammarAstTopLevelSpine
+  GrammarAstVariantSpine
+  GrammarAstVariantPayloadSpine
+  GrammarAstGenericRequirementsSpine
+  GrammarAstSourceHeaderTotality
   GrammarAstVariantDeclRecordFieldTypeSpine
+  GrammarAstVariantRecordFieldTypeSpine
   GrammarAstVariantRecordFieldTypeTotality
   GrammarAstDataTotality.
+
+Import ListNotations.
+Open Scope string_scope.
 
 (*
   Compose the staged variant normalizers into a raw-tree adapter, then prove
@@ -148,14 +162,20 @@ Proof.
     + exact Hnormalize.
     + eapply phase1_surface_normalize_record_field_type_variant_tree_round_trip.
       exact Hnormalize.
-  - pose proof
-      (phase1_surface_validate_named_node_total_from_derivation
-        "variant_payload" _ _ _ payload_body Hpayload_body)
-      as Hpayload_validate.
-    destruct
+  - destruct
       (phase1_surface_normalize_variant_payload_spine_total_from_derivation
         _ _ _ payload_body Hpayload_body)
       as [payload [Hpayload_normalize Hpayload_round_trip]].
+    assert (Hpayload_validate :
+      phase1_surface_validate_named_node "variant_payload" payload_body =
+        Some tt).
+    {
+      rewrite <- Hpayload_round_trip.
+      unfold phase1_surface_variant_payload_spine_tree,
+        phase1_surface_validate_named_node.
+      cbn.
+      reflexivity.
+    }
     destruct
       (phase1_surface_normalize_record_field_type_variant_payload_tree_total_from_derivation
         _ _ _ payload_body Hpayload_body)
