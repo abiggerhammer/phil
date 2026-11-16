@@ -1,6 +1,11 @@
+From Stdlib Require Import Lists.List Strings.String.
+
 From Phil.Surface Require Import
   GrammarAstRecordDataGenericRequirementTypeSpine
   GrammarAstGenericRequirementsPropositionSpine.
+
+Import ListNotations.
+Open Scope string_scope.
 
 (*
   Lift the proposition-refined generic-requirements carrier into the current
