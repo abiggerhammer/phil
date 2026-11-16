@@ -436,6 +436,8 @@ data SteveGetStructuralFact = SteveGetStructuralFact
   , steveGetSourceDigestSite :: SourceSpan
   , steveGetCheckedCallOrdinal :: Int
   , steveGetCheckedFoundOrdinal :: Int
+  , steveGetCheckedLoanOpenOrdinal :: Int
+  , steveGetCheckedLoanCloseOrdinal :: Int
   , steveGetCheckedContentType :: Ty
   , steveGetCheckedBorrowedType :: Ty
   } deriving (Eq, Show)
@@ -452,6 +454,8 @@ data SteveGetStructuralError
   | SteveGetCheckedCallBranchMismatch
   | SteveGetCheckedFoundMissing
   | SteveGetCheckedFoundMismatch
+  | SteveGetCheckedLoanObservationMissing
+  | SteveGetCheckedLoanSequenceMismatch
   | SteveGetCoreFunctionMissing
   | SteveGetCoreValueRolesMismatch
   | SteveGetCoreReadPredecessorMismatch
@@ -573,6 +577,38 @@ verifySteveGetStructural architecture program = do
        && foundRoute == checkedRoute)
     SteveGetCheckedFoundMismatch
 
+  -- The two loan observations MUST come from the original normal checker,
+  -- at the actual borrow transition, not source syntax or a caller-supplied
+  -- nominal LoanId. They attest static lexical permission only.
+  (openRoute, openOrdinal) <- exactlyOne
+    SteveGetCheckedLoanObservationMissing
+      [ (sourceEvidenceBranchRoute event, sourceEvidenceOrdinal event)
+      | u <- checkedSourceUnits (checkedSourceArchitectureBundle architecture)
+      , componentName (locatedValue (checkedSourceComponent u)) == "SteveGet"
+      , event <- checkedSourceEvidenceEvents u
+      , sourceEvidenceSite event == borrowSite
+      , SourceCheckedLoanOpened (Name owner) (Name view) <-
+          [sourceEvidenceUse event]
+      , owner == ownerName, view == viewName
+      ]
+  (closeRoute, closeOrdinal) <- exactlyOne
+    SteveGetCheckedLoanObservationMissing
+      [ (sourceEvidenceBranchRoute event, sourceEvidenceOrdinal event)
+      | u <- checkedSourceUnits (checkedSourceArchitectureBundle architecture)
+      , componentName (locatedValue (checkedSourceComponent u)) == "SteveGet"
+      , event <- checkedSourceEvidenceEvents u
+      , sourceEvidenceSite event == borrowSite
+      , SourceCheckedLoanClosed (Name owner) (Name view) <-
+          [sourceEvidenceUse event]
+      , owner == ownerName, view == viewName
+      ]
+  unlessSource
+    (openRoute == checkedRoute && closeRoute == checkedRoute
+      && foundOrdinal < openOrdinal
+      && openOrdinal < checkedOrdinal
+      && checkedOrdinal < closeOrdinal)
+    SteveGetCheckedLoanSequenceMismatch
+
   function <- maybe (Left SteveGetCoreFunctionMissing) Right
     (Map.lookup "SteveGet" (coreProgramFunctions program))
   let roles = coreFunctionValues function
@@ -631,6 +667,8 @@ verifySteveGetStructural architecture program = do
     , steveGetSourceDigestSite = locatedSpan digest
     , steveGetCheckedCallOrdinal = checkedOrdinal
     , steveGetCheckedFoundOrdinal = foundOrdinal
+    , steveGetCheckedLoanOpenOrdinal = openOrdinal
+    , steveGetCheckedLoanCloseOrdinal = closeOrdinal
     , steveGetCheckedContentType = idType
     , steveGetCheckedBorrowedType = viewType
     }

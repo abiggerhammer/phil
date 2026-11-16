@@ -402,7 +402,9 @@ p9SteveStructuralGate putSource getSource = do
       && steveGetSourceViewBinder fact == "bytesView"
       && steveGetCheckedContentType fact == TyOpaque "ContentId[SHA256]"
       && steveGetCheckedFoundOrdinal fact >= 0
-      && steveGetCheckedFoundOrdinal fact < steveGetCheckedCallOrdinal fact)
+      && steveGetCheckedFoundOrdinal fact < steveGetCheckedLoanOpenOrdinal fact
+      && steveGetCheckedLoanOpenOrdinal fact < steveGetCheckedCallOrdinal fact
+      && steveGetCheckedCallOrdinal fact < steveGetCheckedLoanCloseOrdinal fact)
     "P9 SteveGet real checked found-result / typed-call chain changed"
   let occurrences =
         verifiedSourceCheckEventOccurrences

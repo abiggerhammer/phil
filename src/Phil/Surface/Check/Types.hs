@@ -341,6 +341,10 @@ data SourceEvidenceUse
   -- | Real checked branch payload. This is NOT an authenticated provider law
   -- or runtime incarnation, even when the primitive was named blob_read.
   | SourceCheckedProviderFound Text SourceSpan Name Ty
+  -- | Emitted by the ordinary loan transitions, not inferred from AST spans.
+  -- Static checker event only; not a dynamic loan ID or runtime credential.
+  | SourceCheckedLoanOpened Name Name
+  | SourceCheckedLoanClosed Name Name
   deriving (Eq, Show)
 
 data SourceEvidenceEvent = SourceEvidenceEvent

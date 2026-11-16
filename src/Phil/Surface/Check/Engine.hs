@@ -2678,7 +2678,10 @@ evalBorrowTraced environment state located ownerExpression viewName body =
                  loaned of
                   Left err -> (Left err, prefix)
                   Right withView ->
-                    case checkScopedValueBlock environment state withView body of
+                    let opened = recordSourceEvidence (locatedSpan located)
+                          (SourceCheckedLoanOpened ownerName (Name viewName))
+                          withView
+                    in case checkScopedValueBlock environment state opened body of
                       Left err -> (Left err, prefix)
                       Right bodyPaths ->
                         let (finished, suffix) = finishAll ownerName bodyPaths
@@ -2749,7 +2752,10 @@ evalBorrowTraced environment state located ownerExpression viewName body =
                            { stateCore = (stateCore state1)
                                { resourceContext = context }
                            }
-                     in ( Right path { pathState = closed }
+                     in ( Right path
+                          { pathState = recordSourceEvidence (locatedSpan located)
+                              (SourceCheckedLoanClosed ownerName (Name viewName))
+                              closed }
                         , [ bodyPoint
                           , snapshotBorrow TraceLoanClosed ownerName viewName closed
                           ])
