@@ -529,6 +529,9 @@ Proof.
                        (p8_e1_put_forms xs ++ suffix))).
       2: { cbn [p8_e1_put_form app].
            rewrite <- app_assoc. reflexivity. }
+      let L := match goal with |- ?lhs = _ => lhs end in
+      let Reduced := eval hnf in L in
+      idtac "P8F1_DEBUG_ORDERED_REDUCED" Reduced.
       change
         (match p8_e1_read_count
           (p8_e1_frame_count (p8_e1_forms_count xs) ++
