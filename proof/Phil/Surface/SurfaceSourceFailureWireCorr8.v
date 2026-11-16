@@ -57,8 +57,8 @@ Proof. intros [a b c d e f g h i j]; reflexivity. Qed.
 
 Definition ofFields (fields : list string) : option SourceFailureWire :=
   match fields with
-  | [sha;root;flag;owner;profile;left;right;lp;rp;result] =>
-      Some (mkSourceFailureWire sha root flag owner profile left right lp rp result)
+  | [sha;root;flag;owner;profile;lhs;rhs;lp;rp;result] =>
+      Some (mkSourceFailureWire sha root flag owner profile lhs rhs lp rp result)
   | _ => None
   end.
 
@@ -108,9 +108,9 @@ Definition modelResult (item : SourceFailureWire) : string :=
 Definition prefixAndResultValid (item : SourceFailureWire) : bool :=
   match expectedPrefix (sourceProfile item) with
   | None => false
-  | Some (left,right,lp,rp,result) =>
-      String.eqb (sourceLeftPrefix item) left &&
-      String.eqb (sourceRightPrefix item) right &&
+  | Some (lhs,rhs,lp,rp,result) =>
+      String.eqb (sourceLeftPrefix item) lhs &&
+      String.eqb (sourceRightPrefix item) rhs &&
       String.eqb (sourceLeftPruned item) lp &&
       String.eqb (sourceRightPruned item) rp &&
       String.eqb (sourceResult item) result &&
