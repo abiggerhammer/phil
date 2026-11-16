@@ -55,7 +55,7 @@ class ScheduledAdmissionGuardTests(unittest.TestCase):
         self.assertIn("--add-label \"atc: admitting\"", self.source)
         self.assertNotIn("HAMSTER_PR_TOKEN", self.source)
         self.assertIn("    environment: atc-publisher", self.source)
-        self.assertIn("uses: actions/create-github-app-token@v3", self.source)
+        self.assertIn("uses: actions/create-github-app-token@64ab729a6294000f5aa4a4bc0b73d1f32bc45510 # v3", self.source)
         self.assertIn("IMMUTABLE_ENABLED: ${{ vars.MHB_ATC_IMMUTABLE_HEADS_ENABLED }}",
                       self.source)
         self.assertIn("PUBLISHER_TOKEN: ${{ steps.publisher_token.outputs.token }}",
