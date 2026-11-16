@@ -51,7 +51,7 @@ main = do
         (sourcePingDisjointPairCommutation accepted stale)
     , test "FSEM-02 disjoint Ping pairs complete all 24 terminal Close orders"
         (sourcePingDisjointTerminalInterleavings accepted stale)
-    , test "FSEM-02 25920 terminal schedules, 144 partner prefixes, 288 refused rematches, 1512 adaptive suffix replays"
+    , test "FSEM-02 25920 terminal schedules, 144 partner prefixes, 288 refused rematches, 1512 adaptive suffixes, 10368 half-Close completions"
         (sourcePingThreeDisjointTerminalSchedules accepted stale)
     , test "FSEM-02 competing Ping sends sharing a Client predecessor refuse second use"
         (sourcePingSharedClientContention accepted stale)
@@ -2611,6 +2611,97 @@ sourcePingThreeDisjointTerminalSchedules accepted rejected = do
         [0..3])
       (permutations chosenPairs))
     selectedServerOrders
+  -- An authorized Ping may be followed by one local End Close, or both
+  -- local Closes in either order, BEFORE the remaining partners are selected.
+  -- Those closes retire only their own successors; the two still-free Clients
+  -- and Servers may be paired anew by an external choice. The 10,368
+  -- completions exercise 9 first pairings, four nonempty Close prefixes,
+  -- four remaining ordered partner matchings and all remaining Close orders.
+  let firstPairChoices = [(c, s) | c <- selectedClientKeys, s <- [as, bs, cs]]
+      halfCloseWrongOutcome = Outcome "FSEM02.HalfCloseWrongOutcome"
+  assert (length firstPairChoices == 9
+          && (9 * (2 * 120 + 2 * 24) * 4 :: Int) == 10368)
+    "adaptive half-Close/suffix schedule census changed"
+  mapM_ (\(firstClient, firstServer) -> do
+    firstState <- mapLeft show (run before (request firstClient firstServer))
+    let freeClients = filter (/= firstClient) selectedClientKeys
+        freeServers = filter (/= firstServer) [as, bs, cs]
+        clientEnd = (firstClient, clientNext, clientRole)
+        serverEnd = (firstServer, serverNext, serverRole)
+        committedEnds = [clientEnd, serverEnd]
+        halfClosePrefixes =
+          [[clientEnd], [serverEnd], [clientEnd, serverEnd], [serverEnd, clientEnd]]
+    assert (length freeClients == 2 && length freeServers == 2
+            && length halfClosePrefixes == 4)
+      "adaptive half-Close left the wrong independently available partners"
+    mapM_ (\closePrefix -> do
+      closedPrefix <- foldM closeOne firstState closePrefix
+      canonicalClosed <- foldM closeOne canonical closePrefix
+      let closedKeys = [p | (p, _, _) <- closePrefix]
+          remainingEnds =
+            [sideValue | sideValue@(p, _, _) <- terminalSides, p `notElem` closedKeys]
+      assert (length remainingEnds == 6 - length closePrefix
+              && Map.keysSet closedPrefix == Map.keysSet before)
+        "adaptive half-Close changed activated process population"
+      -- A committed participant's original Send/Receive predecessor cannot
+      -- be recovered by rematching, even if its terminal End was closed.
+      rejectConsumed "adaptive half-Close spent Client" firstClient clientOld
+        closedPrefix (request firstClient (head freeServers))
+      rejectConsumed "adaptive half-Close spent Server" firstServer serverOld
+        closedPrefix (request (head freeClients) firstServer)
+      -- A valid End has a precise wrong-outcome refusal; a closed End is
+      -- unknown. Neither can be treated as a second successful Close.
+      mapM_ (\(p, endpoint, role) -> do
+        current <- maybe (Left "adaptive half-Close participant missing") Right
+          (Map.lookup p closedPrefix)
+        if p `elem` closedKeys
+          then case checkProtocolAction
+              (ProtocolCloseRequest endpoint revision role done) current of
+            Left (ProtocolEndpointUnknown actual) ->
+              assert (actual == endpoint)
+                "adaptive retired End refusal lost exact endpoint"
+            other -> Left ("adaptive retired End was reused: " <> show other)
+          else case checkProtocolAction
+              (ProtocolCloseRequest endpoint revision role halfCloseWrongOutcome) current of
+            Left (ProtocolSessionError (CloseOutcomeMismatch expectedOutcome actual)) ->
+              assert (expectedOutcome == done && actual == halfCloseWrongOutcome)
+                "adaptive live End wrong-outcome class changed"
+            other -> Left ("adaptive live End incorrectly closed: " <> show other))
+        committedEnds
+      -- Unmatched peers still have source-derived Send/Receive heads; they
+      -- cannot Close before the externally selected later rendezvous.
+      mapM_ (\(p, endpoint, role, originalHead) -> do
+        current <- maybe (Left "adaptive free peer missing") Right
+          (Map.lookup p closedPrefix)
+        case checkProtocolAction
+            (ProtocolCloseRequest endpoint revision role done) current of
+          Left (ProtocolSessionError (UnexpectedSessionAction (CloseAction attempted) actual)) ->
+            assert (attempted == done && actual == originalHead)
+              "adaptive free peer premature Close diagnostic changed"
+          other -> Left ("adaptive free peer prematurely closed: " <> show other))
+        ([(p, clientOld, clientRole, sourceClientHead plans) | p <- freeClients]
+         ++ [(p, serverOld, serverRole, sourceServerHead plans) | p <- freeServers])
+      framedPeer <- maybe (Left "adaptive half-Close spectator disappeared") Right
+        (Map.lookup cs closedPrefix)
+      assert (affineBindings (protocolResources framedPeer) == affineBindings loaned
+              && sharedLoans (protocolResources framedPeer) == sharedLoans loaned)
+        "adaptive half-Close altered the unrelated affine spectator"
+      mapM_ (\alternateClients ->
+        mapM_ (\alternateServers -> do
+          let suffix = zipWith request alternateClients alternateServers
+          afterSuffix <- foldM (\contexts req -> mapLeft show (run contexts req))
+            closedPrefix suffix
+          assert (afterSuffix == canonicalClosed)
+            "adaptive half-Close suffix failed exact End/owner replay"
+          mapM_ (\closeOrder -> do
+            terminal <- foldM closeOne afterSuffix closeOrder
+            assert (terminal == expected && Map.keysSet terminal == Map.keysSet before)
+              "adaptive half-Close plus reselected suffix changed final state")
+            (permutations remainingEnds))
+          (permutations freeServers))
+        (permutations freeClients))
+      halfClosePrefixes)
+    firstPairChoices
   mapM_ (\order -> do
     progressed <- foldM (\contexts req -> mapLeft show (run contexts req))
       before order
