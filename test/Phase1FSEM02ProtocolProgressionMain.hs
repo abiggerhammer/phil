@@ -51,7 +51,7 @@ main = do
         (sourcePingDisjointPairCommutation accepted stale)
     , test "FSEM-02 disjoint Ping pairs complete all 24 terminal Close orders"
         (sourcePingDisjointTerminalInterleavings accepted stale)
-    , test "FSEM-02 25920 terminal schedules, 144 partner prefixes, 288 refused rematches, 1512 adaptive suffixes, 10368 half-Close completions"
+    , test "FSEM-02 25920 terminal schedules, 144 partner prefixes, 288 refused rematches, 1512 adaptive suffixes, 10368 half-Close completions, 288 poisoned free-peer refusal/retries"
         (sourcePingThreeDisjointTerminalSchedules accepted stale)
     , test "FSEM-02 competing Ping sends sharing a Client predecessor refuse second use"
         (sourcePingSharedClientContention accepted stale)
@@ -2619,6 +2619,29 @@ sourcePingThreeDisjointTerminalSchedules accepted rejected = do
   -- four remaining ordered partner matchings and all remaining Close orders.
   let firstPairChoices = [(c, s) | c <- selectedClientKeys, s <- [as, bs, cs]]
       halfCloseWrongOutcome = Outcome "FSEM02.HalfCloseWrongOutcome"
+      -- This is intentionally hostile externally supplied state. Change the
+      -- *typed* live head consistently in both maps; preserve all other
+      -- process resources, including the borrowed affine spectator.
+      poisonFreePeer contexts peerKey endpoint endpointRole = do
+        original <- maybe (Left "adaptive poisoned free peer missing") Right
+          (Map.lookup peerKey contexts)
+        let resources = protocolResources original
+            poisoned = original
+              { protocolEndpoints = Map.insert endpoint
+                  (ProtocolEndpointBinding endpoint revision endpointRole (End done))
+                  (protocolEndpoints original)
+              , protocolResources = resources
+                  { linearBindings = Map.insert endpoint (TyEndpoint (End done))
+                      (linearBindings resources) }
+              }
+        pure (Map.insert peerKey poisoned contexts)
+      expectFreePeerHeadRefusal label expectedSite expectedHead contexts req =
+        case run contexts req of
+          Left (RendezvousProjectionSessionMismatch actual wanted observed) ->
+            assert (actual == expectedSite && wanted == expectedHead
+                     && observed == End done)
+              (label <> ": wrong source projection/process/head diagnostic")
+          other -> Left (label <> ": poisoned free peer advanced: " <> show other)
   assert (length firstPairChoices == 9
           && (9 * (2 * 120 + 2 * 24) * 4 :: Int) == 10368)
     "adaptive half-Close/suffix schedule census changed"
@@ -2689,8 +2712,43 @@ sourcePingThreeDisjointTerminalSchedules accepted rejected = do
       mapM_ (\alternateClients ->
         mapM_ (\alternateServers -> do
           let suffix = zipWith request alternateClients alternateServers
+              freeClient = head alternateClients
+              freeServer = head alternateServers
+              firstRequest = head suffix
+          clientOriginal <- maybe (Left "adaptive free Client missing") Right
+            (Map.lookup freeClient closedPrefix)
+          serverOriginal <- maybe (Left "adaptive free Server missing") Right
+            (Map.lookup freeServer closedPrefix)
+          poisonedClient <- poisonFreePeer closedPrefix freeClient clientOld clientRole
+          poisonedServer <- poisonFreePeer closedPrefix freeServer serverOld serverRole
+          let committedUnchanged malformed =
+                Map.lookup firstClient malformed == Map.lookup firstClient closedPrefix
+                && Map.lookup firstServer malformed == Map.lookup firstServer closedPrefix
+                && Map.keysSet malformed == Map.keysSet closedPrefix
+              spectatorLoanUnchanged malformed =
+                case Map.lookup cs malformed of
+                  Nothing -> False
+                  Just spectatorContext ->
+                    affineBindings (protocolResources spectatorContext) == affineBindings loaned
+                    && sharedLoans (protocolResources spectatorContext) == sharedLoans loaned
+          assert (committedUnchanged poisonedClient && committedUnchanged poisonedServer
+                  && spectatorLoanUnchanged poisonedClient
+                  && spectatorLoanUnchanged poisonedServer)
+            "adaptive free-peer injected head changed committed half-Close or loan"
+          expectFreePeerHeadRefusal "adaptive free Client wrong head" freeClient
+            (sourceClientHead plans) poisonedClient firstRequest
+          expectFreePeerHeadRefusal "adaptive free Server wrong head" freeServer
+            (sourceServerHead plans) poisonedServer firstRequest
+          let repairedClient = Map.insert freeClient clientOriginal poisonedClient
+              repairedServer = Map.insert freeServer serverOriginal poisonedServer
+          assert (repairedClient == closedPrefix && repairedServer == closedPrefix)
+            "adaptive fault repair failed exact pre-rendezvous state reconstruction"
           afterSuffix <- foldM (\contexts req -> mapLeft show (run contexts req))
-            closedPrefix suffix
+            repairedClient suffix
+          afterServerRepair <- foldM (\contexts req -> mapLeft show (run contexts req))
+            repairedServer suffix
+          assert (afterServerRepair == afterSuffix)
+            "adaptive repaired peer choice changed legal successor replay"
           assert (afterSuffix == canonicalClosed)
             "adaptive half-Close suffix failed exact End/owner replay"
           mapM_ (\closeOrder -> do
