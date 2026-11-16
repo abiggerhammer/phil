@@ -238,6 +238,50 @@ Proof.
   auto.
 Qed.
 
+(* Every finite structural emitter contributes a constructor octet.  These
+   length bounds justify E1's declared collection-cardinality guard for
+   canonical encodings, independently of parser success assumptions. *)
+Lemma p8_f1_put_form_has_tag :
+  forall form, 0 < length (p8_e1_put_form form).
+Proof.
+  intros [txt|xs|xs|xs]; cbn [p8_e1_put_form length]; lia.
+Qed.
+
+Lemma p8_f1_put_text_has_tag :
+  forall txt, 0 < length (p8_e1_put_text txt).
+Proof.
+  intros txt. unfold p8_e1_put_text. simpl. lia.
+Qed.
+
+Theorem p8_f1_forms_count_fits_canonical_wire :
+  forall xs suffix,
+    p8_e1_forms_count xs <= length (p8_e1_put_forms xs ++ suffix).
+Proof.
+  induction xs as [|form rest IH]; intros suffix.
+  - cbn [p8_e1_forms_count p8_e1_put_forms]. lia.
+  - cbn [p8_e1_forms_count p8_e1_put_forms].
+    repeat rewrite app_length.
+    specialize (IH suffix).
+    rewrite app_length in IH.
+    pose proof (p8_f1_put_form_has_tag form).
+    lia.
+Qed.
+
+Theorem p8_f1_fields_count_fits_canonical_wire :
+  forall fields suffix,
+    p8_e1_fields_count fields <= length (p8_e1_put_fields fields ++ suffix).
+Proof.
+  induction fields as [|key value rest IH]; intros suffix.
+  - cbn [p8_e1_fields_count p8_e1_put_fields]. lia.
+  - cbn [p8_e1_fields_count p8_e1_put_fields].
+    repeat rewrite app_length.
+    specialize (IH suffix).
+    rewrite app_length in IH.
+    pose proof (p8_f1_put_text_has_tag key).
+    pose proof (p8_f1_put_form_has_tag value).
+    lia.
+Qed.
+
 Print Assumptions p8_f1_digit_value_append.
 Print Assumptions p8_f1_count_scan_suffix.
 Print Assumptions p8_f1_read_canonical_digits.
@@ -247,3 +291,7 @@ Print Assumptions p8_f1_decimal_fuel_canonical.
 Print Assumptions p8_f1_frame_count_roundtrip.
 Print Assumptions p8_f1_text_prefix_roundtrip.
 Print Assumptions p8_f1_decoder_is_exact_on_a_success.
+Print Assumptions p8_f1_put_form_has_tag.
+Print Assumptions p8_f1_put_text_has_tag.
+Print Assumptions p8_f1_forms_count_fits_canonical_wire.
+Print Assumptions p8_f1_fields_count_fits_canonical_wire.
