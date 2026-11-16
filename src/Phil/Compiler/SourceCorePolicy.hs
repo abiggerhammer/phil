@@ -458,6 +458,16 @@ verifySteveGetStructural architecture program = do
     | u <- checkedSourceUnits (checkedSourceArchitectureBundle architecture)
     , componentName (locatedValue (checkedSourceComponent u)) == "SteveGet"
     ]
+  let sourceBody = locatedValue (componentBody (locatedValue unit))
+      allCallNames = callNamesBlock sourceBody
+  -- The ordinary source traversal covers all expression constructors, not
+  -- only the limited selected read/borrow pattern extracted below.
+  unlessSource
+    (length (filter (== "blob_read") allCallNames) == 1)
+    SteveGetReadFoundNotUnique
+  unlessSource
+    (length (filter (== "digest_check") allCallNames) == 1)
+    SteveGetDigestNotUnique
   (readSite, contentName, foundArm) <-
     exactlyOne SteveGetReadFoundNotUnique
       (concatMap sourceReadStatement
@@ -523,6 +533,13 @@ verifySteveGetStructural architecture program = do
         , name == "DigestProvider.check"
         ]
   unlessSource readMatches SteveGetCoreReadPredecessorMismatch
+  let extraOperations =
+        [ ()
+        | blockValue <- Map.elems blocks
+        , CoreRuntimeCall _ "DigestProvider.check" _ _ _ <-
+            coreBlockOperations blockValue
+        ]
+  unlessSource (null extraOperations) SteveGetCoreDigestNotUnique
   (coreBlockName, coreInputs, coreArms) <-
     exactlyOne SteveGetCoreDigestNotUnique digestSites
   unlessSource
