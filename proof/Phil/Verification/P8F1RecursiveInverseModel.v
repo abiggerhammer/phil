@@ -92,7 +92,12 @@ Proof.
         [discriminate | exact Nonzero]. }
     assert (NotZero : (first =? 48) = false).
     { apply Nat.eqb_neq. exact NZ. }
-    rewrite NotZero. simpl.
+    rewrite NotZero.
+    (* Keep the tail abstract: simplifying the next digit's scanner test
+       destroys the direct match with the general suffix lemma. *)
+    change (p8_e1_count_scan ((next :: tail) ++ 58 :: suffix)
+              (first - 48) 1 false =
+            Some (p8_f1_digit_value (first - 48) (next :: tail), suffix)).
     apply p8_f1_count_scan_suffix; [lia|exact R].
 Qed.
 
