@@ -188,7 +188,7 @@ Theorem p8_f1_frame_count_roundtrip :
 Proof.
   intros n suffix.
   unfold p8_e1_frame_count, p8_e1_decimal.
-  rewrite app_assoc. simpl [app].
+  simpl [app].
   destruct (p8_f1_decimal_fuel_canonical (S n) n)
     as [first [rest [Shape [Zero Nonzero]]]]; [lia|].
   pose proof (p8_f1_decimal_fuel_digits (S n) n) as Digits.
