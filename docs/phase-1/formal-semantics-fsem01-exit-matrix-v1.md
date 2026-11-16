@@ -4,6 +4,8 @@
 
 > **CORR-7 status note (2026-11-16):** CORR-6 [#1820](https://github.com/abiggerhammer/phil/pull/1820) is protected-merged with checked original-source replay. [CORR-7](formal-semantics-terminal-predecessors-corr7-fsem01-v1.md) now proposes a total finite terminal/continuing/source-failure classifier and globally ordered arbitrary-finite mixed-resource joins, with six original-source controls. These new witnesses are NOT audited or merged at this note's creation; R10/R11/R15 and the general FSEM-01 exit remain open.
 
+> **CORR-8 proposed source-error prefix correspondence (2026-11-16):** [CORR-8](formal-semantics-source-failure-corr8-fsem01-v1.md) adds actual original-source scoped loan failures before any Core join, with exact observed branch prefixes, no fabricated successor, strict source-wire validation and finite Rocq replay. This is only proposed until strict exact-head CI and protected merge; R05/R11/R15 and global FSEM-01 remain open. No P9-selected-provider checker or assurance paths are edited.
+
 > **Review finding: FSEM-01 remains OPEN.** This is a non-normative
 > coverage/acceptance audit, not a new language rule, a proof of the general
 > Haskell implementation, or an FSEM-01 completion claim.
