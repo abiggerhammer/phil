@@ -125,6 +125,101 @@ Proof.
       apply Nat.mod_upper_bound; lia.
 Qed.
 
+(* The emitter's fuel is a bound on the natural count, never a
+   fabricated identity for Phil Text. Decimal division decreases under
+   this bound, so every emitted count represents the original natural. *)
+Lemma p8_f1_decimal_fuel_value :
+  forall fuel n, n <= fuel ->
+    p8_f1_digit_value 0 (p8_e1_decimal_fuel fuel n) = n.
+Proof.
+  induction fuel as [|fuel IH]; intros n Bound.
+  - assert (n = 0) by lia. subst n. reflexivity.
+  - cbn [p8_e1_decimal_fuel].
+    destruct (n <? 10) eqn:Small.
+    + apply Nat.ltb_lt in Small.
+      cbn [p8_f1_digit_value]. lia.
+    + apply Nat.ltb_ge in Small.
+      pose proof (Nat.div_mod n 10 ltac:(lia)) as Division.
+      pose proof (Nat.mod_upper_bound n 10 ltac:(lia)) as Remainder.
+      assert (QuotientBound : n / 10 <= fuel) by lia.
+      rewrite p8_f1_digit_value_append.
+      rewrite (IH (n / 10) QuotientBound).
+      cbn [p8_f1_digit_value].
+      lia.
+Qed.
+
+Lemma p8_f1_decimal_fuel_canonical :
+  forall fuel n, n <= fuel ->
+    exists first rest,
+      p8_e1_decimal_fuel fuel n = first :: rest /\\
+      (n = 0 -> first = 48 /\\ rest = []) /\\
+      (0 < n -> first <> 48).
+Proof.
+  induction fuel as [|fuel IH]; intros n Bound.
+  - assert (n = 0) by lia. subst n.
+    exists 48, []. split; [reflexivity|split].
+    + intro _. split; reflexivity.
+    + lia.
+  - cbn [p8_e1_decimal_fuel].
+    destruct (n <? 10) eqn:Small.
+    + exists (48 + n), []. split; [reflexivity|split].
+      * intro Zero. subst n. split; reflexivity.
+      * intros Pos. lia.
+    + apply Nat.ltb_ge in Small.
+      pose proof (Nat.div_mod n 10 ltac:(lia)) as Division.
+      pose proof (Nat.mod_upper_bound n 10 ltac:(lia)) as Remainder.
+      assert (QuotientBound : n / 10 <= fuel) by lia.
+      destruct (IH (n / 10) QuotientBound)
+        as [first [rest [Shape [Zero Nonzero]]]].
+      exists first, (rest ++ [48 + n mod 10]).
+      rewrite Shape. simpl [app].
+      split; [reflexivity|split].
+      * intros Impossible. lia.
+      * intros _. apply Nonzero. lia.
+Qed.
+
+Theorem p8_f1_frame_count_roundtrip :
+  forall n suffix,
+    p8_e1_read_count (p8_e1_frame_count n ++ suffix) =
+      Some (n, suffix).
+Proof.
+  intros n suffix.
+  unfold p8_e1_frame_count, p8_e1_decimal.
+  rewrite app_assoc. simpl [app].
+  destruct (p8_f1_decimal_fuel_canonical (S n) n)
+    as [first [rest [Shape [Zero Nonzero]]]]; [lia|].
+  pose proof (p8_f1_decimal_fuel_digits (S n) n) as Digits.
+  rewrite Shape in Digits. simpl in Digits.
+  apply andb_true_iff in Digits as [First Rest].
+  assert (Canonical : rest = [] \/ first <> 48).
+  { destruct (Nat.eq_dec n 0) as [IsZero|NotZero].
+    - left. destruct (Zero IsZero) as [_ IsEmpty]. exact IsEmpty.
+    - right. apply Nonzero. lia. }
+  rewrite Shape.
+  rewrite (p8_f1_read_canonical_digits first rest suffix
+             First Rest Canonical).
+  rewrite <- Shape.
+  rewrite (p8_f1_decimal_fuel_value (S n) n) by lia.
+  reflexivity.
+Qed.
+
+Theorem p8_f1_text_prefix_roundtrip :
+  forall txt suffix,
+    p8_d2_text_valid txt = true ->
+    p8_e1_parse_text (p8_e1_put_text txt ++ suffix) =
+      Some (txt, suffix).
+Proof.
+  intros txt suffix Valid.
+  unfold p8_e1_put_text.
+  replace ((116 :: p8_e1_frame_count (length txt) ++ txt) ++ suffix)
+    with (116 :: (p8_e1_frame_count (length txt) ++ (txt ++ suffix)))
+    by (simpl [app]; rewrite app_assoc; reflexivity).
+  cbn [p8_e1_parse_text].
+  rewrite p8_f1_frame_count_roundtrip.
+  rewrite p8_e1_take_exact_prefix.
+  rewrite Valid. reflexivity.
+Qed.
+
 Lemma p8_f1_decoder_is_exact_on_a_success :
   forall wire form,
     p8_e2_normalize_form wire = Some form ->
@@ -140,4 +235,8 @@ Print Assumptions p8_f1_digit_value_append.
 Print Assumptions p8_f1_count_scan_suffix.
 Print Assumptions p8_f1_read_canonical_digits.
 Print Assumptions p8_f1_decimal_fuel_digits.
+Print Assumptions p8_f1_decimal_fuel_value.
+Print Assumptions p8_f1_decimal_fuel_canonical.
+Print Assumptions p8_f1_frame_count_roundtrip.
+Print Assumptions p8_f1_text_prefix_roundtrip.
 Print Assumptions p8_f1_decoder_is_exact_on_a_success.
