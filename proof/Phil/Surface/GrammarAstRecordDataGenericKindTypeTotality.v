@@ -195,7 +195,8 @@ Proof.
   exists
     {| phase1_generic_param_kind_type_spine_name := name;
        phase1_generic_param_kind_type_spine_kind := refined_kind |}.
-  cbn.
+  unfold phase1_surface_normalize_generic_param_kind_type_spine.
+  cbn [phase1_generic_param_spine_name phase1_generic_param_spine_kind].
   rewrite Hrefined_kind.
   reflexivity.
 Qed.
