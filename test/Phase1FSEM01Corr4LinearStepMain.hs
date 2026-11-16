@@ -267,7 +267,8 @@ main = do
         reject "tampered entry-consumed cut"
           (checkLoop (good { linearLoopNativeRun = nativeRun
             { sourceLinearLoopEntryConsumed =
-                Just (spent { Core.linearBindings = Map.empty }) } }))
+                Just (spent { Core.linearBindings =
+                  Map.singleton (Name "corr4-forged-entry") TyBool }) } }))
         reject "tampered header cut"
           (checkLoop (good { linearLoopNativeRun = nativeRun
             { sourceLinearLoopHeaderBound =
