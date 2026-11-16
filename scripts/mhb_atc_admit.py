@@ -35,6 +35,41 @@ def names(obj: dict) -> set[str]:
     return output
 
 
+def is_atc_candidate_issue(issue: dict) -> bool:
+    """Shared classification for admission and reconciliation.
+
+    Lifecycle-labelled issues are always inspected, including untrusted ones:
+    a claimed controller state must never silently become an admission.
+    Unlabelled lookalikes are considered damaged reservations ONLY when their
+    original GitHub creator is the trusted staging bot. Text alone is not
+    evidence of a reservation; ordinary outsiders may quote either marker.
+    Protected-ref inventory independently resolves its original issues.
+    """
+    if not isinstance(issue, dict) or issue.get("state") != "open":
+        raise ValueError("unexpected issue in open-issue snapshot")
+    labels = names(issue)
+    if {STAGED_LABEL, ADMITTING_LABEL, ACTIVE_LABEL} & labels:
+        return True
+    if "pull_request" in issue:
+        return False
+    title, body = issue.get("title"), issue.get("body")
+    looks_like_candidate = (
+        (isinstance(title, str) and title.startswith("ATC candidate: ")) or
+        (isinstance(body, str) and body.startswith(MARKER + "\n"))
+    )
+    creator = issue.get("user")
+    return (looks_like_candidate and isinstance(creator, dict)
+            and creator.get("login") == TRUSTED_CREATOR)
+
+
+def filter_reconciliation_issues(issues: list) -> list[dict]:
+    """Full open-issue snapshot -> controller-relevant issue records only."""
+    if not isinstance(issues, list):
+        raise ValueError("incomplete open issue snapshot")
+    return [i for i in issues
+            if is_atc_candidate_issue(i) and "pull_request" not in i]
+
+
 def machine_record(issue: dict) -> dict:
     body = issue.get("body", "")
     if not isinstance(body, str) or not body.startswith(MARKER + "\n"):
@@ -86,16 +121,13 @@ def plan(issues: list, prs: list, inventory: dict) -> dict:
     for issue in issues:
         if not isinstance(issue, dict) or issue.get("state") != "open":
             raise ValueError("unexpected issue in open-issue snapshot")
+        if not is_atc_candidate_issue(issue):
+            continue
         labels = names(issue)
         if not ({STAGED_LABEL, ADMITTING_LABEL, ACTIVE_LABEL} & labels):
-            # A partial GitHub label update must not erase the final durable
-            # queue marker and silently allow the next PR admission.
-            title = issue.get("title")
-            body = issue.get("body")
-            if ((isinstance(title, str) and title.startswith("ATC candidate: ")) or
-                (isinstance(body, str) and body.startswith(MARKER + "\n"))):
-                raise ValueError("ATC candidate lost all lifecycle labels")
-            continue
+            # Only a genuine trusted-stage bot issue can get here without a
+            # lifecycle label. An untrusted title/body lookalike was ignored.
+            raise ValueError("ATC candidate lost all lifecycle labels")
         if "pull_request" in issue:
             # PRs also appear in the GitHub Issues API. Admitted PRs are
             # deliberately labelled and already counted from the PR listing.
@@ -149,12 +181,21 @@ def plan(issues: list, prs: list, inventory: dict) -> dict:
 def main() -> int:
     p = argparse.ArgumentParser(description=__doc__)
     p.add_argument("--issues", required=True, help="JSON array of all open issues")
-    p.add_argument("--prs", required=True, help="JSON array of all open PRs")
-    p.add_argument("--inventory", required=True,
+    p.add_argument("--prs", help="JSON array of all open PRs")
+    p.add_argument("--inventory",
                    help="complete checked protected-ref issue/PR inventory")
+    p.add_argument("--filter-candidates", action="store_true",
+                   help="print trusted controller issue subset for reconciliation")
     args = p.parse_args()
     with open(args.issues, encoding="utf-8") as f:
         issues = json.load(f)
+    if args.filter_candidates:
+        if args.prs or args.inventory:
+            raise ValueError("candidate filtering cannot accept admission inputs")
+        print(json.dumps(filter_reconciliation_issues(issues), sort_keys=True))
+        return 0
+    if not args.prs or not args.inventory:
+        raise ValueError("admission requires PR and protected-ref inventories")
     with open(args.prs, encoding="utf-8") as f:
         prs = json.load(f)
     with open(args.inventory, encoding="utf-8") as f:
