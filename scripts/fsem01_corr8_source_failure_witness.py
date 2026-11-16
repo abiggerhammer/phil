@@ -160,10 +160,18 @@ def main() -> int:
         reject("branch forgery", lambda: check(
             encode([*fields[:6],"BSVC" if fields[6] == "-" else "-",
                     *fields[7:]]), original, expected))
-        reject("invented continuation", lambda: check(
-            encode([*fields[:7],"1",*fields[8:]]), original, expected)
-            if fields[7] != "1" else check(
-            encode([*fields[:8],"0",fields[9]]), original, expected))
+        # Mutations must change the actual source record, including the
+        # escape-right case whose left count is already one and right is zero.
+        # Exercise each predecessor independently: a former no-op 0 -> 0
+        # would falsely report that the validator admitted a forged state.
+        reject("forged left predecessor count", lambda: check(
+            encode([*fields[:7],
+                    "2" if fields[7] == "1" else "1",
+                    *fields[8:]]), original, expected))
+        reject("forged right predecessor count", lambda: check(
+            encode([*fields[:8],
+                    "2" if fields[8] == "1" else "1",
+                    fields[9]]), original, expected))
         reject("forged result", lambda: check(
             encode([*fields[:9],"JOIN_OK" if fields[9] != "JOIN_OK"
                     else "SOURCE_BORROW"]), original, expected))
