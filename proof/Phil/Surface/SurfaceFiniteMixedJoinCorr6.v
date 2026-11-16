@@ -173,7 +173,7 @@ Proof.
     destruct (String.eqb name head) eqn:Heq; try discriminate.
     simpl.
     destruct (predicate (head,ty)); simpl;
-      rewrite Heq; now apply IH.
+      try rewrite Heq; now apply IH.
 Qed.
 
 Lemma lookup_filter_nodup :
