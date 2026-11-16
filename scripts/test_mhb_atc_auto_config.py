@@ -71,10 +71,10 @@ class ManualPublisherCredentialPreflightTests(unittest.TestCase):
                           encoding="utf-8")
 
     def test_manual_only_trusted_main_protected_environment(self):
-        self.assertIn("  workflow_dispatch:\\n", self.source)
-        self.assertNotIn("\\n  push:", self.source)
-        self.assertNotIn("\\n  schedule:", self.source)
-        self.assertNotIn("\\n  pull_request:", self.source)
+        self.assertIn("  workflow_dispatch:\n", self.source)
+        self.assertNotIn("\n  push:", self.source)
+        self.assertNotIn("\n  schedule:", self.source)
+        self.assertNotIn("\n  pull_request:", self.source)
         self.assertIn("github.ref == 'refs/heads/main'", self.source)
         self.assertIn("environment: atc-publisher", self.source)
         self.assertIn("ref: main", self.source)
