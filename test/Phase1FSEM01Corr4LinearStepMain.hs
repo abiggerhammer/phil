@@ -267,11 +267,11 @@ main = do
         reject "tampered entry-consumed cut"
           (checkLoop (good { linearLoopNativeRun = nativeRun
             { sourceLinearLoopEntryConsumed =
-                Just spent { Core.linearBindings = Map.empty } } }))
+                Just (spent { Core.linearBindings = Map.empty }) } }))
         reject "tampered header cut"
           (checkLoop (good { linearLoopNativeRun = nativeRun
             { sourceLinearLoopHeaderBound =
-                Just header { Core.linearBindings = Map.empty } } }))
+                Just (header { Core.linearBindings = Map.empty }) } }))
         checkConsume "synthetic consumed owner" old spent Nothing
         let x = Name "corr4-synthetic"
             unrestricted = Core.ResourceContext
