@@ -138,6 +138,35 @@ class InventoryTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "duplicate"):
             enumerate_refs([ref(), ref()])
 
+    def test_r3_outside_namespace_siblings_do_not_block_census(self):
+        sibling = {
+            "ref": "refs/heads/hamster/admitted-not-atc",
+            "object": {"sha": A},
+        }
+        sibling_exact_prefix = {
+            "ref": "refs/heads/hamster/admitted",
+            "object": {"sha": A},
+        }
+        self.assertEqual(enumerate_refs([sibling, sibling_exact_prefix]), [])
+        self.assertEqual(enumerate_refs([sibling, ref(), sibling_exact_prefix]),
+                         enumerate_refs([ref()]))
+        # Even with an innocent sibling returned by GitHub's broad ref
+        # prefix search, a fully validated real closed history remains clear.
+        x = check([sibling, ref(), sibling_exact_prefix],
+                  [issue(state="closed", label=None)], [pr(state="closed")])
+        self.assertTrue(x["admission_clear"])
+
+    def test_r3_noncanonical_inside_protected_namespace_still_denied(self):
+        for bad in ("refs/heads/hamster/admitted/not-an-atc-ref",
+                    "refs/heads/hamster/admitted/atc-1-wrong"):
+            with self.subTest(ref=bad), self.assertRaisesRegex(ValueError, "noncanonical"):
+                enumerate_refs([{"ref": bad, "object": {"sha": A}}])
+        # An unrelated API prefix outside the requested GitHub search
+        # prefix is still an error, not silently discarded.
+        with self.assertRaisesRegex(ValueError, "unexpected branch"):
+            enumerate_refs([{"ref": "refs/heads/some/other/prefix",
+                             "object": {"sha": A}}])
+
     def test_unlabelled_open_admitted_issue_not_repaired_implicitly(self):
         with self.assertRaisesRegex(ValueError, "valid reservation"):
             check([ref()], [issue(label=None)], [pr()])
