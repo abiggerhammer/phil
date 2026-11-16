@@ -2116,7 +2116,7 @@ evalPrimitiveRule
   -> PrimitiveSemantics
   -> [Located SurfaceExpression]
   -> Either SurfaceCheckError [SurfacePath]
-evalPrimitiveRule environment state located name primitive arguments =
+evalPrimitiveRule environment state located primitiveName primitive arguments =
   case primitive of
     PrimitiveSupportedVersions -> do
       arity 0
@@ -2191,13 +2191,14 @@ evalPrimitiveRule environment state located name primitive arguments =
       -- Record only the actual type/shape observations returned by the
       -- ordinary checker, at their source occurrence and static branch.
       -- The spelling digest_check grants NO provider competence or evidence.
-      observed <- if name == "digest_check"
+      observed <- if primitiveName == "digest_check"
            && disciplines == [PrimitiveReadOnly, PrimitiveReadOnly]
         then do
           scalars <- mapM (inferReadOnlyScalar environment state) arguments
           Right (recordSourceEvidence (locatedSpan located)
-            (SourceCheckedProviderCall name
-              [ (scalarType scalar, scalarShape scalar) | scalar <- scalars ])
+            (SourceCheckedProviderCall primitiveName
+              [ (scalarType argumentScalar, scalarShape argumentScalar)
+              | argumentScalar <- scalars ])
             next)
         else Right next
       Right
