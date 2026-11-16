@@ -31,6 +31,13 @@ def enumerate_refs(refs: list) -> list[dict]:
             raise ValueError("malformed protected ref record")
         name = raw["ref"]
         if not name.startswith(PREFIX):
+            # GitHub list-matching-refs is a PREFIX search. Querying
+            # heads/hamster/admitted may also return 'admitted-other' or
+            # the branch named 'admitted' itself; neither matches our
+            # protected slash-delimited ruleset namespace. Ignore only
+            # such outside-prefix siblings, NOT unknown refs under PREFIX.
+            if name.startswith(PREFIX.removesuffix("/")):
+                continue
             raise ValueError("unexpected branch returned by admitted-ref census")
         match = ADMITTED.fullmatch(name.removeprefix(PREFIX))
         if match is None:
