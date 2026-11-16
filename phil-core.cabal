@@ -240,6 +240,7 @@ library
       Phil.Surface.GrammarV1.SourceAffineIfJoinResource
       Phil.Surface.GrammarV1.SourceScopedBorrowJoin
       Phil.Surface.GrammarV1.SourceBoolJoinTelescope
+      Phil.Surface.GrammarV1.SourceLinearJoinTelescope
       Phil.Surface.GrammarV1.SourceTwoBoolJoinTelescope
       Phil.Surface.GrammarV1.LoopStateScope
       Phil.Surface.GrammarV1.SourceBoolLoopResource

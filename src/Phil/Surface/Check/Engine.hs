@@ -19,6 +19,9 @@ module Phil.Surface.Check.Engine
   , SourceBoolJoinRun (..)
   , checkSurfaceSourceBoolJoinComponent
   , traceSurfaceSourceBoolJoinComponent
+  , SourceLinearJoinRun (..)
+  , checkSurfaceSourceLinearJoinComponent
+  , traceSurfaceSourceLinearJoinComponent
   , SourceTwoBoolJoinRun (..)
   , checkSurfaceSourceTwoBoolJoinComponent
   , traceSurfaceSourceTwoBoolJoinComponent
@@ -660,6 +663,144 @@ traceSurfaceSourceBoolJoinComponent env locatedComponent left right
       , sourceBoolJoinThenType = Nothing
       , sourceBoolJoinElseType = Nothing
       , sourceBoolJoinOutcome = outcome }
+
+-- | J-5: exactly one checked source Linear Bytes join-state slot.
+-- Both real predecessor expression values must consume the declared owner
+-- before joining their native Core contexts. The new slot is inserted after
+-- the join; this is static resource typing, not dynamic phi execution.
+data SourceLinearJoinRun = SourceLinearJoinRun
+  { sourceLinearJoinBefore :: Maybe ResourceContext
+  , sourceLinearJoinThen :: Maybe ResourceContext
+  , sourceLinearJoinElse :: Maybe ResourceContext
+  , sourceLinearJoinCoreJoined :: Maybe ResourceContext
+  , sourceLinearJoinBound :: Maybe ResourceContext
+  , sourceLinearJoinThenType :: Maybe (Mode, Ty)
+  , sourceLinearJoinElseType :: Maybe (Mode, Ty)
+  , sourceLinearJoinOutcome :: Either SurfaceCheckError SurfaceCheckResult
+  } deriving (Eq, Show)
+
+checkLinearJoinPredecessor
+  :: SurfaceEnvironment -> SurfaceState -> Located Block -> Ty
+  -> Either SurfaceCheckError SurfacePath
+checkLinearJoinPredecessor environment initial block expectedType =
+  checkSourceLinearLoopEdge
+    "linear join predecessor must move the exact checked Linear Bytes actual"
+    environment initial block expectedType
+
+-- | The production checkValueBlock/moveVariable, joinExclusive, and
+-- insertBindingMeta operations are used directly, not replaced by a
+-- caller-supplied context or a fabricated Linear owner.
+checkSurfaceSourceLinearJoinComponent
+  :: SurfaceEnvironment -> Located Component
+  -> Located Block -> Located Block
+  -> SourceSpan -> Text -> Ty -> SourceBoolJoinInvariant
+  -> [Located Statement]
+  -> Either SurfaceCheckError SurfaceCheckResult
+checkSurfaceSourceLinearJoinComponent environment locatedComponent left right
+    joinSpan slotName expectedType invariant afterJoin = do
+  let component = locatedValue locatedComponent
+  initial <- initializeState environment component
+  checkProvides environment initial component
+  leftPath <- checkLinearJoinPredecessor environment initial left expectedType
+  rightPath <- checkLinearJoinPredecessor environment initial right expectedType
+  joinedPaths <- joinExclusive joinSpan [leftPath,rightPath]
+  joined <- case joinedPaths of
+    [SurfacePath PathContinue state _] -> Right state
+    _ -> throw locatedComponent IncompatibleBranchResidue
+      "checked Linear join needs one continuing successor"
+  bound <- insertBindingMeta joinSpan slotName
+    (BindingMeta Linear expectedType (shapeForType expectedType)) joined
+  checkBoolJoinInvariant joinSpan invariant
+  advanced <- checkStatements environment [continuePath bound] afterJoin
+  finished <- mapM
+    (finalizePath environment (locatedSpan locatedComponent)) advanced
+  Right SurfaceCheckResult
+    { checkedComponentName = componentName component
+    , checkedTerminalControls = map toCoreControl finished
+    }
+
+traceSurfaceSourceLinearJoinComponent
+  :: SurfaceEnvironment -> Located Component
+  -> Located Block -> Located Block
+  -> SourceSpan -> Text -> Ty -> SourceBoolJoinInvariant
+  -> [Located Statement]
+  -> SourceLinearJoinRun
+traceSurfaceSourceLinearJoinComponent environment locatedComponent left right
+    joinSpan slotName expectedType invariant afterJoin =
+  case initializeState environment component of
+    Left err -> emptyRun (Left err)
+    Right initial -> case checkProvides environment initial component of
+      Left err -> (emptyRun (Left err))
+        { sourceLinearJoinBefore = Just (context initial) }
+      Right () ->
+        let start = context initial
+        in case checkLinearJoinPredecessor environment initial left expectedType of
+          Left err -> (emptyRun (Left err))
+            { sourceLinearJoinBefore = Just start }
+          Right leftPath ->
+            let leftContext = context (pathState leftPath)
+                leftType = operandType leftPath
+            in case checkLinearJoinPredecessor environment initial right expectedType of
+              Left err -> (emptyRun (Left err))
+                { sourceLinearJoinBefore = Just start
+                , sourceLinearJoinThen = Just leftContext
+                , sourceLinearJoinThenType = leftType }
+              Right rightPath ->
+                let rightContext = context (pathState rightPath)
+                    rightType = operandType rightPath
+                    beforeJoin = (emptyRun (throw locatedComponent
+                        IncompatibleBranchResidue
+                        "linear join has no completed successor"))
+                      { sourceLinearJoinBefore = Just start
+                      , sourceLinearJoinThen = Just leftContext
+                      , sourceLinearJoinElse = Just rightContext
+                      , sourceLinearJoinThenType = leftType
+                      , sourceLinearJoinElseType = rightType }
+                in case joinExclusive joinSpan [leftPath,rightPath] of
+                  Left err -> beforeJoin { sourceLinearJoinOutcome = Left err }
+                  Right joinedPaths -> case joinedPaths of
+                    [SurfacePath PathContinue joined _] ->
+                      let afterCore = beforeJoin
+                            { sourceLinearJoinCoreJoined = Just (context joined) }
+                      in case insertBindingMeta joinSpan slotName
+                          (BindingMeta Linear expectedType
+                            (shapeForType expectedType)) joined of
+                        Left err -> afterCore { sourceLinearJoinOutcome = Left err }
+                        Right bound ->
+                          let afterSlot = afterCore
+                                { sourceLinearJoinBound = Just (context bound) }
+                              outcome = do
+                                checkBoolJoinInvariant joinSpan invariant
+                                advanced <- checkStatements environment
+                                  [continuePath bound] afterJoin
+                                finished <- mapM
+                                  (finalizePath environment
+                                    (locatedSpan locatedComponent)) advanced
+                                Right SurfaceCheckResult
+                                  { checkedComponentName = componentName component
+                                  , checkedTerminalControls =
+                                      map toCoreControl finished }
+                          in afterSlot { sourceLinearJoinOutcome = outcome }
+                    _ -> beforeJoin { sourceLinearJoinOutcome =
+                      throw locatedComponent IncompatibleBranchResidue
+                        "checked Linear join needs one continuing successor" }
+  where
+    component = locatedValue locatedComponent
+    context state = resourceContext (stateCore state)
+    operandType path = case pathValue path of
+      Just (RuntimeScalar scalar) ->
+        Just (decisionCarrierMode (scalarMode scalar) (scalarShape scalar),
+              scalarType scalar)
+      _ -> Nothing
+    emptyRun outcome = SourceLinearJoinRun
+      { sourceLinearJoinBefore = Nothing
+      , sourceLinearJoinThen = Nothing
+      , sourceLinearJoinElse = Nothing
+      , sourceLinearJoinCoreJoined = Nothing
+      , sourceLinearJoinBound = Nothing
+      , sourceLinearJoinThenType = Nothing
+      , sourceLinearJoinElseType = Nothing
+      , sourceLinearJoinOutcome = outcome }
 
 -- | Two exactly typed Bool join-state slots. All observation fields are native
 -- Surface/Core resource cuts. No post-error successor is fabricated.
