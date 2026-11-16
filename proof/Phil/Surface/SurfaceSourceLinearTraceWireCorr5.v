@@ -224,7 +224,7 @@ Proof.
   unfold checkWire in Hcheck.
   destruct (decodeTrace raw) as [t|] eqn:Hdecoded;
     try discriminate.
-  exists t; split; [exact Hdecoded|].
+  exists t; split; [reflexivity|].
   now apply (corr5_decoded_trace_is_valid raw t).
 Qed.
 
