@@ -5,23 +5,9 @@
 set -euo pipefail
 
 : "${GH_REPO:?Missing GH_REPO}"
-: "${PUBLISHER_APP_ID:?Missing publisher App ID}"
-: "${PUBLISHER_APP_SLUG:?Missing publisher App slug}"
-[[ "$PUBLISHER_APP_SLUG" =~ ^[a-zA-Z0-9][a-zA-Z0-9-]*$ ]] || {
-  echo "Invalid App slug" >&2; exit 1;
-}
-
-# GitHub's Get App API and bot user API provide authenticated platform
-# identities (not a PR-body or user-supplied claim).
-gh api "apps/$PUBLISHER_APP_SLUG" > /tmp/atc-publisher-app.json
-encoded_bot="$(BOT="${PUBLISHER_APP_SLUG}[bot]" python3 -c 'import os, urllib.parse; print(urllib.parse.quote(os.environ["BOT"], safe=""))')"
-gh api "users/$encoded_bot" > /tmp/atc-publisher-bot.json
-python3 scripts/mhb_atc_immutable.py publisher \
-  --app-json /tmp/atc-publisher-app.json \
-  --bot-json /tmp/atc-publisher-bot.json \
-  --app-slug "$PUBLISHER_APP_SLUG" --app-id "$PUBLISHER_APP_ID" \
-  > /tmp/atc-publisher-identity.json
-
+# Authenticate the App/bot using the exact public metadata verifier
+# also exercised by PR CI; ordinary GITHUB_TOKEN cannot read /apps/{slug}.
+. scripts/mhb_atc_publisher_identity_snapshot.sh
 gh api --paginate "repos/$GH_REPO/git/matching-refs/heads/hamster/admitted" \
   | jq -s 'add // []' > /tmp/atc-admitted-refs.json
 python3 scripts/mhb_atc_inventory.py --refs /tmp/atc-admitted-refs.json --list \
