@@ -127,7 +127,7 @@ def verify_pr(pr: dict, binding: dict) -> dict:
         raise ValueError("PR immutable head/base/repository mismatch")
     if pr.get("title") != binding["title"]:
         raise ValueError("PR canonical title mismatch")
-    if pr.get("body") != binding["body"]:
+    if not isinstance(pr.get("body"), str) or pr["body"].rstrip("\n") != binding["body"].rstrip("\n"):
         raise ValueError("PR checked publisher receipt mismatch")
     if type(pr.get("number")) is not int or pr["number"] < 1:
         raise ValueError("bad PR number")
