@@ -2683,7 +2683,8 @@ sourcePingThreeDisjointTerminalSchedules accepted rejected = do
                          <> show other)
   assert (length firstPairChoices == 9
           && (9 * (2 * 120 + 2 * 24) * 4 :: Int) == 10368
-          && (9 * 4 * 4 * 4 :: Int) == 576)
+          && (9 * 4 * 4 * 4 :: Int) == 576
+          && (9 * 4 * 4 :: Int) == 144)
     "adaptive half-Close/suffix schedule census changed"
   mapM_ (\(firstClient, firstServer) -> do
     firstState <- mapLeft show (run before (request firstClient firstServer))
@@ -2771,6 +2772,8 @@ sourcePingThreeDisjointTerminalSchedules accepted rejected = do
             clientOld (TyEndpoint (End done))
           wrongSessionServer <- rewriteFreePeerResource closedPrefix freeServer
             serverOld (TyEndpoint (End done))
+          bothWrongType <- rewriteFreePeerResource wrongTypeClient freeServer
+            serverOld (TyUInt 8)
           let committedUnchanged malformed =
                 Map.lookup firstClient malformed == Map.lookup firstClient closedPrefix
                 && Map.lookup firstServer malformed == Map.lookup firstServer closedPrefix
@@ -2784,7 +2787,7 @@ sourcePingThreeDisjointTerminalSchedules accepted rejected = do
           let malformedStates =
                 [ poisonedClient, poisonedServer, missingClient, missingServer
                 , wrongTypeClient, wrongTypeServer
-                , wrongSessionClient, wrongSessionServer ]
+                , wrongSessionClient, wrongSessionServer, bothWrongType ]
           assert (all committedUnchanged malformedStates
                   && all spectatorLoanUnchanged malformedStates)
             "adaptive free-peer faults changed committed half-Close or active loan"
@@ -2808,6 +2811,15 @@ sourcePingThreeDisjointTerminalSchedules accepted rejected = do
           expectFreePeerShapeRefusal "adaptive free Server wrong resource session" freeServer
             (ProtocolEndpointSessionMismatch serverOld (sourceServerHead plans) (End done))
             wrongSessionServer firstRequest
+          expectFreePeerShapeRefusal "adaptive dual bad resources Client-first" freeClient
+            (ProtocolEndpointResourceTypeMismatch clientOld (TyUInt 8))
+            bothWrongType firstRequest
+          let repairedClientOnly = Map.insert freeClient clientOriginal bothWrongType
+          assert (repairedClientOnly == wrongTypeServer)
+            "adaptive repairing Client in two-fault state changed Server resource fault"
+          expectFreePeerShapeRefusal "adaptive dual bad resources Server after Client repair"
+            freeServer (ProtocolEndpointResourceTypeMismatch serverOld (TyUInt 8))
+            repairedClientOnly firstRequest
           let repairedMissingClient = Map.insert freeClient clientOriginal missingClient
               repairedMissingServer = Map.insert freeServer serverOriginal missingServer
           assert (repairedMissingClient == closedPrefix
@@ -2832,6 +2844,9 @@ sourcePingThreeDisjointTerminalSchedules accepted rejected = do
           assert (afterMissingClientRepair == afterSuffix
                   && afterMissingServerRepair == afterSuffix)
             "adaptive missing-owner retry changed authorized suffix successor"
+          let repairedBoth = Map.insert freeServer serverOriginal repairedClientOnly
+          assert (repairedBoth == closedPrefix)
+            "adaptive two-resource repair failed exact committed-state restoration"
           mapM_ (\(label, malformed, peer, original) -> do
             let repaired = Map.insert peer original malformed
             assert (repaired == closedPrefix)
@@ -2844,6 +2859,11 @@ sourcePingThreeDisjointTerminalSchedules accepted rejected = do
             , ("Server non-endpoint", wrongTypeServer, freeServer, serverOriginal)
             , ("Client wrong session", wrongSessionClient, freeClient, clientOriginal)
             , ("Server wrong session", wrongSessionServer, freeServer, serverOriginal) ]
+          repairedBothReplay <- foldM
+            (\contexts req -> mapLeft show (run contexts req))
+            repairedBoth suffix
+          assert (repairedBothReplay == afterSuffix)
+            "adaptive two-resource repair changed authorized suffix replay"
           assert (afterSuffix == canonicalClosed)
             "adaptive half-Close suffix failed exact End/owner replay"
           mapM_ (\closeOrder -> do
