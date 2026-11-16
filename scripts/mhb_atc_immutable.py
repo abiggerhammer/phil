@@ -98,13 +98,13 @@ def _load_owner_attestation() -> dict:
 
 def _timestamp(value) -> dt.datetime:
     if not isinstance(value, str):
-        raise ValueError("ruleset timestamp absent")
+        raise ValueError("ruleset version timestamp absent")
     try:
         result = dt.datetime.fromisoformat(value.replace("Z", "+00:00"))
     except ValueError as exc:
-        raise ValueError("invalid GitHub ruleset timestamp") from exc
+        raise ValueError("invalid GitHub ruleset version timestamp") from exc
     if result.tzinfo is None:
-        raise ValueError("ruleset timestamp missing timezone")
+        raise ValueError("ruleset version timestamp missing timezone")
     return result.astimezone(dt.timezone.utc)
 
 
