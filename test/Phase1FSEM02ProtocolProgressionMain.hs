@@ -51,7 +51,7 @@ main = do
         (sourcePingDisjointPairCommutation accepted stale)
     , test "FSEM-02 disjoint Ping pairs complete all 24 terminal Close orders"
         (sourcePingDisjointTerminalInterleavings accepted stale)
-    , test "FSEM-02 25920 terminal schedules, 144 partner prefixes, 288 refused rematches, 1512 adaptive suffixes, 10368 half-Close completions, 288 poisoned free-peer head and 288 missing-owner refusal/retries"
+    , test "FSEM-02 25920 terminal schedules, 144 partner prefixes, 288 refused rematches, 1512 adaptive suffixes, 10368 half-Close completions, 288 poisoned-head, 288 missing-owner and 576 wrong-resource-shape refusal/retries"
         (sourcePingThreeDisjointTerminalSchedules accepted stale)
     , test "FSEM-02 competing Ping sends sharing a Client predecessor refuse second use"
         (sourcePingSharedClientContention accepted stale)
@@ -2661,8 +2661,30 @@ sourcePingThreeDisjointTerminalSchedules accepted rejected = do
               (label <> ": missing linear owner lost exact process/endpoint/class")
           other -> Left (label <> ": missing owner advanced or was misclassified: "
                          <> show other)
+      -- Keep the source-derived session head, protocol instance, role and
+      -- endpoint metadata intact while substituting a non-endpoint resource
+      -- or a differently headed endpoint resource for an unmatched peer.
+      -- Neither hostile state represents an accepted source transition.
+      rewriteFreePeerResource contexts peerKey endpoint replacement = do
+        original <- maybe (Left "adaptive malformed-resource free peer missing") Right
+          (Map.lookup peerKey contexts)
+        let resources = protocolResources original
+            malformed = original
+              { protocolResources = resources
+                  { linearBindings = Map.insert endpoint replacement
+                      (linearBindings resources) } }
+        pure (Map.insert peerKey malformed contexts)
+      expectFreePeerShapeRefusal label expectedSite expectedError contexts req =
+        case run contexts req of
+          Left (RendezvousProtocolError actual actualError) ->
+            assert (actual == expectedSite && actualError == expectedError)
+              (label <> ": resource shape refusal lost exact site and class")
+          other -> Left (label <> ": malformed resource advanced or misclassified: "
+                         <> show other)
   assert (length firstPairChoices == 9
-          && (9 * (2 * 120 + 2 * 24) * 4 :: Int) == 10368)
+          && (9 * (2 * 120 + 2 * 24) * 4 :: Int) == 10368
+          && (9 * 4 * 4 * 4 :: Int) == 576
+          && (9 * 4 * 4 :: Int) == 144)
     "adaptive half-Close/suffix schedule census changed"
   mapM_ (\(firstClient, firstServer) -> do
     firstState <- mapLeft show (run before (request firstClient firstServer))
@@ -2742,6 +2764,16 @@ sourcePingThreeDisjointTerminalSchedules accepted rejected = do
           poisonedServer <- poisonFreePeer closedPrefix freeServer serverOld serverRole
           missingClient <- removeFreePeerOwner closedPrefix freeClient clientOld
           missingServer <- removeFreePeerOwner closedPrefix freeServer serverOld
+          wrongTypeClient <- rewriteFreePeerResource closedPrefix freeClient
+            clientOld (TyUInt 8)
+          wrongTypeServer <- rewriteFreePeerResource closedPrefix freeServer
+            serverOld (TyUInt 8)
+          wrongSessionClient <- rewriteFreePeerResource closedPrefix freeClient
+            clientOld (TyEndpoint (End done))
+          wrongSessionServer <- rewriteFreePeerResource closedPrefix freeServer
+            serverOld (TyEndpoint (End done))
+          bothWrongType <- rewriteFreePeerResource wrongTypeClient freeServer
+            serverOld (TyUInt 8)
           let committedUnchanged malformed =
                 Map.lookup firstClient malformed == Map.lookup firstClient closedPrefix
                 && Map.lookup firstServer malformed == Map.lookup firstServer closedPrefix
@@ -2752,12 +2784,12 @@ sourcePingThreeDisjointTerminalSchedules accepted rejected = do
                   Just spectatorContext ->
                     affineBindings (protocolResources spectatorContext) == affineBindings loaned
                     && sharedLoans (protocolResources spectatorContext) == sharedLoans loaned
-          assert (committedUnchanged poisonedClient && committedUnchanged poisonedServer
-                  && committedUnchanged missingClient && committedUnchanged missingServer
-                  && spectatorLoanUnchanged poisonedClient
-                  && spectatorLoanUnchanged poisonedServer
-                  && spectatorLoanUnchanged missingClient
-                  && spectatorLoanUnchanged missingServer)
+          let malformedStates =
+                [ poisonedClient, poisonedServer, missingClient, missingServer
+                , wrongTypeClient, wrongTypeServer
+                , wrongSessionClient, wrongSessionServer, bothWrongType ]
+          assert (all committedUnchanged malformedStates
+                  && all spectatorLoanUnchanged malformedStates)
             "adaptive free-peer faults changed committed half-Close or active loan"
           expectFreePeerHeadRefusal "adaptive free Client wrong head" freeClient
             (sourceClientHead plans) poisonedClient firstRequest
@@ -2767,6 +2799,27 @@ sourcePingThreeDisjointTerminalSchedules accepted rejected = do
             clientOld missingClient firstRequest
           expectFreePeerOwnerRefusal "adaptive free Server missing owner" freeServer
             serverOld missingServer firstRequest
+          expectFreePeerShapeRefusal "adaptive free Client wrong resource type" freeClient
+            (ProtocolEndpointResourceTypeMismatch clientOld (TyUInt 8))
+            wrongTypeClient firstRequest
+          expectFreePeerShapeRefusal "adaptive free Server wrong resource type" freeServer
+            (ProtocolEndpointResourceTypeMismatch serverOld (TyUInt 8))
+            wrongTypeServer firstRequest
+          expectFreePeerShapeRefusal "adaptive free Client wrong resource session" freeClient
+            (ProtocolEndpointSessionMismatch clientOld (sourceClientHead plans) (End done))
+            wrongSessionClient firstRequest
+          expectFreePeerShapeRefusal "adaptive free Server wrong resource session" freeServer
+            (ProtocolEndpointSessionMismatch serverOld (sourceServerHead plans) (End done))
+            wrongSessionServer firstRequest
+          expectFreePeerShapeRefusal "adaptive dual bad resources Client-first" freeClient
+            (ProtocolEndpointResourceTypeMismatch clientOld (TyUInt 8))
+            bothWrongType firstRequest
+          let repairedClientOnly = Map.insert freeClient clientOriginal bothWrongType
+          assert (repairedClientOnly == wrongTypeServer)
+            "adaptive repairing Client in two-fault state changed Server resource fault"
+          expectFreePeerShapeRefusal "adaptive dual bad resources Server after Client repair"
+            freeServer (ProtocolEndpointResourceTypeMismatch serverOld (TyUInt 8))
+            repairedClientOnly firstRequest
           let repairedMissingClient = Map.insert freeClient clientOriginal missingClient
               repairedMissingServer = Map.insert freeServer serverOriginal missingServer
           assert (repairedMissingClient == closedPrefix
@@ -2791,6 +2844,26 @@ sourcePingThreeDisjointTerminalSchedules accepted rejected = do
           assert (afterMissingClientRepair == afterSuffix
                   && afterMissingServerRepair == afterSuffix)
             "adaptive missing-owner retry changed authorized suffix successor"
+          let repairedBoth = Map.insert freeServer serverOriginal repairedClientOnly
+          assert (repairedBoth == closedPrefix)
+            "adaptive two-resource repair failed exact committed-state restoration"
+          mapM_ (\(label, malformed, peer, original) -> do
+            let repaired = Map.insert peer original malformed
+            assert (repaired == closedPrefix)
+              (label <> ": explicit resource-shape repair changed the committed prefix")
+            retried <- foldM (\contexts req -> mapLeft show (run contexts req))
+              repaired suffix
+            assert (retried == afterSuffix)
+              (label <> ": resource-shape refusal corrupted authorized suffix retry"))
+            [ ("Client non-endpoint", wrongTypeClient, freeClient, clientOriginal)
+            , ("Server non-endpoint", wrongTypeServer, freeServer, serverOriginal)
+            , ("Client wrong session", wrongSessionClient, freeClient, clientOriginal)
+            , ("Server wrong session", wrongSessionServer, freeServer, serverOriginal) ]
+          repairedBothReplay <- foldM
+            (\contexts req -> mapLeft show (run contexts req))
+            repairedBoth suffix
+          assert (repairedBothReplay == afterSuffix)
+            "adaptive two-resource repair changed authorized suffix replay"
           assert (afterSuffix == canonicalClosed)
             "adaptive half-Close suffix failed exact End/owner replay"
           mapM_ (\closeOrder -> do
