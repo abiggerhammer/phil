@@ -109,18 +109,19 @@ Lemma p8_f1_decimal_fuel_digits :
     forallb p8_e1_digit (p8_e1_decimal_fuel fuel n) = true.
 Proof.
   induction fuel as [|fuel IH]; intro n.
-  - change (p8_e1_digit (48 + n mod 10) = true).
+  - change (p8_e1_digit (48 + n mod 10) && true = true).
+    rewrite Bool.andb_true_r.
     apply p8_f1_digit_offset.
     apply Nat.mod_upper_bound; lia.
   - destruct (n <? 10) eqn:Small.
     + apply Nat.ltb_lt in Small.
-      change (p8_e1_digit (48 + n) = true).
+      change (p8_e1_digit (48 + n) && true = true).
+      rewrite Bool.andb_true_r.
       apply p8_f1_digit_offset. lia.
     + change
         (forallb p8_e1_digit (p8_e1_decimal_fuel fuel (n / 10)) &&
-         p8_e1_digit (48 + n mod 10) = true).
-      rewrite IH.
-      change (p8_e1_digit (48 + n mod 10) = true).
+         (p8_e1_digit (48 + n mod 10) && true) = true).
+      rewrite IH, Bool.andb_true_l, Bool.andb_true_r.
       apply p8_f1_digit_offset.
       apply Nat.mod_upper_bound; lia.
 Qed.
