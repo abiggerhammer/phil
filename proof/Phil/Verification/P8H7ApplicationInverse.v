@@ -149,7 +149,10 @@ Proof.
         {| p8_d2_declaration := declaration;
            p8_d2_interface := interface;
            p8_d2_arguments := fields |} ++ suffix))).
-  { apply p8_h7_application_arguments_fuel. }
+  { exact (p8_h7_application_arguments_fuel
+      {| p8_d2_declaration := declaration;
+         p8_d2_interface := interface;
+         p8_d2_arguments := fields |} suffix). }
   replace
     (p8_e2_put_application
       {| p8_d2_declaration := declaration;
