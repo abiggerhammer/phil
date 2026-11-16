@@ -2,6 +2,7 @@
 
 module Main (main) where
 
+import qualified Data.Map.Strict as Map
 import qualified Data.Set as Set
 import Data.Text (Text)
 import Phil.Core.Generic (GenericStaticParameterKey (..))
@@ -19,6 +20,10 @@ main = do
     , test "GEN-013 unresolved reference rejects" unresolvedReferenceRejects
     , test "GEN-013 ambiguous same-kind reference rejects" ambiguousReferenceRejects
     , test "GEN-013 telescope arity mismatch rejects" arityMismatchRejects
+    , test "P8-H4 malformed direct and referenced native forms reject"
+        malformedSelectedSemanticsReject
+    , test "P8-H4 valid nested Unicode native forms remain accepted"
+        validNestedSemanticsAccept
     ]
   if and results then pure () else exitFailure
 
@@ -118,6 +123,70 @@ arityMismatchRejects =
       [] of
     Left (GenericStaticActualCountMismatch 2 1) -> Right ()
     other -> Left ("generic telescope arity mismatch was accepted: " <> show other)
+
+-- H3's actual native negative must now fail at the shared Core static-actual
+-- checker, for both source-tied direct evidence and a resolved reference.
+malformedSelectedSemanticsReject :: Either String ()
+malformedSelectedSemanticsReject = do
+  let u0 = SemanticUnordered Set.empty
+      r0 = SemanticRecord Map.empty
+      badSet = SemanticUnordered (Set.fromDistinctAscList [r0, u0])
+      badMap = SemanticRecord (Map.fromDistinctAscList
+        [("z", SemanticAtom "last"), ("a", SemanticAtom "first")])
+      values =
+        [ ("unordered", badSet)
+        , ("nested ordered", SemanticOrdered [SemanticAtom "ok", badSet])
+        , ("nested record", SemanticRecord (Map.singleton "child" badSet))
+        , ("nested unordered", SemanticUnordered (Set.singleton badSet))
+        , ("record", badMap)
+        , ("record nested", SemanticOrdered [badMap])
+        ]
+      parameter = GenericStaticParameter (key "T") GenericTypeKind
+      checkedDirect form = checkGenericStaticActuals
+        [parameter] [DirectGenericStaticActual GenericTypeKind form] []
+      checkedReference form = checkGenericStaticActuals
+        [parameter] [ReferencedGenericStaticActual "actual"]
+        [GenericStaticReferenceCandidate "actual" GenericTypeKind form]
+      checkMalformed (label, form) = do
+        checkResult (label <> " direct") (checkedDirect form)
+        checkResult (label <> " referenced") (checkedReference form)
+      checkResult label result = case result of
+        Left (GenericStaticMalformedSemanticForm actualKey) ->
+          assert (actualKey == key "T")
+            ("malformed " <> label <> " diagnosed wrong parameter")
+        other -> Left ("malformed " <> label <> " was admitted: " <> show other)
+  mapM_ checkMalformed values
+  -- A wrong-kind direct argument must retain its original error precedence.
+  case checkGenericStaticActuals [parameter]
+      [DirectGenericStaticActual GenericMessageKind badSet] [] of
+    Left (GenericStaticDirectKindMismatch actualKey GenericTypeKind GenericMessageKind) ->
+      assert (actualKey == key "T")
+        "wrong-kind malformed direct argument changed kind diagnosis"
+    other -> Left ("wrong-kind malformed direct argument changed error: " <> show other)
+
+validNestedSemanticsAccept :: Either String ()
+validNestedSemanticsAccept = do
+  let u0 = SemanticUnordered Set.empty
+      r0 = SemanticRecord Map.empty
+      valid = SemanticRecord (Map.fromList
+        [ ("unicode", SemanticAtom "é / e\\x0301 / 🙂")
+        , ("nul", SemanticAtom "\\0")
+        , ("nested", SemanticOrdered
+            [SemanticUnordered (Set.fromList [r0, u0])])
+        ])
+      parameter = GenericStaticParameter (key "T") GenericTypeKind
+      direct = checkGenericStaticActuals
+        [parameter] [DirectGenericStaticActual GenericTypeKind valid] []
+      referenced = checkGenericStaticActuals
+        [parameter] [ReferencedGenericStaticActual "actual"]
+        [GenericStaticReferenceCandidate "actual" GenericTypeKind valid]
+      checkPreserved label result = case result of
+        Right [actual] ->
+          assert (checkedGenericStaticSemanticForm actual == valid)
+            ("valid " <> label <> " was changed")
+        other -> Left ("valid " <> label <> " was rejected: " <> show other)
+  checkPreserved "direct" direct
+  checkPreserved "referenced" referenced
 
 parameters :: [GenericStaticParameter]
 parameters =
