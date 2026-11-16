@@ -25,9 +25,10 @@ import Phil.Core.Syntax
   ( Mode (..), Name (..), RefTerm (..), Ty (..) )
 import Phil.Surface.Check.Support (emptySurfaceState)
 import Phil.Surface.GrammarV1.BinderScope
-  ( GrammarV1BinderScopeError
+  ( GrammarV1BinderScopeError (..)
   , GrammarV1ResolvedBinder (..)
-  , grammarV1FunctionParameterScope )
+  , grammarV1FunctionParameterScope
+  , grammarV1ResolveLocal )
 import Phil.Surface.GrammarV1.CheckedType
   ( GrammarV1CheckedResolvedTypeMode (..)
   , GrammarV1CheckedTypeModeOrigin (..)
@@ -54,7 +55,8 @@ import Phil.Surface.GrammarV1.Parser
   ( GrammarV1Block (..), GrammarV1DataDecl (..)
   , GrammarV1Declaration (..), GrammarV1Expression (..)
   , GrammarV1FunctionDecl (..), GrammarV1JoinClause (..)
-  , GrammarV1Proposition (..), GrammarV1RelationOperator (..)
+  , GrammarV1Proposition (..), GrammarV1QualifiedName (..)
+  , GrammarV1RelationOperator (..), GrammarV1StaticReference (..)
   , GrammarV1SourceFile (..), GrammarV1StateSlot (..)
   , GrammarV1Statement (..), GrammarV1TermParam (..)
   , GrammarV1TopLevelDecl (..)
@@ -412,6 +414,47 @@ expectScopeFailure source why = do
     Just (Left (J6ScopeError _)) -> Right ()
     other -> Left ("scope failure bypassed: " ++ why ++ " => " ++ show other)
 
+-- A source predecessor using a POST-join state-slot spelling is not a
+-- resolvable parameter-local occurrence. The shared bounded lexical checker
+-- therefore returns Nothing (outside competence), not a typed ScopeError:
+-- such a name may also be a static/global reference in general Grammar-v1.
+-- Check the real source AST, the precise pre-join lexical absence and the
+-- independent checker's actual refusal; never manufacture a production error.
+expectForwardSlotRefusal :: Text -> Either String ()
+expectForwardSlotRefusal source = do
+  (_,fn) <- parsePair source
+  (_,preJoin) <- either (Left . show) Right
+    (grammarV1FunctionParameterScope fnRoot fn)
+  sourceIf <- case grammarV1BlockStatements
+      (locatedValue (grammarV1FunctionBody fn)) of
+    [Located _ (GrammarV1ExpressionStatement sourceIf),_] -> Right sourceIf
+    _ -> Left "forward-ref negative lost its one-if source-body shape"
+  (predecessor,slotName) <- case locatedValue sourceIf of
+    GrammarV1IfExpression _ (Just joinClause) left (Just _) ->
+      case (grammarV1JoinState (locatedValue joinClause),
+            grammarV1BlockStatements (locatedValue left)) of
+        ([Located _ slot],[Located _ (GrammarV1ExpressionStatement value)]) ->
+          Right (value,grammarV1StateSlotName slot)
+        _ -> Left "forward-ref negative lost its source slot or predecessor"
+    _ -> Left "forward-ref negative lost its declared if/join"
+  let isExactlyFutureSlot = case locatedValue predecessor of
+        GrammarV1NameExpression reference args ->
+          null args &&
+          null (grammarV1StaticReferenceArguments reference) &&
+          grammarV1QualifiedNameParts
+            (grammarV1StaticReferenceName reference) == [locatedValue slotName]
+        _ -> False
+  assert isExactlyFutureSlot
+    "forward-ref negative no longer refers to its own future join slot"
+  case grammarV1ResolveLocal slotName preJoin of
+    Left (GrammarV1BinderNotInScope _) -> Right ()
+    other -> Left ("post-join state slot unexpectedly visible before join: " ++
+                   show other)
+  assert (grammarV1CheckedLocalValueOccurrenceInScope preJoin predecessor == Nothing &&
+          grammarV1CheckedJoinExpressionInScope preJoin sourceIf == Nothing &&
+          admitText lifecycle source == Nothing)
+    "unavailable post-join slot incorrectly acquired pre-join local authority"
+
 main :: IO ()
 main = do
   let fixture name' = TextIO.readFile (directory ++ name' ++ ".phil")
@@ -441,7 +484,7 @@ main = do
         checkNativeTwoOwnerMove evidence
         expectNominalRejections positive weakened
         expectScopeFailure shadow "join state shadows existing parameter"
-        expectScopeFailure future "predecessor references future state slot"
+        expectForwardSlotRefusal future
         mapM_ (uncurry expectOutside) (zip unsupported
           [ "both arms move the same source owner"
           , "then arm Bool is not Affine Permit"
