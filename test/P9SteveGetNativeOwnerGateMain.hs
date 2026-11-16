@@ -16,10 +16,10 @@ import System.Directory
   ( createDirectory, getTemporaryDirectory, removeFile, removePathForcibly )
 import System.IO (hClose, openTempFile)
 
-foreign import ccall unsafe
+foreign import ccall safe
   "phil_runtime_choice_SteveGet_get_entry_BlobProvider_read"
   readCall :: Ptr () -> Ptr (Ptr ()) -> IO CInt
-foreign import ccall unsafe
+foreign import ccall safe
   "phil_runtime_choice_SteveGet_get_check_DigestProvider_check"
   checkCall :: Ptr () -> Ptr () -> IO CInt
 
