@@ -23,6 +23,18 @@ Proof.
   repeat rewrite length_app. simpl. lia.
 Qed.
 
+(* Concrete Q/M framing associativity, independent of any parser tactic. *)
+Lemma p8_h7_qm_concat :
+  forall (prefix value suffix : list nat),
+    ((prefix ++ [77]) ++ value) ++ suffix =
+    prefix ++ (77 :: (value ++ suffix)).
+Proof.
+  intros prefix value suffix.
+  induction prefix as [|byte rest IH].
+  - reflexivity.
+  - simpl. rewrite IH. reflexivity.
+Qed.
+
 Lemma p8_h7_argument_prefix :
   forall fuel key value suffix,
     p8_d2_text_valid key = true ->
@@ -34,7 +46,15 @@ Lemma p8_h7_argument_prefix :
 Proof.
   intros fuel key value suffix KeyValid ValueValid Bound.
   unfold p8_e2_put_argument.
-  repeat rewrite <- app_assoc.
+  replace (([81] ++ p8_e1_put_text key ++ [77] ++
+            p8_e1_put_form value) ++ suffix)
+    with (81 :: (p8_e1_put_text key ++
+          (77 :: (p8_e1_put_form value ++ suffix)))).
+  2: {
+    cbn [app].
+    f_equal.
+    apply p8_h7_qm_concat.
+  }
   unfold p8_e2_parse_argument.
   cbn [p8_e2_expect].
   rewrite (p8_f1_text_prefix_roundtrip key
