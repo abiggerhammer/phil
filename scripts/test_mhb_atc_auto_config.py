@@ -95,7 +95,7 @@ class ManualPublisherCredentialPreflightTests(unittest.TestCase):
         # approximation: GitHub Actions expression equality ignores case.
         first = '          for enabled in "$AUTO_ADMIT_ENABLED" "$STAGE_BRIDGE_ENABLED" "$IMMUTABLE_ENABLED"; do'
         start = self.source.index(first)
-        stop = self.source.index("          done\\n", start) + len("          done\\n")
+        stop = self.source.index("          done\n", start) + len("          done\n")
         guard = textwrap.dedent(self.source[start:stop])
         for variable in ("AUTO_ADMIT_ENABLED", "STAGE_BRIDGE_ENABLED",
                          "IMMUTABLE_ENABLED"):
@@ -105,7 +105,7 @@ class ManualPublisherCredentialPreflightTests(unittest.TestCase):
                 env[variable] = enabled
                 with self.subTest(variable=variable, enabled=enabled):
                     ran = subprocess.run(
-                        ["bash", "-c", "set -euo pipefail\\n" + guard],
+                        ["bash", "-c", "set -euo pipefail\n" + guard],
                         text=True, capture_output=True, env=env, check=False)
                     self.assertNotEqual(ran.returncode, 0, ran.stdout)
                     self.assertIn("must remain OFF", ran.stderr)
@@ -114,7 +114,7 @@ class ManualPublisherCredentialPreflightTests(unittest.TestCase):
                        STAGE_BRIDGE_ENABLED="", IMMUTABLE_ENABLED="")
             with self.subTest(inactive=enabled):
                 ran = subprocess.run(
-                    ["bash", "-c", "set -euo pipefail\\n" + guard],
+                    ["bash", "-c", "set -euo pipefail\n" + guard],
                     text=True, capture_output=True, env=env, check=False)
                 self.assertEqual(ran.returncode, 0, ran.stderr)
 
