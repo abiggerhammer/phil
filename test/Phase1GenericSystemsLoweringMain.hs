@@ -3,6 +3,7 @@
 module Main (main) where
 
 import qualified Data.Map.Strict as Map
+import qualified Data.Map.Internal as MapInternal
 import qualified Data.Set as Set
 import qualified Data.Text as Text
 import Phil.Core.Static
@@ -35,6 +36,8 @@ main = do
         malformedContextSemanticsReject
     , test "P8-H2 valid nested Set/Map/Unicode context remains admissible"
         validNestedContextSemanticsAccept
+    , test "P8-H6 direct generic producer rejects original cached-size corruption"
+        malformedOriginalNativeContainerRejects
     , test "SYS-GENERIC target-only ABI choice remains explicit"
         steveAbiChoiceExplicit
     ]
@@ -173,6 +176,42 @@ validNestedContextSemanticsAccept = do
   bundle <- mapLeft show (lowerGenericSystems checked sampleProgram
     (contextA { genericContextSemantics = valid }))
   mapLeft show (verifyPhase1StageBundle bundle)
+
+-- This checked-in regression exercises the H5 cached-size witness, not just a
+-- missorted `fromDistinctAscList` that might fail unrelated lookups.
+malformedOriginalNativeContainerRejects :: Either String ()
+malformedOriginalNativeContainerRejects = do
+  checked <- checkedInstance "Sample"
+  let validDecisions = genericContextDecisions contextA
+      badDecisions = corruptCachedMap validDecisions
+      validFunctions = coreProgramFunctions sampleProgram
+      badFunctions = corruptCachedMap validFunctions
+      contextBad = contextA { genericContextDecisions = badDecisions }
+      coreBad = sampleProgram { coreProgramFunctions = badFunctions }
+      check label original malformed = do
+        assert (Map.valid original && not (Map.valid malformed))
+          (label <> " did not corrupt the original native Map")
+        assert (Map.toAscList original == Map.toAscList malformed)
+          (label <> " changed ascending entries")
+        assert (all (\(key, value) -> Map.lookup key malformed == Just value)
+          (Map.toAscList original))
+          (label <> " changed an original lookup")
+      expectBad path result = case result of
+        Left (GenericLoweringMalformedNativeContainer actual) ->
+          assert (actual == path) ("wrong invalid-container path: " <> show actual)
+        other -> Left ("malformed native container accepted: " <> show other)
+  check "context.decisions" validDecisions badDecisions
+  check "core.functions" validFunctions badFunctions
+  expectBad "context.decisions"
+    (lowerGenericSystems checked sampleProgram contextBad)
+  expectBad "core.functions"
+    (lowerGenericSystems checked coreBad contextA)
+
+corruptCachedMap :: Map.Map k v -> Map.Map k v
+corruptCachedMap value = case value of
+  MapInternal.Tip -> value
+  MapInternal.Bin n key item left right ->
+    MapInternal.Bin (n + 1) key item left right
 
 steveAbiChoiceExplicit :: Either String ()
 steveAbiChoiceExplicit = do
