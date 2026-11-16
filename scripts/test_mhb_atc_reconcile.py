@@ -19,6 +19,9 @@ REPO = "abiggerhammer/phil"
 NOW = dt.datetime(2026, 11, 6, 14, 0, tzinfo=dt.timezone.utc)
 BRANCH = "hamster/staged/mhb-atc/first"
 OTHER = "hamster/staged/stdlib/second"
+PUBLISHER = {"app_id": 5782193, "app_slug": "atc-synthetic",
+             "bot_login": "atc-synthetic[bot]", "bot_id": 178245}
+
 
 
 def label(name):
@@ -43,6 +46,7 @@ def pr(n=1702, issue_number=1701, branch=BRANCH, sha=A,
             "head": {"ref": binding["admitted_branch"], "sha": sha,
                      "repo": {"full_name": REPO}},
             "base": {"ref": "main", "repo": {"full_name": REPO}},
+            "user": {"login": PUBLISHER["bot_login"], "id": PUBLISHER["bot_id"], "type": "Bot"},
             "labels": [label(ACTIVE_LABEL), label("lane: " + lane)] if labels else []}
 
 
@@ -67,7 +71,7 @@ def plan(issues, prs, repo, now, *, refs_override=None):
                 refs.append({"ref": "refs/heads/" + name, "object": {"sha": sha}})
                 found.add(name)
     return production_plan(issues, prs, refs if refs_override is None else refs_override,
-                           repo, now)
+                           repo, now, PUBLISHER)
 
 
 class RecoveryTests(unittest.TestCase):
@@ -138,6 +142,22 @@ class RecoveryTests(unittest.TestCase):
             with self.subTest(pr=x):
                 with self.assertRaises(ValueError):
                     plan([issue()], [x], REPO, NOW)
+
+    def test_f3_wrong_publisher_origin_prevents_repair_and_release(self):
+        for state in ("open", "closed"):
+            for variant in ("foreign-bot", "human", "missing-user", "wrong-app"):
+                x = pr(state=state)
+                if variant == "foreign-bot":
+                    x["user"]["login"] = "other-app[bot]"
+                elif variant == "human":
+                    x["user"]["type"] = "User"
+                elif variant == "missing-user":
+                    del x["user"]
+                else:
+                    x["performed_via_github_app"] = {"id": 999}
+                with self.subTest(state=state, variant=variant), self.assertRaisesRegex(
+                        ValueError, "publisher|attribution"):
+                    plan([issue(state=ADMITTING_LABEL)], [x], REPO, NOW)
 
     def test_untrusted_issue_fails_closed(self):
         x = issue()
