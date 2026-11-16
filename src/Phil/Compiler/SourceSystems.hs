@@ -60,6 +60,8 @@ import Phil.Systems.GenericLowering
   , GenericRealizationContext
   , coreSystemsProgramSemanticForm
   , lowerGenericSystems
+  , validateCoreNativeContainers
+  , validateNativeContainers
   )
 import Phil.Systems.Phase1Stage (Phase1StageBundle (..))
 import Phil.Surface.Lineage (PortableSourceBundle)
@@ -88,6 +90,9 @@ prepareSourceSystemsAdmission
   -> CoreSystemsProgram
   -> Either SourceSystemsError SourceSystemsAdmission
 prepareSourceSystemsAdmission policy architecture program = do
+  -- Reject invalid original Core Maps before key-set/equality comparisons can
+  -- turn representation corruption into an unrelated correspondence error.
+  mapLeft SourceSystemsLoweringRejected (validateCoreNativeContainers program)
   correspondence <- mapLeft SourceSystemsCorrespondenceRejected
     (verifySourceCoreCorrespondence architecture program)
   mapLeft SourceSystemsPolicyRejected
@@ -99,6 +104,8 @@ lowerSourceSystems
   -> GenericRealizationContext
   -> Either SourceSystemsError Phase1StageBundle
 lowerSourceSystems (SourceSystemsAdmission architecture program correspondence) context = do
+  -- Even this opaque admission may receive a fresh public realization context.
+  mapLeft SourceSystemsLoweringRejected (validateNativeContainers program context)
   if checkedArchitectureIdentity (checkedSourceArchitectureRoot architecture)
       == sourceCoreArchitectureIdentity correspondence
     then Right ()
@@ -177,6 +184,10 @@ produceVerifiedSourceSystems
   -> GenericRealizationContext
   -> Either VerifiedSourceSystemsProductionError VerifiedSourceSystemsProduction
 produceVerifiedSourceSystems roots environments sites policy portable program context = do
+  -- P8-H6 original-native-container gate: inspect every public native Map/Set
+  -- before source correspondence, policy, or canonicalization consumes it.
+  mapLeft (VerifiedSourceLoweringRejected . SourceSystemsLoweringRejected)
+    (validateNativeContainers program context)
   checked <- mapLeft VerifiedSourceBundleRejected
     (checkPortableSourceBundle roots environments portable)
   architecture <- mapLeft VerifiedSourceArchitectureRejected
