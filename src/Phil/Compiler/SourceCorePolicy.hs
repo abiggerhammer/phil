@@ -11,6 +11,9 @@ module Phil.Compiler.SourceCorePolicy
   , sourceCoreCallSites
   , sourceCoreBranchSites
   , verifySourceCorePolicy
+  , SteveGetStructuralFact (..)
+  , SteveGetStructuralError (..)
+  , verifySteveGetStructural
   ) where
 
 import qualified Data.Map.Strict as Map
@@ -25,8 +28,17 @@ import Phil.Compiler.SourceBundle
   , CheckedSourceUnit (..)
   )
 import Phil.Surface.Syntax
+import Phil.Surface.Check.Types
+  ( SourceEvidenceEvent (..)
+  , SourceEvidenceBranch (..)
+  , SourceEvidenceUse (..)
+  , SurfaceShape (..)
+  )
+import Phil.Core.Syntax (Name (..), Ty (..))
 import Phil.Systems.GenericLowering
   ( CoreSystemsBlock (..)
+  , CoreSystemsValue (..)
+  , CoreSystemsValueRole (..)
   , CoreSystemsFunction (..)
   , CoreSystemsOperation (..)
   , CoreSystemsProgram (..)
@@ -409,3 +421,279 @@ branchLabelsFallback :: Fallback -> [Set Text]
 branchLabelsFallback fallback = case fallback of
   FailFallback _ -> []
   RejectFallback expression -> branchLabelsExpression (locatedValue expression)
+
+
+-- | OBSERVATIONAL ONLY. The caller-visible fact is not a P9 capability.
+-- Only the private raw-source-rechecked SourceSystems producer may seal it.
+-- In particular source binder spelling is not a dynamic owner incarnation,
+-- and this checker does not prove a source-to-runtime simulation.
+data SteveGetStructuralFact = SteveGetStructuralFact
+  { steveGetSourceContentBinder :: Text
+  , steveGetSourceOwnerBinder :: Text
+  , steveGetSourceViewBinder :: Text
+  , steveGetSourceReadSite :: SourceSpan
+  , steveGetSourceBorrowSite :: SourceSpan
+  , steveGetSourceDigestSite :: SourceSpan
+  , steveGetCheckedCallOrdinal :: Int
+  , steveGetCheckedFoundOrdinal :: Int
+  , steveGetCheckedContentType :: Ty
+  , steveGetCheckedBorrowedType :: Ty
+  } deriving (Eq, Show)
+
+data SteveGetStructuralError
+  = SteveGetSourceUnitNotUnique
+  | SteveGetReadFoundNotUnique
+  | SteveGetFoundOwnerNotUnique
+  | SteveGetBorrowNotUnique
+  | SteveGetDigestNotUnique
+  | SteveGetDigestOperandsMismatch
+  | SteveGetCheckedCallObservationMissing
+  | SteveGetCheckedCallTypeMismatch
+  | SteveGetCheckedCallBranchMismatch
+  | SteveGetCheckedFoundMissing
+  | SteveGetCheckedFoundMismatch
+  | SteveGetCoreFunctionMissing
+  | SteveGetCoreValueRolesMismatch
+  | SteveGetCoreReadPredecessorMismatch
+  | SteveGetCoreDigestNotUnique
+  | SteveGetCoreDigestSiteMismatch
+  deriving (Eq, Show)
+
+-- | Special-purpose source/Core structural discriminator. It checks a
+-- selected, genuinely parsed and checked SteveGet AST against the exact
+-- manually supplied Core value roles/CFG. It does NOT derive a fresh owner,
+-- qualified provider law, live runtime loan, compiled ABI identity, or proof.
+-- Those are separate non-bypassable P9-F2 gates.
+verifySteveGetStructural
+  :: CheckedSourceArchitecture
+  -> CoreSystemsProgram
+  -> Either SteveGetStructuralError SteveGetStructuralFact
+verifySteveGetStructural architecture program = do
+  unit <- exactlyOne SteveGetSourceUnitNotUnique
+    [ checkedSourceComponent u
+    | u <- checkedSourceUnits (checkedSourceArchitectureBundle architecture)
+    , componentName (locatedValue (checkedSourceComponent u)) == "SteveGet"
+    ]
+  let sourceBody = locatedValue (componentBody (locatedValue unit))
+      allCallNames = callNamesBlock sourceBody
+  -- The ordinary source traversal covers all expression constructors, not
+  -- only the limited selected read/borrow pattern extracted below.
+  unlessSource
+    (length (filter (== "blob_read") allCallNames) == 1)
+    SteveGetReadFoundNotUnique
+  unlessSource
+    (length (filter (== "digest_check") allCallNames) == 1)
+    SteveGetDigestNotUnique
+  (readSite, contentName, foundArm) <-
+    exactlyOne SteveGetReadFoundNotUnique
+      (concatMap sourceReadStatement
+        (blockStatements (locatedValue (componentBody (locatedValue unit)))))
+  ownerName <- exactlyOne SteveGetFoundOwnerNotUnique
+    (casePatternBinders (caseArmPattern (locatedValue foundArm)))
+  (borrowSite, borrowOwner, viewName, borrowBody) <-
+    exactlyOne SteveGetBorrowNotUnique
+      (concatMap sourceBorrowStatement
+        (blockStatements (locatedValue (caseArmBody (locatedValue foundArm)))))
+  unlessSource (borrowOwner == ownerName) SteveGetDigestOperandsMismatch
+  digest <- exactlyOne SteveGetDigestNotUnique
+    (concatMap sourceDigestStatement
+      (blockStatements (locatedValue borrowBody)))
+  let digestExpr = locatedValue digest
+  case digestExpr of
+    CallExpression "digest_check" [first, second] ->
+      unlessSource
+        (locatedValue first == VariableExpression contentName
+          && locatedValue second == VariableExpression viewName)
+        SteveGetDigestOperandsMismatch
+    _ -> Left SteveGetDigestOperandsMismatch
+  -- No extra digest call may hide outside the selected read-found/borrow.
+  let allDigestSites = concatMap sourceDigestStatement
+        (blockStatements (locatedValue (componentBody (locatedValue unit))))
+  unlessSource
+    (length allDigestSites == 1
+      && locatedSpan (head allDigestSites) == locatedSpan digest)
+    SteveGetDigestNotUnique
+
+  -- The checked observation is minted at the ORIGINAL ordinary primitive
+  -- transition, not reconstructed from presentation syntax or a copied map.
+  -- It establishes typed source arguments ONLY; no qualified source-owner
+  -- incarnation or runtime loan is inferred from a static binder.
+  (checkedTypes, checkedRoute, checkedOrdinal) <-
+    exactlyOne SteveGetCheckedCallObservationMissing
+      [ (arguments, sourceEvidenceBranchRoute event,
+          sourceEvidenceOrdinal event)
+      | u <- checkedSourceUnits (checkedSourceArchitectureBundle architecture)
+      , componentName (locatedValue (checkedSourceComponent u)) == "SteveGet"
+      , event <- checkedSourceEvidenceEvents u
+      , sourceEvidenceSite event == locatedSpan digest
+      , SourceCheckedProviderCall "digest_check" arguments <-
+          [sourceEvidenceUse event]
+      ]
+  (checkedId, checkedView) <- case checkedTypes of
+    [first, second] -> Right (first, second)
+    _ -> Left SteveGetCheckedCallTypeMismatch
+  let (idType, idShape) = checkedId
+      (viewType, viewShape) = checkedView
+  unlessSource
+    (idType == TyOpaque "ContentId[SHA256]"
+      && idShape == PlainShape
+      && case viewType of
+           TyOpaqueSorted "SharedBytes" _ -> True
+           _ -> False)
+    SteveGetCheckedCallTypeMismatch
+  unlessSource
+    (case viewShape of
+       BorrowedViewShape (Name actualOwner) _ -> actualOwner == ownerName
+       _ -> False)
+    SteveGetCheckedCallTypeMismatch
+  unlessSource
+    (checkedOrdinal >= 0
+      && any (\branch ->
+           sourceBranchLabel branch == "found"
+           && sourceBranchSpan branch == locatedSpan foundArm)
+         checkedRoute)
+    SteveGetCheckedCallBranchMismatch
+  (foundRoute, foundOrdinal, foundTy) <-
+    exactlyOne SteveGetCheckedFoundMissing
+      [ (sourceEvidenceBranchRoute event,
+          sourceEvidenceOrdinal event, ownerTy)
+      | u <- checkedSourceUnits (checkedSourceArchitectureBundle architecture)
+      , componentName (locatedValue (checkedSourceComponent u)) == "SteveGet"
+      , event <- checkedSourceEvidenceEvents u
+      , sourceEvidenceSite event == locatedSpan foundArm
+      , SourceCheckedProviderFound "blob_read" actualCall actualBinder ownerTy <-
+          [sourceEvidenceUse event]
+      , actualCall == readSite
+      , actualBinder == Name ownerName
+      ]
+  unlessSource
+    (foundTy == TyOpaque "OwnedBytes"
+       && foundOrdinal >= 0
+       && foundOrdinal < checkedOrdinal
+       && foundRoute == checkedRoute)
+    SteveGetCheckedFoundMismatch
+
+  function <- maybe (Left SteveGetCoreFunctionMissing) Right
+    (Map.lookup "SteveGet" (coreProgramFunctions program))
+  let roles = coreFunctionValues function
+      hasRole key role = case Map.lookup key roles of
+        Just value -> coreValueRole value == role
+        Nothing -> False
+  unlessSource (and
+    [ hasRole "get.id" (CoreRuntimeScalar "ContentId[SHA256]")
+    , hasRole "get.bytes" (CoreOwnedBuffer "OwnedBytes")
+    , hasRole "get.bytes-view" (CoreBorrowedValue "get.bytes")
+    ]) SteveGetCoreValueRolesMismatch
+  let blocks = coreFunctionBlocks function
+      readExpected = Map.fromList
+        [ ("found", "get.check")
+        , ("not-found", "get.not-found")
+        , ("storage-failure", "get.failure")
+        ]
+      digestExpected = Map.fromList
+        [ ("accepted", "get.ok")
+        , ("rejected", "get.integrity-failure")
+        ]
+      readMatches = case Map.lookup "get.entry" blocks of
+        Just blockValue -> case coreBlockTerminator blockValue of
+          CoreSystemsRuntimeChoice "BlobProvider.read" ["get.id"] _ arms ->
+            arms == readExpected && coreFunctionEntry function == "get.entry"
+          _ -> False
+        Nothing -> False
+      digestSites =
+        [ (key, inputs, arms)
+        | (key, blockValue) <- Map.toAscList blocks
+        , CoreSystemsRuntimeChoice name inputs _ arms <-
+            [coreBlockTerminator blockValue]
+        , name == "DigestProvider.check"
+        ]
+  unlessSource readMatches SteveGetCoreReadPredecessorMismatch
+  let extraOperations =
+        [ ()
+        | blockValue <- Map.elems blocks
+        , CoreRuntimeCall _ "DigestProvider.check" _ _ _ <-
+            coreBlockOperations blockValue
+        ]
+  unlessSource (null extraOperations) SteveGetCoreDigestNotUnique
+  (coreBlockName, coreInputs, coreArms) <-
+    exactlyOne SteveGetCoreDigestNotUnique digestSites
+  unlessSource
+    (coreBlockName == "get.check"
+      && coreInputs == ["get.id", "get.bytes-view"]
+      && coreArms == digestExpected)
+    SteveGetCoreDigestSiteMismatch
+  Right SteveGetStructuralFact
+    { steveGetSourceContentBinder = contentName
+    , steveGetSourceOwnerBinder = ownerName
+    , steveGetSourceViewBinder = viewName
+    , steveGetSourceReadSite = readSite
+    , steveGetSourceBorrowSite = borrowSite
+    , steveGetSourceDigestSite = locatedSpan digest
+    , steveGetCheckedCallOrdinal = checkedOrdinal
+    , steveGetCheckedFoundOrdinal = foundOrdinal
+    , steveGetCheckedContentType = idType
+    , steveGetCheckedBorrowedType = viewType
+    }
+  where
+    exactlyOne problem xs = case xs of
+      [one] -> Right one
+      _ -> Left problem
+    unlessSource True _ = Right ()
+    unlessSource False problem = Left problem
+
+    sourceReadStatement stmt = case locatedValue stmt of
+      LetStatement _ expr -> sourceReadExpression expr
+      ReturnStatement expr -> sourceReadExpression expr
+      ExpressionStatement expr -> sourceReadExpression expr
+
+    sourceReadExpression expr = case locatedValue expr of
+      DecideExpression scrutinee arms ->
+        case locatedValue scrutinee of
+          CallExpression "blob_read" [arg] ->
+            case locatedValue arg of
+              VariableExpression name ->
+                [ (locatedSpan scrutinee, name, arm)
+                | arm <- arms
+                , casePatternLabel (caseArmPattern (locatedValue arm)) == "found"
+                ]
+              _ -> []
+          _ -> []
+      _ -> []
+
+    sourceBorrowStatement stmt = case locatedValue stmt of
+      LetStatement _ expr -> sourceBorrowExpression expr
+      ReturnStatement expr -> sourceBorrowExpression expr
+      ExpressionStatement expr -> sourceBorrowExpression expr
+
+    sourceBorrowExpression expr = case locatedValue expr of
+      BorrowExpression owner view body ->
+        case locatedValue owner of
+          VariableExpression name ->
+            [(locatedSpan expr, name, view, body)]
+          _ -> []
+      DecideExpression scrutinee arms ->
+        sourceBorrowExpression scrutinee
+        ++ concatMap
+             (concatMap sourceBorrowStatement
+               . blockStatements . locatedValue . caseArmBody . locatedValue)
+             arms
+      _ -> []
+
+    -- Traverse nested static alternatives; this is only source occurrence
+    -- enumeration, not an assertion of which runtime arm was executed.
+    sourceDigestStatement stmt = case locatedValue stmt of
+      LetStatement _ expr -> sourceDigestExpression expr
+      ReturnStatement expr -> sourceDigestExpression expr
+      ExpressionStatement expr -> sourceDigestExpression expr
+
+    sourceDigestExpression expr = case locatedValue expr of
+      CallExpression "digest_check" _ -> [expr]
+      BorrowExpression _ _ body ->
+        concatMap sourceDigestStatement (blockStatements (locatedValue body))
+      DecideExpression scrutinee arms ->
+        sourceDigestExpression scrutinee
+        ++ concatMap
+             (concatMap sourceDigestStatement
+               . blockStatements . locatedValue . caseArmBody . locatedValue)
+             arms
+      _ -> []

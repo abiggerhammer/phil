@@ -13,6 +13,10 @@ import Phil.Compiler.SourceArchitecture
 import Phil.Compiler.SourceBundle
 import Phil.Compiler.SourceCorePolicy
 import Phil.Compiler.SourceSystems
+import Phil.Assurance.P9SteveGetCorrespondence
+import Phil.Compiler.RuntimeChoicePayload
+  ( RuntimeChoicePayloadSpec (..), RuntimeChoicePayloadArm (..)
+  , RuntimeChoiceSite (..), certifyRuntimeChoicePayloadPlan )
 import Phil.Core.Static
   ( DeclarationKey (..)
   , emptyStaticContext
@@ -183,6 +187,8 @@ main = do
         (uploadVerifiedProducer uploadClient uploadServer)
     , test "INT-001 Steve source-owned producer retains exact K/I and whole stage"
         (steveVerifiedProducer stevePut steveGet)
+    , test "P9-F2 SteveGet private structural read/borrow/call discriminator"
+        (p9SteveStructuralGate stevePut steveGet)
     , test "INT-001 source-owned producer refuses unlisted occurrence site"
         (verifiedProducerRejectsWrongSite uploadClient uploadServer)
     , test "P8-H2 actual Upload P2 rejects malformed realization semantics"
@@ -332,6 +338,232 @@ steveVerifiedProducer putSource getSource = do
     "source-owned producer lost Steve occurrence I"
   assert (fullStage == original)
     "source-owned producer changed complete Steve stage"
+
+
+-- P9-F2 G1 is a bounded structural discriminator only. It does NOT establish
+-- the dynamic read owner, live source loan, selected linked ABI or proof.
+p9SteveStructuralGate :: Text -> Text -> Either String ()
+p9SteveStructuralGate putSource getSource = do
+  context <- steveQualifiedRealizationContext
+  checkedCanonical <- mapLeft show $ produceVerifiedSteveGetCanonicalSource
+    steveRoots steveEnvironments
+    (Map.singleton "program:steve" (InstanceLineageSiteId "instance.steve"))
+    stevePolicy (steveBundle putSource getSource)
+    steveCoreProgram context
+  payload <- mapLeft show $
+    certifyRuntimeChoicePayloadPlan steveCoreProgram steveP9PayloadSpecs
+  modeled <- mapLeft show (verifyOriginalSteveGetModeledABI checkedCanonical payload)
+  let originalLLVM = verifiedSteveGetModeledLLVMText modeled
+  mapLeft show (verifySteveGetLLVMPointerFlow originalLLVM)
+  -- Mutate the *rederived* real LLVM artifact, never a dummy success string.
+  let wrongOwnerLLVM = Text.replace
+        "@phil_runtime_choice_SteveGet_get_check_DigestProvider_check(ptr %get_id, ptr %get_bytes)"
+        "@phil_runtime_choice_SteveGet_get_check_DigestProvider_check(ptr %get_id, ptr %get_id)"
+        originalLLVM
+  assert (wrongOwnerLLVM /= originalLLVM)
+    "P9 LLVM owner swap did not actually change the selected call"
+  case verifySteveGetLLVMPointerFlow wrongOwnerLLVM of
+    Left SteveGetLLVMDigestOwnerSubstituted -> Right ()
+    other -> Left ("P9 accepted wrong LLVM native owner: " <> show other)
+  let wrongReadInvocation = Text.replace
+        "@phil_runtime_choice_SteveGet_get_entry_BlobProvider_read(ptr %get_id, ptr %phil_runtime_choice_payload_slot_SteveGet_get_entry_get_bytes)"
+        "@phil_runtime_choice_SteveGet_get_entry_BlobProvider_read(ptr %get_bytes, ptr %phil_runtime_choice_payload_slot_SteveGet_get_entry_get_bytes)"
+        originalLLVM
+  assert (wrongReadInvocation /= originalLLVM)
+    "P9 wrong read invocation did not mutate selected LLVM"
+  case verifySteveGetLLVMPointerFlow wrongReadInvocation of
+    Left SteveGetLLVMReadResultSlotMissing -> Right ()
+    other -> Left ("P9 accepted wrong LLVM native read invocation: " <> show other)
+  let withoutLoad = Text.replace
+        "get_check:\n  %get_bytes = load ptr, ptr %phil_runtime_choice_payload_slot_SteveGet_get_entry_get_bytes"
+        "get_check:\n  %get_bytes = inttoptr i64 0 to ptr"
+        originalLLVM
+  assert (withoutLoad /= originalLLVM)
+    "P9 LLVM payload-load negative did not change selected artifact"
+  case verifySteveGetLLVMPointerFlow withoutLoad of
+    Left SteveGetLLVMPayloadLoadMissing -> Right ()
+    other -> Left ("P9 accepted forged LLVM owner load: " <> show other)
+  let produced = verifiedSteveGetCanonicalSourceProduction checkedCanonical
+      conditions = verifiedSteveGetCanonicalSelectedAssumptions checkedCanonical
+      expectedConditions = Set.fromList
+        [ "assumption:sha256-semantic-profile.v1"
+        , "assumption:steve.blob.backing-authority-confined.v1"
+        , "assumption:steve.blob.no-out-of-band-mutation.v1"
+        , "assumption:steve.blob.atomic-no-replace-publication.v1"
+        , "assumption:steve.blob.complete-copy-before-candidate-borrow-end.v1"
+        ]
+  assert (conditions == expectedConditions)
+    "P9 selected canonical provider assumption lineage changed"
+  _ <- mapLeft show (verifyOriginalSteveGetStructural produced)
+  architecture <- checkedSteveArchitecture putSource getSource
+  fact <- mapLeft show (verifySteveGetStructural architecture steveCoreProgram)
+  assert (steveGetSourceContentBinder fact == "contentId"
+      && steveGetSourceOwnerBinder fact == "bytes"
+      && steveGetSourceViewBinder fact == "bytesView"
+      && steveGetCheckedContentType fact == TyOpaque "ContentId[SHA256]"
+      && steveGetCheckedFoundOrdinal fact >= 0
+      && steveGetCheckedFoundOrdinal fact < steveGetCheckedCallOrdinal fact)
+    "P9 SteveGet real checked found-result / typed-call chain changed"
+  let occurrences =
+        verifiedSourceCheckEventOccurrences
+          (verifiedSourceSystemsCheckEventGraph produced)
+      originalFound =
+        [ ()
+        | occurrence <- occurrences
+        , SourceCheckedProviderFound "blob_read" _ (Name "bytes")
+            (TyOpaque "OwnedBytes") <-
+              [sourceEvidenceUse (checkedEvidenceEvent occurrence)]
+        ]
+      originalCall =
+        [ ()
+        | occurrence <- occurrences
+        , SourceCheckedProviderCall "digest_check" _ <-
+            [sourceEvidenceUse (checkedEvidenceEvent occurrence)]
+        ]
+  assert (length originalFound == 1 && length originalCall == 1)
+    "P9 private P2 graph omitted the real checked provider-result/call events"
+
+  -- Matching a source spelling and constructing an accepted Proof payload
+  -- is not authority: the private qualifier must rederive the canonical
+  -- Blob/Digest source environment rather than trusting the supplied map.
+  -- Alter the selected read-found result payload while keeping the
+  -- source/Core fixed. The production payload checker must reject it.
+  let forgedPayload = map
+        (\spec -> if runtimeChoicePayloadSite spec
+                       == RuntimeChoiceSite "SteveGet" "get.entry"
+          then spec { runtimeChoicePayloadArms =
+              Map.adjust (\arm -> arm { runtimeChoicePayloadValue =
+                Just "get.id" }) "found" (runtimeChoicePayloadArms spec) }
+          else spec)
+        steveP9PayloadSpecs
+  -- The GENERIC payload planner admits any declared Core value here;
+  -- it is the SPECIALIZED selected P9 ABI consumer that must refuse this
+  -- false read.found owner-result association.
+  case certifyRuntimeChoicePayloadPlan steveCoreProgram forgedPayload of
+    Left _ -> Right ()
+    Right substituted -> case
+        verifyOriginalSteveGetModeledABI checkedCanonical substituted of
+      Left _ -> Right ()
+      Right _ -> Left "P9 selected ABI accepted substituted found-result owner"
+
+  let forgedEnvironment = Map.adjust
+        (\environment -> environment
+          { surfacePrimitives = Map.insert "digest_check"
+              (PrimitiveProviderDecision
+                [PrimitiveReadOnly, PrimitiveReadOnly]
+                [ ProviderOutcomeSpec "accepted"
+                    [(Unrestricted, TyProof (Atom "DigestMatches" []))]
+                , ProviderOutcomeSpec "rejected"
+                    [(Unrestricted, TyOpaque "DigestFailure")]
+                ])
+              (surfacePrimitives environment) })
+        steveGetDeclaration steveEnvironments
+  case produceVerifiedSteveGetCanonicalSource
+      steveRoots forgedEnvironment
+      (Map.singleton "program:steve" (InstanceLineageSiteId "instance.steve"))
+      stevePolicy (steveBundle putSource getSource)
+      steveCoreProgram context of
+    Left SteveGetCanonicalEnvironmentMismatch -> Right ()
+    other -> Left
+      ("P9 source qualification accepted caller-minted TyProof: " <> show other)
+
+  -- The ordinary primitive permits readable arguments without a qualified
+  -- expected type vector. The new P9-only discriminator must reject a
+  -- genuine source recheck with the WRONG declared content-id type, even
+  -- when the source call name, argument names and Core are unchanged.
+  let wrongIdEnvironment = Map.adjust
+        (\environment -> environment
+          { surfaceInitialBindings = Map.insert "contentId"
+              (InitialBinding Unrestricted (TyOpaque "WrongContentId") PlainShape)
+              (surfaceInitialBindings environment) })
+        steveGetDeclaration steveEnvironments
+  wronglyTyped <- mapLeft show $ checkPortableSourceBundle
+    steveRoots wrongIdEnvironment (steveBundle putSource getSource)
+  wrongTypeArchitecture <- mapLeft show $
+    buildCheckedSourceArchitecture
+      (Map.singleton "program:steve" (InstanceLineageSiteId "instance.steve"))
+      wronglyTyped
+  case verifySteveGetStructural wrongTypeArchitecture steveCoreProgram of
+    Left SteveGetCheckedCallTypeMismatch -> Right ()
+    other -> Left
+      ("P9 accepted wrongly typed source ContentId: " <> show other)
+
+  let changeTerminator transform core =
+        core { coreProgramFunctions =
+          Map.adjust
+            (\function -> function
+              { coreFunctionBlocks =
+                  Map.adjust
+                    (\block -> block
+                      { coreBlockTerminator =
+                          transform (coreBlockTerminator block) })
+                    "get.check" (coreFunctionBlocks function) })
+            "SteveGet" (coreProgramFunctions core)
+          }
+      swapOperands terminator = case terminator of
+        CoreSystemsRuntimeChoice name [first, second] runtimeSite arms ->
+          CoreSystemsRuntimeChoice name [second, first] runtimeSite arms
+        other -> other
+      wrongCore = changeTerminator swapOperands steveCoreProgram
+  case verifySteveGetStructural architecture wrongCore of
+    Left SteveGetCoreDigestSiteMismatch -> Right ()
+    other -> Left ("P9 accepted swapped Core arguments: " <> show other)
+
+  let duplicate = steveCoreProgram
+        { coreProgramFunctions =
+            Map.adjust
+              (\function -> function
+                { coreFunctionBlocks =
+                    Map.insert "get.unrelated-duplicate"
+                      (CoreSystemsBlock "get.unrelated-duplicate" []
+                        (CoreSystemsRuntimeChoice "DigestProvider.check"
+                          ["get.id", "get.bytes-view"] Nothing
+                          (Map.fromList
+                            [("accepted", "get.ok")
+                            ,("rejected", "get.integrity-failure")])))
+                      (coreFunctionBlocks function) })
+              "SteveGet" (coreProgramFunctions steveCoreProgram)
+        }
+  case verifySteveGetStructural architecture duplicate of
+    Left SteveGetCoreDigestNotUnique -> Right ()
+    other -> Left ("P9 accepted duplicate Core digest-check site: " <> show other)
+
+  let swappedSource = Text.replace
+        "digest_check(contentId, bytesView)"
+        "digest_check(bytesView, contentId)" getSource
+  assert (swappedSource /= getSource)
+    "P9 source operand negative did not change source text"
+  swappedArchitecture <- checkedSteveArchitecture putSource swappedSource
+  case verifySteveGetStructural swappedArchitecture steveCoreProgram of
+    Left SteveGetDigestOperandsMismatch -> Right ()
+    other -> Left ("P9 accepted swapped source digest operands: " <> show other)
+
+-- The four exact canonical Steve runtime-choice sites used by the real
+-- application. This is a test fixture, not evidence of linked native code.
+steveP9PayloadSpecs :: [RuntimeChoicePayloadSpec]
+steveP9PayloadSpecs =
+  [ payloadSite "StevePut" "put.entry"
+      [ arm "computed" "put.install" (Just "put.id") ]
+  , payloadSite "StevePut" "put.install"
+      [ arm "installed" "put.ok" Nothing
+      , arm "already-exists" "put.ok" Nothing
+      , arm "storage-failure" "put.failure" Nothing
+      ]
+  , payloadSite "SteveGet" "get.entry"
+      [ arm "found" "get.check" (Just "get.bytes")
+      , arm "not-found" "get.not-found" Nothing
+      , arm "storage-failure" "get.failure" Nothing
+      ]
+  , payloadSite "SteveGet" "get.check"
+      [ arm "accepted" "get.ok" Nothing
+      , arm "rejected" "get.integrity-failure" Nothing
+      ]
+  ]
+  where
+    payloadSite functionName blockName arms = RuntimeChoicePayloadSpec
+      (RuntimeChoiceSite functionName blockName) (Map.fromList arms)
+    arm label target value =
+      (label, RuntimeChoicePayloadArm target value)
 
 verifiedProducerRejectsWrongSite :: Text -> Text -> Either String ()
 verifiedProducerRejectsWrongSite clientSource serverSource = do

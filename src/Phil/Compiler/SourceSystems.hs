@@ -18,6 +18,7 @@ module Phil.Compiler.SourceSystems
   , verifiedSourceSystemsStage
   , sourceSystemsArchitectureIdentity
   , sourceSystemsProgramSemantics
+  , withVerifiedSourceCore
   ) where
 
 import Phil.Compiler.SourceArchitecture
@@ -42,10 +43,8 @@ import Phil.Compiler.SourceCore
   , verifySourceCoreCorrespondence
   )
 import Phil.Compiler.SourceCorePolicy
-  ( SourceCoreCorrespondencePolicy
-  , SourceCorePolicyError
-  , verifySourceCorePolicy
-  )
+  ( SourceCoreCorrespondencePolicy, SourceCorePolicyError
+  , verifySourceCorePolicy )
 import Phil.Core.Static
   ( ArchitectureInstanceDescriptor
   , ArchitectureInstanceIdentity
@@ -240,3 +239,15 @@ sourceSystemsProgramSemantics
 
 mapLeft :: (a -> b) -> Either a c -> Either b c
 mapLeft f = either (Left . f) Right
+
+
+-- | A read-only diagnostic projection of the original privately sealed
+-- source/Core pair. Neither value on its own is a P9 authority certificate.
+withVerifiedSourceCore
+  :: VerifiedSourceSystemsProduction
+  -> (CheckedSourceArchitecture -> CoreSystemsProgram -> a)
+  -> a
+withVerifiedSourceCore
+  (VerifiedSourceSystemsProduction (SourceSystemsAdmission arch core _) _ _) f =
+    f arch core
+

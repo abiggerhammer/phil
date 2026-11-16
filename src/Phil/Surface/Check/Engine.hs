@@ -2106,16 +2106,17 @@ evalPrimitive environment state located name arguments =
   case Map.lookup name (surfacePrimitives environment) of
     Nothing -> throw located UnknownPrimitive
       ("primitive is not declared in Sigma: " <> name)
-    Just primitive -> evalPrimitiveRule environment state located primitive arguments
+    Just primitive -> evalPrimitiveRule environment state located name primitive arguments
 
 evalPrimitiveRule
   :: SurfaceEnvironment
   -> SurfaceState
   -> Located SurfaceExpression
+  -> Text
   -> PrimitiveSemantics
   -> [Located SurfaceExpression]
   -> Either SurfaceCheckError [SurfacePath]
-evalPrimitiveRule environment state located primitive arguments =
+evalPrimitiveRule environment state located primitiveName primitive arguments =
   case primitive of
     PrimitiveSupportedVersions -> do
       arity 0
@@ -2187,8 +2188,21 @@ evalPrimitiveRule environment state located primitive arguments =
       unless (Set.size (Set.fromList labels) == length labels) $
         throw located TypeMismatch "provider decision outcome labels are not unique"
       next <- foldM applyProviderArgument state (zip disciplines arguments)
+      -- Record only the actual type/shape observations returned by the
+      -- ordinary checker, at their source occurrence and static branch.
+      -- The spelling digest_check grants NO provider competence or evidence.
+      observed <- if primitiveName == "digest_check"
+           && disciplines == [PrimitiveReadOnly, PrimitiveReadOnly]
+        then do
+          scalars <- mapM (inferReadOnlyScalar environment state) arguments
+          Right (recordSourceEvidence (locatedSpan located)
+            (SourceCheckedProviderCall primitiveName
+              [ (scalarType argumentScalar, scalarShape argumentScalar)
+              | argumentScalar <- scalars ])
+            next)
+        else Right next
       Right
-        [ valuePath next (RuntimeScalar
+        [ valuePath observed (RuntimeScalar
             (ScalarValue Unrestricted
               (TyOpaque "ProviderDecision")
               (DecisionShape (ProviderDecision outcomes))))
@@ -2781,15 +2795,20 @@ evalDecide environment state located scrutinee arms = do
   unless (expected == actual && Set.size expected == length arms) $
     throw located BranchExhaustiveness
       "decision handlers do not exactly cover all alternatives"
-  concat <$> mapM (checkDecisionArm environment decisionState decision) arms
+  let sourceOrigin = case locatedValue scrutinee of
+        CallExpression primitiveName _ ->
+          Just (primitiveName, locatedSpan scrutinee)
+        _ -> Nothing
+  concat <$> mapM (checkDecisionArm environment decisionState decision sourceOrigin) arms
 
 checkDecisionArm
   :: SurfaceEnvironment
   -> SurfaceState
   -> DecisionKind
+  -> Maybe (Text, SourceSpan)
   -> Located CaseArm
   -> Either SurfaceCheckError [SurfacePath]
-checkDecisionArm environment original decision locatedArm = do
+checkDecisionArm environment original decision sourceOrigin locatedArm = do
   let pattern' = caseArmPattern (locatedValue locatedArm)
       label = casePatternLabel pattern'
       state = enterEvidenceBranch (locatedSpan locatedArm) label original
@@ -2807,19 +2826,36 @@ checkDecisionArm environment original decision locatedArm = do
         label
         (casePatternBinders pattern')
         locatedArm
+      -- Only after actual typed arm-binding acceptance, preserve the original
+      -- source result occurrence. This records no dynamic execution or
+      -- credentialed provider evidence.
+      let observed = case
+            (sourceOrigin, decision, label, casePatternBinders pattern') of
+            (Just ("blob_read", callSite), ProviderDecision outcomes,
+              "found", [binder]) ->
+              case [providerOutcomePayload outcome
+                   | outcome <- outcomes
+                   , providerOutcomeLabel outcome == "found"] of
+                [[(Linear, TyOpaque "OwnedBytes")]] ->
+                  recordSourceEvidence (locatedSpan locatedArm)
+                    (SourceCheckedProviderFound "blob_read" callSite
+                      (Name binder) (TyOpaque "OwnedBytes"))
+                    withBinders
+                _ -> withBinders
+            _ -> withBinders
       case callableDecisionObligations decision label of
         Just obligations ->
           checkCallableDecisionArm
             environment
             resourceState
-            withBinders
+            observed
             obligations
             (caseArmBody (locatedValue locatedArm))
         Nothing ->
           checkScopedValueBlock
             environment
             resourceState
-            withBinders
+            observed
             (caseArmBody (locatedValue locatedArm))
 
 applyCallableDecisionResources
