@@ -30,10 +30,14 @@ concurrency:
 jobs:
   admit:
     if: >-
-      github.event_name == 'workflow_dispatch' ||
-      (github.event_name == 'schedule' &&
-       vars.MHB_ATC_AUTO_ADMIT_ENABLED == 'true')
+      github.ref == 'refs/heads/main' &&
+      (github.event_name == 'workflow_dispatch' ||
+       (github.event_name == 'schedule' &&
+        vars.MHB_ATC_AUTO_ADMIT_ENABLED == 'true'))
     runs-on: ubuntu-24.04
+    # The App private key is an environment secret, NOT a repo-wide secret.
+    # Configure deployment branches = main in the environment's GitHub settings.
+    environment: atc-publisher
     steps:
       - name: Checkout trusted main
         uses: actions/checkout@v4
