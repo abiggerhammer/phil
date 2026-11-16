@@ -1,0 +1,4 @@
+fn unpack(packet : (Bool, (Bytes[4], Unit))) -> Bytes[8] satisfies C {
+  let (flag, (payload, spare)) = packet;
+  return payload;
+}

@@ -6,6 +6,8 @@
 
 > **CORR-8 proposed source-error prefix correspondence (2026-11-16):** [CORR-8](formal-semantics-source-failure-corr8-fsem01-v1.md) adds actual original-source scoped loan failures before any Core join, with exact observed branch prefixes, no fabricated successor, strict source-wire validation and finite Rocq replay. This is only proposed until strict exact-head CI and protected merge; R05/R11/R15 and global FSEM-01 remain open. No P9-selected-provider checker or assurance paths are edited.
 
+> **DATA-05A bounded foundation proposed (2026-11-16):** [Nested product source/Core test](formal-semantics-nested-product-data05a-fsem01-v1.md) checks original nested tuple patterns and source-rooted leaf identities, primitive leaf typing, two actual sequential native Linear product eliminations and conditional Rocq positional/no-resurrection lemmas. No production nested Surface elaboration or general R14/R15 discharge; DATA-05 remains **gap**. No P9-owned files changed.
+
 > **Review finding: FSEM-01 remains OPEN.** This is a non-normative
 > coverage/acceptance audit, not a new language rule, a proof of the general
 > Haskell implementation, or an FSEM-01 completion claim.
