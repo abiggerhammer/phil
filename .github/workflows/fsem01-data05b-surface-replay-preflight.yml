@@ -1,0 +1,87 @@
+name: FSEM-01 DATA-05B Real Surface Nested Product Replay
+
+on:
+  push:
+    branches:
+      - formal-semantics/fsem01-data05b-checked-surface-nested
+    paths:
+      - 'test/Phase1FSEM01Data05BSourceSurfaceMain.hs'
+      - 'proof/Phil/Surface/SurfaceNestedProductSurfaceD05B.v'
+      - 'docs/phase-1/formal-semantics-nested-product-data05b-fsem01-v1.md'
+      - '.github/workflows/fsem01-data05b-surface-replay-preflight.yml'
+  pull_request:
+    paths:
+      - 'test/Phase1FSEM01Data05BSourceSurfaceMain.hs'
+      - 'proof/Phil/Surface/SurfaceNestedProductSurfaceD05B.v'
+      - 'docs/phase-1/formal-semantics-nested-product-data05b-fsem01-v1.md'
+      - '.github/workflows/fsem01-data05b-surface-replay-preflight.yml'
+
+concurrency:
+  group: data05b-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  strict-native-surface-two-stage:
+    name: Strict GHC checked source and both actual Surface/native product transitions
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: haskell-actions/setup@v2
+        with:
+          ghc-version: '9.6.7'
+          cabal-version: 'latest'
+          cabal-update: false
+      - name: Bounded Hackage HTTP1 retry
+        run: bash scripts/ci/cabal-update-retry.sh
+      - name: Strict product substrate, source regression and actual Surface two-stage run
+        shell: bash
+        run: |
+          set -euo pipefail
+          cabal build lib:phil-core --ghc-options=-Werror
+          for test in \
+            Phase1FSEM01FlatProductMain \
+            Phase1FSEM01SourceProductEliminationMain \
+            Phase1FSEM01Data05ANestedProductMain \
+            Phase1FSEM01Data05BSourceSurfaceMain
+          do
+            cabal exec -- ghc -isrc -itest -Wall -Werror -fno-code "test/$test.hs"
+            cabal exec -- runghc -isrc -itest -Wall -Werror "test/$test.hs"
+          done
+          sha256sum test/Phase1FSEM01Data05BSourceSurfaceMain.hs \
+                     src/Phil/Surface/Check/Engine.hs \
+                     src/Phil/Core/DataMode.hs
+
+  rocq-two-stage-surface-model:
+    name: Rocq finite two-stage projection no-invented-successor and exact inner leaf
+    runs-on: ubuntu-24.04
+    container:
+      image: rocq/rocq-prover:9.2.0
+      options: --user root
+    steps:
+      - uses: actions/checkout@v4
+      - name: Kernel compile prior product/owner facts and DATA-05B
+        shell: bash
+        run: |
+          set -euo pipefail
+          export PATH="/home/rocq/.opam/$COMPILER/bin:$PATH"
+          for file in \
+            proof/Phil/Core/Syntax.v \
+            proof/Phil/Core/Context.v \
+            proof/Phil/Core/DataMode.v \
+            proof/Phil/Core/DataProduct.v \
+            proof/Phil/Surface/SurfaceNestedProductFoundationD05A.v \
+            proof/Phil/Surface/SurfaceNestedProductSurfaceD05B.v
+          do
+            rocq c -Q proof/Phil Phil "$file"
+          done
+          rocq check -Q proof/Phil Phil Phil.Surface.SurfaceNestedProductSurfaceD05B
+          if grep -nE '^[[:space:]]*(Admitted[.]|Axiom[[:space:]]|Parameter[[:space:]])' \
+            proof/Phil/Surface/SurfaceNestedProductSurfaceD05B.v; then
+            echo "Unproved DATA-05B model" >&2
+            exit 1
+          fi
+          sha256sum proof/Phil/Surface/SurfaceNestedProductSurfaceD05B.v \
+                     proof/Phil/Surface/SurfaceNestedProductSurfaceD05B.vo
