@@ -169,8 +169,8 @@ validNestedSemanticsAccept = do
   let u0 = SemanticUnordered Set.empty
       r0 = SemanticRecord Map.empty
       valid = SemanticRecord (Map.fromList
-        [ ("unicode", SemanticAtom "é / e\\x0301 / 🙂")
-        , ("nul", SemanticAtom "\\0")
+        [ ("unicode", SemanticAtom "é / é / 🙂")
+        , ("nul", SemanticAtom "\0")
         , ("nested", SemanticOrdered
             [SemanticUnordered (Set.fromList [r0, u0])])
         ])
