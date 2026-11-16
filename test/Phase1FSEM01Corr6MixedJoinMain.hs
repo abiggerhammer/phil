@@ -5,6 +5,13 @@
 module Main (main) where
 
 import Control.Monad (forM_)
+import qualified Crypto.Hash.SHA256 as SHA256
+import qualified Data.ByteString as ByteString
+import qualified Data.Text.Encoding as Encoding
+import Numeric (showHex)
+import System.Directory (createDirectoryIfMissing)
+import System.Environment (getArgs)
+import System.FilePath ((</>))
 import Data.List (find)
 import qualified Data.Map.Strict as Map
 import qualified Data.Set as Set
@@ -310,22 +317,106 @@ adversarial t = do
          Core.joinContinuing [missing,base] == Right missing)
     "affine branch-order intersection not extensional on valid inputs"
 
+-- Bound, nonnormative actual-source witness. All four-zone shape bits
+-- come from authentic *post-prune* contexts; the native test above proves
+-- they correspond to the exact actual source/checker run. No type oracle
+-- is obtained from arbitrary user-provided wire bytes.
+hashBytes :: ByteString.ByteString -> Text
+hashBytes = Text.pack . concatMap encodeByte . ByteString.unpack
+  where
+    encodeByte n = let h = showHex n ""
+                   in if length h == 1 then '0' : h else h
+
+utf8Hex :: Text -> Text
+utf8Hex = hashBytes . Encoding.encodeUtf8
+
+framed :: Text -> Text
+framed value = Text.pack (show (Text.length value)) <> ":" <> value
+
+sourceWire :: Profile -> Text -> GrammarV1AffineIfJoinTrace
+  -> Either String (String,Text)
+sourceWire profile source trace = do
+  let run = affineIfJoinRun trace
+      flag = binder (affineIfJoinFlagBinder trace)
+      permit = binder (affineIfJoinPermitBinder trace)
+      payload = binder (affineIfJoinPayloadBinder trace)
+      classify ctx = do
+        check (Core.unrestrictedBindings ctx == Map.singleton flag TyBool &&
+               Core.linearBindings ctx == Map.singleton payload bytes8 &&
+               Set.null (Core.sharedLoans ctx) &&
+               (Map.null (Core.affineBindings ctx) ||
+                Core.affineBindings ctx == Map.singleton permit permitTy))
+          "source-derived post-prune snapshot not in finite bridge domain"
+        pure $ if Map.null (Core.affineBindings ctx)
+          then "U1A0L1N0" else "U1A1L1N0"
+      exact label contexts = case contexts of
+        [ctx] -> classify ctx
+        _ -> Left ("not one reached pruned predecessor: " ++ label)
+  left <- case profile of
+    LinearLeak -> check (null (scopedIfJoinThenPruned run)) "forged left" >>
+                  pure "UNREACHED"
+    _ -> exact "left" (scopedIfJoinThenPruned run)
+  right <- case profile of
+    LinearLeak -> check (null (scopedIfJoinElsePruned run)) "forged right" >>
+                  pure "UNREACHED"
+    _ -> exact "right" (scopedIfJoinElsePruned run)
+  let disposition = case profile of
+        Asymmetric -> "JOIN_EMPTY"
+        Retained -> "JOIN_PERMIT"
+        BothLocals -> "JOIN_EMPTY"
+        UnrestrictedLocal -> "JOIN_PERMIT"
+        LinearLeak -> "PREJOIN_LINEAR"
+        StaleAfter -> "POSTJOIN_STALE"
+      fields =
+        [ hashBytes (SHA256.hash (Encoding.encodeUtf8 source))
+        , utf8Hex "decl.fsem01.join.choose"
+        , utf8Hex (unName flag)
+        , utf8Hex (unName permit)
+        , utf8Hex (unName payload)
+        , left
+        , right
+        , disposition
+        ]
+      body = Text.concat (map framed fields)
+      wire = "PHIL-FSEM01-CORR6-V1|" <> body
+  check (length fields == 8 &&
+         Text.all (\x -> x >= ' ' && x <= '~') wire)
+    "noncanonical ASCII source witness"
+  pure (fixture profile,wire)
+
 main :: IO ()
 main = do
   let cases = [Asymmetric,Retained,BothLocals,UnrestrictedLocal,
                LinearLeak,StaleAfter]
-  sources <- mapM (\k -> do
-    input <- TextIO.readFile (directory ++ fixture k ++ ".phil")
-    pure (k,input)) cases
-  let result = do
-        checked <- mapM (\(k,input) -> do
-          t <- sourceTrace input
-          checkSource k t
-          pure (k,t)) sources
-        case find ((==Retained) . fst) checked of
-          Just (_,retained) -> adversarial retained
-          Nothing -> Left "retained affine source missing"
-  case result of
-    Left why -> putStrLn ("FAIL CORR-6: " ++ why) >> exitFailure
-    Right () -> putStrLn
-      "PASS CORR-6: six real source affine join profiles, four-zone finite join comparison, loan/U/L/A first-failure and forged-state controls"
+  args <- getArgs
+  let destination = case args of
+        [] -> Just Nothing
+        ["--emit",dir] -> Just (Just dir)
+        _ -> Nothing
+  case destination of
+    Nothing -> putStrLn
+      "usage: Phase1FSEM01Corr6MixedJoinMain [--emit DIR]" >> exitFailure
+    Just output -> do
+      sources <- mapM (\k -> do
+        input <- TextIO.readFile (directory ++ fixture k ++ ".phil")
+        pure (k,input)) cases
+      let result = do
+            checked <- mapM (\(k,input) -> do
+              t <- sourceTrace input
+              checkSource k t
+              pure (k,input,t)) sources
+            case find (\(k,_,_) -> k == Retained) checked of
+              Just (_,_,retained) -> adversarial retained
+              Nothing -> Left "retained affine source missing"
+            mapM (\(k,input,t) -> sourceWire k input t) checked
+      case result of
+        Left why -> putStrLn ("FAIL CORR-6: " ++ why) >> exitFailure
+        Right records -> do
+          case output of
+            Nothing -> pure ()
+            Just dir -> do
+              createDirectoryIfMissing True dir
+              forM_ records $ \(name,wire) ->
+                TextIO.writeFile (dir </> name ++ ".mix") wire
+          putStrLn
+            "PASS CORR-6: six real source mixed U/A/L/loan joins, pre/post-join source refusals, independent finite native controls and emitted canonical source transcripts"
