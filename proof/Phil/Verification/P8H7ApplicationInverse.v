@@ -36,7 +36,8 @@ Proof.
   unfold p8_e2_put_argument.
   repeat rewrite app_assoc.
   unfold p8_e2_parse_argument.
-  cbn [app p8_e2_expect].
+  cbn [p8_e2_expect].
+  Show.
   rewrite (p8_f1_text_prefix_roundtrip key
     (77 :: (p8_e1_put_form value ++ suffix)) KeyValid).
   cbn [p8_e2_expect].
