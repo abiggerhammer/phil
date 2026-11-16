@@ -16,7 +16,7 @@ import re
 
 HEADER = "PHIL-FSEM01-CORR6-V1|"
 ROOT = "decl.fsem01.join.choose"
-ASCII = re.compile(r"[A-Za-z0-9:|.-]+")
+ASCII = re.compile(r"[A-Za-z0-9:|._-]+")
 HEXDIGITS = re.compile(r"(?:[0-9a-f]{2})+")
 SHA = re.compile(r"[0-9a-f]{64}")
 PROFILES = (
