@@ -48,20 +48,20 @@ jobs:
           (github.event_name == 'schedule' || inputs.mode == 'admit-one')
         uses: actions/create-github-app-token@v3
         with:
-          client-id: \${{ vars.MHB_ATC_PUBLISHER_APP_CLIENT_ID }}
-          private-key: \${{ secrets.MHB_ATC_PUBLISHER_APP_PRIVATE_KEY }}
+          client-id: ${{ vars.MHB_ATC_PUBLISHER_APP_CLIENT_ID }}
+          private-key: ${{ secrets.MHB_ATC_PUBLISHER_APP_PRIVATE_KEY }}
           permission-contents: write
           permission-pull-requests: write
 
       - name: Reconcile queue and optionally publish one immutable exact head
         env:
-          GH_TOKEN: \${{ github.token }}
-          GH_REPO: \${{ github.repository }}
-          MODE: \${{ github.event_name == 'schedule' && 'admit-one' || inputs.mode }}
-          IMMUTABLE_ENABLED: \${{ vars.MHB_ATC_IMMUTABLE_HEADS_ENABLED }}
-          PUBLISHER_TOKEN: \${{ steps.publisher_token.outputs.token }}
-          PUBLISHER_APP_ID: \${{ vars.MHB_ATC_PUBLISHER_APP_ID }}
-          PUBLISHER_RULESET_ID: \${{ vars.MHB_ATC_PUBLISHER_RULESET_ID }}
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          MODE: ${{ github.event_name == 'schedule' && 'admit-one' || inputs.mode }}
+          IMMUTABLE_ENABLED: ${{ vars.MHB_ATC_IMMUTABLE_HEADS_ENABLED }}
+          PUBLISHER_TOKEN: ${{ steps.publisher_token.outputs.token }}
+          PUBLISHER_APP_ID: ${{ vars.MHB_ATC_PUBLISHER_APP_ID }}
+          PUBLISHER_RULESET_ID: ${{ vars.MHB_ATC_PUBLISHER_RULESET_ID }}
         shell: bash
         run: |
           set -euo pipefail
