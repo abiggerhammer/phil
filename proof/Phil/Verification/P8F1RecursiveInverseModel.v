@@ -487,7 +487,7 @@ Proof.
       ValidKey).
     rewrite (Child value (p8_e1_put_fields rest ++ suffix)
       ValidValue BoundValue).
-    rewrite (IH suffix ValidRest BoundRest).
+    rewrite (IH suffix eq_refl BoundRest).
     reflexivity.
 Qed.
 
