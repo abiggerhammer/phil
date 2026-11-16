@@ -342,8 +342,27 @@ p9SteveStructuralGate putSource getSource = do
       && steveGetSourceOwnerBinder fact == "bytes"
       && steveGetSourceViewBinder fact == "bytesView"
       && steveGetCheckedContentType fact == TyOpaque "ContentId[SHA256]"
-      && steveGetCheckedCallOrdinal fact >= 0)
-    "P9 SteveGet real checked typed source call observation changed"
+      && steveGetCheckedFoundOrdinal fact >= 0
+      && steveGetCheckedFoundOrdinal fact < steveGetCheckedCallOrdinal fact)
+    "P9 SteveGet real checked found-result / typed-call chain changed"
+  let occurrences =
+        verifiedSourceCheckEventOccurrences
+          (verifiedSourceSystemsCheckEventGraph produced)
+      originalFound =
+        [ ()
+        | occurrence <- occurrences
+        , SourceCheckedProviderFound "blob_read" _ (Name "bytes")
+            (TyOpaque "OwnedBytes") <-
+              [sourceEvidenceUse (checkedEvidenceEvent occurrence)]
+        ]
+      originalCall =
+        [ ()
+        | occurrence <- occurrences
+        , SourceCheckedProviderCall "digest_check" _ <-
+            [sourceEvidenceUse (checkedEvidenceEvent occurrence)]
+        ]
+  assert (length originalFound == 1 && length originalCall == 1)
+    "P9 private P2 graph omitted the real checked provider-result/call events"
 
   -- The ordinary primitive permits readable arguments without a qualified
   -- expected type vector. The new P9-only discriminator must reject a
