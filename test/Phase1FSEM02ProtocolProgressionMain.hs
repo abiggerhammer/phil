@@ -51,7 +51,7 @@ main = do
         (sourcePingDisjointPairCommutation accepted stale)
     , test "FSEM-02 disjoint Ping pairs complete all 24 terminal Close orders"
         (sourcePingDisjointTerminalInterleavings accepted stale)
-    , test "FSEM-02 25920 terminal schedules, 144 partner prefixes, 288 refused rematches, 1512 adaptive suffixes, 10368 half-Close completions, 288 poisoned-head, 288 missing-owner and 576 wrong-resource-shape refusal/retries"
+    , test "FSEM-02 25920 terminal schedules, 144 partner prefixes, 288 refused rematches, 1512 adaptive suffixes, 10368 half-Close completions, 288 poisoned-head, 288 missing-owner, 576 wrong-resource-shape and 576 combined-head/resource fault diagnostic/retries"
         (sourcePingThreeDisjointTerminalSchedules accepted stale)
     , test "FSEM-02 competing Ping sends sharing a Client predecessor refuse second use"
         (sourcePingSharedClientContention accepted stale)
@@ -2774,6 +2774,17 @@ sourcePingThreeDisjointTerminalSchedules accepted rejected = do
             serverOld (TyEndpoint (End done))
           bothWrongType <- rewriteFreePeerResource wrongTypeClient freeServer
             serverOld (TyUInt 8)
+          -- A second independent fault is added to the very same free peer:
+          -- the projected head is poisoned AND its linear resource is wrong.
+          -- Neither fault represents accepted source or scheduler authority.
+          headTypeClient <- rewriteFreePeerResource poisonedClient freeClient
+            clientOld (TyUInt 8)
+          headTypeServer <- rewriteFreePeerResource poisonedServer freeServer
+            serverOld (TyUInt 8)
+          headSessionClient <- rewriteFreePeerResource poisonedClient freeClient
+            clientOld (TyEndpoint (End done))
+          headSessionServer <- rewriteFreePeerResource poisonedServer freeServer
+            serverOld (TyEndpoint (End done))
           let committedUnchanged malformed =
                 Map.lookup firstClient malformed == Map.lookup firstClient closedPrefix
                 && Map.lookup firstServer malformed == Map.lookup firstServer closedPrefix
@@ -2787,7 +2798,9 @@ sourcePingThreeDisjointTerminalSchedules accepted rejected = do
           let malformedStates =
                 [ poisonedClient, poisonedServer, missingClient, missingServer
                 , wrongTypeClient, wrongTypeServer
-                , wrongSessionClient, wrongSessionServer, bothWrongType ]
+                , wrongSessionClient, wrongSessionServer, bothWrongType
+                , headTypeClient, headTypeServer
+                , headSessionClient, headSessionServer ]
           assert (all committedUnchanged malformedStates
                   && all spectatorLoanUnchanged malformedStates)
             "adaptive free-peer faults changed committed half-Close or active loan"
@@ -2844,6 +2857,51 @@ sourcePingThreeDisjointTerminalSchedules accepted rejected = do
           assert (afterMissingClientRepair == afterSuffix
                   && afterMissingServerRepair == afterSuffix)
             "adaptive missing-owner retry changed authorized suffix successor"
+          -- Projection/session refusal is checked before the same peer's
+          -- resource shape. Repairing just its typed head must expose the
+          -- still-malformed linear owner, not silently admit the rendezvous.
+          -- Only restoring the exact original context permits valid suffix
+          -- replay, with all committed and affine spectator state unchanged.
+          let headShapeCases =
+                [ ("Client non-endpoint", headTypeClient, freeClient, clientOriginal
+                  , sourceClientHead plans
+                  , ProtocolEndpointResourceTypeMismatch clientOld (TyUInt 8))
+                , ("Server non-endpoint", headTypeServer, freeServer, serverOriginal
+                  , sourceServerHead plans
+                  , ProtocolEndpointResourceTypeMismatch serverOld (TyUInt 8))
+                , ("Client wrong-session resource", headSessionClient
+                  , freeClient, clientOriginal, sourceClientHead plans
+                  , ProtocolEndpointSessionMismatch clientOld
+                      (sourceClientHead plans) (End done))
+                , ("Server wrong-session resource", headSessionServer
+                  , freeServer, serverOriginal, sourceServerHead plans
+                  , ProtocolEndpointSessionMismatch serverOld
+                      (sourceServerHead plans) (End done)) ]
+          assert (length headShapeCases == 4)
+            "adaptive combined head/resource fault census changed"
+          mapM_ (\(label, doublyBad, peer, original, expectedHead, expectedError) -> do
+            assert (committedUnchanged doublyBad && spectatorLoanUnchanged doublyBad)
+              (label <> ": combined fault disturbed the committed prefix")
+            expectFreePeerHeadRefusal
+              (label <> ": projection takes precedence") peer expectedHead
+              doublyBad firstRequest
+            -- Restore ONLY protocol endpoint metadata; resource remains bad.
+            let originalHeadOnly = Map.adjust
+                  (\context -> context
+                    { protocolEndpoints = protocolEndpoints original })
+                  peer doublyBad
+            expectFreePeerShapeRefusal
+              (label <> ": resource fault exposed after head repair") peer
+              expectedError originalHeadOnly firstRequest
+            let fullyRepaired = Map.insert peer original originalHeadOnly
+            assert (fullyRepaired == closedPrefix)
+              (label <> ": combined repair did not restore exact prefix")
+            replay <- foldM
+              (\contexts req -> mapLeft show (run contexts req))
+              fullyRepaired suffix
+            assert (replay == afterSuffix)
+              (label <> ": combined repair altered authorized suffix"))
+            headShapeCases
           let repairedBoth = Map.insert freeServer serverOriginal repairedClientOnly
           assert (repairedBoth == closedPrefix)
             "adaptive two-resource repair failed exact committed-state restoration"
