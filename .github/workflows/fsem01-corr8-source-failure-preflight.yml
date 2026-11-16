@@ -80,7 +80,7 @@ jobs:
           cabal build lib:phil-core --ghc-options=-Werror
           for test in \
             Phase1FSEM01ScopedBorrowJoinMain \
-            Phase1FSEM01Corr8SourceFailureMain \
+            Phase1FSEM01Corr7PredecessorsMain \
             Phase1FSEM01Corr8SourceFailureMain
           do
             cabal exec -- ghc -isrc -Wall -Werror -fno-code "test/$test.hs"
