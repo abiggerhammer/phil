@@ -154,7 +154,11 @@ Proof.
     simpl in Hlookup.
     destruct (String.eqb name head) eqn:Heq.
     + inversion Hlookup; subst ty.
-      unfold affineAccept in Hhead. exact Hhead.
+      apply String.eqb_eq in Heq. subst name.
+      unfold affineAccept in Hhead.
+      destruct (F.lookupFinite right head) as [other|]; simpl in *.
+      * exact Hhead.
+      * exact I.
     + apply IH; assumption.
 Qed.
 
