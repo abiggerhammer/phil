@@ -79,6 +79,7 @@ jobs:
         run: |
           set -euo pipefail
           for test in \
+            Phase1FSEM01SourceBranchJoinMain \
             Phase1FSEM01AffineJoinScopeMain \
             Phase1FSEM01Corr3FiniteProjectionMain \
             Phase1FSEM01Corr6MixedJoinMain
