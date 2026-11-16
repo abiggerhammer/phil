@@ -6,7 +6,7 @@ import Control.Exception (bracket)
 import Control.Monad (unless)
 import qualified Data.ByteString.Char8 as Bytes
 import Foreign (Ptr, alloca, peek)
-import Foreign.C.Types (CInt)
+import Foreign.C.Types (CInt (..))
 import Phil.Compiler.SteveCAS (InstallResult (..), installBlob)
 import SteveProviderBridge
   ( freeContentIdHandle, freeOwnedBytesHandle
