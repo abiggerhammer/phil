@@ -160,7 +160,7 @@ def check_ruleset(rule: dict, repo: str, app_id: int, ruleset_id: int,
                          else "redacted-live-plus-pinned-owner-version"),
             "pinned_updated_at": policy["ruleset_updated_at"]}
 
-def verified_publisher(app: dict, bot: dict, slug: str, app_id: int,
+def verified_publisher(app: dict | None, bot: dict, slug: str, app_id: int,
                        attestation: dict | None = None) -> dict:
     """Require GitHub's authenticated App and bot-user identities to agree."""
     if (not isinstance(slug, str) or
@@ -171,10 +171,16 @@ def verified_publisher(app: dict, bot: dict, slug: str, app_id: int,
     if (not isinstance(policy, dict) or
         policy.get("format") != "MHB-ATC-OWNER-RULESET-ATTESTATION-V1" or
         policy.get("publisher_app_id") != app_id or
+        policy.get("publisher_app_slug") != slug or
         not isinstance(policy.get("repository"), str)):
         raise ValueError("publisher App ID differs from source-reviewed ruleset identity")
-    if (not isinstance(app, dict) or app.get("id") != app_id or
-        app.get("slug") != slug):
+    # Private GitHub Apps can return HTTP 403 from GET /apps/{slug}, even
+    # unauthenticated. The reviewed ruleset pins the numeric App identity and
+    # this source policy pins its slug. When actual App API metadata IS visible,
+    # independently compare it; otherwise require the trusted App-token
+    # action to authenticate its app-slug output during publication.
+    if app is not None and (not isinstance(app, dict) or app.get("id") != app_id
+                            or app.get("slug") != slug):
         raise ValueError("publisher App slug does not resolve to pinned App ID")
     login = slug + "[bot]"
     if (not isinstance(bot, dict) or bot.get("login") != login or
@@ -242,7 +248,8 @@ def _args():
             s.add_argument("--pr-json", required=True)
             s.add_argument("--publisher-json", required=True)
     s = sub.add_parser("publisher")
-    s.add_argument("--app-json", required=True)
+    s.add_argument("--app-json", required=False,
+                   help="optional authenticated GitHub App metadata if accessible")
     s.add_argument("--bot-json", required=True)
     s.add_argument("--app-slug", required=True)
     s.add_argument("--app-id", type=int, required=True)
@@ -260,8 +267,10 @@ def main() -> int:
         with open(args.ruleset_json, encoding="utf-8") as f:
             result = check_ruleset(json.load(f), args.repo, args.app_id, args.ruleset_id)
     elif args.command == "publisher":
-        with open(args.app_json, encoding="utf-8") as f:
-            app = json.load(f)
+        app = None
+        if args.app_json is not None:
+            with open(args.app_json, encoding="utf-8") as f:
+                app = json.load(f)
         with open(args.bot_json, encoding="utf-8") as f:
             bot = json.load(f)
         result = verified_publisher(app, bot, args.app_slug, args.app_id)
