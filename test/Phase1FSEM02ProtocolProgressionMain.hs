@@ -2620,7 +2620,7 @@ sourcePingThreeDisjointTerminalSchedules accepted rejected = do
   let firstPairChoices = [(c, s) | c <- selectedClientKeys, s <- [as, bs, cs]]
       halfCloseWrongOutcome = Outcome "FSEM02.HalfCloseWrongOutcome"
   assert (length firstPairChoices == 9
-          && 9 * (2 * 120 + 2 * 24) * 4 == 10368)
+          && (9 * (2 * 120 + 2 * 24) * 4 :: Int) == 10368)
     "adaptive half-Close/suffix schedule census changed"
   mapM_ (\(firstClient, firstServer) -> do
     firstState <- mapLeft show (run before (request firstClient firstServer))
