@@ -255,18 +255,18 @@ Lemma
         phase1_surface_normalize_generic_param_kind_type_values parameters =
           Some refined.
 Proof.
-  intros path body input rest trees Hderive Hbody_shape.
-  subst body.
+  intros path body input rest trees Hderive.
   induction Hderive as
     [path body input
     |path body input middle rest tree trees
        Hitem Hprogress Hrest IHrest];
-    intros parameters Htrees.
+    intros Hbody_shape parameters Htrees.
   - destruct parameters as [|parameter parameters]; cbn in Htrees.
     + exists [].
       reflexivity.
     + discriminate Htrees.
-  - destruct parameters as [|parameter parameters]; cbn in Htrees;
+  - subst body.
+    destruct parameters as [|parameter parameters]; cbn in Htrees;
       try discriminate Htrees.
     inversion Htrees; subst tree trees.
     destruct
@@ -275,7 +275,7 @@ Proof.
         (descend path AtRepetitionBody)
         input middle Hitem)
       as [refined Hrefined].
-    destruct (IHrest parameters eq_refl)
+    destruct (IHrest eq_refl parameters eq_refl)
       as [refined_rest Hrefined_rest].
     exists (refined :: refined_rest).
     cbn.
