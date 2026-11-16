@@ -23,7 +23,7 @@ import qualified Phil.Core.Context as Core
 import Phil.Core.Generic.StaticActual (GenericStaticActual (..))
 import Phil.Core.NominalDataMode (NominalRestrictionJustification (..))
 import Phil.Core.Static (DeclarationKey (..), InterfaceRevision (..),emptyStaticContext)
-import Phil.Core.Syntax (Name (..), RefTerm (..), Ty (..))
+import Phil.Core.Syntax (Mode (Affine, Linear), Name (..), RefTerm (..), Ty (..))
 import Phil.Surface.Check.Engine (SourceScopedIfJoinRun (..))
 import Phil.Surface.Check.Types
   ( RejectionClass (..), SurfaceCheckError (..) )
