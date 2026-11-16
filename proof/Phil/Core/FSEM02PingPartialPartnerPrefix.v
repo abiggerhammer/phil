@@ -1,5 +1,5 @@
 From Stdlib Require Import Arith.PeanoNat Bool.Bool.
-From Phil.Core Require Import FSEM02PingPartnerSelection.
+From Phil.Core Require Import FSEM02PingMixedPrefixStalePing FSEM02PingPartnerSelection.
 
 (* FSEM-02, NON-NORMATIVE: source-checked dual heads and the right to choose
    distinct participants are explicit premises. A finite nat->bool ledger is
