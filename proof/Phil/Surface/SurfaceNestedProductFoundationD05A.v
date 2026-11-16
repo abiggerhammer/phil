@@ -57,8 +57,10 @@ Theorem data05a_each_successful_stage_has_fresh_successors :
 Proof.
   intros outerElements outerNames innerElements innerNames Houter Hinner.
   split.
-  - now apply D.accepted_product_elimination_has_unique_successors.
-  - now apply D.accepted_product_elimination_has_unique_successors.
+  - exact (D.accepted_product_elimination_has_unique_successors
+      outerElements outerNames Houter).
+  - exact (D.accepted_product_elimination_has_unique_successors
+      innerElements innerNames Hinner).
 Qed.
 
 Theorem data05a_inner_leaf_contract_is_not_fabricated :
