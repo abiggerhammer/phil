@@ -7,6 +7,14 @@ From Phil.Surface Require Import
   GrammarAstSourceHeaderTotality
   GrammarAstGenericParamsSpine
   GrammarAstGenericParamsTotality
+  GrammarAstStructuralModeSpine
+  GrammarAstGenericRequirementsSpine
+  GrammarAstOptionalFieldTypeSpine
+  GrammarAstRecordFieldsTotality
+  GrammarAstRecordFieldTypeSpine
+  GrammarAstVariantDeclRecordFieldTypeSpine
+  GrammarAstDataRecordFieldTypeSpine
+  GrammarAstDataTotality
   GrammarAstGenericKindTypeSpine
   GrammarAstRecordDataGenericKindTypeSpine
   GrammarAstGenericKindTypeTotality
