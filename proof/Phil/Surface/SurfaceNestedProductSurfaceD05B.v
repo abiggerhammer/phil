@@ -64,9 +64,9 @@ Proof.
   inversion H; subst; clear H.
   split.
   - exact (proj1 (D.restoration_plan_success_has_exact_lengths
-      outer outerNames outerPlan Houter)).
+      outer outerNames first Houter)).
   - exact (proj1 (D.restoration_plan_success_has_exact_lengths
-      inner innerNames innerPlan Hinner)).
+      inner innerNames second Hinner)).
 Qed.
 
 Theorem data05b_successful_pair_has_no_fabricated_inner_leaf :
