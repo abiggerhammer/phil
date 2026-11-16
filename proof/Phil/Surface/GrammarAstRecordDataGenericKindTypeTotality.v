@@ -511,6 +511,10 @@ Proof.
       phase1_surface_normalize_optional_generic_params_kind_type_total_from_spine_derivation;
     eassumption. }
   destruct Hgeneric_total as [refined_generic Hrefined_generic].
+  let original_tree :=
+    match goal with
+    | |- context[phase1_surface_normalize_record_generic_kind_type_tree ?t] => t
+    end in
   let refined := constr:(
         {| phase1_record_generic_kind_type_spine_name := name;
            phase1_record_generic_kind_type_spine_generic_params :=
@@ -519,7 +523,7 @@ Proof.
            phase1_record_generic_kind_type_spine_requirements := requirements;
            phase1_record_generic_kind_type_spine_fields := fields |}) in
       assert (Hnormalize :
-        phase1_surface_normalize_record_generic_kind_type_tree tree =
+        phase1_surface_normalize_record_generic_kind_type_tree original_tree =
           Some refined);
       [ unfold phase1_surface_normalize_record_generic_kind_type_tree;
         rewrite Hbase;
@@ -625,6 +629,10 @@ Proof.
       phase1_surface_normalize_optional_generic_params_kind_type_total_from_spine_derivation;
     eassumption. }
   destruct Hgeneric_total as [refined_generic Hrefined_generic].
+  let original_tree :=
+    match goal with
+    | |- context[phase1_surface_normalize_data_generic_kind_type_tree ?t] => t
+    end in
   let refined := constr:(
         {| phase1_data_generic_kind_type_spine_name := name;
            phase1_data_generic_kind_type_spine_generic_params :=
@@ -635,7 +643,7 @@ Proof.
            phase1_data_generic_kind_type_spine_rest_variants :=
              rest_variants |}) in
       assert (Hnormalize :
-        phase1_surface_normalize_data_generic_kind_type_tree tree =
+        phase1_surface_normalize_data_generic_kind_type_tree original_tree =
           Some refined);
       [ unfold phase1_surface_normalize_data_generic_kind_type_tree;
         rewrite Hbase;
