@@ -13,7 +13,7 @@ import qualified Phil.Core.Context as Core
 import qualified Phil.Core.DataMode as DataMode
 import Phil.Core.CheckedBindingMode (CheckedTypeMode (..))
 import Phil.Core.Static (DeclarationKey (..), emptyStaticContext)
-import Phil.Core.Syntax (Mode (..), Name (..), ProductElementType (..), RefTerm (..), Ty (..))
+import Phil.Core.Syntax (Control (..), Mode (..), Name (..), ProductElementType (..), RefTerm (..), Ty (..))
 import Phil.Surface.Check.Engine
   ( ProductEliminationRun (..), checkSurfaceComponent
   , traceSurfaceProductEliminationComponent )

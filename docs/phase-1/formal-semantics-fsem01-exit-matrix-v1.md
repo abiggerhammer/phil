@@ -8,6 +8,8 @@
 
 > **DATA-05A bounded foundation proposed (2026-11-16):** [Nested product source/Core test](formal-semantics-nested-product-data05a-fsem01-v1.md) checks original nested tuple patterns and source-rooted leaf identities, primitive leaf typing, two actual sequential native Linear product eliminations and conditional Rocq positional/no-resurrection lemmas. No production nested Surface elaboration or general R14/R15 discharge; DATA-05 remains **gap**. No P9-owned files changed.
 
+> **DATA-05B bounded Surface replay proposed (2026-11-16):** [Two-stage source/Surface evidence](formal-semantics-nested-product-data05b-fsem01-v1.md) uses actual parsed nested sources, source-rooted leaf binders and production checked flat product eliminations twice, independently checking original/outer/inner Core states and negative classes. The intermediate is test-generated; general production nested Grammar-v1 elaboration and FSEM-01 R14/R15 remain open. P9/Engine/checker code is untouched.
+
 > **Review finding: FSEM-01 remains OPEN.** This is a non-normative
 > coverage/acceptance audit, not a new language rule, a proof of the general
 > Haskell implementation, or an FSEM-01 completion claim.
