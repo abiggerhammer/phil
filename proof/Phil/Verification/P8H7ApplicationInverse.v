@@ -56,11 +56,10 @@ Proof.
     apply p8_h7_qm_concat.
   }
   unfold p8_e2_parse_argument.
-  cbn [p8_e2_expect].
-  Show.
+  cbn [p8_e2_expect Nat.eqb].
   rewrite (p8_f1_text_prefix_roundtrip key
     (77 :: (p8_e1_put_form value ++ suffix)) KeyValid).
-  cbn [p8_e2_expect].
+  cbn [p8_e2_expect Nat.eqb].
   rewrite (p8_f1_form_prefix_fuel_bound fuel value suffix
     ValueValid Bound).
   reflexivity.
