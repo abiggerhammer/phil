@@ -331,9 +331,9 @@ checkError expected (Left err) = check (surfaceErrorClass err == expected)
 checkError _ (Right succeeded) =
   Left ("invalid projected source admitted: " ++ show succeeded)
 
-checkRejected :: Either SurfaceCheckError SurfaceCheckResult -> Either String ()
-checkRejected (Left _) = Right ()
-checkRejected (Right succeeded) =
+checkSurfaceRejected :: Either SurfaceCheckError SurfaceCheckResult -> Either String ()
+checkSurfaceRejected (Left _) = Right ()
+checkSurfaceRejected (Right succeeded) =
   Left ("invalid projected source produced successor: " ++ show succeeded)
 
 -- The first checkpoint is recorded by the production trace interface after
@@ -419,9 +419,9 @@ checkRealSurface p initial outer inner = do
   checkError StructuralUse (checkSurfaceComponent env duplicateSecond)
   checkError StructuralUse (checkSurfaceComponent env liveCollision)
   checkError LinearCompletion (checkSurfaceComponent env wrongReturn)
-  checkRejected (checkSurfaceComponent noSecond full)
-  checkRejected (checkSurfaceComponent noContracts full)
-  checkRejected (checkSurfaceComponent env staleOriginal)
+  checkSurfaceRejected (checkSurfaceComponent noSecond full)
+  checkSurfaceRejected (checkSurfaceComponent noContracts full)
+  checkSurfaceRejected (checkSurfaceComponent env staleOriginal)
 
 fixturePath :: String -> FilePath
 fixturePath key = "test/fixtures/fsem01-data05a-nested-product-v1/" ++ key ++ ".phil"
