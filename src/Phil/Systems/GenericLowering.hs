@@ -11,6 +11,8 @@ module Phil.Systems.GenericLowering
   , GenericDecisionSpec (..)
   , GenericRealizationContext (..)
   , GenericLoweringError (..)
+  , validateCoreNativeContainers
+  , validateNativeContainers
   , coreSystemsProgramSemanticForm
   , genericRealizationSemanticForm
   , lowerGenericSystems
@@ -152,6 +154,7 @@ data GenericLoweringError
   = GenericLoweringEmptyVerifierProfile
   | GenericLoweringEmptyContextRevision
   | GenericLoweringMalformedContextSemantics
+  | GenericLoweringMalformedNativeContainer Text
   | GenericLoweringEmptyRealizationRefs
   | GenericLoweringEmptyFacts
   | GenericLoweringEmptyFunctions
@@ -247,10 +250,9 @@ validateInputs program context = do
     GenericLoweringEmptyVerifierProfile
   require (not (Text.null (genericContextRevision context)))
     GenericLoweringEmptyContextRevision
-  -- Public SemanticForm constructors can carry invalid native Set/Map trees.
-  -- Refuse them before any digest or revision canonicalizes their contents.
-  require (nativeSemanticFormValid (genericContextSemantics context))
-    GenericLoweringMalformedContextSemantics
+  -- Validate original native containers before any lookup-driven lowering,
+  -- canonicalization or digest; public Haskell constructors are not a seal.
+  validateNativeContainers program context
   require (not (Set.null (genericContextRealizationRefs context)))
     GenericLoweringEmptyRealizationRefs
   require (not (Map.null (coreProgramFacts program)))
@@ -260,6 +262,70 @@ validateInputs program context = do
   mapM_ (validateRuntimeFact program)
     (Map.toAscList (genericContextRuntimeSites context))
   mapM_ (validateFunction context) (Map.toAscList (coreProgramFunctions program))
+
+-- | Check every original caller-supplied container on the generic P2 path.
+-- This check is also called at the earliest source-owned P2 entry, before
+-- source/Core policy comparisons can mistake an invalid cached size for an
+-- ordinary semantic mismatch. Do not normalize malformed Map/Set trees.
+validateNativeContainers
+  :: CoreSystemsProgram
+  -> GenericRealizationContext
+  -> Either GenericLoweringError ()
+validateNativeContainers program context = do
+  require (nativeSemanticFormValid (genericContextSemantics context))
+    GenericLoweringMalformedContextSemantics
+  requireValidMap "context.decisions" (genericContextDecisions context)
+  requireValidMap "context.runtime_sites" (genericContextRuntimeSites context)
+  requireValidSet "context.realization_refs" (genericContextRealizationRefs context)
+  requireValidSet "context.qualification_refs" (genericContextQualificationRefs context)
+  requireValidSet "context.assumptions" (genericContextAssumptions context)
+  validateCoreNativeContainers program
+
+-- | Native Core Map validity is required *before* constructing the source/Core
+-- correspondence. Nested functions, blocks and runtime-choice arms are
+-- checked at their original representation, not after Map.map/keysSet.
+validateCoreNativeContainers
+  :: CoreSystemsProgram
+  -> Either GenericLoweringError ()
+validateCoreNativeContainers program = do
+  requireValidMap "core.facts" (coreProgramFacts program)
+  requireValidMap "core.functions" (coreProgramFunctions program)
+  mapM_ validateFunctionMaps (Map.toAscList (coreProgramFunctions program))
+  where
+    validateFunctionMaps (functionKey, function) = do
+      requireValidMap
+        ("core.functions." <> functionKey <> ".values")
+        (coreFunctionValues function)
+      requireValidMap
+        ("core.functions." <> functionKey <> ".blocks")
+        (coreFunctionBlocks function)
+      mapM_ (validateBlockMaps functionKey)
+        (Map.toAscList (coreFunctionBlocks function))
+
+    validateBlockMaps functionKey (blockKey, blockValue) =
+      case coreBlockTerminator blockValue of
+        CoreSystemsRuntimeChoice _ _ _ arms ->
+          requireValidMap
+            ("core.functions." <> functionKey <> ".blocks." <> blockKey
+              <> ".runtime_choice_arms")
+            arms
+        _ -> Right ()
+
+requireValidMap
+  :: Ord k
+  => Text
+  -> Map k a
+  -> Either GenericLoweringError ()
+requireValidMap path values =
+  require (Map.valid values) (GenericLoweringMalformedNativeContainer path)
+
+requireValidSet
+  :: Ord a
+  => Text
+  -> Set a
+  -> Either GenericLoweringError ()
+requireValidSet path values =
+  require (Set.valid values) (GenericLoweringMalformedNativeContainer path)
 
 -- | Check original recursive native shape, not equality with a repaired or
 -- re-sorted representation. The public containers validators inspect tree
