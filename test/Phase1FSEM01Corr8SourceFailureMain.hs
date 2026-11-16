@@ -154,7 +154,7 @@ sourceWire profile raw trace = do
          scopedIfJoinOutcome run == scopedBorrowJoinOutcome trace &&
          owner /= flag)
     "source initial resource state or trace/ordinary checker parity changed"
-  checkObserved owner left
+  checkObserved (if profile == BorrowUnrestricted then flag else owner) left
   checkObserved owner right
   case profile of
     AcceptedLeft -> accepted run trace
