@@ -11,6 +11,7 @@ From Phil.Surface Require Import
   GrammarAstDataRecordFieldTypeSpine
   GrammarAstVariantDeclRecordFieldTypeSpine
   GrammarAstGenericRequirementsSpine
+  GrammarAstGenericRequirementsTypeSpine
   GrammarAstRecordDataGenericKindTypeSpine
   GrammarAstRecordDataGenericRequirementTypeSpine
   GrammarAstGenericRequirementsTypeTotality
