@@ -435,6 +435,7 @@ data SteveGetStructuralFact = SteveGetStructuralFact
   , steveGetSourceBorrowSite :: SourceSpan
   , steveGetSourceDigestSite :: SourceSpan
   , steveGetCheckedCallOrdinal :: Int
+  , steveGetCheckedFoundOrdinal :: Int
   , steveGetCheckedContentType :: Ty
   , steveGetCheckedBorrowedType :: Ty
   } deriving (Eq, Show)
@@ -449,6 +450,8 @@ data SteveGetStructuralError
   | SteveGetCheckedCallObservationMissing
   | SteveGetCheckedCallTypeMismatch
   | SteveGetCheckedCallBranchMismatch
+  | SteveGetCheckedFoundMissing
+  | SteveGetCheckedFoundMismatch
   | SteveGetCoreFunctionMissing
   | SteveGetCoreValueRolesMismatch
   | SteveGetCoreReadPredecessorMismatch
@@ -550,6 +553,25 @@ verifySteveGetStructural architecture program = do
            && sourceBranchSpan branch == locatedSpan foundArm)
          checkedRoute)
     SteveGetCheckedCallBranchMismatch
+  (foundRoute, foundOrdinal, foundTy) <-
+    exactlyOne SteveGetCheckedFoundMissing
+      [ (sourceEvidenceBranchRoute event,
+          sourceEvidenceOrdinal event, ownerTy)
+      | u <- checkedSourceUnits (checkedSourceArchitectureBundle architecture)
+      , componentName (locatedValue (checkedSourceComponent u)) == "SteveGet"
+      , event <- checkedSourceEvidenceEvents u
+      , sourceEvidenceSite event == locatedSpan foundArm
+      , SourceCheckedProviderFound "blob_read" actualCall actualBinder ownerTy <-
+          [sourceEvidenceUse event]
+      , actualCall == readSite
+      , actualBinder == Name ownerName
+      ]
+  unlessSource
+    (foundTy == TyOpaque "OwnedBytes"
+       && foundOrdinal >= 0
+       && foundOrdinal < checkedOrdinal
+       && foundRoute == checkedRoute)
+    SteveGetCheckedFoundMismatch
 
   function <- maybe (Left SteveGetCoreFunctionMissing) Right
     (Map.lookup "SteveGet" (coreProgramFunctions program))
@@ -608,6 +630,7 @@ verifySteveGetStructural architecture program = do
     , steveGetSourceBorrowSite = borrowSite
     , steveGetSourceDigestSite = locatedSpan digest
     , steveGetCheckedCallOrdinal = checkedOrdinal
+    , steveGetCheckedFoundOrdinal = foundOrdinal
     , steveGetCheckedContentType = idType
     , steveGetCheckedBorrowedType = viewType
     }

@@ -2794,15 +2794,20 @@ evalDecide environment state located scrutinee arms = do
   unless (expected == actual && Set.size expected == length arms) $
     throw located BranchExhaustiveness
       "decision handlers do not exactly cover all alternatives"
-  concat <$> mapM (checkDecisionArm environment decisionState decision) arms
+  let sourceOrigin = case locatedValue scrutinee of
+        CallExpression primitiveName _ ->
+          Just (primitiveName, locatedSpan scrutinee)
+        _ -> Nothing
+  concat <$> mapM (checkDecisionArm environment decisionState decision sourceOrigin) arms
 
 checkDecisionArm
   :: SurfaceEnvironment
   -> SurfaceState
   -> DecisionKind
+  -> Maybe (Text, SourceSpan)
   -> Located CaseArm
   -> Either SurfaceCheckError [SurfacePath]
-checkDecisionArm environment original decision locatedArm = do
+checkDecisionArm environment original decision sourceOrigin locatedArm = do
   let pattern' = caseArmPattern (locatedValue locatedArm)
       label = casePatternLabel pattern'
       state = enterEvidenceBranch (locatedSpan locatedArm) label original
@@ -2820,19 +2825,36 @@ checkDecisionArm environment original decision locatedArm = do
         label
         (casePatternBinders pattern')
         locatedArm
+      -- Only after actual typed arm-binding acceptance, preserve the original
+      -- source result occurrence. This records no dynamic execution or
+      -- credentialed provider evidence.
+      let observed = case
+            (sourceOrigin, decision, label, casePatternBinders pattern') of
+            (Just ("blob_read", callSite), ProviderDecision outcomes,
+              "found", [binder]) ->
+              case [providerOutcomePayload outcome
+                   | outcome <- outcomes
+                   , providerOutcomeLabel outcome == "found"] of
+                [[(Linear, TyOpaque "OwnedBytes")]] ->
+                  recordSourceEvidence (locatedSpan locatedArm)
+                    (SourceCheckedProviderFound "blob_read" callSite
+                      (Name binder) (TyOpaque "OwnedBytes"))
+                    withBinders
+                _ -> withBinders
+            _ -> withBinders
       case callableDecisionObligations decision label of
         Just obligations ->
           checkCallableDecisionArm
             environment
             resourceState
-            withBinders
+            observed
             obligations
             (caseArmBody (locatedValue locatedArm))
         Nothing ->
           checkScopedValueBlock
             environment
             resourceState
-            withBinders
+            observed
             (caseArmBody (locatedValue locatedArm))
 
 applyCallableDecisionResources
