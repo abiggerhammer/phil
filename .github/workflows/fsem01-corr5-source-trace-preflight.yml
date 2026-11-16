@@ -58,6 +58,47 @@ jobs:
           sha256sum proof/Phil/Surface/SurfaceFiniteLinearTraceCorr5.v \
                      proof/Phil/Surface/SurfaceFiniteLinearTraceCorr5.vo
 
+  rocq-wire-preflight:
+    name: Rocq canonical source-trace wire decoder and replay interface
+    runs-on: ubuntu-24.04
+    container:
+      image: rocq/rocq-prover:9.2.0
+      options: --user root
+    steps:
+      - uses: actions/checkout@v4
+      - name: Compile the strict decoder independently before Hackage producer
+        shell: bash
+        run: |
+          set -euo pipefail
+          export PATH="/home/rocq/.opam/$COMPILER/bin:$PATH"
+          for file in \
+            proof/Phil/Core/Syntax.v \
+            proof/Phil/Core/Context.v \
+            proof/Phil/Core/BindingSemantics.v \
+            proof/Phil/Core/ContextJoin.v \
+            proof/Phil/Core/ProcessJoin.v \
+            proof/Phil/Core/ResourceJoin.v \
+            proof/Phil/Core/ResourceScope.v \
+            proof/Phil/Surface/SurfaceBinderScopeCore.v \
+            proof/Phil/Surface/SurfaceLetPatternScope.v \
+            proof/Phil/Surface/SurfaceBorrowViewScope.v \
+            proof/Phil/Surface/SurfaceBorrowLoanStateCorrespondence.v \
+            proof/Phil/Surface/SurfaceBinderNameEncoding.v \
+            proof/Phil/Surface/SurfaceDeclarationIdentityBridge.v \
+            proof/Phil/Surface/SurfaceRepresentedBorrowTrace.v \
+            proof/Phil/Surface/SurfaceBorrowStepErrorBridge.v \
+            proof/Phil/Surface/SurfaceObservationWire.v \
+            proof/Phil/Surface/SurfaceFiniteContextFrame.v \
+            proof/Phil/Surface/SurfaceFiniteLinearStepCorr4.v \
+            proof/Phil/Surface/SurfaceFiniteLinearTraceCorr5.v \
+            proof/Phil/Surface/SurfaceSourceLinearTraceWireCorr5.v
+          do
+            rocq c -Q proof/Phil Phil "$file"
+          done
+          rocq check -Q proof/Phil Phil Phil.Surface.SurfaceSourceLinearTraceWireCorr5
+          sha256sum proof/Phil/Surface/SurfaceSourceLinearTraceWireCorr5.v \
+                     proof/Phil/Surface/SurfaceSourceLinearTraceWireCorr5.vo
+
   native-source-transcript:
     name: Strict native source-trace producer, exact-core replay and independent byte validator
     runs-on: ubuntu-24.04
