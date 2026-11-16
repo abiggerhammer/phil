@@ -41,20 +41,32 @@ jobs:
           ref: main
           persist-credentials: false
 
-      - name: Reconcile queue and optionally admit one exact revision
+      - name: Mint dedicated protected-head publisher token
+        id: publisher_token
+        if: >-
+          vars.MHB_ATC_IMMUTABLE_HEADS_ENABLED == 'true' &&
+          (github.event_name == 'schedule' || inputs.mode == 'admit-one')
+        uses: actions/create-github-app-token@v3
+        with:
+          client-id: \${{ vars.MHB_ATC_PUBLISHER_APP_CLIENT_ID }}
+          private-key: \${{ secrets.MHB_ATC_PUBLISHER_APP_PRIVATE_KEY }}
+          permission-contents: write
+          permission-pull-requests: write
+
+      - name: Reconcile queue and optionally publish one immutable exact head
         env:
-          GH_TOKEN: ${{ github.token }}
-          GH_REPO: ${{ github.repository }}
-          MODE: ${{ github.event_name == 'schedule' && 'admit-one' || inputs.mode }}
-          # A user token rather than GITHUB_TOKEN is needed for PR creation
-          # to trigger the usual pull_request CI workflows.
-          HAMSTER_PR_TOKEN: ${{ secrets.HAMSTER_PR_TOKEN }}
+          GH_TOKEN: \${{ github.token }}
+          GH_REPO: \${{ github.repository }}
+          MODE: \${{ github.event_name == 'schedule' && 'admit-one' || inputs.mode }}
+          IMMUTABLE_ENABLED: \${{ vars.MHB_ATC_IMMUTABLE_HEADS_ENABLED }}
+          PUBLISHER_TOKEN: \${{ steps.publisher_token.outputs.token }}
+          PUBLISHER_APP_ID: \${{ vars.MHB_ATC_PUBLISHER_APP_ID }}
+          PUBLISHER_RULESET_ID: \${{ vars.MHB_ATC_PUBLISHER_RULESET_ID }}
         shell: bash
         run: |
           set -euo pipefail
 
           read_snapshot() {
-            # Two independent complete, paginated GitHub API listings.
             gh api --paginate "repos/$GH_REPO/issues?state=open&per_page=100" \
               | jq -s 'add // []' > /tmp/atc-open-issues.json
             gh api --paginate "repos/$GH_REPO/pulls?state=open&per_page=100" \
@@ -64,6 +76,17 @@ jobs:
               --prs /tmp/atc-open-prs.json > /tmp/atc-plan.json
           }
 
+          # A missing or inactive ruleset must never fall back to a mutable PR head.
+          verify_publisher_ruleset() {
+            test -n "$PUBLISHER_APP_ID" && test -n "$PUBLISHER_RULESET_ID"
+            gh api "repos/$GH_REPO/rulesets/$PUBLISHER_RULESET_ID" > /tmp/atc-ruleset.json
+            python3 scripts/mhb_atc_immutable.py ruleset \
+              --ruleset-json /tmp/atc-ruleset.json \
+              --repo "$GH_REPO" \
+              --app-id "$PUBLISHER_APP_ID" \
+              --ruleset-id "$PUBLISHER_RULESET_ID"
+          }
+
           read_snapshot
           cat /tmp/atc-plan.json
           decision="$(jq -r '.decision' /tmp/atc-plan.json)"
@@ -71,107 +94,130 @@ jobs:
           if [ "$MODE" = "dry-run" ]; then
             {
               echo "### MHB-ATC admission (read-only)"
-              echo
               echo "- mode: dry-run"
               echo "- decision: $decision"
+              echo "- immutable publishing: NOT attempted"
               echo "- no PR created; no queue state changed"
             } >> "$GITHUB_STEP_SUMMARY"
             exit 0
           fi
-          if [ "$MODE" != "admit-one" ]; then
-            echo "Unknown mode $MODE" >&2
+          test "$MODE" = "admit-one" || { echo "Unknown mode" >&2; exit 1; }
+          test "$IMMUTABLE_ENABLED" = "true" || {
+            echo "Immutable publisher activation gate is disabled" >&2
             exit 1
-          fi
+          }
+          test -n "$PUBLISHER_TOKEN" || {
+            echo "Dedicated publisher GitHub App token missing" >&2
+            exit 1
+          }
           if [ "$decision" = "hold" ]; then
             echo "No admission clearance; capacity occupied or no candidate."
             exit 0
           fi
           test "$decision" = "would-admit"
-          if [ -z "$HAMSTER_PR_TOKEN" ]; then
-            echo "Missing HAMSTER_PR_TOKEN; GitHub token would not trigger PR CI" >&2
-            exit 1
-          fi
 
-          # Refresh entire snapshot before side effects; reject a changed plan.
+          # Fail closed BEFORE reserving any capacity if ruleset not active.
+          verify_publisher_ruleset
+
+          # Re-read all open issue and PR state before the irreversible transaction.
           prior="$(cat /tmp/atc-plan.json)"
           read_snapshot
-          test "$(cat /tmp/atc-plan.json)" = "$prior"
-
+          test "$(cat /tmp/atc-plan.json)" = "$prior" || {
+            echo "Admission plan moved; refusing stale publish" >&2
+            exit 1
+          }
           issue="$(jq -r '.candidate_issue' /tmp/atc-plan.json)"
           lane="$(jq -r '.lane' /tmp/atc-plan.json)"
           branch="$(jq -r '.branch' /tmp/atc-plan.json)"
           expected="$(jq -r '.head_sha' /tmp/atc-plan.json)"
 
-          # Exact-head freshness is checked against the authoritative ref,
-          # not a mutable issue description or a checkout of staged code.
+          python3 scripts/mhb_atc_immutable.py contract \
+            --issue "$issue" --lane "$lane" \
+            --staged "$branch" --sha "$expected" --repo "$GH_REPO" \
+            > /tmp/atc-binding.json
+          admitted="$(jq -r '.admitted_branch' /tmp/atc-binding.json)"
+          title="$(jq -r '.title' /tmp/atc-binding.json)"
+          jq -r '.body' /tmp/atc-binding.json > /tmp/atc-pr-body.md
+
           live="$(gh api "repos/$GH_REPO/git/ref/heads/$branch" --jq '.object.sha')"
           test "$live" = "$expected" || {
-            echo "Staged candidate $issue is stale; refusing PR creation" >&2
+            echo "Staged candidate $issue is stale; refusing publishing" >&2
             exit 1
           }
 
-          # Reject any already-open PR for this staged branch. A previous
-          # partially completed admission must be reconciled, never duplicated.
-          duplicate="$(gh pr list --repo "$GH_REPO" --head "$branch" \
-            --state open --json number --jq 'length')"
-          test "$duplicate" = "0"
+          # The new ref MUST NOT be pre-existing, even with a matching SHA:
+          # a crash-created orphan is a human investigation, not automatic reuse.
+          gh api "repos/$GH_REPO/git/matching-refs/heads/$admitted" \
+            > /tmp/atc-admitted-refs.json
+          python3 scripts/mhb_atc_immutable.py ref \
+            --issue "$issue" --lane "$lane" --staged "$branch" \
+            --sha "$expected" --repo "$GH_REPO" \
+            --refs /tmp/atc-admitted-refs.json --expect absent
 
-          # Reserve the single slot DURABLY before the non-atomic PR create.
-          # A failed create leaves an admitting issue, not a free CI slot.
+          # Global controller concurrency already serializes all ATC mutations.
           for label in "atc: admitting" "atc: admitted"; do
             if ! gh label list --repo "$GH_REPO" --limit 1000 --json name \
                  | jq -e --arg name "$label" 'any(.[]; .name == $name)' >/dev/null; then
               gh label create "$label" --repo "$GH_REPO" \
-                --color 6a737d --description "MHB-ATC verification lifecycle"
+                --color 6a737d --description "MHB-ATC immutable admission lifecycle"
             fi
           done
+
           gh issue edit "$issue" --repo "$GH_REPO" \
             --remove-label "atc: staged" --add-label "atc: admitting"
           gh issue comment "$issue" --repo "$GH_REPO" \
-            --body "ATC admission reserved on this exact head: $expected. A crash before PR creation is recoverable after the grace period."
+            --body "ATC immutable admission reserved: staged $branch at $expected, protected PR head $admitted. An orphan ref blocks automatic requeue."
 
-          cat > /tmp/atc-pr-body.md <<EOF
-          MHB-ATC admitted staged candidate; this PR is **not** merge clearance.
-
-          - Candidate issue: #$issue
-          - Lane: $lane
-          - Staged branch: $branch
-          - Exact registered head: $expected
-
-          Required checks and integration safety must still be verified before any merge.
-          EOF
-
-          # Use the existing credential that provably triggers PR CI, not the
-          # workflow's GITHUB_TOKEN (whose events would not launch PR CI).
-          url="$(GH_TOKEN="$HAMSTER_PR_TOKEN" gh pr create \
-            --repo "$GH_REPO" --base main --head "$branch" \
-            --title "MHB-ATC admission: $lane / $issue" \
-            --body-file /tmp/atc-pr-body.md)"
-
-          # Detect the create-PR race: if the live revision changed between
-          # preflight and creation, immediately close the PR fail-closed.
-          actual="$(gh pr view "$url" --repo "$GH_REPO" \
-            --json headRefOid --jq '.headRefOid')"
-          if [ "$actual" != "$expected" ]; then
-            gh pr close "$url" --repo "$GH_REPO" \
-              --comment "ATC admission invalidated: head SHA moved during PR creation."
-            echo "Head moved during PR creation; PR closed fail-closed" >&2
+          # Final ref and ruleset preflight before the protected write.
+          verify_publisher_ruleset
+          live="$(gh api "repos/$GH_REPO/git/ref/heads/$branch" --jq '.object.sha')"
+          test "$live" = "$expected" || {
+            echo "Staged candidate drifted after reservation" >&2
             exit 1
-          fi
+          }
+          gh api "repos/$GH_REPO/git/matching-refs/heads/$admitted" \
+            > /tmp/atc-admitted-refs.json
+          python3 scripts/mhb_atc_immutable.py ref \
+            --issue "$issue" --lane "$lane" --staged "$branch" \
+            --sha "$expected" --repo "$GH_REPO" \
+            --refs /tmp/atc-admitted-refs.json --expect absent
 
-          # A crash before issue mutation leaves an open staged-branch PR;
-          # subsequent admissions detect it and hold rather than duplicate it.
-          gh pr edit "$url" --repo "$GH_REPO" \
+          # Create-only publishing: never update/force/delete an admitted ref.
+          GH_TOKEN="$PUBLISHER_TOKEN" gh api --method POST "repos/$GH_REPO/git/refs" \
+            -f "ref=refs/heads/$admitted" -f "sha=$expected" \
+            > /tmp/atc-publisher-create-ref.json
+
+          gh api "repos/$GH_REPO/git/matching-refs/heads/$admitted" \
+            > /tmp/atc-admitted-refs.json
+          python3 scripts/mhb_atc_immutable.py ref \
+            --issue "$issue" --lane "$lane" --staged "$branch" \
+            --sha "$expected" --repo "$GH_REPO" \
+            --refs /tmp/atc-admitted-refs.json --expect present
+
+          # GitHub App token intentionally triggers normal pull_request CI;
+          # GITHUB_TOKEN would suppress the event's usual downstream workflows.
+          url="$(GH_TOKEN="$PUBLISHER_TOKEN" gh pr create \
+            --repo "$GH_REPO" --base main --head "$admitted" \
+            --title "$title" --body-file /tmp/atc-pr-body.md)"
+          number="$(gh pr view "$url" --repo "$GH_REPO" --json number --jq .number)"
+          gh api "repos/$GH_REPO/pulls/$number" > /tmp/atc-created-pr.json
+          python3 scripts/mhb_atc_immutable.py verify-pr \
+            --issue "$issue" --lane "$lane" --staged "$branch" \
+            --sha "$expected" --repo "$GH_REPO" \
+            --pr-json /tmp/atc-created-pr.json
+
+          gh pr edit "$number" --repo "$GH_REPO" \
             --add-label "atc: admitted" --add-label "lane: $lane"
           gh issue edit "$issue" --repo "$GH_REPO" \
             --remove-label "atc: admitting" --add-label "atc: admitted"
 
           {
-            echo "### MHB-ATC admission"
-            echo
-            echo "- admitted issue: #$issue"
-            echo "- opened PR: $url"
-            echo "- lane: $lane"
-            echo "- authorized head: $expected"
-            echo "- next admission requires PR and issue closeout"
+            echo "### MHB-ATC immutable admission"
+            echo "- candidate issue: #$issue"
+            echo "- staged branch: $branch"
+            echo "- protected PR head: $admitted"
+            echo "- exact commit: $expected"
+            echo "- PR: $url"
+            echo "- merge authority: NONE"
+            echo "- next admission requires positive PR/issue reconciliation"
           } >> "$GITHUB_STEP_SUMMARY"
