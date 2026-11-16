@@ -10,6 +10,7 @@ import argparse
 import json
 import re
 import sys
+from pathlib import Path
 
 from mhb_atc_stage import parse_intent
 
@@ -82,34 +83,69 @@ def check_ref(refs: list, binding: dict, expected: str) -> dict:
             "head_sha": binding["head_sha"]}
 
 
-def check_ruleset(rule: dict, repo: str, app_id: int, ruleset_id: int) -> dict:
-    """A conservative preflight, not a substitute for negative write tests."""
+def _load_owner_attestation() -> dict:
+    """Reviewed, owner-authenticated ruleset attestation in the trusted main tree.
+
+    The workflow token may see only a REDACTED ruleset. The live version stamp
+    must exactly match the owner-reviewed version; every GitHub policy mutation
+    invalidates the certificate and stops publication until a reviewed update.
+    """
+    path = Path(__file__).resolve().parents[1] / ".github/atc-publisher-policy.json"
+    with path.open(encoding="utf-8") as fp:
+        return json.load(fp)
+
+
+def check_ruleset(rule: dict, repo: str, app_id: int, ruleset_id: int,
+                  attestation: dict | None = None) -> dict:
+    """Fail closed on a missing/changed live policy or unreviewed bypass.
+
+    A low-privilege GITHUB_TOKEN need not see bypass_actors. In that case this
+    validates GitHub's live updated_at and full unredacted trusted-main
+    owner attestation; it never guesses who can bypass from visible fields.
+    """
     if type(app_id) is not int or app_id < 1 or type(ruleset_id) is not int or ruleset_id < 1:
         raise ValueError("numeric App and ruleset IDs required")
     if not isinstance(rule, dict):
         raise ValueError("invalid ruleset response")
+    policy = _load_owner_attestation() if attestation is None else attestation
+    if (not isinstance(policy, dict) or
+        policy.get("format") != "MHB-ATC-OWNER-RULESET-ATTESTATION-V1" or
+        policy.get("repository") != repo or policy.get("ruleset_id") != ruleset_id or
+        policy.get("publisher_app_id") != app_id or
+        policy.get("attested_bypass_actors") != [{
+            "actor_type": "Integration", "actor_id": app_id,
+            "bypass_mode": "always"}]):
+        raise ValueError("reviewed owner ruleset attestation missing or inconsistent")
+    if (not isinstance(policy.get("ruleset_created_at"), str) or
+        not isinstance(policy.get("ruleset_updated_at"), str) or
+        rule.get("created_at") != policy["ruleset_created_at"] or
+        rule.get("updated_at") != policy["ruleset_updated_at"]):
+        raise ValueError("live ruleset version differs from reviewed owner attestation")
     if rule.get("id") != ruleset_id or rule.get("target") != "branch" or rule.get("enforcement") != "active":
         raise ValueError("wrong/inactive ruleset")
     if rule.get("source_type") != "Repository" or rule.get("source") != repo:
         raise ValueError("ruleset not scoped to exact repository")
     conditions = rule.get("conditions")
     ref_name = conditions.get("ref_name") if isinstance(conditions, dict) else None
-    if not isinstance(ref_name, dict) or set(ref_name.get("include", [])) not in (
-        {"refs/heads/hamster/admitted/*"}, {"hamster/admitted/*"}
-    ) or ref_name.get("exclude") != []:
-        raise ValueError("ruleset target must be the exact single-level admitted-ref namespace")
-    types = {x.get("type") for x in rule.get("rules", []) if isinstance(x, dict)}
+    if not isinstance(ref_name, dict) or ref_name.get("include") != [
+        "refs/heads/hamster/admitted/*"] or ref_name.get("exclude") != []:
+        raise ValueError("ruleset target must be exact admitted-ref namespace")
+    rules = rule.get("rules")
+    if not isinstance(rules, list) or not all(isinstance(x, dict) for x in rules):
+        raise ValueError("malformed live ruleset rule list")
+    types = {x.get("type") for x in rules}
     if not {"creation", "update", "deletion", "non_fast_forward"} <= types:
         raise ValueError("ruleset missing creation/update/delete or non-fast-forward protections")
     bypass = rule.get("bypass_actors")
-    if (not isinstance(bypass, list) or len(bypass) != 1 or
-        bypass[0].get("actor_type") != "Integration" or
-        bypass[0].get("actor_id") != app_id or
-        bypass[0].get("bypass_mode") != "always"):
-        raise ValueError("ruleset bypass must be only the dedicated publisher App")
+    if bypass is not None and bypass != policy["attested_bypass_actors"]:
+        raise ValueError("live bypass conflicts with reviewed owner attestation")
+    if bypass is not None and not isinstance(bypass, list):
+        raise ValueError("malformed live bypass actor list")
     return {"decision": "ruleset-preflight-valid", "ruleset_id": ruleset_id,
-            "app_id": app_id, "namespace": ADMITTED_PREFIX}
-
+            "app_id": app_id, "namespace": ADMITTED_PREFIX,
+            "evidence": ("unredacted-live-plus-version" if bypass is not None
+                         else "redacted-live-plus-pinned-owner-version"),
+            "pinned_updated_at": policy["ruleset_updated_at"]}
 
 def verify_pr(pr: dict, binding: dict) -> dict:
     if not isinstance(pr, dict) or pr.get("state") not in ("open", "closed"):
