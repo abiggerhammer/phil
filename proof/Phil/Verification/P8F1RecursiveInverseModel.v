@@ -373,6 +373,123 @@ Proof.
   congruence.
 Qed.
 
+
+(*
+ E1's two local recursive count-loops are exposed here as transparent
+ proof-only aliases. Their bodies are intentionally identical to E1's
+ parse_forms/parse_fields closures; the subsequent proof must relate
+ these loops to the *unchanged* E1 parser by kernel conversion, not by
+ a caller-provided parser-correspondence axiom.
+*)
+Fixpoint p8_f1_forms_loop (fuel count : nat) (wire : list nat)
+    : option (P8D2Forms * list nat) :=
+  match count with
+  | 0 => Some (P8D2Nil, wire)
+  | S remaining =>
+      match p8_e1_parse_form_fuel fuel wire with
+      | None => None
+      | Some (child, next) =>
+          match p8_f1_forms_loop fuel remaining next with
+          | None => None
+          | Some (children, suffix) =>
+              Some (P8D2Cons child children, suffix)
+          end
+      end
+  end.
+
+Fixpoint p8_f1_fields_loop (fuel count : nat) (wire : list nat)
+    : option (P8D2Fields * list nat) :=
+  match count with
+  | 0 => Some (P8D2FieldNil, wire)
+  | S remaining =>
+      match p8_e1_parse_text wire with
+      | None => None
+      | Some (key, after_key) =>
+          match p8_e1_parse_form_fuel fuel after_key with
+          | None => None
+          | Some (value, after_value) =>
+              match p8_f1_fields_loop fuel remaining after_value with
+              | None => None
+              | Some (fields, suffix) =>
+                  Some (P8D2FieldCons key value fields, suffix)
+              end
+          end
+      end
+  end.
+
+Lemma p8_f1_forms_loop_complete_from_children :
+  forall fuel,
+    (forall form suffix,
+      p8_d2_valid_form form = true ->
+      length (p8_e1_put_form form) <= fuel ->
+      p8_e1_parse_form_fuel fuel
+        (p8_e1_put_form form ++ suffix) = Some (form, suffix)) ->
+    forall xs suffix,
+      p8_d2_valid_forms xs = true ->
+      length (p8_e1_put_forms xs) <= fuel ->
+      p8_f1_forms_loop fuel (p8_e1_forms_count xs)
+        (p8_e1_put_forms xs ++ suffix) = Some (xs, suffix).
+Proof.
+  intros fuel Child xs.
+  induction xs as [|form rest IH]; intros suffix Valid Bound.
+  - reflexivity.
+  - cbn [p8_d2_valid_forms] in Valid.
+    apply andb_true_iff in Valid as [ValidForm ValidRest].
+    assert (BoundForm : length (p8_e1_put_form form) <= fuel).
+    { cbn [p8_e1_put_forms] in Bound.
+      rewrite app_length in Bound. lia. }
+    assert (BoundRest : length (p8_e1_put_forms rest) <= fuel).
+    { cbn [p8_e1_put_forms] in Bound.
+      rewrite app_length in Bound. lia. }
+    cbn [p8_f1_forms_loop p8_e1_forms_count p8_e1_put_forms].
+    rewrite app_assoc.
+    rewrite (Child form (p8_e1_put_forms rest ++ suffix)
+                   ValidForm BoundForm).
+    rewrite (IH suffix ValidRest BoundRest).
+    reflexivity.
+Qed.
+
+Lemma p8_f1_fields_loop_complete_from_children :
+  forall fuel,
+    (forall form suffix,
+      p8_d2_valid_form form = true ->
+      length (p8_e1_put_form form) <= fuel ->
+      p8_e1_parse_form_fuel fuel
+        (p8_e1_put_form form ++ suffix) = Some (form, suffix)) ->
+    forall fields suffix,
+      p8_d2_valid_fields fields = true ->
+      length (p8_e1_put_fields fields) <= fuel ->
+      p8_f1_fields_loop fuel (p8_e1_fields_count fields)
+        (p8_e1_put_fields fields ++ suffix) = Some (fields, suffix).
+Proof.
+  intros fuel Child fields.
+  induction fields as [|key value rest IH]; intros suffix Valid Bound.
+  - reflexivity.
+  - cbn [p8_d2_valid_fields] in Valid.
+    destruct (p8_d2_text_valid key) eqn:ValidKey;
+    destruct (p8_d2_valid_form value) eqn:ValidValue;
+    destruct (p8_d2_valid_fields rest) eqn:ValidRest;
+      simpl in Valid; try discriminate.
+    assert (BoundValue : length (p8_e1_put_form value) <= fuel).
+    { cbn [p8_e1_put_fields] in Bound.
+      repeat rewrite app_length in Bound. lia. }
+    assert (BoundRest : length (p8_e1_put_fields rest) <= fuel).
+    { cbn [p8_e1_put_fields] in Bound.
+      repeat rewrite app_length in Bound. lia. }
+    cbn [p8_f1_fields_loop p8_e1_fields_count p8_e1_put_fields].
+    repeat rewrite app_assoc.
+    rewrite (p8_f1_text_prefix_roundtrip key
+      (p8_e1_put_form value ++ p8_e1_put_fields rest ++ suffix)
+      ValidKey).
+    rewrite (Child value (p8_e1_put_fields rest ++ suffix)
+      ValidValue BoundValue).
+    rewrite (IH suffix ValidRest BoundRest).
+    reflexivity.
+Qed.
+
+Print Assumptions p8_f1_forms_loop_complete_from_children.
+Print Assumptions p8_f1_fields_loop_complete_from_children.
+
 Print Assumptions p8_f1_atom_prefix_all_fuel.
 Print Assumptions p8_f1_empty_ordered_prefix.
 Print Assumptions p8_f1_empty_unordered_prefix.
