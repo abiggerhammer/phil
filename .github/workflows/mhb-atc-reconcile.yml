@@ -34,7 +34,7 @@ jobs:
   reconcile:
     if: >-
       github.event_name != 'pull_request' ||
-      (startsWith(github.event.pull_request.head.ref, 'hamster/staged/') &&
+      (startsWith(github.event.pull_request.head.ref, 'hamster/admitted/') &&
        github.event.pull_request.head.repo.full_name == github.repository)
     runs-on: ubuntu-24.04
     steps:
@@ -61,11 +61,16 @@ jobs:
             jq -s 'add | map(select(has("pull_request") | not)) | unique_by(.number)' \
               /tmp/atc-staged.json /tmp/atc-admitting.json /tmp/atc-admitted.json \
               > /tmp/atc-issues.json
+            # A COMPLETE protected-ref snapshot is required for orphan detection.
+            # Exact canonical ref derivation is performed by trusted-main code.
+            gh api --paginate "repos/$GH_REPO/git/matching-refs/heads/hamster/admitted" \
+              | jq -s 'add // []' > /tmp/atc-admitted-refs.json
             printf '%s\n' '[]' > /tmp/atc-prs.json
             if [ "$(jq 'length' /tmp/atc-issues.json)" -gt 0 ]; then
               python3 scripts/mhb_atc_reconcile.py \
                 --issues /tmp/atc-issues.json --prs /tmp/atc-prs.json \
-                --repo "$GH_REPO" --branches-only > /tmp/atc-branches.json
+                --repo "$GH_REPO" --refs /tmp/atc-admitted-refs.json \
+                --branches-only > /tmp/atc-branches.json
               : > /tmp/atc-pr-pages.ndjson
               owner="${GH_REPO%%/*}"
               while IFS= read -r branch; do
@@ -78,7 +83,8 @@ jobs:
             fi
             python3 scripts/mhb_atc_reconcile.py \
               --issues /tmp/atc-issues.json --prs /tmp/atc-prs.json \
-              --repo "$GH_REPO" > /tmp/atc-plan.json
+              --repo "$GH_REPO" --refs /tmp/atc-admitted-refs.json \
+              > /tmp/atc-plan.json
           }
 
           read_snapshot
@@ -117,8 +123,14 @@ jobs:
 
           if [ "$action" = "retry" ]; then
             test "$prior" = "atc: admitting"
+            # A publisher ref appearing since planning makes recovery unsafe.
+            admitted="hamster/admitted/atc-$issue-$lane-$sha"
+            fresh_refs="$(gh api "repos/$GH_REPO/git/matching-refs/heads/$admitted")"
+            test "$(jq --arg ref "refs/heads/$admitted" '[.[] | select(.ref == $ref)] | length' <<<"$fresh_refs")" = "0" || {
+              echo "Cannot requeue orphan protected ref $admitted" >&2; exit 1;
+            }
             gh issue comment "$issue" --repo "$GH_REPO" \
-              --body "ATC recovery: reservation expired without any matching PR. Returned exact head $sha to staged queue; this does not authorize a merge."
+              --body "ATC recovery: reservation expired without admitted ref or matching PR. Returned exact head $sha to staged queue; this does not authorize a merge."
             gh issue edit "$issue" --repo "$GH_REPO" \
               --remove-label "atc: admitting" --add-label "atc: staged"
           elif [ "$action" = "repair" ]; then
@@ -139,8 +151,10 @@ jobs:
             live="$(gh api "repos/$GH_REPO/pulls/$number")"
             test "$(jq -r '.state' <<<"$live")" = "closed"
             test "$(jq -r '.head.sha' <<<"$live")" = "$sha"
+            test "$(jq -r '.head.ref' <<<"$live")" = "hamster/admitted/atc-$issue-$lane-$sha"
+            test "$(jq -r '.base.ref' <<<"$live")" = "main"
             gh issue comment "$issue" --repo "$GH_REPO" \
-              --body "ATC slot released: linked PR #$number is closed at exact head $sha. This records capacity release only, not proof or merge approval."
+              --body "ATC slot released: immutable linked PR #$number closed at exact head $sha. This records capacity release only, not proof or merge approval."
             gh issue close "$issue" --repo "$GH_REPO" --reason completed
           else
             echo "Unexpected ATC action: $action" >&2
