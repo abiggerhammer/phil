@@ -506,6 +506,8 @@ verifySteveGetLLVMPointerFlow emitted = do
         "%phil_runtime_choice_payload_slot_SteveGet_get_entry_get_bytes = alloca ptr"
       readCall =
         "@phil_runtime_choice_SteveGet_get_entry_BlobProvider_read("
+      exactReadCall =
+        "@phil_runtime_choice_SteveGet_get_entry_BlobProvider_read(ptr %get_id, ptr %phil_runtime_choice_payload_slot_SteveGet_get_entry_get_bytes)"
       payloadLoad =
         "get_check:\n  %get_bytes = load ptr, ptr %phil_runtime_choice_payload_slot_SteveGet_get_entry_get_bytes"
       digestCall =
@@ -513,6 +515,7 @@ verifySteveGetLLVMPointerFlow emitted = do
       releaseCall = "call void @phil_runtime_release(ptr %get_bytes)"
       count textValue = Text.count textValue emitted
   if count readSlot == 1 && count readCall == 2
+       && count exactReadCall == 1
     then Right () else Left SteveGetLLVMReadResultSlotMissing
   if count payloadLoad == 1
     then Right () else Left SteveGetLLVMPayloadLoadMissing
