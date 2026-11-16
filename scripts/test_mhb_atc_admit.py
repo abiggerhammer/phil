@@ -8,7 +8,20 @@ import sys
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 from mhb_atc_stage import parse_intent
-from mhb_atc_admit import plan, STAGED_LABEL, ACTIVE_LABEL
+from mhb_atc_admit import (plan as production_plan, STAGED_LABEL, ACTIVE_LABEL,
+                              filter_reconciliation_issues)
+from mhb_atc_stage import MARKER
+
+EMPTY_VERIFIED_INVENTORY = {
+    "decision": "inventory-validated", "admission_clear": True,
+    "active_refs": [], "closed_history": [], "total_refs": 0,
+}
+
+
+def plan(issues, prs, inventory=None):
+    return production_plan(issues, prs, EMPTY_VERIFIED_INVENTORY
+                           if inventory is None else inventory)
+
 
 A, B = ("a" * 40, "b" * 40)
 
@@ -51,6 +64,12 @@ class AdmissionTests(unittest.TestCase):
         live = pr(branch="some/other/branch")
         live["labels"].append(label(ACTIVE_LABEL))
         self.assertEqual(plan([issue()], [live])["decision"], "hold")
+
+    def test_unlabelled_immutable_admitted_pr_blocks_slot(self):
+        # A crashed publisher may leave an open PR before labels are written.
+        live = pr(branch="hamster/admitted/atc-101-mhb-atc-" + A)
+        self.assertEqual(plan([issue()], [live])["decision"], "hold")
+        self.assertEqual(plan([issue()], [live])["open_staged_prs"], [555])
 
     def test_admitted_pr_seen_in_issues_api_is_not_a_candidate_issue(self):
         live = pr()
@@ -124,6 +143,89 @@ class AdmissionTests(unittest.TestCase):
             with self.subTest(pr=bad):
                 with self.assertRaises(ValueError):
                     plan([issue()], [bad])
+
+    def test_unknown_unresolved_protected_ref_holds_without_open_pr(self):
+        evidence = {"decision": "inventory-validated",
+                    "admission_clear": False,
+                    "active_refs": [{"issue": 1701, "pr": 1702}]}
+        self.assertEqual(plan([issue()], [], evidence)["decision"], "hold")
+
+    def test_missing_protected_inventory_is_never_admission(self):
+        for evidence in (None, {}, {"decision": "hold"},
+                         {"decision": "inventory-validated",
+                          "active_refs": [], "admission_clear": "yes"}):
+            with self.subTest(evidence=evidence), self.assertRaises(ValueError):
+                production_plan([issue()], [], evidence)
+
+    def test_lost_final_lifecycle_label_fails_closed(self):
+        x = issue()
+        x["labels"] = [label("lane: mhb-atc")]
+        with self.assertRaisesRegex(ValueError, "lost all lifecycle"):
+            plan([x], [])
+
+    def test_partially_applied_add_first_blocks_instead_of_disappearing(self):
+        x = issue()
+        x["labels"].append(label("atc: admitting"))
+        with self.assertRaisesRegex(ValueError, "ambiguous"):
+            plan([x], [])
+
+    def test_r2_untrusted_unlabelled_title_is_not_damaged_reservation(self):
+        outsider = {
+            "number": 1999, "state": "open",
+            "title": "ATC candidate: please investigate",
+            "body": "An ordinary issue", "labels": [],
+            "user": {"login": "ordinary-outsider", "id": 12345, "type": "User"},
+        }
+        selected = plan([outsider, issue()], [])
+        self.assertEqual(selected["decision"], "would-admit")
+        self.assertEqual(selected["candidate_issue"], 101)
+        # The reconciling workflow uses this exact shared classifier.
+        self.assertEqual(filter_reconciliation_issues([outsider, issue()]),
+                         [issue()])
+
+    def test_r2_untrusted_unlabelled_marker_quote_is_not_candidate(self):
+        outsider = {
+            "number": 1999, "state": "open",
+            "title": "Question about the staging marker",
+            "body": MARKER + "\nThis is quoted documentation.",
+            "labels": [], "user": {"login": "ordinary-outsider"},
+        }
+        self.assertEqual(plan([outsider, issue()], [])["candidate_issue"], 101)
+        self.assertEqual(filter_reconciliation_issues([outsider, issue()]),
+                         [issue()])
+
+    def test_r2_actual_trusted_lost_label_still_blocks_both_planners(self):
+        trusted = issue()
+        trusted["labels"] = [{"name": "lane: mhb-atc"}]
+        with self.assertRaisesRegex(ValueError, "lost all lifecycle"):
+            plan([trusted], [])
+        self.assertEqual(filter_reconciliation_issues([trusted]), [trusted])
+
+    def test_r2_untrusted_labelled_candidate_still_fails_closed(self):
+        outsider = {
+            "number": 1999, "state": "open",
+            "title": "ordinary issue", "body": "not an ATC candidate",
+            "labels": [label("atc: staged")],
+            "user": {"login": "ordinary-outsider"},
+        }
+        self.assertEqual(filter_reconciliation_issues([outsider]), [outsider])
+        with self.assertRaisesRegex(ValueError, "not created by trusted"):
+            plan([outsider], [])
+
+    def test_r2_reconciler_uses_the_same_trusted_classifier(self):
+        workflow = (Path(__file__).resolve().parents[1] /
+                    ".github/workflows/mhb-atc-reconcile.yml").read_text(encoding="utf-8")
+        self.assertIn("python3 scripts/mhb_atc_admit.py --filter-candidates", workflow)
+        self.assertIn("--issues /tmp/atc-all-open-issues.json > /tmp/atc-issues.json",
+                      workflow)
+        self.assertNotIn("map(select((has(\"pull_request\") | not) and", workflow)
+
+    def test_r2_duplicate_lifecycle_labels_are_not_filtered(self):
+        damaged = issue()
+        damaged["labels"].append(label("atc: admitting"))
+        self.assertEqual(filter_reconciliation_issues([damaged]), [damaged])
+        with self.assertRaisesRegex(ValueError, "ambiguous"):
+            plan([damaged], [])
 
     def test_only_staged_issues_are_candidates(self):
         arbitrary = {"state": "open", "number": 2, "labels": [],

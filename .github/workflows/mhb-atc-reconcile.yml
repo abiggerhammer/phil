@@ -34,7 +34,7 @@ jobs:
   reconcile:
     if: >-
       github.event_name != 'pull_request' ||
-      (startsWith(github.event.pull_request.head.ref, 'hamster/staged/') &&
+      (startsWith(github.event.pull_request.head.ref, 'hamster/admitted/') &&
        github.event.pull_request.head.repo.full_name == github.repository)
     runs-on: ubuntu-24.04
     steps:
@@ -49,23 +49,30 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           GH_REPO: ${{ github.repository }}
           MODE: ${{ inputs.mode || 'reconcile' }}
+          PUBLISHER_APP_ID: ${{ vars.MHB_ATC_PUBLISHER_APP_ID }}
+          PUBLISHER_APP_SLUG: ${{ vars.MHB_ATC_PUBLISHER_APP_SLUG }}
         shell: bash
         run: |
           set -euo pipefail
 
           read_snapshot() {
-            for state in staged admitting admitted; do
-              gh api --paginate "repos/$GH_REPO/issues?state=open&labels=atc%3A%20$state&per_page=100" \
-                | jq -s 'add // []' > "/tmp/atc-$state.json"
-            done
-            jq -s 'add | map(select(has("pull_request") | not)) | unique_by(.number)' \
-              /tmp/atc-staged.json /tmp/atc-admitting.json /tmp/atc-admitted.json \
-              > /tmp/atc-issues.json
+            # Share the admission planner's creator-aware classifier.
+            # Untrusted, unlabelled issue text is NOT a reservation; trusted
+            # lost-label issues and ANY lifecycle-labelled claim still block.
+            gh api --paginate "repos/$GH_REPO/issues?state=open&per_page=100" \
+              | jq -s 'add // []' > /tmp/atc-all-open-issues.json
+            python3 scripts/mhb_atc_admit.py --filter-candidates \
+              --issues /tmp/atc-all-open-issues.json > /tmp/atc-issues.json
+            # Reconcile the ENTIRE protected namespace, including refs whose
+            # original issue is now closed or has missing lifecycle labels.
+            . scripts/mhb_atc_inventory_snapshot.sh
             printf '%s\n' '[]' > /tmp/atc-prs.json
             if [ "$(jq 'length' /tmp/atc-issues.json)" -gt 0 ]; then
               python3 scripts/mhb_atc_reconcile.py \
                 --issues /tmp/atc-issues.json --prs /tmp/atc-prs.json \
-                --repo "$GH_REPO" --branches-only > /tmp/atc-branches.json
+                --repo "$GH_REPO" --refs /tmp/atc-admitted-refs.json \
+                --publisher-json /tmp/atc-publisher-identity.json \
+                --branches-only > /tmp/atc-branches.json
               : > /tmp/atc-pr-pages.ndjson
               owner="${GH_REPO%%/*}"
               while IFS= read -r branch; do
@@ -78,7 +85,9 @@ jobs:
             fi
             python3 scripts/mhb_atc_reconcile.py \
               --issues /tmp/atc-issues.json --prs /tmp/atc-prs.json \
-              --repo "$GH_REPO" > /tmp/atc-plan.json
+              --repo "$GH_REPO" --refs /tmp/atc-admitted-refs.json \
+              --publisher-json /tmp/atc-publisher-identity.json \
+              > /tmp/atc-plan.json
           }
 
           read_snapshot
@@ -117,10 +126,16 @@ jobs:
 
           if [ "$action" = "retry" ]; then
             test "$prior" = "atc: admitting"
+            # A publisher ref appearing since planning makes recovery unsafe.
+            admitted="hamster/admitted/atc-$issue-$lane-$sha"
+            fresh_refs="$(gh api "repos/$GH_REPO/git/matching-refs/heads/$admitted")"
+            test "$(jq --arg ref "refs/heads/$admitted" '[.[] | select(.ref == $ref)] | length' <<<"$fresh_refs")" = "0" || {
+              echo "Cannot requeue orphan protected ref $admitted" >&2; exit 1;
+            }
             gh issue comment "$issue" --repo "$GH_REPO" \
-              --body "ATC recovery: reservation expired without any matching PR. Returned exact head $sha to staged queue; this does not authorize a merge."
-            gh issue edit "$issue" --repo "$GH_REPO" \
-              --remove-label "atc: admitting" --add-label "atc: staged"
+              --body "ATC recovery: reservation expired without admitted ref or matching PR. Returned exact head $sha to staged queue; this does not authorize a merge."
+            gh issue edit "$issue" --repo "$GH_REPO" --add-label "atc: staged"
+            gh issue edit "$issue" --repo "$GH_REPO" --remove-label "atc: admitting"
           elif [ "$action" = "repair" ]; then
             test "$prior" = "atc: admitting" || test "$prior" = "atc: admitted"
             test -n "$number"
@@ -129,8 +144,8 @@ jobs:
                 --add-label "atc: admitted" --add-label "lane: $lane"
             fi
             if [ "$prior" = "atc: admitting" ]; then
-              gh issue edit "$issue" --repo "$GH_REPO" \
-                --remove-label "atc: admitting" --add-label "atc: admitted"
+              gh issue edit "$issue" --repo "$GH_REPO" --add-label "atc: admitted"
+              gh issue edit "$issue" --repo "$GH_REPO" --remove-label "atc: admitting"
             fi
           elif [ "$action" = "release" ]; then
             test "$prior" = "atc: admitting" || test "$prior" = "atc: admitted"
@@ -139,8 +154,10 @@ jobs:
             live="$(gh api "repos/$GH_REPO/pulls/$number")"
             test "$(jq -r '.state' <<<"$live")" = "closed"
             test "$(jq -r '.head.sha' <<<"$live")" = "$sha"
+            test "$(jq -r '.head.ref' <<<"$live")" = "hamster/admitted/atc-$issue-$lane-$sha"
+            test "$(jq -r '.base.ref' <<<"$live")" = "main"
             gh issue comment "$issue" --repo "$GH_REPO" \
-              --body "ATC slot released: linked PR #$number is closed at exact head $sha. This records capacity release only, not proof or merge approval."
+              --body "ATC slot released: immutable linked PR #$number closed at exact head $sha. This records capacity release only, not proof or merge approval."
             gh issue close "$issue" --repo "$GH_REPO" --reason completed
           else
             echo "Unexpected ATC action: $action" >&2

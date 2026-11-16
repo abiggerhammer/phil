@@ -19,9 +19,10 @@ class ScheduledAdmissionGuardTests(unittest.TestCase):
     def test_schedule_does_not_admit_without_exact_opt_in(self):
         gate = (
             "    if: >-\n"
-            "      github.event_name == 'workflow_dispatch' ||\n"
-            "      (github.event_name == 'schedule' &&\n"
-            "       vars.MHB_ATC_AUTO_ADMIT_ENABLED == 'true')\n"
+            "      github.ref == 'refs/heads/main' &&\n"
+            "      (github.event_name == 'workflow_dispatch' ||\n"
+            "       (github.event_name == 'schedule' &&\n"
+            "        vars.MHB_ATC_AUTO_ADMIT_ENABLED == 'true'))\n"
         )
         self.assertEqual(self.source.count(gate), 1)
         self.assertEqual(
@@ -50,9 +51,15 @@ class ScheduledAdmissionGuardTests(unittest.TestCase):
             "MODE: ${{ github.event_name == 'schedule' && 'admit-one' || inputs.mode }}",
             self.source)
         self.assertIn("test \"$live\" = \"$expected\"", self.source)
-        self.assertIn("gh issue edit \"$issue\" --repo \"$GH_REPO\" \\", self.source)
+        self.assertIn('gh issue edit "$issue" --repo "$GH_REPO" --add-label "atc: admitting"', self.source)
+        self.assertIn('gh issue edit "$issue" --repo "$GH_REPO" --remove-label "atc: staged"', self.source)
         self.assertIn("--add-label \"atc: admitting\"", self.source)
-        self.assertIn("HAMSTER_PR_TOKEN: ${{ secrets.HAMSTER_PR_TOKEN }}",
+        self.assertNotIn("HAMSTER_PR_TOKEN", self.source)
+        self.assertIn("    environment: atc-publisher", self.source)
+        self.assertIn("uses: actions/create-github-app-token@64ab729a6294000f5aa4a4bc0b73d1f32bc45510 # v3", self.source)
+        self.assertIn("IMMUTABLE_ENABLED: ${{ vars.MHB_ATC_IMMUTABLE_HEADS_ENABLED }}",
+                      self.source)
+        self.assertIn("PUBLISHER_TOKEN: ${{ steps.publisher_token.outputs.token }}",
                       self.source)
 
 

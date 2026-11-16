@@ -12,6 +12,7 @@ import json
 import sys
 
 from mhb_atc_admit import ACTIVE_LABEL, STAGED_LABEL, TRUSTED_CREATOR, machine_record, names
+from mhb_atc_immutable import contract, github_ref_sha, verify_pr
 
 ADMITTING_LABEL = "atc: admitting"
 STATES = (STAGED_LABEL, ADMITTING_LABEL, ACTIVE_LABEL)
@@ -53,80 +54,71 @@ def candidate(issue: dict) -> dict:
             "created_at": timestamp(issue.get("created_at"))}
 
 
-def pr_for_issue(pr: dict, item: dict, repo: str) -> dict:
-    """Require a unique exact-SHA PR with a canonical link to its candidate."""
-    if not isinstance(pr, dict) or pr.get("state") not in ("open", "closed"):
-        raise ValueError("unknown PR lifecycle state")
-    number = pr.get("number")
-    if type(number) is not int or number <= 0:
-        raise ValueError("invalid PR number")
-    head, base = pr.get("head"), pr.get("base")
-    if not isinstance(head, dict) or not isinstance(base, dict):
-        raise ValueError("PR missing branch identities")
-    hrepo, brepo = head.get("repo"), base.get("repo")
-    if not isinstance(hrepo, dict) or not isinstance(brepo, dict):
-        raise ValueError("PR repository provenance missing")
-    if (head.get("ref") != item["branch"] or head.get("sha") != item["head_sha"]
-        or hrepo.get("full_name") != repo or base.get("ref") != "main"
-        or brepo.get("full_name") != repo):
-        raise ValueError("PR branch/head/base identity mismatch")
-    if pr.get("title") != "MHB-ATC admission: " + item["lane"] + " / " + str(item["issue"]):
-        raise ValueError("PR admission title mismatch")
-    body = pr.get("body")
-    expected_lines = [
-        "MHB-ATC admitted staged candidate; this PR is **not** merge clearance.",
-        "- Candidate issue: #" + str(item["issue"]),
-        "- Lane: " + item["lane"],
-        "- Staged branch: " + item["branch"],
-        "- Exact registered head: " + item["head_sha"],
-    ]
-    if not isinstance(body, str) or any(body.splitlines().count(line) != 1 for line in expected_lines):
-        raise ValueError("PR admission binding missing or ambiguous")
+def pr_for_issue(pr: dict, item: dict, repo: str, publisher: dict) -> dict:
+    """Bind a PR to the canonical protected admitted head, never staged ref."""
+    binding = contract(item["issue"], item["lane"], item["branch"],
+                       item["head_sha"], repo)
+    check = verify_pr(pr, binding, publisher)
     label_set = names(pr)
     lane_labels = {l for l in label_set if l.startswith("lane: ")}
     if lane_labels and lane_labels != {"lane: " + item["lane"]}:
         raise ValueError("PR has conflicting lane ownership labels")
     if STAGED_LABEL in label_set or ADMITTING_LABEL in label_set:
         raise ValueError("PR has an invalid ATC state label")
-    return {"pr": number, "state": pr["state"],
+    return {"pr": check["pr"], "state": pr["state"],
             "needs_label": ACTIVE_LABEL not in label_set or
                            "lane: " + item["lane"] not in label_set}
 
-
-def plan(issues: list, prs: list, repo: str, now: dt.datetime) -> dict:
+def plan(issues: list, prs: list, refs: list, repo: str, now: dt.datetime, publisher: dict) -> dict:
     """Return at most one idempotent write or a diagnostic hold.
 
     All candidates are validated before any action is returned. Unknown or
     ambiguous linked PRs fail closed; a stale reservation with no PR may be
     returned to the staging queue only after a grace period.
     """
-    if not isinstance(issues, list) or not isinstance(prs, list):
+    if not isinstance(issues, list) or not isinstance(prs, list) or not isinstance(refs, list):
         raise ValueError("incomplete reconciliation snapshot")
     if not isinstance(repo, str) or "/" not in repo:
         raise ValueError("repository identity required")
     if now.tzinfo is None:
         raise ValueError("now must be timezone-aware")
     now = now.astimezone(dt.timezone.utc)
+    if not isinstance(publisher, dict) or not isinstance(publisher.get("bot_login"), str):
+        raise ValueError("authenticated publisher identity is required")
     candidates = [candidate(issue) for issue in issues]
     branches = [i["branch"] for i in candidates]
     if len(branches) != len(set(branches)):
         raise ValueError("duplicate queue identities")
-    all_branches = set(branches)
-    by_branch: dict[str, list[dict]] = {b: [] for b in all_branches}
+    # Every live candidate has a deterministic admitted-ref identity.
+    bindings = {i["branch"]: contract(i["issue"], i["lane"], i["branch"],
+                                      i["head_sha"], repo) for i in candidates}
+    by_admitted: dict[str, list[dict]] = {
+        b["admitted_branch"]: [] for b in bindings.values()}
     for pr in prs:
         if not isinstance(pr, dict) or not isinstance(pr.get("head"), dict):
             raise ValueError("malformed PR snapshot")
         branch = pr["head"].get("ref")
-        if branch not in all_branches:
-            raise ValueError("PR from unknown candidate branch in snapshot")
-        by_branch[branch].append(pr)
+        if branch not in by_admitted:
+            raise ValueError("PR from unknown admitted candidate in snapshot")
+        by_admitted[branch].append(pr)
 
     actions = []
     for item in candidates:
-        related = by_branch[item["branch"]]
+        binding = bindings[item["branch"]]
+        admitted = binding["admitted_branch"]
+        related = by_admitted[admitted]
         if len(related) > 1:
-            raise ValueError("multiple PRs exist for candidate branch")
-        pr = pr_for_issue(related[0], item, repo) if related else None
+            raise ValueError("multiple PRs exist for admitted candidate")
+        ref_sha = github_ref_sha(refs, admitted)
+        if ref_sha is not None and ref_sha != item["head_sha"]:
+            raise ValueError("admitted protected ref SHA drift")
+        if related and ref_sha is None:
+            raise ValueError("linked PR exists but admitted ref is missing")
+        pr = pr_for_issue(related[0], item, repo, publisher) if related else None
+        if pr is None and ref_sha is not None:
+            # An interrupted create-ref -> create-PR transaction must never
+            # be auto-requeued: another attempt would reuse/squat the ref.
+            raise ValueError("orphan admitted ref without PR: manual reconciliation required")
         state = item["state"]
         if pr is not None and pr["state"] == "closed":
             # A closed PR consumes no active CI slot. An explicit admission
@@ -166,6 +158,9 @@ def main() -> int:
     p.add_argument("--issues", required=True)
     p.add_argument("--prs", required=True)
     p.add_argument("--repo", required=True)
+    p.add_argument("--refs", required=True, help="complete admitted-ref API snapshot")
+    p.add_argument("--publisher-json", required=True,
+                   help="verified GitHub App/bot platform identity snapshot")
     p.add_argument("--branches-only", action="store_true",
                    help="emit validated candidate branch list and no actions")
     args = p.parse_args()
@@ -176,12 +171,18 @@ def main() -> int:
         branches = [i["branch"] for i in items]
         if len(branches) != len(set(branches)):
             raise ValueError("duplicate candidate branches")
-        print(json.dumps(sorted(branches)))
+        print(json.dumps(sorted(contract(i["issue"], i["lane"], i["branch"],
+                                         i["head_sha"], args.repo)["admitted_branch"]
+                                for i in items)))
         return 0
     with open(args.prs, encoding="utf-8") as handle:
         prs = json.load(handle)
-    print(json.dumps(plan(issues, prs, args.repo,
-                          dt.datetime.now(dt.timezone.utc)), sort_keys=True))
+    with open(args.refs, encoding="utf-8") as handle:
+        refs = json.load(handle)
+    with open(args.publisher_json, encoding="utf-8") as handle:
+        publisher = json.load(handle)
+    print(json.dumps(plan(issues, prs, refs, args.repo,
+                          dt.datetime.now(dt.timezone.utc), publisher), sort_keys=True))
     return 0
 
 

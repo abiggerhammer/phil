@@ -13,6 +13,7 @@ import re
 import sys
 
 from mhb_atc_stage import MARKER, parse_intent
+from mhb_atc_immutable import ADMITTED_PREFIX
 
 MARKER_FENCE = re.compile(r"~~~json\n(\{.*?\})\n~~~", re.DOTALL)
 SHA = re.compile(r"[a-f0-9]{40}\Z")
@@ -34,6 +35,41 @@ def names(obj: dict) -> set[str]:
     return output
 
 
+def is_atc_candidate_issue(issue: dict) -> bool:
+    """Shared classification for admission and reconciliation.
+
+    Lifecycle-labelled issues are always inspected, including untrusted ones:
+    a claimed controller state must never silently become an admission.
+    Unlabelled lookalikes are considered damaged reservations ONLY when their
+    original GitHub creator is the trusted staging bot. Text alone is not
+    evidence of a reservation; ordinary outsiders may quote either marker.
+    Protected-ref inventory independently resolves its original issues.
+    """
+    if not isinstance(issue, dict) or issue.get("state") != "open":
+        raise ValueError("unexpected issue in open-issue snapshot")
+    labels = names(issue)
+    if {STAGED_LABEL, ADMITTING_LABEL, ACTIVE_LABEL} & labels:
+        return True
+    if "pull_request" in issue:
+        return False
+    title, body = issue.get("title"), issue.get("body")
+    looks_like_candidate = (
+        (isinstance(title, str) and title.startswith("ATC candidate: ")) or
+        (isinstance(body, str) and body.startswith(MARKER + "\n"))
+    )
+    creator = issue.get("user")
+    return (looks_like_candidate and isinstance(creator, dict)
+            and creator.get("login") == TRUSTED_CREATOR)
+
+
+def filter_reconciliation_issues(issues: list) -> list[dict]:
+    """Full open-issue snapshot -> controller-relevant issue records only."""
+    if not isinstance(issues, list):
+        raise ValueError("incomplete open issue snapshot")
+    return [i for i in issues
+            if is_atc_candidate_issue(i) and "pull_request" not in i]
+
+
 def machine_record(issue: dict) -> dict:
     body = issue.get("body", "")
     if not isinstance(body, str) or not body.startswith(MARKER + "\n"):
@@ -52,10 +88,15 @@ def machine_record(issue: dict) -> dict:
     return parsed
 
 
-def plan(issues: list, prs: list) -> dict:
+def plan(issues: list, prs: list, inventory: dict) -> dict:
     """Do not admit until *all* MHB-managed in-flight PRs are cleared."""
     if not isinstance(issues, list) or not isinstance(prs, list):
         raise ValueError("incomplete API snapshot")
+    if (not isinstance(inventory, dict) or
+        inventory.get("decision") != "inventory-validated" or
+        type(inventory.get("admission_clear")) is not bool or
+        not isinstance(inventory.get("active_refs"), list)):
+        raise ValueError("complete authenticated protected-ref inventory required")
     active_prs: list[int] = []
     active_branches: set[str] = set()
     for pr in prs:
@@ -66,7 +107,8 @@ def plan(issues: list, prs: list) -> dict:
             raise ValueError("PR missing head ref")
         branch = head["ref"]
         label_names = names(pr)
-        if branch.startswith("hamster/staged/") or ACTIVE_LABEL in label_names:
+        if (branch.startswith("hamster/staged/") or
+            branch.startswith(ADMITTED_PREFIX) or ACTIVE_LABEL in label_names):
             number = pr.get("number")
             if type(number) is not int or number < 1:
                 raise ValueError("invalid active PR number")
@@ -79,9 +121,13 @@ def plan(issues: list, prs: list) -> dict:
     for issue in issues:
         if not isinstance(issue, dict) or issue.get("state") != "open":
             raise ValueError("unexpected issue in open-issue snapshot")
+        if not is_atc_candidate_issue(issue):
+            continue
         labels = names(issue)
         if not ({STAGED_LABEL, ADMITTING_LABEL, ACTIVE_LABEL} & labels):
-            continue
+            # Only a genuine trusted-stage bot issue can get here without a
+            # lifecycle label. An untrusted title/body lookalike was ignored.
+            raise ValueError("ATC candidate lost all lifecycle labels")
         if "pull_request" in issue:
             # PRs also appear in the GitHub Issues API. Admitted PRs are
             # deliberately labelled and already counted from the PR listing.
@@ -118,10 +164,11 @@ def plan(issues: list, prs: list) -> dict:
 
     # An admitting/admitted issue may be awaiting recovery. Fail closed
     # rather than declaring the slot free simply because the PR disappeared.
-    if active_prs or admitted_issues:
+    if active_prs or admitted_issues or inventory['active_refs']:
         return {"decision": "hold", "reason": "active or unreconciled admissions",
                 "open_staged_prs": sorted(active_prs),
-                "unreconciled_issue_ids": sorted(admitted_issues)}
+                "unreconciled_issue_ids": sorted(admitted_issues),
+                "protected_active_refs": inventory["active_refs"]}
     if not candidates:
         return {"decision": "hold", "reason": "no staged candidates"}
     _, number, record = min(candidates, key=lambda v: (v[0], v[1]))
@@ -134,13 +181,26 @@ def plan(issues: list, prs: list) -> dict:
 def main() -> int:
     p = argparse.ArgumentParser(description=__doc__)
     p.add_argument("--issues", required=True, help="JSON array of all open issues")
-    p.add_argument("--prs", required=True, help="JSON array of all open PRs")
+    p.add_argument("--prs", help="JSON array of all open PRs")
+    p.add_argument("--inventory",
+                   help="complete checked protected-ref issue/PR inventory")
+    p.add_argument("--filter-candidates", action="store_true",
+                   help="print trusted controller issue subset for reconciliation")
     args = p.parse_args()
     with open(args.issues, encoding="utf-8") as f:
         issues = json.load(f)
+    if args.filter_candidates:
+        if args.prs or args.inventory:
+            raise ValueError("candidate filtering cannot accept admission inputs")
+        print(json.dumps(filter_reconciliation_issues(issues), sort_keys=True))
+        return 0
+    if not args.prs or not args.inventory:
+        raise ValueError("admission requires PR and protected-ref inventories")
     with open(args.prs, encoding="utf-8") as f:
         prs = json.load(f)
-    print(json.dumps(plan(issues, prs), sort_keys=True))
+    with open(args.inventory, encoding="utf-8") as f:
+        inventory = json.load(f)
+    print(json.dumps(plan(issues, prs, inventory), sort_keys=True))
     return 0
 
 
