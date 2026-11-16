@@ -51,8 +51,8 @@ Proof. intros [a b c d e f g h]. reflexivity. Qed.
 
 Definition ofFields (fields : list string) : option SourceJoin :=
   match fields with
-  | [hash;root;flag;permit;payload;left;right;result] =>
-      Some (mkSourceJoin hash root flag permit payload left right result)
+  | [hash;root;flag;permit;payload;leftView;rightView;result] =>
+      Some (mkSourceJoin hash root flag permit payload leftView rightView result)
   | _ => None
   end.
 
@@ -64,21 +64,21 @@ Definition loanFreeRetained : string := "U1A1L1N0".
 Definition noPredecessor : string := "UNREACHED".
 
 Definition caseValid (t : SourceJoin) : bool :=
-  let left := leftStatus t in
-  let right := rightStatus t in
+  let leftView := leftStatus t in
+  let rightView := rightStatus t in
   let outcome := sourceDisposition t in
-  (String.eqb left loanFreeDropped &&
-   String.eqb right loanFreeRetained &&
+  (String.eqb leftView loanFreeDropped &&
+   String.eqb rightView loanFreeRetained &&
      (String.eqb outcome "JOIN_EMPTY" ||
       String.eqb outcome "POSTJOIN_STALE"))
-  || (String.eqb left loanFreeDropped &&
-      String.eqb right loanFreeDropped &&
+  || (String.eqb leftView loanFreeDropped &&
+      String.eqb rightView loanFreeDropped &&
       String.eqb outcome "JOIN_EMPTY")
-  || (String.eqb left loanFreeRetained &&
-      String.eqb right loanFreeRetained &&
+  || (String.eqb leftView loanFreeRetained &&
+      String.eqb rightView loanFreeRetained &&
       String.eqb outcome "JOIN_PERMIT")
-  || (String.eqb left noPredecessor &&
-      String.eqb right noPredecessor &&
+  || (String.eqb leftView noPredecessor &&
+      String.eqb rightView noPredecessor &&
       String.eqb outcome "PREJOIN_LINEAR").
 
 Definition validSourceJoin (t : SourceJoin) : bool :=
@@ -170,11 +170,11 @@ Definition sourceJoinCheck
   then andb (String.eqb (leftStatus record) noPredecessor)
             (String.eqb (rightStatus record) noPredecessor)
   else
-    let left := finitePredecessor boolType permitType bytesType
+    let leftContext := finitePredecessor boolType permitType bytesType
       record (leftStatus record) in
-    let right := finitePredecessor boolType permitType bytesType
+    let rightContext := finitePredecessor boolType permitType bytesType
       record (rightStatus record) in
-    match J.finiteJoin (fun _ _ => true) left right with
+    match J.finiteJoin (fun _ _ => true) leftContext rightContext with
     | J.JoinRejected _ => false
     | J.JoinSuccess result =>
         match F.finiteAffine result with
