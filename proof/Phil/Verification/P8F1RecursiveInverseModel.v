@@ -513,8 +513,10 @@ Proof.
     + apply p8_f1_atom_prefix_all_fuel. exact Valid.
     + cbn [p8_d2_valid_form] in Valid.
       assert (ListBound : length (p8_e1_put_forms xs) <= fuel).
-      { cbn [p8_e1_put_form] in Bound.
-        repeat rewrite app_length in Bound. simpl in Bound. lia. }
+      { change (S (length
+          (p8_e1_frame_count (p8_e1_forms_count xs) ++
+           p8_e1_put_forms xs)) <= S fuel) in Bound.
+        rewrite app_length in Bound. lia. }
       assert (Guard :
         (p8_e1_forms_count xs <=?
          length (p8_e1_put_forms xs ++ suffix)) = true).
@@ -541,8 +543,10 @@ Proof.
     + cbn [p8_d2_valid_form] in Valid.
       apply andb_true_iff in Valid as [Strict ValidChildren].
       assert (ListBound : length (p8_e1_put_forms xs) <= fuel).
-      { cbn [p8_e1_put_form] in Bound.
-        repeat rewrite app_length in Bound. simpl in Bound. lia. }
+      { change (S (length
+          (p8_e1_frame_count (p8_e1_forms_count xs) ++
+           p8_e1_put_forms xs)) <= S fuel) in Bound.
+        rewrite app_length in Bound. lia. }
       assert (Guard :
         (p8_e1_forms_count xs <=?
          length (p8_e1_put_forms xs ++ suffix)) = true).
@@ -572,8 +576,10 @@ Proof.
     + cbn [p8_d2_valid_form] in Valid.
       apply andb_true_iff in Valid as [Strict ValidFields].
       assert (ListBound : length (p8_e1_put_fields fields) <= fuel).
-      { cbn [p8_e1_put_form] in Bound.
-        repeat rewrite app_length in Bound. simpl in Bound. lia. }
+      { change (S (length
+          (p8_e1_frame_count (p8_e1_fields_count fields) ++
+           p8_e1_put_fields fields)) <= S fuel) in Bound.
+        rewrite app_length in Bound. lia. }
       assert (Guard :
         (p8_e1_fields_count fields <=?
          length (p8_e1_put_fields fields ++ suffix)) = true).
