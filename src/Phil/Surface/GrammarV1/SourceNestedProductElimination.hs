@@ -197,6 +197,16 @@ grammarV1CheckedNestedProductElimination static declarationKey source
         pure (grammarV1BlockStatements
           (locatedValue (grammarV1FunctionBody source)))
       (side, nestedSpan) <- sourcePatternSide patternSource
+      -- An unresolved source occurrence can denote a static/global name;
+      -- the bounded lexical route must report noncompetence, not an
+      -- authoritative invalid-program judgment. Keep this outside Either.
+      case grammarV1FunctionParameterScope declarationKey source of
+        Right (_, parameterScope) ->
+          case grammarV1CheckedLetPatternBlockInScope parameterScope
+              (grammarV1FunctionBody source) of
+            Nothing -> Nothing
+            _ -> Just ()
+        Left _ -> Just ()
       typedInput <- checkedPair static (grammarV1TermParamType parameter)
       typedResult <- checkedPair static declaredResult
       case (typedInput, typedResult) of
