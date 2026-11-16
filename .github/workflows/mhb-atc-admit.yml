@@ -1,8 +1,10 @@
 name: MHB ATC Admit One (Manual)
 
-# Deliberately manual while ATC is being commissioned.
-# This does NOT modify legacy hamster auto-PR workflows.
+# Scheduled ATC admission is disabled unless the repo variable is exactly 'true'.
+# Manual dry-run/admit-one remain available, and legacy Phase 1 lanes are unchanged.
 on:
+  schedule:
+    - cron: '7,22,37,52 * * * *'
   workflow_dispatch:
     inputs:
       mode:
@@ -27,6 +29,10 @@ concurrency:
 
 jobs:
   admit:
+    if: >-
+      github.event_name == 'workflow_dispatch' ||
+      (github.event_name == 'schedule' &&
+       vars.MHB_ATC_AUTO_ADMIT_ENABLED == 'true')
     runs-on: ubuntu-24.04
     steps:
       - name: Checkout trusted main
@@ -39,7 +45,7 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
           GH_REPO: ${{ github.repository }}
-          MODE: ${{ inputs.mode }}
+          MODE: ${{ github.event_name == 'schedule' && 'admit-one' || inputs.mode }}
           # A user token rather than GITHUB_TOKEN is needed for PR creation
           # to trigger the usual pull_request CI workflows.
           HAMSTER_PR_TOKEN: ${{ secrets.HAMSTER_PR_TOKEN }}
