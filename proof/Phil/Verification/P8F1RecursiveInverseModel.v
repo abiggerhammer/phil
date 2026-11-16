@@ -446,9 +446,9 @@ Proof.
        association after reduction; orient the child equation explicitly. *)
     pose proof (Child form (p8_e1_put_forms rest ++ suffix)
       ValidForm BoundForm) as ParsedChild.
-    match goal with |- ?G => idtac "P8F1_FORM_LOOP_GOAL:" G end.
-    first [rewrite ParsedChild |
-           rewrite <- app_assoc in ParsedChild; rewrite ParsedChild].
+    (* Coq's app_assoc states right-associated = left-associated. *)
+    rewrite app_assoc in ParsedChild.
+    rewrite ParsedChild.
     rewrite (IH suffix ValidRest BoundRest).
     reflexivity.
 Qed.
@@ -481,7 +481,7 @@ Proof.
     { cbn [p8_e1_put_fields] in Bound.
       repeat rewrite app_length in Bound. lia. }
     cbn [p8_f1_fields_loop p8_e1_fields_count p8_e1_put_fields].
-    repeat rewrite app_assoc.
+    repeat rewrite <- app_assoc.
     rewrite (p8_f1_text_prefix_roundtrip key
       (p8_e1_put_form value ++ p8_e1_put_fields rest ++ suffix)
       ValidKey).
