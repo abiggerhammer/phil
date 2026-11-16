@@ -51,7 +51,7 @@ main = do
         (sourcePingDisjointPairCommutation accepted stale)
     , test "FSEM-02 disjoint Ping pairs complete all 24 terminal Close orders"
         (sourcePingDisjointTerminalInterleavings accepted stale)
-    , test "FSEM-02 25920 externally selected partner terminal schedules and 13440 mixed-prefix fault schedules"
+    , test "FSEM-02 25920 partner terminal schedules, 144 partial prefixes, 288 stale cross-partner refusals"
         (sourcePingThreeDisjointTerminalSchedules accepted stale)
     , test "FSEM-02 competing Ping sends sharing a Client predecessor refuse second use"
         (sourcePingSharedClientContention accepted stale)
@@ -2539,6 +2539,52 @@ sourcePingThreeDisjointTerminalSchedules accepted rejected = do
           "selected partner/terminal Close order changed final linear owners or spectator")
         closeOrders)
       (permutations selected))
+    selectedServerOrders
+  -- In addition to a complete externally chosen matching, exercise every
+  -- prefix of every partner selection/order. Unmatched participants remain
+  -- live and unchanged; no consumed peer may be rematched across that prefix.
+  -- Failed cross-pair requests must not perturb valid suffix replay.
+  mapM_ (\selectedServers -> do
+    let chosenPairs = zip3 selectedClientKeys selectedServers
+          (selectedRequests selectedServers)
+    mapM_ (\chosenOrder ->
+      mapM_ (\prefixLength -> do
+        let committed = take prefixLength chosenOrder
+            unmatched = drop prefixLength chosenOrder
+        prefixState <- foldM
+          (\contexts (_, _, req) -> mapLeft show (run contexts req))
+          before committed
+        mapM_ (\(freeClient, freeServer, _) ->
+          assert
+            (Map.lookup freeClient prefixState == Map.lookup freeClient before
+             && Map.lookup freeServer prefixState == Map.lookup freeServer before)
+            "partial external partner selection changed an unmatched source endpoint")
+          unmatched
+        mapM_ (\(spentClient, spentServer, _) -> do
+          mapM_ (\(_, freeServer, _) ->
+            rejectConsumed "partial-prefix spent Client with free Server"
+              spentClient clientOld prefixState (request spentClient freeServer))
+            unmatched
+          mapM_ (\(freeClient, _, _) ->
+            rejectConsumed "partial-prefix free Client with spent Server"
+              spentServer serverOld prefixState (request freeClient spentServer))
+            unmatched)
+          committed
+        spectatorContext <- maybe (Left "partial-prefix affine spectator missing") Right
+          (Map.lookup cs prefixState)
+        assert
+          (affineBindings (protocolResources spectatorContext) == affineBindings loaned
+           && sharedLoans (protocolResources spectatorContext) == sharedLoans loaned)
+          "partial external partner selection altered the independent active loan"
+        replayedPrefix <- foldM
+          (\contexts (_, _, req) -> mapLeft show (run contexts req))
+          prefixState unmatched
+        assert
+          (replayedPrefix == canonical
+           && Map.keysSet replayedPrefix == Map.keysSet before)
+          "partial-prefix rejected rematch changed valid suffix replay or owners")
+        [0..3])
+      (permutations chosenPairs))
     selectedServerOrders
   mapM_ (\order -> do
     progressed <- foldM (\contexts req -> mapLeft show (run contexts req))
