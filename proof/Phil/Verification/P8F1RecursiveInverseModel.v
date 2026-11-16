@@ -459,6 +459,13 @@ Proof.
     (* Coq's app_assoc states right-associated = left-associated. *)
     rewrite app_assoc in ParsedChild.
     rewrite ParsedChild.
+    change
+      (match p8_f1_forms_loop fuel (p8_e1_forms_count rest)
+        (p8_e1_put_forms rest ++ suffix) with
+       | None => None
+       | Some (children, suffix') =>
+           Some (P8D2Cons form children, suffix')
+       end = Some (P8D2Cons form rest, suffix)).
     rewrite (IH suffix ValidRest BoundRest).
     reflexivity.
 Qed.
@@ -497,6 +504,13 @@ Proof.
       ValidKey).
     rewrite (Child value (p8_e1_put_fields rest ++ suffix)
       ValidValue BoundValue).
+    change
+      (match p8_f1_fields_loop fuel (p8_e1_fields_count rest)
+        (p8_e1_put_fields rest ++ suffix) with
+       | None => None
+       | Some (other, suffix') =>
+           Some (P8D2FieldCons key value other, suffix')
+       end = Some (P8D2FieldCons key value rest, suffix)).
     rewrite (IH suffix eq_refl BoundRest).
     reflexivity.
 Qed.
