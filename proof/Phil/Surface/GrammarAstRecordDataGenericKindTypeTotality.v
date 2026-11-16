@@ -503,15 +503,15 @@ Proof.
   | Hnil : DerivesSequence phase1_surface_rules _ _ [] _ _ _ |- _ =>
       inversion Hnil; subst; clear Hnil
   end.
-  match goal with
-  | Hgeneric : Derives phase1_surface_rules _
-      (EOptional (ENonterminal "generic_params"))
-      _ _ (phase1_surface_optional_generic_params_tree generic_params) |- _ =>
-      destruct
-        (phase1_surface_normalize_optional_generic_params_kind_type_total_from_spine_derivation
-          generic_params _ _ _ Hgeneric)
-        as [refined_generic Hrefined_generic];
-      let refined := constr:(
+  assert (Hgeneric_total :
+    exists refined_generic,
+      phase1_surface_normalize_optional_generic_params_kind_type generic_params =
+        Some refined_generic).
+  { eapply
+      phase1_surface_normalize_optional_generic_params_kind_type_total_from_spine_derivation;
+    eassumption. }
+  destruct Hgeneric_total as [refined_generic Hrefined_generic].
+  let refined := constr:(
         {| phase1_record_generic_kind_type_spine_name := name;
            phase1_record_generic_kind_type_spine_generic_params :=
              refined_generic;
@@ -531,8 +531,7 @@ Proof.
         split;
         [ exact Hnormalize
         | eapply phase1_surface_normalize_record_generic_kind_type_tree_round_trip;
-          exact Hnormalize ] ]
-  end.
+          exact Hnormalize ] ].
 Qed.
 
 Theorem
@@ -618,15 +617,15 @@ Proof.
   | Hnil : DerivesSequence phase1_surface_rules _ _ [] _ _ _ |- _ =>
       inversion Hnil; subst; clear Hnil
   end.
-  match goal with
-  | Hgeneric : Derives phase1_surface_rules _
-      (EOptional (ENonterminal "generic_params"))
-      _ _ (phase1_surface_optional_generic_params_tree generic_params) |- _ =>
-      destruct
-        (phase1_surface_normalize_optional_generic_params_kind_type_total_from_spine_derivation
-          generic_params _ _ _ Hgeneric)
-        as [refined_generic Hrefined_generic];
-      let refined := constr:(
+  assert (Hgeneric_total :
+    exists refined_generic,
+      phase1_surface_normalize_optional_generic_params_kind_type generic_params =
+        Some refined_generic).
+  { eapply
+      phase1_surface_normalize_optional_generic_params_kind_type_total_from_spine_derivation;
+    eassumption. }
+  destruct Hgeneric_total as [refined_generic Hrefined_generic].
+  let refined := constr:(
         {| phase1_data_generic_kind_type_spine_name := name;
            phase1_data_generic_kind_type_spine_generic_params :=
              refined_generic;
@@ -648,6 +647,5 @@ Proof.
         split;
         [ exact Hnormalize
         | eapply phase1_surface_normalize_data_generic_kind_type_tree_round_trip;
-          exact Hnormalize ] ]
-  end.
+          exact Hnormalize ] ].
 Qed.
