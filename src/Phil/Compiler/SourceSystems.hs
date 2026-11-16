@@ -18,6 +18,9 @@ module Phil.Compiler.SourceSystems
   , verifiedSourceSystemsStage
   , sourceSystemsArchitectureIdentity
   , sourceSystemsProgramSemantics
+  , VerifiedSteveGetStructural
+  , VerifiedSteveGetStructuralError (..)
+  , verifyOriginalSteveGetStructural
   ) where
 
 import Phil.Compiler.SourceArchitecture
@@ -44,7 +47,10 @@ import Phil.Compiler.SourceCore
 import Phil.Compiler.SourceCorePolicy
   ( SourceCoreCorrespondencePolicy
   , SourceCorePolicyError
+  , SteveGetStructuralError
+  , SteveGetStructuralFact
   , verifySourceCorePolicy
+  , verifySteveGetStructural
   )
 import Phil.Core.Static
   ( ArchitectureInstanceDescriptor
@@ -229,3 +235,24 @@ sourceSystemsProgramSemantics
 
 mapLeft :: (a -> b) -> Either a c -> Either b c
 mapLeft f = either (Left . f) Right
+
+
+-- | A private, raw-source-rechecked STEVEGET STRUCTURAL discriminator only.
+-- This is not a native owner/loan/ABI or P9 final-use certificate.
+data VerifiedSteveGetStructural = VerifiedSteveGetStructural
+  VerifiedSourceSystemsProduction
+  SteveGetStructuralFact
+  deriving (Eq, Show)
+
+data VerifiedSteveGetStructuralError
+  = VerifiedSteveGetStructuralRejected SteveGetStructuralError
+  deriving (Eq, Show)
+
+verifyOriginalSteveGetStructural
+  :: VerifiedSourceSystemsProduction
+  -> Either VerifiedSteveGetStructuralError VerifiedSteveGetStructural
+verifyOriginalSteveGetStructural production@(VerifiedSourceSystemsProduction
+    (SourceSystemsAdmission architecture program _) _ _) = do
+  fact <- mapLeft VerifiedSteveGetStructuralRejected
+    (verifySteveGetStructural architecture program)
+  pure (VerifiedSteveGetStructural production fact)
