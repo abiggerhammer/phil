@@ -15,6 +15,8 @@ jobs:
         with:
           ghc-version: '9.6.7'
           cabal-version: 'latest'
+      - name: Populate Cabal package database with strict phil-core
+        run: cabal build lib:phil-core --ghc-options=-Werror
       - name: Compile real Steve native provider ABI and A/B owner-swap runner
         run: |
           cabal exec -- ghc -isrc -iruntime/phase1 -itest -Wall -Werror \
