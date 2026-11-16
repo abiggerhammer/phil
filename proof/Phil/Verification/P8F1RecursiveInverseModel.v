@@ -381,41 +381,51 @@ Qed.
  these loops to the *unchanged* E1 parser by kernel conversion, not by
  a caller-provided parser-correspondence axiom.
 *)
-Fixpoint p8_f1_forms_loop (fuel count : nat) (wire : list nat)
+(* Exact E1 local count-loop shape: fuel is captured by the closure,
+   while the recursive argument is only the declared collection count.
+   Unlike an extra-argument global Fixpoint, this is kernel-convertible
+   with the unchanged E1 parser's corresponding local let fix. *)
+Definition p8_f1_forms_loop (fuel count : nat) (wire : list nat)
     : option (P8D2Forms * list nat) :=
-  match count with
-  | 0 => Some (P8D2Nil, wire)
-  | S remaining =>
-      match p8_e1_parse_form_fuel fuel wire with
-      | None => None
-      | Some (child, next) =>
-          match p8_f1_forms_loop fuel remaining next with
-          | None => None
-          | Some (children, suffix) =>
-              Some (P8D2Cons child children, suffix)
-          end
-      end
-  end.
+  let fix parse_forms (n : nat) (input : list nat) {struct n}
+      : option (P8D2Forms * list nat) :=
+    match n with
+    | 0 => Some (P8D2Nil, input)
+    | S remaining =>
+        match p8_e1_parse_form_fuel fuel input with
+        | None => None
+        | Some (child, next) =>
+            match parse_forms remaining next with
+            | None => None
+            | Some (children, suffix) =>
+                Some (P8D2Cons child children, suffix)
+            end
+        end
+    end in
+  parse_forms count wire.
 
-Fixpoint p8_f1_fields_loop (fuel count : nat) (wire : list nat)
+Definition p8_f1_fields_loop (fuel count : nat) (wire : list nat)
     : option (P8D2Fields * list nat) :=
-  match count with
-  | 0 => Some (P8D2FieldNil, wire)
-  | S remaining =>
-      match p8_e1_parse_text wire with
-      | None => None
-      | Some (key, after_key) =>
-          match p8_e1_parse_form_fuel fuel after_key with
-          | None => None
-          | Some (value, after_value) =>
-              match p8_f1_fields_loop fuel remaining after_value with
-              | None => None
-              | Some (fields, suffix) =>
-                  Some (P8D2FieldCons key value fields, suffix)
-              end
-          end
-      end
-  end.
+  let fix parse_fields (n : nat) (input : list nat) {struct n}
+      : option (P8D2Fields * list nat) :=
+    match n with
+    | 0 => Some (P8D2FieldNil, input)
+    | S remaining =>
+        match p8_e1_parse_text input with
+        | None => None
+        | Some (key, after_key) =>
+            match p8_e1_parse_form_fuel fuel after_key with
+            | None => None
+            | Some (value, after_value) =>
+                match parse_fields remaining after_value with
+                | None => None
+                | Some (fields, suffix) =>
+                    Some (P8D2FieldCons key value fields, suffix)
+                end
+            end
+        end
+    end in
+  parse_fields count wire.
 
 Lemma p8_f1_forms_loop_complete_from_children :
   forall fuel,
@@ -529,9 +539,6 @@ Proof.
                        (p8_e1_put_forms xs ++ suffix))).
       2: { cbn [p8_e1_put_form app].
            rewrite <- app_assoc. reflexivity. }
-      let L := match goal with |- ?lhs = _ => lhs end in
-      let Reduced := eval hnf in L in
-      idtac "P8F1_DEBUG_ORDERED_REDUCED" Reduced.
       change
         (match p8_e1_read_count
           (p8_e1_frame_count (p8_e1_forms_count xs) ++
