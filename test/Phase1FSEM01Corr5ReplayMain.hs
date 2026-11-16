@@ -105,6 +105,7 @@ decode raw = do
     then Just items else Nothing
   where
     encodeFromFields items = version <> Text.concat (map frame items)
+    go :: Int -> Text -> Maybe ([Text],Text)
     go 0 rest = Just ([],rest)
     go n rest = do
       let (digits,restWithColon) = Text.breakOn ":" rest
