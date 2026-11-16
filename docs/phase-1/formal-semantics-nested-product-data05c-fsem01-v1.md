@@ -1,0 +1,29 @@
+# FSEM-01 DATA-05C — source-owned two-level nested product admission
+
+**Proposed bounded production Grammar-v1 adapter; not general nested semantics.** Coordinates [FSEM #1613](https://github.com/abiggerhammer/phil/issues/1613), the DATA-04/05 coverage gaps and R14/R15. Builds on [DATA-05A](formal-semantics-nested-product-data05a-fsem01-v1.md) and [DATA-05B](formal-semantics-nested-product-data05b-fsem01-v1.md).
+
+## Exact production boundary
+
+[SourceNestedProductElimination.hs](../../src/Phil/Surface/GrammarV1/SourceNestedProductElimination.hs) is a registered, opt-in Phil core module. Its only invocation input is a StaticContext, a declaration-rooted DeclarationKey, and a GrammarV1FunctionDecl syntax tree. **Callers cannot pass the product-elimination contracts, synthetic Core owner name, projection, or SurfaceEnvironment.** The module:
+
+1. Uses the existing Grammar-v1 function parameter and recursive pattern/let scope checkers to obtain exact original binder identities and source spans for the original packet, flag, payload and spare. It resolves initializer and return from the original source syntax, refusing wrong owner/return identity.
+2. Checks each leaf with the existing production grammarV1CheckedTypeMode and combines only two nested pairs into an exact TyProduct and certified strongest mode; admission is specifically either (Bool, (Bytes[8], Unit)) or ((Bytes[8], Unit), Bool) with Linear Bytes[8] return. This is an opt-in shape restriction, not an arbitrary recursive nested-type rule.
+3. Generates one fresh Core internal owner from the declaration-rooted original packet identity, checks uniqueness against every source leaf, then constructs two ordered *flat* Surface let statements, retaining source spans and identities. The generated intermediate is **not a source binder** or semantic authority supplied by the caller.
+4. Derives two precise source-qualified product contracts *inside the module* and calls the unchanged production traceSurfaceProductEliminationComponent for both original-source-derived steps, independently confirming exact before/after Core resource Map/Set states. The first diagnostic prefix intentionally returns Bool with the Linear intermediate live and must fail LinearCompletion. The second prefix returns the Linear payload.
+5. Runs the unchanged ordinary checkSurfaceComponent on the complete projected three-statement component and accepts **only** the exact expected result Return Bytes[8], with matching both actual trace observations. Source/lexical failures and Surface resource errors use distinct constructors; unsupported shapes are Maybe noncompetence, **not** normative invalid source claims.
+
+The module has no new generic Surface Engine path, compiler interface, nominal lifecycle authority, provider law, assurance or kernel rule. It is registered in phil-core.cabal so library compilation (with -Werror) covers the production implementation. The bounded checker is a genuine opt-in production helper, not a general language-wide checking path.
+
+## Original source and independent tests
+
+The [DATA-05C native test](../../test/Phase1FSEM01Data05CSourceAdmissionMain.hs) reparses all 13 original [DATA-05A source fixtures](../../test/fixtures/fsem01-data05a-nested-product-v1/), calls this production adapter, and independently executes real Core.insertBinding and two DataMode.eliminateProductBinding operations against returned source binder names. Original, outer, inner, terminal, return and stale owner states are checked against both actually reached Surface cuts.
+
+There are two accepted original left/right nested forms; wrong source return, width, leaf type and pattern orientation receive exact source mismatch diagnostics; duplicate binder/active shadowing return lexical failures. Wide, flat, unknown return and multi-statement source forms produce explicit noncompetence. Positive alpha-renaming keeps declaration-rooted semantic owners and the generated intermediate stable, whereas changing the declaration key changes both.
+
+An arbitrary caller-supplied SurfaceEnvironment or externally declared product contract cannot qualify the adapter, because the adapter has no such parameter. The test runs actual original parsed input, but the module receives the already parsed AST and **does not authenticate original source bytes, prove the function's satisfies C proposition, or seal an independent verified-source artifact**. Those distinct authorities remain outside this bounded FSEM-01 slice.
+
+## Conditional Rocq and limitations
+
+[SurfaceNestedProductSourceD05C.v](../../proof/Phil/Surface/SurfaceNestedProductSourceD05C.v) models the two-level source-owned plan and conditional fresh source/internal owner constraints. It composes the existing DATA-05A Core one-shot and DATA-05B positional product-restoration results: an accepted source plan has both replayable stages, missing first/second stages have no successful successor, replayed inner leaf contract is exact, and distinct original/intermediate Linear owners do not resurrect under explicit native-model success premises. The Rocq model does not assert full Haskell Map/Set or source-AST-to-Rocq implementation refinement.
+
+**Remaining:** DATA-04 and DATA-05 remain gap for general recursive/dependent products, arbitrary nesting, record/sum destructuring, source runtime execution and universal proof obligations; R14/R15 and FSEM-01 remain open. The new source-owned result is not a general source acceptance certificate or an assurance/ABI/provider authority. The focused preflight runs strict full Cabal/GHC 9.6.7 -Wall -Werror, existing flat/DATA-05A/B regressions, original DATA-05C test and Rocq 9.2.0, forbidding new Axiom, Parameter or Admitted. The separate exact-head PR checks, fresh after-ready claim guard, protected squash, verified main readback and trusted claim release remain mandatory.
