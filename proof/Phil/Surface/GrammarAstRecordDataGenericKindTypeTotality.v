@@ -185,11 +185,13 @@ Proof.
   | Hnil : DerivesSequence phase1_surface_rules _ _ [] _ _ _ |- _ =>
       inversion Hnil; subst; clear Hnil
   end.
-  destruct
-    (phase1_surface_normalize_generic_kind_type_spine_total_from_spine_derivation
-      kind _ _ _)
-    as [refined_kind Hrefined_kind].
-  { eassumption. }
+  assert (Hkind_total :
+    exists refined_kind,
+      phase1_surface_normalize_generic_kind_type_spine kind = Some refined_kind).
+  { eapply
+      phase1_surface_normalize_generic_kind_type_spine_total_from_spine_derivation;
+    eassumption. }
+  destruct Hkind_total as [refined_kind Hrefined_kind].
   exists
     {| phase1_generic_param_kind_type_spine_name := name;
        phase1_generic_param_kind_type_spine_kind := refined_kind |}.
