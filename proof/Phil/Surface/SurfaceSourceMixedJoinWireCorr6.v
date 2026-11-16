@@ -208,7 +208,7 @@ Proof.
   unfold checkWire in Hchecked.
   destruct (decodeJoin wire) as [record|] eqn:Hdecoded;
     try discriminate.
-  exists record. split; [exact Hdecoded|].
+  exists record. split; [reflexivity|].
   now eapply corr6_decoded_source_join_is_valid.
 Qed.
 
