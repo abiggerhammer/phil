@@ -201,10 +201,10 @@ Proof.
         F.lookupFinite (filter predicate tail) head = None).
       { apply lookup_filter_missing. exact Htail. }
       destruct (predicate (head,ty)) eqn:Hpred;
-        simpl; rewrite String.eqb_refl; try reflexivity.
+        simpl; try rewrite String.eqb_refl; try reflexivity.
       exact Hfiltered.
     + destruct (predicate (head,ty)) eqn:Hpred; simpl;
-        rewrite Heq; apply IH; exact Hrest.
+        try rewrite Heq; apply IH; exact Hrest.
 Qed.
 
 Inductive JoinFailure : Type :=
