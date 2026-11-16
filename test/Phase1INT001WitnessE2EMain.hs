@@ -11,6 +11,9 @@ import Phil.Compiler.SourceArchitecture
 import Phil.Compiler.SourceBundle
 import Phil.Compiler.SourceCorePolicy
 import Phil.Compiler.SourceSystems
+import Phil.Compiler.RuntimeChoicePayload
+  ( RuntimeChoicePayloadSpec (..), RuntimeChoicePayloadArm (..)
+  , RuntimeChoiceSite (..), certifyRuntimeChoicePayloadPlan )
 import Phil.Core.Static
   ( DeclarationKey (..)
   , emptyStaticContext
@@ -340,6 +343,9 @@ p9SteveStructuralGate putSource getSource = do
     (Map.singleton "program:steve" (InstanceLineageSiteId "instance.steve"))
     stevePolicy (steveBundle putSource getSource)
     steveCoreProgram context
+  payload <- mapLeft show $
+    certifyRuntimeChoicePayloadPlan steveCoreProgram steveP9PayloadSpecs
+  _ <- mapLeft show (verifyOriginalSteveGetModeledABI checkedCanonical payload)
   let produced = verifiedSteveGetCanonicalSourceProduction checkedCanonical
       conditions = verifiedSteveGetCanonicalSelectedAssumptions checkedCanonical
       expectedConditions = Set.fromList
@@ -383,6 +389,20 @@ p9SteveStructuralGate putSource getSource = do
   -- Matching a source spelling and constructing an accepted Proof payload
   -- is not authority: the private qualifier must rederive the canonical
   -- Blob/Digest source environment rather than trusting the supplied map.
+  -- Alter the selected read-found result payload while keeping the
+  -- source/Core fixed. The production payload checker must reject it.
+  let forgedPayload = map
+        (\spec -> if runtimeChoicePayloadSite spec
+                       == RuntimeChoiceSite "SteveGet" "get.entry"
+          then spec { runtimeChoicePayloadArms =
+              Map.adjust (\arm -> arm { runtimeChoicePayloadValue =
+                Just "get.id" }) "found" (runtimeChoicePayloadArms spec) }
+          else spec)
+        steveP9PayloadSpecs
+  case certifyRuntimeChoicePayloadPlan steveCoreProgram forgedPayload of
+    Left _ -> Right ()
+    other -> Left ("P9 accepted substituted found-result payload: " <> show other)
+
   let forgedEnvironment = Map.adjust
         (\environment -> environment
           { surfacePrimitives = Map.insert "digest_check"
@@ -474,6 +494,33 @@ p9SteveStructuralGate putSource getSource = do
   case verifySteveGetStructural swappedArchitecture steveCoreProgram of
     Left SteveGetDigestOperandsMismatch -> Right ()
     other -> Left ("P9 accepted swapped source digest operands: " <> show other)
+
+-- The four exact canonical Steve runtime-choice sites used by the real
+-- application. This is a test fixture, not evidence of linked native code.
+steveP9PayloadSpecs :: [RuntimeChoicePayloadSpec]
+steveP9PayloadSpecs =
+  [ site "StevePut" "put.entry"
+      [ arm "computed" "put.install" (Just "put.id") ]
+  , site "StevePut" "put.install"
+      [ arm "installed" "put.ok" Nothing
+      , arm "already-exists" "put.ok" Nothing
+      , arm "storage-failure" "put.failure" Nothing
+      ]
+  , site "SteveGet" "get.entry"
+      [ arm "found" "get.check" (Just "get.bytes")
+      , arm "not-found" "get.not-found" Nothing
+      , arm "storage-failure" "get.failure" Nothing
+      ]
+  , site "SteveGet" "get.check"
+      [ arm "accepted" "get.ok" Nothing
+      , arm "rejected" "get.integrity-failure" Nothing
+      ]
+  ]
+  where
+    site functionName blockName arms = RuntimeChoicePayloadSpec
+      (RuntimeChoiceSite functionName blockName) (Map.fromList arms)
+    arm label target value =
+      (label, RuntimeChoicePayloadArm target value)
 
 verifiedProducerRejectsWrongSite :: Text -> Text -> Either String ()
 verifiedProducerRejectsWrongSite clientSource serverSource = do
