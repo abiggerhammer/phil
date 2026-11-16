@@ -19,9 +19,10 @@ class ScheduledAdmissionGuardTests(unittest.TestCase):
     def test_schedule_does_not_admit_without_exact_opt_in(self):
         gate = (
             "    if: >-\n"
-            "      github.event_name == 'workflow_dispatch' ||\n"
-            "      (github.event_name == 'schedule' &&\n"
-            "       vars.MHB_ATC_AUTO_ADMIT_ENABLED == 'true')\n"
+            "      github.ref == 'refs/heads/main' &&\n"
+            "      (github.event_name == 'workflow_dispatch' ||\n"
+            "       (github.event_name == 'schedule' &&\n"
+            "        vars.MHB_ATC_AUTO_ADMIT_ENABLED == 'true'))\n"
         )
         self.assertEqual(self.source.count(gate), 1)
         self.assertEqual(
@@ -53,6 +54,7 @@ class ScheduledAdmissionGuardTests(unittest.TestCase):
         self.assertIn("gh issue edit \"$issue\" --repo \"$GH_REPO\" \\", self.source)
         self.assertIn("--add-label \"atc: admitting\"", self.source)
         self.assertNotIn("HAMSTER_PR_TOKEN", self.source)
+        self.assertIn("    environment: atc-publisher", self.source)
         self.assertIn("uses: actions/create-github-app-token@v3", self.source)
         self.assertIn("IMMUTABLE_ENABLED: ${{ vars.MHB_ATC_IMMUTABLE_HEADS_ENABLED }}",
                       self.source)
