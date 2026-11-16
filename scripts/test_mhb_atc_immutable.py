@@ -142,7 +142,7 @@ class ImmutablePublisherTests(unittest.TestCase):
         wf = (Path(__file__).resolve().parents[1] /
               ".github/workflows/mhb-atc-admit.yml").read_text(encoding="utf-8")
         self.assertNotIn("HAMSTER_PR_TOKEN", wf)
-        self.assertIn("uses: actions/create-github-app-token@v3", wf)
+        self.assertIn("uses: actions/create-github-app-token@64ab729a6294000f5aa4a4bc0b73d1f32bc45510 # v3", wf)
         self.assertIn("vars.MHB_ATC_IMMUTABLE_HEADS_ENABLED == 'true'", wf)
         self.assertIn("MHB_ATC_PUBLISHER_RULESET_ID", wf)
         self.assertIn("repos/$GH_REPO/git/refs", wf)
