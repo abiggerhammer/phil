@@ -27,7 +27,10 @@ Theorem fsem02DualHeadClientWrongTypeLadder :
 Proof.
   intros client server ec es badClient badServer before Hc Hs.
   split.
-  - apply fsem02AdaptiveClientBadHeadMasksResource; exact Hc.
+  - unfold fsem02AdaptiveHeadShapeGate.
+    assert (Hbad : Nat.eqb ec badClient = false).
+    { apply Nat.eqb_neq; exact Hc. }
+    now rewrite Hbad.
   - split.
     + apply fsem02AdaptiveServerBadHeadMasksResource; exact Hs.
     + apply fsem02AdaptiveClientHeadRepairExposesWrongType.
@@ -48,7 +51,10 @@ Theorem fsem02DualHeadClientWrongSessionLadder :
 Proof.
   intros client server ec es badClient badServer wrongResource before Hc Hs Hr.
   split.
-  - apply fsem02AdaptiveClientBadHeadMasksResource; exact Hc.
+  - unfold fsem02AdaptiveHeadShapeGate.
+    assert (Hbad : Nat.eqb ec badClient = false).
+    { apply Nat.eqb_neq; exact Hc. }
+    now rewrite Hbad.
   - split.
     + apply fsem02AdaptiveServerBadHeadMasksResource; exact Hs.
     + destruct (fsem02CrossPeerServerHeadClientWrongSessionLadder
@@ -71,7 +77,10 @@ Theorem fsem02DualHeadServerWrongTypeLadder :
 Proof.
   intros client server ec es badClient badServer before Hc Hs.
   split.
-  - apply fsem02AdaptiveClientBadHeadMasksResource; exact Hc.
+  - unfold fsem02AdaptiveHeadShapeGate.
+    assert (Hbad : Nat.eqb ec badClient = false).
+    { apply Nat.eqb_neq; exact Hc. }
+    now rewrite Hbad.
   - split.
     + apply fsem02AdaptiveServerBadHeadMasksResource; exact Hs.
     + destruct (fsem02CrossPeerClientHeadServerWrongTypeLadder
@@ -94,7 +103,10 @@ Theorem fsem02DualHeadServerWrongSessionLadder :
 Proof.
   intros client server ec es badClient badServer wrongResource before Hc Hs Hr.
   split.
-  - apply fsem02AdaptiveClientBadHeadMasksResource; exact Hc.
+  - unfold fsem02AdaptiveHeadShapeGate.
+    assert (Hbad : Nat.eqb ec badClient = false).
+    { apply Nat.eqb_neq; exact Hc. }
+    now rewrite Hbad.
   - split.
     + apply fsem02AdaptiveServerBadHeadMasksResource; exact Hs.
     + destruct (fsem02CrossPeerClientHeadServerWrongSessionLadder
