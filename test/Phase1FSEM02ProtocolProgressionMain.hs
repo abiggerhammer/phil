@@ -3194,7 +3194,7 @@ sourcePingThreeDisjointTerminalSchedules accepted rejected = do
                 restored suffix
               assert (replayAgain == afterSuffix)
                 (label <> ": re-repair changed authorized suffix replay"))
-              allReinjectionSites)
+              allReinjectionSites
             -- Reintroduce two independently corrupted observations after
             -- exact restoration. All six unordered site pairs, with both
             -- possible repair orders, must refuse on the first remaining
