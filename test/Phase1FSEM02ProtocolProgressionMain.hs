@@ -3148,7 +3148,7 @@ sourcePingThreeDisjointTerminalSchedules accepted rejected = do
                 restored suffix
               assert (replayOrdered == afterSuffix)
                 (label <> ": repair order changed authorized suffix"))
-              repairOrders)
+              repairOrders
             -- One newly reintroduced observation fault after full recovery
             -- must again refuse the original request. Repair remains an
             -- external test intervention, not a language transition.
@@ -3194,7 +3194,7 @@ sourcePingThreeDisjointTerminalSchedules accepted rejected = do
                 restored suffix
               assert (replayAgain == afterSuffix)
                 (label <> ": re-repair changed authorized suffix replay"))
-              allReinjectionSites
+              allReinjectionSites)
             fourFaultCases
           assert (committedUnchanged bothHeads && spectatorLoanUnchanged bothHeads)
             "two malformed projected heads disturbed committed state"
