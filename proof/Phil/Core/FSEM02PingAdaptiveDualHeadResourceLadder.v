@@ -3,6 +3,7 @@ From Phil.Core Require Import
   FSEM02PingAdaptiveCrossPeerHeadResourceShapeRetry
   FSEM02PingAdaptiveCrossPeerHeadOwnerRetry
   FSEM02PingAdaptiveHeadResourcePriorityRetry
+  FSEM02PingAdaptiveFreePeerResourceShapeRetry
   FSEM02PingAdaptiveHalfCloseSuffix
   FSEM02PingMixedPrefixFault.
 
