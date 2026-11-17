@@ -49,7 +49,10 @@ Proof.
   - unfold fsem02AdaptiveHeadShapeGate,
       fsem02AdaptiveShapeGatedPing.
     repeat rewrite Nat.eqb_refl.
-    now rewrite Hrs.
+    unfold fsem02AdaptiveResourceShapeCheck at 1.
+    rewrite Nat.eqb_refl.
+    rewrite Hrs.
+    reflexivity.
 Qed.
 
 (* Concrete both-wrong-type instance of the polymorphic four-stage rule. *)
