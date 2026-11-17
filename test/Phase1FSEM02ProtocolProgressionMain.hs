@@ -3354,7 +3354,7 @@ sourcePingThreeDisjointTerminalSchedules accepted rejected = do
                     restoredBounce suffix
                   assert (replayBounce == afterSuffix)
                     (label <> ": post-bounce authorized suffix changed"))
-              firstSiteBounceOrders)
+              firstSiteBounceOrders
             -- All 16 partial fault masks: each of four observation sites
             -- is probed, repaired, and recontaminated independently.
             -- These are EXTERNAL interventions, never Phil source steps.
@@ -3396,7 +3396,7 @@ sourcePingThreeDisjointTerminalSchedules accepted rejected = do
                   (label <> ": repair/reinjection failed exact reversibility")
                 checkRemaining healthyAfterProbe probedAgain)
                 allReinjectionSites)
-              partialFaultMasks
+              partialFaultMasks)
             fourFaultCases
           assert (committedUnchanged bothHeads && spectatorLoanUnchanged bothHeads)
             "two malformed projected heads disturbed committed state"
