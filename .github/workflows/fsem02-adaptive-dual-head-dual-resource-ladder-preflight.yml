@@ -9,14 +9,14 @@ on:
       - 'proof/Phil/Core/FSEM02PingAdaptiveDualHeadDualResourceLadder.v'
       - 'docs/phase-1/formal-semantics-source-ping-adaptive-dual-head-dual-resource-ladder-fsem02-v1.md'
       - 'docs/phase-1/typing-and-semantics-reader-guide-v1.md'
-      - '.github/workflows/fsem02-adaptive-dual-head-resource-ladder-preflight.yml'
+      - '.github/workflows/fsem02-adaptive-dual-head-dual-resource-ladder-preflight.yml'
   pull_request:
     paths:
       - 'test/Phase1FSEM02ProtocolProgressionMain.hs'
       - 'proof/Phil/Core/FSEM02PingAdaptiveDualHeadDualResourceLadder.v'
       - 'docs/phase-1/formal-semantics-source-ping-adaptive-dual-head-dual-resource-ladder-fsem02-v1.md'
       - 'docs/phase-1/typing-and-semantics-reader-guide-v1.md'
-      - '.github/workflows/fsem02-adaptive-dual-head-resource-ladder-preflight.yml'
+      - '.github/workflows/fsem02-adaptive-dual-head-dual-resource-ladder-preflight.yml'
 
 permissions:
   contents: read
