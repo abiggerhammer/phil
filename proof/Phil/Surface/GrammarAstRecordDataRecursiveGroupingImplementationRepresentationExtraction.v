@@ -7,6 +7,9 @@ From Phil.Surface Require Import
    This is not a production Haskell parser binding or a whole-source proof. *)
 Extraction Language Haskell.
 
+(* Explicit output path avoids Rocq 9.2's default-directory warning under -w +all. *)
+Set Extraction Output Directory ".".
+
 Extract Inductive bool => "Prelude.Bool" [ "Prelude.True" "Prelude.False" ].
 Extract Inductive list => "[]" [ "[]" "(:)" ].
 Extract Inductive option => "Prelude.Maybe" [ "Prelude.Just" "Prelude.Nothing" ].
