@@ -51,7 +51,7 @@ main = do
         (sourcePingDisjointPairCommutation accepted stale)
     , test "FSEM-02 disjoint Ping pairs complete all 24 terminal Close orders"
         (sourcePingDisjointTerminalInterleavings accepted stale)
-    , test "FSEM-02 25920 terminal schedules, 144 partner prefixes, 288 refused rematches, 1512 adaptive suffixes, 10368 half-Close completions, 288 poisoned-head, 288 missing-owner, 576 wrong-resource-shape, 576 combined-head/resource, 288 cross-peer head/missing-owner, 144 two-head, 576 cross-peer head/resource-shape, 576 dual-head/third-resource and 576 dual-head/dual-resource fault diagnostic/retries"
+    , test "FSEM-02 25920 terminal schedules, 144 partner prefixes, 288 refused rematches, 1512 adaptive suffixes, 10368 half-Close completions, 288 poisoned-head, 288 missing-owner, 576 wrong-resource-shape, 576 combined-head/resource, 288 cross-peer head/missing-owner, 144 two-head, 576 cross-peer head/resource-shape, 576 dual-head/third-resource and 576 dual-head/dual-resource fault diagnostic/retries with 13824 repair-order traces"
         (sourcePingThreeDisjointTerminalSchedules accepted stale)
     , test "FSEM-02 competing Ping sends sharing a Client predecessor refuse second use"
         (sourcePingSharedClientContention accepted stale)
@@ -87,6 +87,11 @@ test label result =
   case result of
     Right () -> putStrLn ("PASS: " <> label) >> pure True
     Left detail -> putStrLn ("FAIL: " <> label <> " -- " <> detail) >> pure False
+
+data FSEM02RepairSite
+  = RepairClientHead | RepairServerHead
+  | RepairClientResource | RepairServerResource
+  deriving (Eq, Show)
 
 data SourcePlans = SourcePlans
   { sourceBinaryInstance :: BinaryProtocolInstance
@@ -3084,7 +3089,66 @@ sourcePingThreeDisjointTerminalSchedules accepted rejected = do
               (\contexts req -> mapLeft show (run contexts req))
               fullyRestored suffix
             assert (replay == afterSuffix)
-              (label <> ": four-fault repair altered authorized suffix")) 
+              (label <> ": four-fault repair altered authorized suffix")
+            -- Verify all 24 orders of repairing four distinct observations.
+            -- A repaired low-priority site cannot mask a remaining head fault.
+            let repairOrders = permutations
+                  [ RepairClientHead, RepairServerHead
+                  , RepairClientResource, RepairServerResource ]
+                repairOne repairSite contexts =
+                  case repairSite of
+                    RepairClientHead -> Map.adjust
+                      (\ctx -> ctx { protocolEndpoints = protocolEndpoints clientOriginal })
+                      freeClient contexts
+                    RepairServerHead -> Map.adjust
+                      (\ctx -> ctx { protocolEndpoints = protocolEndpoints serverOriginal })
+                      freeServer contexts
+                    RepairClientResource -> Map.adjust
+                      (\ctx -> ctx { protocolResources = protocolResources clientOriginal })
+                      freeClient contexts
+                    RepairServerResource -> Map.adjust
+                      (\ctx -> ctx { protocolResources = protocolResources serverOriginal })
+                      freeServer contexts
+                checkRemaining repaired contexts
+                  | not (elem RepairClientHead repaired) =
+                      expectFreePeerHeadRefusal (label <> ": Client head remains")
+                        freeClient (sourceClientHead plans) contexts firstRequest
+                  | not (elem RepairServerHead repaired) =
+                      expectFreePeerHeadRefusal (label <> ": Server head remains")
+                        freeServer (sourceServerHead plans) contexts firstRequest
+                  | not (elem RepairClientResource repaired) =
+                      expectFreePeerShapeRefusal (label <> ": Client resource remains")
+                        freeClient clientError contexts firstRequest
+                  | not (elem RepairServerResource repaired) =
+                      expectFreePeerShapeRefusal (label <> ": Server resource remains")
+                        freeServer serverError contexts firstRequest
+                  | otherwise = assert (contexts == closedPrefix)
+                      (label <> ": four repairs did not recover exact prefix")
+            assert (length repairOrders == 24
+                 && (9 * 4 * 4 * length fourFaultCases * length repairOrders :: Int)
+                      == 13824)
+              "adaptive four-fault repair-order census changed"
+            mapM_ (\order -> do
+              (restored, repaired) <- foldM
+                (\(current, completed) repairSite -> do
+                  checkRemaining completed current
+                  let next = repairOne repairSite current
+                      nowCompleted = repairSite : completed
+                  assert (next /= current)
+                    (label <> ": repair did not change its own observation")
+                  assert (committedUnchanged next && spectatorLoanUnchanged next)
+                    (label <> ": repair changed committed Close/affine spectator")
+                  checkRemaining nowCompleted next
+                  Right (next, nowCompleted))
+                (faulty, []) order
+              assert (length repaired == 4 && restored == closedPrefix)
+                (label <> ": permutation did not restore exact prefix")
+              replayOrdered <- foldM
+                (\contexts req -> mapLeft show (run contexts req))
+                restored suffix
+              assert (replayOrdered == afterSuffix)
+                (label <> ": repair order changed authorized suffix"))
+              repairOrders)
             fourFaultCases
           assert (committedUnchanged bothHeads && spectatorLoanUnchanged bothHeads)
             "two malformed projected heads disturbed committed state"

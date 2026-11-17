@@ -31,6 +31,8 @@ There are several layers of authority; they must not be conflated.
 → the specific proof and implementation correspondence for any claim you want
 to challenge.
 
+The [non-normative FSEM-02 four-fault repair-order confluence regression](formal-semantics-source-ping-four-fault-repair-order-confluence-fsem02-v1.md) checks 13,824 actual production Haskell repair-order traces and separately proves conditional 16-mask Rocq diagnostic priority without granting external protocol authority.
+
 The [non-normative FSEM-02 typed partner-selection regression](formal-semantics-source-ping-partner-selection-fsem02-v1.md) checks 25,920 typed terminal schedules under six explicitly external Client/Server bijections, exact consumed-partner refusal and unchanged spectator/linear owners. Four conditional Rocq 9.2 lemmas do not authorize partner choice or establish implementation refinement.
 
 The [non-normative FSEM-02 mixed-prefix stale joint Ping replay](formal-semantics-source-ping-mixed-prefix-stale-joint-ping-fsem02-v1.md) checks 302,400 exact stale Send/Receive rendezvous refusals across 13,440 legal Ping/Close schedules, preserving the preceding 806,400 Close fault probes and independent affine spectator. Six conditional Rocq consumption-phase lemmas are not implementation refinement or new nominal authority.
