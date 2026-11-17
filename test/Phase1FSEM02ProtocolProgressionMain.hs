@@ -3366,7 +3366,7 @@ sourcePingThreeDisjointTerminalSchedules accepted rejected = do
               "adaptive full partial-mask reversibility census changed"
             mapM_ (\badSites -> do
               let partiallyBad = foldl (flip reinjectSite) closedPrefix badSites
-                  alreadyHealthy = filter (\site -> notElem site badSites)
+                  alreadyHealthy = filter (\candidateSite -> notElem candidateSite badSites)
                     allReinjectionSites
               assert (committedUnchanged partiallyBad
                       && spectatorLoanUnchanged partiallyBad)
@@ -3376,7 +3376,7 @@ sourcePingThreeDisjointTerminalSchedules accepted rejected = do
                 let probed = reinjectSite probeSite partiallyBad
                     twiceProbed = reinjectSite probeSite probed
                     healthyAfterProbe = filter
-                      (\site -> notElem site (probeSite : badSites))
+                      (\candidateSite -> notElem candidateSite (probeSite : badSites))
                       allReinjectionSites
                     repairedProbe = repairOne probeSite probed
                     directlyRepaired = repairOne probeSite partiallyBad
