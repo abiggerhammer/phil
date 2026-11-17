@@ -3095,8 +3095,8 @@ sourcePingThreeDisjointTerminalSchedules accepted rejected = do
             let repairOrders = permutations
                   [ RepairClientHead, RepairServerHead
                   , RepairClientResource, RepairServerResource ]
-                repairOne site contexts =
-                  case site of
+                repairOne repairSite contexts =
+                  case repairSite of
                     RepairClientHead -> Map.adjust
                       (\ctx -> ctx { protocolEndpoints = protocolEndpoints clientOriginal })
                       freeClient contexts
@@ -3130,10 +3130,10 @@ sourcePingThreeDisjointTerminalSchedules accepted rejected = do
               "adaptive four-fault repair-order census changed"
             mapM_ (\order -> do
               (restored, repaired) <- foldM
-                (\(current, completed) site -> do
+                (\(current, completed) repairSite -> do
                   checkRemaining completed current
-                  let next = repairOne site current
-                      nowCompleted = site : completed
+                  let next = repairOne repairSite current
+                      nowCompleted = repairSite : completed
                   assert (next /= current)
                     (label <> ": repair did not change its own observation")
                   assert (committedUnchanged next && spectatorLoanUnchanged next)
