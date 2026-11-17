@@ -13,7 +13,7 @@ on:
   pull_request:
     paths:
       - 'test/Phase1FSEM02ProtocolProgressionMain.hs'
-      - 'proof/Phil/Core/FSEM02PingPostRepairFourSiteBounce.v'
+      - 'proof/Phil/Core/FSEM02PingPartialMaskReversibility.v'
       - 'docs/phase-1/formal-semantics-source-ping-partial-mask-reversibility-fsem02-v1.md'
       - 'docs/phase-1/typing-and-semantics-reader-guide-v1.md'
       - '.github/workflows/fsem02-partial-mask-reversibility-preflight.yml'
