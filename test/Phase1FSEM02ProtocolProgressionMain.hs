@@ -51,7 +51,7 @@ main = do
         (sourcePingDisjointPairCommutation accepted stale)
     , test "FSEM-02 disjoint Ping pairs complete all 24 terminal Close orders"
         (sourcePingDisjointTerminalInterleavings accepted stale)
-    , test "FSEM-02 25920 terminal schedules, 144 partner prefixes, 288 refused rematches, 1512 adaptive suffixes, 10368 half-Close completions, 288 poisoned-head, 288 missing-owner, 576 wrong-resource-shape, 576 combined-head/resource, 288 cross-peer head/missing-owner and 144 two-head fault diagnostic/retries"
+    , test "FSEM-02 25920 terminal schedules, 144 partner prefixes, 288 refused rematches, 1512 adaptive suffixes, 10368 half-Close completions, 288 poisoned-head, 288 missing-owner, 576 wrong-resource-shape, 576 combined-head/resource, 288 cross-peer head/missing-owner, 144 two-head and 576 cross-peer head/resource-shape fault diagnostic/retries"
         (sourcePingThreeDisjointTerminalSchedules accepted stale)
     , test "FSEM-02 competing Ping sends sharing a Client predecessor refuse second use"
         (sourcePingSharedClientContention accepted stale)
@@ -2898,6 +2898,62 @@ sourcePingThreeDisjointTerminalSchedules accepted rejected = do
             assert (replay == afterSuffix)
               (label <> ": cross-peer repair changed authorized suffix"))
             crossPeerCases
+          -- A malformed projected head on one still-free peer must take
+          -- priority over a wrong TYPE or wrong SESSION resource on the
+          -- OTHER peer, even after an already committed terminal half-Close.
+          -- Restoring only the head reveals the precise remote resource
+          -- error; neither hostile observation conveys pairing authority.
+          clientHeadServerType <- rewriteFreePeerResource poisonedClient freeServer
+            serverOld (TyUInt 8)
+          clientHeadServerSession <- rewriteFreePeerResource poisonedClient freeServer
+            serverOld (TyEndpoint (End done))
+          serverHeadClientType <- rewriteFreePeerResource poisonedServer freeClient
+            clientOld (TyUInt 8)
+          serverHeadClientSession <- rewriteFreePeerResource poisonedServer freeClient
+            clientOld (TyEndpoint (End done))
+          let crossPeerShapeCases =
+                [ ("Client head / Server wrong type", clientHeadServerType
+                  , freeClient, clientOriginal, sourceClientHead plans
+                  , freeServer, serverOriginal
+                  , ProtocolEndpointResourceTypeMismatch serverOld (TyUInt 8))
+                , ("Client head / Server wrong session", clientHeadServerSession
+                  , freeClient, clientOriginal, sourceClientHead plans
+                  , freeServer, serverOriginal
+                  , ProtocolEndpointSessionMismatch serverOld
+                      (sourceServerHead plans) (End done))
+                , ("Server head / Client wrong type", serverHeadClientType
+                  , freeServer, serverOriginal, sourceServerHead plans
+                  , freeClient, clientOriginal
+                  , ProtocolEndpointResourceTypeMismatch clientOld (TyUInt 8))
+                , ("Server head / Client wrong session", serverHeadClientSession
+                  , freeServer, serverOriginal, sourceServerHead plans
+                  , freeClient, clientOriginal
+                  , ProtocolEndpointSessionMismatch clientOld
+                      (sourceClientHead plans) (End done)) ]
+          assert (length crossPeerShapeCases == 4
+                  && (9 * 4 * 4 * length crossPeerShapeCases :: Int) == 576)
+            "adaptive cross-peer head/resource-shape ladder census changed"
+          mapM_ (\(label, faulty, headPeer, headOriginal, expectedHead
+                   , shapePeer, shapeOriginal, expectedError) -> do
+            assert (committedUnchanged faulty && spectatorLoanUnchanged faulty)
+              (label <> ": fault changed committed Close or unrelated active loan")
+            expectFreePeerHeadRefusal (label <> ": projected-head-first")
+              headPeer expectedHead faulty firstRequest
+            -- This is an explicit restoration of ONE process; the other
+            -- process retains its malformed linear predecessor resource.
+            let headRestored = Map.insert headPeer headOriginal faulty
+            expectFreePeerShapeRefusal
+              (label <> ": remote resource exposed after head-only repair")
+              shapePeer expectedError headRestored firstRequest
+            let bothRestored = Map.insert shapePeer shapeOriginal headRestored
+            assert (bothRestored == closedPrefix)
+              (label <> ": two-site repair lost exact committed prefix")
+            replay <- foldM
+              (\contexts req -> mapLeft show (run contexts req))
+              bothRestored suffix
+            assert (replay == afterSuffix)
+              (label <> ": two-site repair changed authorized suffix"))
+            crossPeerShapeCases
           assert (committedUnchanged bothHeads && spectatorLoanUnchanged bothHeads)
             "two malformed projected heads disturbed committed state"
           expectFreePeerHeadRefusal "both free heads: Client first" freeClient
