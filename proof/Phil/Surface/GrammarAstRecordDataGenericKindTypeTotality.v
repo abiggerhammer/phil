@@ -1,8 +1,24 @@
 From Stdlib Require Import Lists.List Strings.String.
 
 From Phil.Surface Require Import
+  GrammarDerivation
+  GrammarDeterminacySimpleResolverSoundness
+  GrammarAstSourceHeader
+  GrammarAstSourceHeaderTotality
+  GrammarAstGenericParamsSpine
+  GrammarAstGenericParamsTotality
+  GrammarAstStructuralModeSpine
+  GrammarAstGenericRequirementsSpine
+  GrammarAstOptionalFieldTypeSpine
+  GrammarAstRecordFieldsTotality
+  GrammarAstRecordFieldTypeSpine
+  GrammarAstVariantDeclRecordFieldTypeSpine
+  GrammarAstDataRecordFieldTypeSpine
+  GrammarAstDataTotality
+  GrammarAstGenericKindTypeSpine
   GrammarAstRecordDataGenericKindTypeSpine
   GrammarAstGenericKindTypeTotality
+  GrammarAstGenericParamKindTypeSpine
   GrammarAstGenericParamKindTypeTotality
   GrammarAstRecordFieldTypeTotality
   GrammarAstDataRecordFieldTypeTotality.
@@ -61,15 +77,40 @@ Proof.
   rewrite phase1_surface_generic_kind_item_at_tag in Hnth.
   inversion Hnth; subst item.
   destruct tag; cbn in Hselected |- *.
-  - exists Phase1GenericTypeKind.
+  - destruct
+      (literal_derivation_is_exact
+        phase1_surface_rules _ "Type" _ _ selected Hselected)
+      as [literal_tail [_ [_ Hselected_tree]]].
+    rewrite Hselected_tree.
+    exists Phase1GenericTypeKind.
     reflexivity.
-  - exists Phase1GenericNatKind.
+  - destruct
+      (literal_derivation_is_exact
+        phase1_surface_rules _ "Nat" _ _ selected Hselected)
+      as [literal_tail [_ [_ Hselected_tree]]].
+    rewrite Hselected_tree.
+    exists Phase1GenericNatKind.
     reflexivity.
-  - exists Phase1GenericSessionKind.
+  - destruct
+      (literal_derivation_is_exact
+        phase1_surface_rules _ "Session" _ _ selected Hselected)
+      as [literal_tail [_ [_ Hselected_tree]]].
+    rewrite Hselected_tree.
+    exists Phase1GenericSessionKind.
     reflexivity.
-  - exists Phase1GenericMessageKind.
+  - destruct
+      (literal_derivation_is_exact
+        phase1_surface_rules _ "Message" _ _ selected Hselected)
+      as [literal_tail [_ [_ Hselected_tree]]].
+    rewrite Hselected_tree.
+    exists Phase1GenericMessageKind.
     reflexivity.
-  - exists Phase1GenericEffectsKind.
+  - destruct
+      (literal_derivation_is_exact
+        phase1_surface_rules _ "Effects" _ _ selected Hselected)
+      as [literal_tail [_ [_ Hselected_tree]]].
+    rewrite Hselected_tree.
+    exists Phase1GenericEffectsKind.
     reflexivity.
   - destruct
       (phase1_surface_normalize_typed_generic_kind_type_total_from_derivation
@@ -153,20 +194,20 @@ Proof.
   | Hnil : DerivesSequence phase1_surface_rules _ _ [] _ _ _ |- _ =>
       inversion Hnil; subst; clear Hnil
   end.
-  match goal with
-  | Hkind : Derives phase1_surface_rules _ (ENonterminal "generic_kind")
-      _ _ (phase1_surface_generic_kind_spine_tree kind) |- _ =>
-      destruct
-        (phase1_surface_normalize_generic_kind_type_spine_total_from_spine_derivation
-          kind _ _ _ Hkind)
-        as [refined_kind Hrefined_kind];
-      exists
-        {| phase1_generic_param_kind_type_spine_name := name;
-           phase1_generic_param_kind_type_spine_kind := refined_kind |};
-      cbn;
-      rewrite Hrefined_kind;
-      reflexivity
-  end.
+  assert (Hkind_total :
+    exists refined_kind,
+      phase1_surface_normalize_generic_kind_type_spine kind = Some refined_kind).
+  { eapply
+      phase1_surface_normalize_generic_kind_type_spine_total_from_spine_derivation;
+    eassumption. }
+  destruct Hkind_total as [refined_kind Hrefined_kind].
+  exists
+    {| phase1_generic_param_kind_type_spine_name := name;
+       phase1_generic_param_kind_type_spine_kind := refined_kind |}.
+  unfold phase1_surface_normalize_generic_param_kind_type_spine.
+  cbn [phase1_generic_param_spine_name phase1_generic_param_spine_kind].
+  rewrite Hrefined_kind.
+  reflexivity.
 Qed.
 
 Lemma
@@ -223,18 +264,18 @@ Lemma
         phase1_surface_normalize_generic_param_kind_type_values parameters =
           Some refined.
 Proof.
-  intros path body input rest trees Hderive Hbody_shape.
-  subst body.
+  intros path body input rest trees Hderive.
   induction Hderive as
     [path body input
     |path body input middle rest tree trees
        Hitem Hprogress Hrest IHrest];
-    intros parameters Htrees.
+    intros Hbody_shape parameters Htrees.
   - destruct parameters as [|parameter parameters]; cbn in Htrees.
     + exists [].
       reflexivity.
     + discriminate Htrees.
-  - destruct parameters as [|parameter parameters]; cbn in Htrees;
+  - subst body.
+    destruct parameters as [|parameter parameters]; cbn in Htrees;
       try discriminate Htrees.
     inversion Htrees; subst tree trees.
     destruct
@@ -243,7 +284,7 @@ Proof.
         (descend path AtRepetitionBody)
         input middle Hitem)
       as [refined Hrefined].
-    destruct (IHrest parameters eq_refl)
+    destruct (IHrest eq_refl parameters eq_refl)
       as [refined_rest Hrefined_rest].
     exists (refined :: refined_rest).
     cbn.
@@ -300,54 +341,60 @@ Proof.
         ])
       Hbody)
     as [trees [Hsequence_tree Hitems]].
-  inversion Hsequence_tree; subst trees.
-  repeat match goal with
-  | Hseq : DerivesSequence phase1_surface_rules _ _ (_ :: _) _ _ _ |- _ =>
-      inversion Hseq; subst; clear Hseq
-  end.
-  match goal with
-  | Hnil : DerivesSequence phase1_surface_rules _ _ [] _ _ _ |- _ =>
-      inversion Hnil; subst; clear Hnil
-  end.
-  match goal with
-  | Hfirst : Derives phase1_surface_rules _ (ENonterminal "generic_param")
-      _ _ (phase1_surface_generic_param_spine_tree first),
-    Hrepeat : Derives phase1_surface_rules _
-      (ERepetition
-        (ESequence [ELiteral ","; ENonterminal "generic_param"]))
+  (* Decompose the four grammar-derived sequence items explicitly.  The
+     indiscriminate inversion loop previously erased the item evidence
+     before the generic-parameter and repetition premises could be used. *)
+  destruct
+    (derives_sequence_cons_exposes_head_exact _ _ _ _ _ _ _ _ Hitems)
+    as [after_open [open_tree [tail1
+      [Htrees [Hopen Htail1]]]]].
+  destruct
+    (derives_sequence_cons_exposes_head_exact _ _ _ _ _ _ _ _ Htail1)
+    as [after_first [first_tree [tail2
+      [Htail1_trees [Hfirst Htail2]]]]].
+  destruct
+    (derives_sequence_cons_exposes_head_exact _ _ _ _ _ _ _ _ Htail2)
+    as [after_repeat [repeat_tree [tail3
+      [Htail2_trees [Hrepeat Htail3]]]]].
+  destruct
+    (derives_sequence_cons_exposes_head_exact _ _ _ _ _ _ _ _ Htail3)
+    as [after_close [close_tree [nil_trees
+      [Htail3_trees [Hclose Hnil]]]]].
+  rewrite Htrees, Htail1_trees, Htail2_trees, Htail3_trees
+    in Hsequence_tree.
+  inversion Hsequence_tree; subst.
+  inversion Hnil; subst.
+  destruct
+    (phase1_surface_normalize_generic_param_kind_type_spine_total_from_spine_derivation
+      first _ _ _ Hfirst)
+    as [refined_first Hrefined_first].
+  destruct
+    (phase1_surface_repetition_derivation_exposes
+      _
+      (ESequence [ELiteral ","; ENonterminal "generic_param"])
       _ _
       (PTRepetition
-        (map phase1_surface_generic_param_suffix_tree rest_parameters)) |- _ =>
-      destruct
-        (phase1_surface_normalize_generic_param_kind_type_spine_total_from_spine_derivation
-          first _ _ _ Hfirst)
-        as [refined_first Hrefined_first];
-      destruct
-        (phase1_surface_repetition_derivation_exposes
-          _
-          (ESequence [ELiteral ","; ENonterminal "generic_param"])
-          _ _
-          (PTRepetition
-            (map phase1_surface_generic_param_suffix_tree rest_parameters))
-          Hrepeat)
-        as [rest_trees [Hrest_tree Hrest_body]];
-      inversion Hrest_tree; subst rest_trees;
-      destruct
-        (phase1_surface_normalize_generic_param_kind_type_values_total_from_spine_repetition
-          _
-          (ESequence [ELiteral ","; ENonterminal "generic_param"])
-          _ _
-          (map phase1_surface_generic_param_suffix_tree rest_parameters)
-          Hrest_body eq_refl
-          rest_parameters eq_refl)
-        as [refined_rest Hrefined_rest];
-      exists
-        {| phase1_generic_params_kind_type_spine_first := refined_first;
-           phase1_generic_params_kind_type_spine_rest := refined_rest |};
-      cbn;
-      rewrite Hrefined_first, Hrefined_rest;
-      reflexivity
-  end.
+        (map phase1_surface_generic_param_suffix_tree rest_parameters))
+      Hrepeat)
+    as [rest_trees [Hrest_tree Hrest_body]].
+  inversion Hrest_tree; subst rest_trees.
+  destruct
+    (phase1_surface_normalize_generic_param_kind_type_values_total_from_spine_repetition
+      _
+      (ESequence [ELiteral ","; ENonterminal "generic_param"])
+      _ _
+      (map phase1_surface_generic_param_suffix_tree rest_parameters)
+      Hrest_body eq_refl
+      rest_parameters eq_refl)
+    as [refined_rest Hrefined_rest].
+  exists
+    {| phase1_generic_params_kind_type_spine_first := refined_first;
+       phase1_generic_params_kind_type_spine_rest := refined_rest |}.
+  unfold phase1_surface_normalize_generic_params_kind_type_spine.
+  cbn [phase1_generic_params_spine_first
+       phase1_generic_params_spine_rest].
+  rewrite Hrefined_first, Hrefined_rest.
+  reflexivity.
 Qed.
 
 Lemma
@@ -456,15 +503,19 @@ Proof.
   | Hnil : DerivesSequence phase1_surface_rules _ _ [] _ _ _ |- _ =>
       inversion Hnil; subst; clear Hnil
   end.
-  match goal with
-  | Hgeneric : Derives phase1_surface_rules _
-      (EOptional (ENonterminal "generic_params"))
-      _ _ (phase1_surface_optional_generic_params_tree generic_params) |- _ =>
-      destruct
-        (phase1_surface_normalize_optional_generic_params_kind_type_total_from_spine_derivation
-          generic_params _ _ _ Hgeneric)
-        as [refined_generic Hrefined_generic];
-      let refined := constr:(
+  assert (Hgeneric_total :
+    exists refined_generic,
+      phase1_surface_normalize_optional_generic_params_kind_type generic_params =
+        Some refined_generic).
+  { eapply
+      phase1_surface_normalize_optional_generic_params_kind_type_total_from_spine_derivation;
+    eassumption. }
+  destruct Hgeneric_total as [refined_generic Hrefined_generic].
+  let original_tree :=
+    match goal with
+    | |- context[phase1_surface_normalize_record_generic_kind_type_tree ?t] => t
+    end in
+  let refined := constr:(
         {| phase1_record_generic_kind_type_spine_name := name;
            phase1_record_generic_kind_type_spine_generic_params :=
              refined_generic;
@@ -472,7 +523,7 @@ Proof.
            phase1_record_generic_kind_type_spine_requirements := requirements;
            phase1_record_generic_kind_type_spine_fields := fields |}) in
       assert (Hnormalize :
-        phase1_surface_normalize_record_generic_kind_type_tree tree =
+        phase1_surface_normalize_record_generic_kind_type_tree original_tree =
           Some refined);
       [ unfold phase1_surface_normalize_record_generic_kind_type_tree;
         rewrite Hbase;
@@ -484,8 +535,7 @@ Proof.
         split;
         [ exact Hnormalize
         | eapply phase1_surface_normalize_record_generic_kind_type_tree_round_trip;
-          exact Hnormalize ] ]
-  end.
+          exact Hnormalize ] ].
 Qed.
 
 Theorem
@@ -571,15 +621,19 @@ Proof.
   | Hnil : DerivesSequence phase1_surface_rules _ _ [] _ _ _ |- _ =>
       inversion Hnil; subst; clear Hnil
   end.
-  match goal with
-  | Hgeneric : Derives phase1_surface_rules _
-      (EOptional (ENonterminal "generic_params"))
-      _ _ (phase1_surface_optional_generic_params_tree generic_params) |- _ =>
-      destruct
-        (phase1_surface_normalize_optional_generic_params_kind_type_total_from_spine_derivation
-          generic_params _ _ _ Hgeneric)
-        as [refined_generic Hrefined_generic];
-      let refined := constr:(
+  assert (Hgeneric_total :
+    exists refined_generic,
+      phase1_surface_normalize_optional_generic_params_kind_type generic_params =
+        Some refined_generic).
+  { eapply
+      phase1_surface_normalize_optional_generic_params_kind_type_total_from_spine_derivation;
+    eassumption. }
+  destruct Hgeneric_total as [refined_generic Hrefined_generic].
+  let original_tree :=
+    match goal with
+    | |- context[phase1_surface_normalize_data_generic_kind_type_tree ?t] => t
+    end in
+  let refined := constr:(
         {| phase1_data_generic_kind_type_spine_name := name;
            phase1_data_generic_kind_type_spine_generic_params :=
              refined_generic;
@@ -589,7 +643,7 @@ Proof.
            phase1_data_generic_kind_type_spine_rest_variants :=
              rest_variants |}) in
       assert (Hnormalize :
-        phase1_surface_normalize_data_generic_kind_type_tree tree =
+        phase1_surface_normalize_data_generic_kind_type_tree original_tree =
           Some refined);
       [ unfold phase1_surface_normalize_data_generic_kind_type_tree;
         rewrite Hbase;
@@ -601,6 +655,5 @@ Proof.
         split;
         [ exact Hnormalize
         | eapply phase1_surface_normalize_data_generic_kind_type_tree_round_trip;
-          exact Hnormalize ] ]
-  end.
+          exact Hnormalize ] ].
 Qed.

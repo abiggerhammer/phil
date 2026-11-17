@@ -1,6 +1,17 @@
+From Stdlib Require Import Lists.List Strings.String.
+
 From Phil.Surface Require Import
+  GrammarDerivation
+  GrammarAstSourceHeader
+  GrammarAstGenericParamsSpine
+  GrammarAstStructuralModeSpine
+  GrammarAstGenericRequirementsSpine
   GrammarAstRecordFieldsSpine
+  GrammarAstFieldTypeListSpine
   GrammarAstOptionalFieldTypeSpine.
+
+Import ListNotations.
+Open Scope string_scope.
 
 (*
   Lift the refined optional field-list type payload into record_decl.
@@ -74,10 +85,31 @@ Proof.
   destruct (phase1_surface_normalize_optional_field_type_list fields)
     as [actual |] eqn:Hfields; try discriminate Hnormalize.
   inversion Hnormalize; subst refined.
-  cbn.
-  rewrite
+  pose proof
     (phase1_surface_normalize_optional_field_type_list_round_trip
-      fields actual Hfields).
+      fields actual Hfields) as Htree.
+  change
+    (PTNonterminal "record_decl"
+      (PTSequence
+        [ PTLiteral "record";
+          phase1_surface_identifier_tree name;
+          phase1_surface_optional_generic_params_tree generic_params;
+          phase1_surface_optional_mode_tree mode;
+          phase1_surface_optional_generic_requirements_tree requirements;
+          PTLiteral "{";
+          phase1_surface_optional_field_type_list_tree actual;
+          PTLiteral "}" ]) =
+     PTNonterminal "record_decl"
+      (PTSequence
+        [ PTLiteral "record";
+          phase1_surface_identifier_tree name;
+          phase1_surface_optional_generic_params_tree generic_params;
+          phase1_surface_optional_mode_tree mode;
+          phase1_surface_optional_generic_requirements_tree requirements;
+          PTLiteral "{";
+          phase1_surface_optional_fields_tree fields;
+          PTLiteral "}" ])).
+  rewrite Htree.
   reflexivity.
 Qed.
 
