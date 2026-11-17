@@ -47,9 +47,10 @@ Proof.
     repeat rewrite Nat.eqb_refl.
     now rewrite Hrc.
   - unfold fsem02AdaptiveHeadShapeGate,
-      fsem02AdaptiveShapeGatedPing,
-      fsem02AdaptiveResourceShapeCheck.
+      fsem02AdaptiveShapeGatedPing.
     repeat rewrite Nat.eqb_refl.
+    change (fsem02AdaptiveResourceShapeCheck ec
+      (FSEM02EndpointResource ec)) with None.
     now rewrite Hrs.
 Qed.
 
