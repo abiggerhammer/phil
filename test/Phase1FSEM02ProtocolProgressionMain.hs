@@ -3195,6 +3195,52 @@ sourcePingThreeDisjointTerminalSchedules accepted rejected = do
               assert (replayAgain == afterSuffix)
                 (label <> ": re-repair changed authorized suffix replay"))
               allReinjectionSites)
+            -- Reintroduce two independently corrupted observations after
+            -- exact restoration. All six unordered site pairs, with both
+            -- possible repair orders, must refuse on the first remaining
+            -- fault and replay the SAME externally admitted suffix.
+            -- Corruption/repair are test interventions, not Phil steps.
+            let pairedSites =
+                  [ (siteA, siteB)
+                  | (siteIndex, siteA) <- zip [(0 :: Int) ..] allReinjectionSites
+                  , siteB <- drop (siteIndex + 1) allReinjectionSites ]
+            assert (length pairedSites == 6
+                    && (9 * 4 * 4 * length fourFaultCases
+                        * length pairedSites * (2 :: Int)) == 6912)
+              "adaptive paired post-repair reinjection census changed"
+            mapM_ (\(siteA, siteB) -> do
+              let twiceRegressed = reinjectSite siteB
+                    (reinjectSite siteA closedPrefix)
+                  unaffectedSites = filter
+                    (\site -> site /= siteA && site /= siteB)
+                    allReinjectionSites
+              assert (reinjectSite siteA closedPrefix /= closedPrefix
+                      && reinjectSite siteB closedPrefix /= closedPrefix
+                      && twiceRegressed /= closedPrefix)
+                (label <> ": paired reinjection failed to corrupt both observations")
+              assert (committedUnchanged twiceRegressed
+                      && spectatorLoanUnchanged twiceRegressed)
+                (label <> ": paired reinjection mutated unrelated state")
+              checkRemaining unaffectedSites twiceRegressed
+              mapM_ (\(firstRepair, secondRepair) -> do
+                let onceRepaired = repairOne firstRepair twiceRegressed
+                assert (onceRepaired /= twiceRegressed
+                        && onceRepaired /= closedPrefix)
+                  (label <> ": first repair masked independent remaining fault")
+                assert (committedUnchanged onceRepaired
+                        && spectatorLoanUnchanged onceRepaired)
+                  (label <> ": first paired repair changed committed owners")
+                checkRemaining (firstRepair : unaffectedSites) onceRepaired
+                let twiceRepaired = repairOne secondRepair onceRepaired
+                assert (twiceRepaired == closedPrefix)
+                  (label <> ": paired repair order did not restore exact prefix")
+                replayPair <- foldM
+                  (\contexts req -> mapLeft show (run contexts req))
+                  twiceRepaired suffix
+                assert (replayPair == afterSuffix)
+                  (label <> ": paired repair changed authorized suffix"))
+                [(siteA, siteB), (siteB, siteA)])
+              pairedSites)
             fourFaultCases
           assert (committedUnchanged bothHeads && spectatorLoanUnchanged bothHeads)
             "two malformed projected heads disturbed committed state"
