@@ -50,7 +50,7 @@ Proof.
       fsem02AdaptiveShapeGatedPing.
     repeat rewrite Nat.eqb_refl.
     change (fsem02AdaptiveResourceShapeCheck ec
-      (FSEM02EndpointResource ec)) with None.
+      (FSEM02EndpointResource ec)) with (None : option fsem02AdaptiveResourceFailure).
     now rewrite Hrs.
 Qed.
 
