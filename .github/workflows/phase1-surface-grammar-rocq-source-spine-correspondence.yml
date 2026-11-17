@@ -101,14 +101,15 @@ jobs:
             proof/Phil/Surface/GrammarAstGenericRequirementsRecursiveGroupingExamples.vo \
             proof/Phil/Surface/GrammarAstRecordDataGenericRequirementRecursiveGroupingSpine.vo \
             proof/Phil/Surface/GrammarAstRecordDataGenericRequirementRecursiveGroupingTotality.vo \
-            proof/Phil/Surface/GrammarAstRecordDataGenericRequirementRecursiveGroupingExamples.vo
+            proof/Phil/Surface/GrammarAstRecordDataGenericRequirementRecursiveGroupingExamples.vo \
+            proof/Phil/Surface/GrammarAstRecordDataRecursiveGroupingImplementationRepresentation.vo
 
       - name: Compile new generic-requirement modules with all warnings enabled
         shell: bash
         run: |
           set -euo pipefail
           export PATH="/home/rocq/.opam/${COMPILER}/bin:$PATH"
-          for module in GrammarAstGenericRequirementRecursiveGroupingSpine GrammarAstGenericRequirementRecursiveGroupingSpineTotality GrammarAstGenericRequirementRecursiveGroupingExamples GrammarAstGenericRequirementsRecursiveGroupingSpine GrammarAstGenericRequirementsRecursiveGroupingSpineTotality GrammarAstGenericRequirementsRecursiveGroupingExamples GrammarAstRecordDataGenericRequirementRecursiveGroupingSpine GrammarAstRecordDataGenericRequirementRecursiveGroupingTotality GrammarAstRecordDataGenericRequirementRecursiveGroupingExamples; do
+          for module in GrammarAstGenericRequirementRecursiveGroupingSpine GrammarAstGenericRequirementRecursiveGroupingSpineTotality GrammarAstGenericRequirementRecursiveGroupingExamples GrammarAstGenericRequirementsRecursiveGroupingSpine GrammarAstGenericRequirementsRecursiveGroupingSpineTotality GrammarAstGenericRequirementsRecursiveGroupingExamples GrammarAstRecordDataGenericRequirementRecursiveGroupingSpine GrammarAstRecordDataGenericRequirementRecursiveGroupingTotality GrammarAstRecordDataGenericRequirementRecursiveGroupingExamples GrammarAstRecordDataRecursiveGroupingImplementationRepresentation; do
             rocq c -w +all -Q proof/Phil Phil "proof/Phil/Surface/${module}.v"
           done
 
@@ -151,7 +152,8 @@ jobs:
             GrammarAstGenericRequirementsRecursiveGroupingSpine
             GrammarAstGenericRequirementsRecursiveGroupingSpineTotality
             GrammarAstRecordDataGenericRequirementRecursiveGroupingSpine
-            GrammarAstRecordDataGenericRequirementRecursiveGroupingTotality.
+            GrammarAstRecordDataGenericRequirementRecursiveGroupingTotality
+            GrammarAstRecordDataRecursiveGroupingImplementationRepresentation.
           Print Assumptions phase1_surface_normalize_recursive_grouping_fuel_round_trip.
           Print Assumptions phase1_surface_grouping_well_formed_from_derivation_mutual.
           Print Assumptions phase1_surface_recursive_grouping_sufficient_fuel.
@@ -212,13 +214,22 @@ jobs:
           Print Assumptions phase1_surface_normalize_record_generic_requirement_recursive_grouping_tree_total_from_derivation.
           Print Assumptions phase1_surface_normalize_data_generic_requirement_recursive_grouping_tree_round_trip.
           Print Assumptions phase1_surface_normalize_data_generic_requirement_recursive_grouping_tree_total_from_derivation.
+          Print Assumptions phase1_surface_recursive_grouping_record_implementation_round_trip.
+          Print Assumptions phase1_surface_recursive_grouping_record_implementation_inverse.
+          Print Assumptions phase1_surface_recursive_grouping_data_implementation_round_trip.
+          Print Assumptions phase1_surface_recursive_grouping_data_implementation_inverse.
+          Print Assumptions phase1_surface_normalize_recursive_grouping_record_implementation_round_trip.
+          Print Assumptions phase1_surface_normalize_recursive_grouping_data_implementation_round_trip.
+          Print Assumptions phase1_surface_normalize_recursive_grouping_record_data_declaration_spine_round_trip.
+          Print Assumptions phase1_surface_certified_record_has_recursive_grouping_implementation_view.
+          Print Assumptions phase1_surface_certified_data_has_recursive_grouping_implementation_view.
           EOF
           rocq c -Q proof/Phil Phil RecursiveGroupingAssumptions.v \
             | tee recursive-grouping-assumptions.txt
           python3 - <<'PY'
           from pathlib import Path
           output = Path("recursive-grouping-assumptions.txt").read_text()
-          assert output.count("Closed under the global context") == 60, output
+          assert output.count("Closed under the global context") == 69, output
           assert "Axioms:" not in output, output
           PY
           rocq check -silent -Q proof/Phil Phil \
@@ -247,7 +258,8 @@ jobs:
             Phil.Surface.GrammarAstGenericRequirementsRecursiveGroupingSpineTotality \
             Phil.Surface.GrammarAstGenericRequirementsRecursiveGroupingExamples \
             Phil.Surface.GrammarAstRecordDataGenericRequirementRecursiveGroupingTotality \
-            Phil.Surface.GrammarAstRecordDataGenericRequirementRecursiveGroupingExamples
+            Phil.Surface.GrammarAstRecordDataGenericRequirementRecursiveGroupingExamples \
+            Phil.Surface.GrammarAstRecordDataRecursiveGroupingImplementationRepresentation
 
       - name: Record source representation and recursive grouping identities
         shell: bash
@@ -294,6 +306,8 @@ jobs:
           cp proof/Phil/Surface/GrammarAstGenericRequirementsRecursiveGrouping*.vo surface-grammar-ast-representation/
           cp proof/Phil/Surface/GrammarAstRecordDataGenericRequirementRecursiveGrouping*.v surface-grammar-ast-representation/
           cp proof/Phil/Surface/GrammarAstRecordDataGenericRequirementRecursiveGrouping*.vo surface-grammar-ast-representation/
+          cp proof/Phil/Surface/GrammarAstRecordDataRecursiveGroupingImplementationRepresentation.v surface-grammar-ast-representation/
+          cp proof/Phil/Surface/GrammarAstRecordDataRecursiveGroupingImplementationRepresentation.vo surface-grammar-ast-representation/
           cp recursive-grouping-assumptions.txt surface-grammar-ast-representation/
           sha256sum \
             grammar/phase1-surface.ebnf \
@@ -389,6 +403,8 @@ jobs:
             proof/Phil/Surface/GrammarAstRecordDataGenericRequirementRecursiveGroupingTotality.vo \
             proof/Phil/Surface/GrammarAstRecordDataGenericRequirementRecursiveGroupingExamples.v \
             proof/Phil/Surface/GrammarAstRecordDataGenericRequirementRecursiveGroupingExamples.vo \
+            proof/Phil/Surface/GrammarAstRecordDataRecursiveGroupingImplementationRepresentation.v \
+            proof/Phil/Surface/GrammarAstRecordDataRecursiveGroupingImplementationRepresentation.vo \
             > surface-grammar-ast-representation/identities.sha256
           cat surface-grammar-ast-representation/identities.sha256
 
