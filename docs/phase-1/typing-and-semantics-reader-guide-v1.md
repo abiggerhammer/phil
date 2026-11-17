@@ -502,3 +502,6 @@ The bounded [FSEM-02 adaptive cross-peer projected-head/missing-owner diagnostic
 
 
 The bounded [FSEM-02 adaptive cross-peer projected-head/resource-shape diagnostic priority](formal-semantics-source-ping-adaptive-cross-peer-head-resource-shape-retry-fsem02-v1.md) adds 576 two-site malformed-head plus wrong-type/wrong-session linear predecessor probes after committed Ping terminal half-Closes. Actual production Haskell checks exact projected-head-before-remote-resource rejection, error exposure only after explicit head repair, and original authorized suffix replay only after both repairs. Five conditional Rocq lemmas retain all external nominal, activation, partner/root/disposal and implementation-representation premises; this is not universal refinement or normative completion.
+
+
+The bounded [FSEM-02 dual projected-head plus independent resource fault ladder](formal-semantics-source-ping-adaptive-dual-head-resource-ladder-fsem02-v1.md) adds 576 three-fault production Haskell states after independently authorized terminal Close prefixes. It requires Client-head, Server-head and resource-shape refusal in that order, then exact suffix replay after three explicit repairs; five conditional Rocq lemmas retain external authority and representation premises. No general refinement or normative completion is claimed.

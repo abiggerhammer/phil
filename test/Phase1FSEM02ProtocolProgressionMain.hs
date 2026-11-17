@@ -51,7 +51,7 @@ main = do
         (sourcePingDisjointPairCommutation accepted stale)
     , test "FSEM-02 disjoint Ping pairs complete all 24 terminal Close orders"
         (sourcePingDisjointTerminalInterleavings accepted stale)
-    , test "FSEM-02 25920 terminal schedules, 144 partner prefixes, 288 refused rematches, 1512 adaptive suffixes, 10368 half-Close completions, 288 poisoned-head, 288 missing-owner, 576 wrong-resource-shape, 576 combined-head/resource, 288 cross-peer head/missing-owner, 144 two-head and 576 cross-peer head/resource-shape fault diagnostic/retries"
+    , test "FSEM-02 25920 terminal schedules, 144 partner prefixes, 288 refused rematches, 1512 adaptive suffixes, 10368 half-Close completions, 288 poisoned-head, 288 missing-owner, 576 wrong-resource-shape, 576 combined-head/resource, 288 cross-peer head/missing-owner, 144 two-head, 576 cross-peer head/resource-shape and 576 dual-head/third-resource fault diagnostic/retries"
         (sourcePingThreeDisjointTerminalSchedules accepted stale)
     , test "FSEM-02 competing Ping sends sharing a Client predecessor refuse second use"
         (sourcePingSharedClientContention accepted stale)
@@ -2954,6 +2954,68 @@ sourcePingThreeDisjointTerminalSchedules accepted rejected = do
             assert (replay == afterSuffix)
               (label <> ": two-site repair changed authorized suffix"))
             crossPeerShapeCases
+          -- Three independent hostile observations: BOTH still-free source
+          -- projected heads are wrong and ONE endpoint linear resource on
+          -- either peer is independently wrong-typed or wrong-session.
+          -- All projected heads must reject in Client/Server order before
+          -- the resource fault can be observed. Repairing source metadata
+          -- alone must never silently repair the distinct linear resource.
+          bothHeadsClientType <- rewriteFreePeerResource bothHeads freeClient
+            clientOld (TyUInt 8)
+          bothHeadsClientSession <- rewriteFreePeerResource bothHeads freeClient
+            clientOld (TyEndpoint (End done))
+          bothHeadsServerType <- rewriteFreePeerResource bothHeads freeServer
+            serverOld (TyUInt 8)
+          bothHeadsServerSession <- rewriteFreePeerResource bothHeads freeServer
+            serverOld (TyEndpoint (End done))
+          let threeFaultCases =
+                [ ("two heads / Client wrong type", bothHeadsClientType
+                  , freeClient
+                  , ProtocolEndpointResourceTypeMismatch clientOld (TyUInt 8))
+                , ("two heads / Client wrong session", bothHeadsClientSession
+                  , freeClient
+                  , ProtocolEndpointSessionMismatch clientOld
+                      (sourceClientHead plans) (End done))
+                , ("two heads / Server wrong type", bothHeadsServerType
+                  , freeServer
+                  , ProtocolEndpointResourceTypeMismatch serverOld (TyUInt 8))
+                , ("two heads / Server wrong session", bothHeadsServerSession
+                  , freeServer
+                  , ProtocolEndpointSessionMismatch serverOld
+                      (sourceServerHead plans) (End done)) ]
+          assert (length threeFaultCases == 4
+                  && (9 * 4 * 4 * length threeFaultCases :: Int) == 576)
+            "adaptive two-head/third-resource ladder census changed"
+          mapM_ (\(label, faulty, resourcePeer, expectedResourceError) -> do
+            assert (committedUnchanged faulty && spectatorLoanUnchanged faulty)
+              (label <> ": fault modified prior Close or affine spectator")
+            expectFreePeerHeadRefusal (label <> ": Client first") freeClient
+              (sourceClientHead plans) faulty firstRequest
+            -- Repair the first projected head. If this peer also owns the
+            -- third fault, preserve its malformed linear resource.
+            let repairHead peer original malformed =
+                  if peer == resourcePeer
+                    then Map.adjust
+                      (\ctx -> ctx { protocolEndpoints = protocolEndpoints original })
+                      peer malformed
+                    else Map.insert peer original malformed
+                afterClientHead = repairHead freeClient clientOriginal faulty
+            expectFreePeerHeadRefusal (label <> ": Server second") freeServer
+              (sourceServerHead plans) afterClientHead firstRequest
+            let afterBothHeads = repairHead freeServer serverOriginal afterClientHead
+            expectFreePeerShapeRefusal (label <> ": resource third")
+              resourcePeer expectedResourceError afterBothHeads firstRequest
+            let resourceOriginal =
+                  if resourcePeer == freeClient then clientOriginal else serverOriginal
+                fullyRestored = Map.insert resourcePeer resourceOriginal afterBothHeads
+            assert (fullyRestored == closedPrefix)
+              (label <> ": exact three-fault repair failed")
+            replay <- foldM
+              (\contexts req -> mapLeft show (run contexts req))
+              fullyRestored suffix
+            assert (replay == afterSuffix)
+              (label <> ": repaired three-fault state changed authorized suffix"))
+            threeFaultCases
           assert (committedUnchanged bothHeads && spectatorLoanUnchanged bothHeads)
             "two malformed projected heads disturbed committed state"
           expectFreePeerHeadRefusal "both free heads: Client first" freeClient
