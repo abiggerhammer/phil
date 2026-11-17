@@ -3296,7 +3296,7 @@ sourcePingThreeDisjointTerminalSchedules accepted rejected = do
                 assert (replayTriple == afterSuffix)
                   (label <> ": triple restoration changed authorized suffix"))
                 tripleOrders)
-              tripleSites)
+              tripleSites
             -- A non-monotone post-repair episode: reintroduce all four
             -- faults AFTER complete restoration, then restore the first
             -- site, recontaminate that very site, and resume the original
@@ -3354,7 +3354,7 @@ sourcePingThreeDisjointTerminalSchedules accepted rejected = do
                     restoredBounce suffix
                   assert (replayBounce == afterSuffix)
                     (label <> ": post-bounce authorized suffix changed"))
-              firstSiteBounceOrders
+              firstSiteBounceOrders)
             fourFaultCases
           assert (committedUnchanged bothHeads && spectatorLoanUnchanged bothHeads)
             "two malformed projected heads disturbed committed state"
