@@ -185,6 +185,69 @@ jobs:
             exit 1
           fi
 
+          # A push-based merge intent at the exact PR head registers its own
+          # merge-pr check on that head.  Do not make that check a prerequisite
+          # of itself.  Only remove check IDs independently proven to be jobs
+          # of this trusted workflow on this exact merge-intent ref and SHA.
+          intent_branch="hamster/merge/$LANE/pr-$PR_NUMBER/$EXPECTED_HEAD"
+          verified_intent_ids='[]'
+          while IFS= read -r check; do
+            if ! jq -e --arg expected_head "$EXPECTED_HEAD" \
+              '(.name == "merge-pr") and (.app.slug == "github-actions")
+               and (.head_sha == $expected_head)' <<<"$check" >/dev/null; then
+              continue
+            fi
+            url_prefix="https://github.com/$GH_REPO/actions/runs/"
+            ids="$(jq -er --arg prefix "$url_prefix" \
+              '.details_url | select(type == "string" and startswith($prefix))
+               | ltrimstr($prefix)
+               | capture("^(?<run>[0-9]+)/job/(?<job>[0-9]+)$")
+               | "\(.run) \(.job)"' <<<"$check")" || continue
+            read -r run_id job_id <<<"$ids"
+            [[ "$run_id" =~ ^[0-9]+$ && "$job_id" =~ ^[0-9]+$ ]] || continue
+
+            intent_run="$(gh api "repos/$GH_REPO/actions/runs/$run_id")"
+            if ! jq -e \
+              --arg expected_head "$EXPECTED_HEAD" \
+              --arg expected_branch "$intent_branch" \
+              --arg repo "$GH_REPO" \
+              '(.name == "Hamster Merge Intent")
+               and (.path == ".github/workflows/hamster-merge-intent.yml")
+               and (.event == "push")
+               and (.head_branch == $expected_branch)
+               and (.head_sha == $expected_head)
+               and (.repository.full_name == $repo)' <<<"$intent_run" >/dev/null; then
+              continue
+            fi
+
+            intent_job="$(gh api "repos/$GH_REPO/actions/jobs/$job_id")"
+            if ! jq -e \
+              --argjson expected_run "$run_id" \
+              --argjson expected_job "$job_id" \
+              '(.id == $expected_job) and (.run_id == $expected_run)
+               and (.name == "merge-pr")' <<<"$intent_job" >/dev/null; then
+              continue
+            fi
+
+            check_id="$(jq -r '.id' <<<"$check")"
+            if [ "$check_id" != "$job_id" ]; then
+              echo "Merge-intent job/check ID mismatch: $job_id vs $check_id" >&2
+              exit 1
+            fi
+            verified_intent_ids="$(jq --argjson id "$check_id" \
+              '. + [$id]' <<<"$verified_intent_ids")"
+          done < <(jq -c '.check_runs[] | select(.name == "merge-pr")' <<<"$checks_json")
+
+          checks_json="$(jq --argjson ids "$verified_intent_ids" \
+            '.check_runs |= map(select(.id as $id | ($ids | index($id)) == null))
+             | .total_count = (.check_runs | length)' <<<"$checks_json")"
+          remaining="$(jq -r '.check_runs | length' <<<"$checks_json")"
+          if [ "$remaining" -eq 0 ]; then
+            echo "No independent exact-head verification checks remain." >&2
+            exit 1
+          fi
+          echo "Excluded $(jq -r 'length' <<<"$verified_intent_ids") provenance-verified merge-intent job(s); verifying $remaining independent exact-head checks."
+
           # Fail closed for all incomplete, failed, cancelled, neutral, or
           # otherwise non-successful checks. A single PR-only release publish
           # skip is handled separately after verifying GitHub provenance.
