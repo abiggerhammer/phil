@@ -3240,7 +3240,63 @@ sourcePingThreeDisjointTerminalSchedules accepted rejected = do
                 assert (replayPair == afterSuffix)
                   (label <> ": paired repair changed authorized suffix"))
                 [(siteA, siteB), (siteB, siteA)])
-              pairedSites)
+              pairedSites
+            -- Three independently reintroduced observation faults after
+            -- complete recovery, across all four triple subsets and six
+            -- repair orders. Repairs are EXTERNAL test interventions.
+            let tripleSites =
+                  [ (firstSite, secondSite, thirdSite)
+                  | (indexFirst, firstSite) <- zip [(0 :: Int) ..] allReinjectionSites
+                  , (indexSecond, secondSite) <- zip [(0 :: Int) ..] allReinjectionSites
+                  , indexFirst < indexSecond
+                  , (indexThird, thirdSite) <- zip [(0 :: Int) ..] allReinjectionSites
+                  , indexSecond < indexThird ]
+            assert (length tripleSites == 4
+                    && (9 * 4 * 4 * length fourFaultCases
+                        * length tripleSites * (6 :: Int)) == 13824)
+              "adaptive triple post-repair reinjection census changed"
+            mapM_ (\(firstSite, secondSite, thirdSite) -> do
+              let regressedSites = [firstSite, secondSite, thirdSite]
+                  tripleCorrupted = foldl (flip reinjectSite)
+                    closedPrefix regressedSites
+                  unaffectedSites = filter
+                    (\candidateSite -> notElem candidateSite regressedSites)
+                    allReinjectionSites
+                  tripleOrders = permutations regressedSites
+              assert (length tripleOrders == 6
+                      && all (\candidateSite ->
+                        reinjectSite candidateSite closedPrefix /= closedPrefix)
+                        regressedSites
+                      && tripleCorrupted /= closedPrefix)
+                (label <> ": triple reinjection did not corrupt three observations")
+              assert (committedUnchanged tripleCorrupted
+                      && spectatorLoanUnchanged tripleCorrupted)
+                (label <> ": triple reinjection altered committed or spectator state")
+              checkRemaining unaffectedSites tripleCorrupted
+              mapM_ (\restorationOrder -> do
+                (restoredTriple, repairedTriple) <- foldM
+                  (\(currentTriple, repairedAlready) repairedSite -> do
+                    checkRemaining (unaffectedSites ++ repairedAlready) currentTriple
+                    let oneMoreRepaired = repairOne repairedSite currentTriple
+                        nowRepaired = repairedSite : repairedAlready
+                    assert (oneMoreRepaired /= currentTriple)
+                      (label <> ": triple restoration did not change its own site")
+                    assert (committedUnchanged oneMoreRepaired
+                            && spectatorLoanUnchanged oneMoreRepaired)
+                      (label <> ": triple restoration mutated unrelated state")
+                    checkRemaining (unaffectedSites ++ nowRepaired) oneMoreRepaired
+                    Right (oneMoreRepaired, nowRepaired))
+                  (tripleCorrupted, []) restorationOrder
+                assert (length repairedTriple == 3
+                        && restoredTriple == closedPrefix)
+                  (label <> ": triple order did not restore the exact prefix")
+                replayTriple <- foldM
+                  (\contexts req -> mapLeft show (run contexts req))
+                  restoredTriple suffix
+                assert (replayTriple == afterSuffix)
+                  (label <> ": triple restoration changed authorized suffix"))
+                tripleOrders)
+              tripleSites)
             fourFaultCases
           assert (committedUnchanged bothHeads && spectatorLoanUnchanged bothHeads)
             "two malformed projected heads disturbed committed state"
