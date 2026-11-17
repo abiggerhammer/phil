@@ -1,6 +1,8 @@
 From Phil.Core Require Import
   FSEM02PingFourFaultRepairOrderConfluence
   FSEM02PingAdaptiveDualHeadDualResourceLadder
+  FSEM02PingAdaptiveFreePeerResourceShapeRetry
+  FSEM02PingAdaptiveHeadResourcePriorityRetry
   FSEM02PingAdaptiveHalfCloseSuffix
   FSEM02PingMixedPrefixFault.
 
