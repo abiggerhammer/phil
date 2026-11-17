@@ -56,5 +56,5 @@ jobs:
           do
             rocq c -Q proof/Phil Phil "$file"
           done
-          if grep -nE '^[[:space:]]*(Admitted[.]|Axiom[[:space:]]|Parameter[[:space:]])' proof/Phil/Core/FSEM02PingPostRepairFourSiteBounce.v; then exit 1; fi
+          if grep -nE '^[[:space:]]*(Admitted[.]|Axiom[[:space:]]|Parameter[[:space:]])' proof/Phil/Core/FSEM02PingPartialMaskReversibility.v; then exit 1; fi
           sha256sum proof/Phil/Core/FSEM02PingPartialMaskReversibility.v proof/Phil/Core/FSEM02PingPartialMaskReversibility.vo
