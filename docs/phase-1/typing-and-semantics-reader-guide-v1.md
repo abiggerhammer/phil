@@ -31,6 +31,8 @@ There are several layers of authority; they must not be conflated.
 → the specific proof and implementation correspondence for any claim you want
 to challenge.
 
+The [non-normative FSEM-02 paired post-repair reinjection check](formal-semantics-source-ping-post-repair-paired-reinjection-fsem02-v1.md) tests 3,456 independently paired native observation faults and both one-site repair orders (6,912 repair-order traces), with exact rejection priority and unchanged authorized Ping/Close suffix replay. A conditional Rocq theorem covers six abstract masks, not universal implementation refinement or new authority.
+
 The [non-normative FSEM-02 post-repair fault reinjection regression](formal-semantics-source-ping-post-repair-reinjection-fsem02-v1.md) checks 2,304 native single-site recontamination/re-repair cycles after an otherwise fully restored four-site state. A conditional Rocq theorem establishes abstract refusal and restoration without granting protocol authority or general Haskell-to-Rocq refinement.
 
 The [non-normative FSEM-02 four-fault repair-order confluence regression](formal-semantics-source-ping-four-fault-repair-order-confluence-fsem02-v1.md) checks 13,824 actual production Haskell repair-order traces and separately proves conditional 16-mask Rocq diagnostic priority without granting external protocol authority.
