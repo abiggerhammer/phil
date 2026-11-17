@@ -3240,7 +3240,7 @@ sourcePingThreeDisjointTerminalSchedules accepted rejected = do
                 assert (replayPair == afterSuffix)
                   (label <> ": paired repair changed authorized suffix"))
                 [(siteA, siteB), (siteB, siteA)])
-              pairedSites)
+              pairedSites
             -- Three independently reintroduced observation faults after
             -- complete recovery, across all four triple subsets and six
             -- repair orders. Repairs are EXTERNAL test interventions.
