@@ -26,9 +26,7 @@ Theorem fsem02PartialMaskSiteReversibility :
       fsem02RecontaminateOne site mask.
 Proof.
   intros site mask.
-  destruct mask as [ch tail].
-  destruct tail as [sh tail].
-  destruct tail as [cr sr].
+  destruct mask as [[[ch sh] cr] sr].
   destruct site; simpl; repeat split; reflexivity.
 Qed.
 
@@ -43,8 +41,6 @@ Theorem fsem02DisjointObservationRepairCommutesWithReinjection :
       (fsem02RepairObservation repairedSite mask).
 Proof.
   intros repairedSite corruptedSite mask Hneq.
-  destruct mask as [ch tail].
-  destruct tail as [sh tail].
-  destruct tail as [cr sr].
+  destruct mask as [[[ch sh] cr] sr].
   destruct repairedSite, corruptedSite; try congruence; reflexivity.
 Qed.
