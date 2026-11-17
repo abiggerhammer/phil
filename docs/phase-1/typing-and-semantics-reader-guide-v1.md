@@ -31,6 +31,8 @@ There are several layers of authority; they must not be conflated.
 → the specific proof and implementation correspondence for any claim you want
 to challenge.
 
+The [non-normative FSEM-02 four-site post-repair recontamination and relapse regression](formal-semantics-source-ping-post-repair-four-site-bounce-fsem02-v1.md) tests 13,824 non-monotone native repair traces: after fully restoring all four observations, reintroduce all four faults, repair one, recontaminate it and finish the same authorized suffix only after complete repair. Conditional Rocq mask proofs do not confer source authority or general implementation refinement.
+
 The [non-normative FSEM-02 triple post-repair reinjection regression](formal-semantics-source-ping-post-repair-triple-reinjection-fsem02-v1.md) checks 2,304 three-fault native states and all six restoration orders (13,824 replay traces), requiring exact first-fault rejection and unchanged independently admitted Ping/Close replay. One conditional Rocq theorem classifies the four triple masks; it does not establish general implementation refinement or new protocol authority.
 
 The [non-normative FSEM-02 paired post-repair reinjection check](formal-semantics-source-ping-post-repair-paired-reinjection-fsem02-v1.md) tests 3,456 independently paired native observation faults and both one-site repair orders (6,912 repair-order traces), with exact rejection priority and unchanged authorized Ping/Close suffix replay. A conditional Rocq theorem covers six abstract masks, not universal implementation refinement or new authority.

@@ -3297,6 +3297,64 @@ sourcePingThreeDisjointTerminalSchedules accepted rejected = do
                   (label <> ": triple restoration changed authorized suffix"))
                 tripleOrders)
               tripleSites)
+            -- A non-monotone post-repair episode: reintroduce all four
+            -- faults AFTER complete restoration, then restore the first
+            -- site, recontaminate that very site, and resume the original
+            -- four-site repair order. These are test interventions, NOT
+            -- source steps or permissions to replay a rejected request.
+            let allFourRecontaminated =
+                  foldl (flip reinjectSite) closedPrefix allReinjectionSites
+                firstSiteBounceOrders = permutations allReinjectionSites
+            assert (allFourRecontaminated == faulty
+                    && length firstSiteBounceOrders == 24
+                    && (9 * 4 * 4 * length fourFaultCases
+                        * length firstSiteBounceOrders :: Int) == 13824)
+              "adaptive post-repair four-site bounce census changed"
+            assert (committedUnchanged allFourRecontaminated
+                    && spectatorLoanUnchanged allFourRecontaminated)
+              (label <> ": full reinjection altered independent owners")
+            checkRemaining [] allFourRecontaminated
+            mapM_ (\restorationOrder ->
+              case restorationOrder of
+                [] -> Left (label <> ": impossible empty bounce order")
+                firstSite : remainingSites -> do
+                  let onceRepaired = repairOne firstSite allFourRecontaminated
+                  assert (onceRepaired /= allFourRecontaminated
+                          && committedUnchanged onceRepaired
+                          && spectatorLoanUnchanged onceRepaired)
+                    (label <> ": first bounce repair corrupted unrelated state")
+                  checkRemaining [firstSite] onceRepaired
+                  let relapsed = reinjectSite firstSite onceRepaired
+                  assert (relapsed == allFourRecontaminated
+                          && committedUnchanged relapsed
+                          && spectatorLoanUnchanged relapsed)
+                    (label <> ": first-site relapse did not recover exact faults")
+                  checkRemaining [] relapsed
+                  let reRepaired = repairOne firstSite relapsed
+                  assert (reRepaired == onceRepaired)
+                    (label <> ": repeat first-site repair was not stable")
+                  checkRemaining [firstSite] reRepaired
+                  (restoredBounce, repairedBounce) <- foldM
+                    (\(currentBounce, repairedSoFar) nextSite -> do
+                      checkRemaining repairedSoFar currentBounce
+                      let repairedNext = repairOne nextSite currentBounce
+                          newRepaired = nextSite : repairedSoFar
+                      assert (repairedNext /= currentBounce
+                              && committedUnchanged repairedNext
+                              && spectatorLoanUnchanged repairedNext)
+                        (label <> ": bounce continuation changed unrelated state")
+                      checkRemaining newRepaired repairedNext
+                      Right (repairedNext, newRepaired))
+                    (reRepaired, [firstSite]) remainingSites
+                  assert (length repairedBounce == 4
+                          && restoredBounce == closedPrefix)
+                    (label <> ": bounce repair failed exact prefix restoration")
+                  replayBounce <- foldM
+                    (\contexts req -> mapLeft show (run contexts req))
+                    restoredBounce suffix
+                  assert (replayBounce == afterSuffix)
+                    (label <> ": post-bounce authorized suffix changed"))
+              firstSiteBounceOrders
             fourFaultCases
           assert (committedUnchanged bothHeads && spectatorLoanUnchanged bothHeads)
             "two malformed projected heads disturbed committed state"
