@@ -1,6 +1,7 @@
 From Stdlib Require Import Arith.PeanoNat.
 From Phil.Core Require Import
   FSEM02PingAdaptiveDualHeadDualResourceLadder
+  FSEM02PingAdaptiveHalfCloseSuffix
   FSEM02PingAdaptiveHeadResourcePriorityRetry
   FSEM02PingAdaptiveFreePeerResourceShapeRetry
   FSEM02PingMixedPrefixFault.
