@@ -51,7 +51,7 @@ main = do
         (sourcePingDisjointPairCommutation accepted stale)
     , test "FSEM-02 disjoint Ping pairs complete all 24 terminal Close orders"
         (sourcePingDisjointTerminalInterleavings accepted stale)
-    , test "FSEM-02 25920 terminal schedules, 144 partner prefixes, 288 refused rematches, 1512 adaptive suffixes, 10368 half-Close completions, 288 poisoned-head, 288 missing-owner, 576 wrong-resource-shape, 576 combined-head/resource, 288 cross-peer head/missing-owner, 144 two-head, 576 cross-peer head/resource-shape and 576 dual-head/third-resource fault diagnostic/retries"
+    , test "FSEM-02 25920 terminal schedules, 144 partner prefixes, 288 refused rematches, 1512 adaptive suffixes, 10368 half-Close completions, 288 poisoned-head, 288 missing-owner, 576 wrong-resource-shape, 576 combined-head/resource, 288 cross-peer head/missing-owner, 144 two-head, 576 cross-peer head/resource-shape, 576 dual-head/third-resource and 576 dual-head/dual-resource fault diagnostic/retries"
         (sourcePingThreeDisjointTerminalSchedules accepted stale)
     , test "FSEM-02 competing Ping sends sharing a Client predecessor refuse second use"
         (sourcePingSharedClientContention accepted stale)
@@ -3016,6 +3016,76 @@ sourcePingThreeDisjointTerminalSchedules accepted rejected = do
             assert (replay == afterSuffix)
               (label <> ": repaired three-fault state changed authorized suffix"))
             threeFaultCases
+          -- Four independent faults on the two still-free peers: both
+          -- projected heads and both linear predecessor resource shapes.
+          -- Repair each observation separately. No rejected call advances
+          -- the already committed terminal Close prefix or spectator loan.
+          dualHeadClientType <- rewriteFreePeerResource bothHeads freeClient
+            clientOld (TyUInt 8)
+          dualHeadClientSession <- rewriteFreePeerResource bothHeads freeClient
+            clientOld (TyEndpoint (End done))
+          dualHeadBothTypes <- rewriteFreePeerResource dualHeadClientType freeServer
+            serverOld (TyUInt 8)
+          dualHeadClientTypeServerSession <- rewriteFreePeerResource
+            dualHeadClientType freeServer serverOld (TyEndpoint (End done))
+          dualHeadClientSessionServerType <- rewriteFreePeerResource
+            dualHeadClientSession freeServer serverOld (TyUInt 8)
+          dualHeadBothSessions <- rewriteFreePeerResource
+            dualHeadClientSession freeServer serverOld (TyEndpoint (End done))
+          let fourFaultCases =
+                [ ("both heads / Client type / Server type", dualHeadBothTypes
+                  , ProtocolEndpointResourceTypeMismatch clientOld (TyUInt 8)
+                  , ProtocolEndpointResourceTypeMismatch serverOld (TyUInt 8))
+                , ("both heads / Client type / Server session"
+                  , dualHeadClientTypeServerSession
+                  , ProtocolEndpointResourceTypeMismatch clientOld (TyUInt 8)
+                  , ProtocolEndpointSessionMismatch serverOld
+                      (sourceServerHead plans) (End done))
+                , ("both heads / Client session / Server type"
+                  , dualHeadClientSessionServerType
+                  , ProtocolEndpointSessionMismatch clientOld
+                      (sourceClientHead plans) (End done)
+                  , ProtocolEndpointResourceTypeMismatch serverOld (TyUInt 8))
+                , ("both heads / Client session / Server session"
+                  , dualHeadBothSessions
+                  , ProtocolEndpointSessionMismatch clientOld
+                      (sourceClientHead plans) (End done)
+                  , ProtocolEndpointSessionMismatch serverOld
+                      (sourceServerHead plans) (End done)) ]
+          assert (length fourFaultCases == 4
+                  && (9 * 4 * 4 * length fourFaultCases :: Int) == 576)
+            "adaptive two-head/two-resource four-fault census changed"
+          mapM_ (\(label, faulty, clientError, serverError) -> do
+            assert (committedUnchanged faulty && spectatorLoanUnchanged faulty)
+              (label <> ": four faults altered committed Close/affine spectator")
+            expectFreePeerHeadRefusal (label <> ": Client head first")
+              freeClient (sourceClientHead plans) faulty firstRequest
+            let clientHeadRepaired = Map.adjust
+                  (\ctx -> ctx { protocolEndpoints = protocolEndpoints clientOriginal })
+                  freeClient faulty
+            expectFreePeerHeadRefusal (label <> ": Server head second")
+              freeServer (sourceServerHead plans) clientHeadRepaired firstRequest
+            let bothHeadsRepaired = Map.adjust
+                  (\ctx -> ctx { protocolEndpoints = protocolEndpoints serverOriginal })
+                  freeServer clientHeadRepaired
+            expectFreePeerShapeRefusal (label <> ": Client resource third")
+              freeClient clientError bothHeadsRepaired firstRequest
+            let clientResourceRepaired = Map.adjust
+                  (\ctx -> ctx { protocolResources = protocolResources clientOriginal })
+                  freeClient bothHeadsRepaired
+            expectFreePeerShapeRefusal (label <> ": Server resource fourth")
+              freeServer serverError clientResourceRepaired firstRequest
+            let fullyRestored = Map.adjust
+                  (\ctx -> ctx { protocolResources = protocolResources serverOriginal })
+                  freeServer clientResourceRepaired
+            assert (fullyRestored == closedPrefix)
+              (label <> ": all four explicit repairs failed exact prefix equality")
+            replay <- foldM
+              (\contexts req -> mapLeft show (run contexts req))
+              fullyRestored suffix
+            assert (replay == afterSuffix)
+              (label <> ": four-fault repair altered authorized suffix")) 
+            fourFaultCases
           assert (committedUnchanged bothHeads && spectatorLoanUnchanged bothHeads)
             "two malformed projected heads disturbed committed state"
           expectFreePeerHeadRefusal "both free heads: Client first" freeClient
