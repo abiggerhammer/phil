@@ -1,0 +1,19 @@
+# FSEM-02 — all four-site repair orders preserve refusal and replay
+
+**Status: bounded, non-normative; FSEM-02 remains open.** This follows the [four-fault diagnostic precedence slice](formal-semantics-source-ping-adaptive-dual-head-dual-resource-ladder-fsem02-v1.md) and tracks [#1613](https://github.com/abiggerhammer/phil/issues/1613). Fixed-order repair tests did not establish the behavior when resource state is repaired before projected session-head metadata.
+
+## Source witnesses and production transition observations
+
+The existing accepted complete Grammar-v1 Ping source at [accepted.phil](../../test/fixtures/fsem02-protocol-progression-v1/accepted.phil) provides the checked U8 Send/Receive predecessor and End Done successor. Its minimally rejected [stale-close.phil](../../test/fixtures/fsem02-protocol-progression-v1/stale-close.phil) must still reject as **exactly** GrammarV1ComponentSendCloseCloseMismatch. External activation, protocol instance, role/partner/root choice, terminal Close/disposal permission, scheduler and assurance remain independently supplied premises.
+
+In the actual production Haskell [protocol progression regression](../../test/Phase1FSEM02ProtocolProgressionMain.hs), 9 initial partner choices × 4 authorized nonempty terminal Close prefixes × 4 legal remaining partner orders × 4 combinations of independently wrong-type/wrong-session Client and Server resources yield **576 four-fault states**. Each has both projected session heads malformed and both associated linear resources independently wrong. For each state the test exhausts **all 24 permutations** of repairing Client projected head, Server projected head, Client linear resource and Server linear resource: **13,824 repair-order traces**, with exact native diagnostic checks before and after every separate repair.
+
+Every incomplete state must reject with the first still-unrepaired fault in priority order: Client projected head, Server projected head, Client resource type/session, Server resource type/session. Each repair changes only its own observation field. Previously committed terminal Closes, unrelated process contexts and an active affine spectator loan must remain intact. Once all four sites are restored, the complete state must exactly equal the pre-injection native state, and the same externally authorized remaining Ping/Close suffix must replay without divergence. A rejected check is not a successful transition, and test-only fault injection or repair is **not** valid Phil source syntax.
+
+## Conditional Rocq model and limits
+
+The [Rocq 9.2 model](../../proof/Phil/Core/FSEM02PingFourFaultRepairOrderConfluence.v) gives a single 16-mask theorem for every combination of repaired/unrepaired sites (thereby covering every repair permutation), proves no incomplete mask manufactures a successor, and reuses the existing authorized half-Close transition proof after complete restoration. No new Axiom, Parameter or Admitted is introduced.
+
+**Nonclaims:** the finite nat-carrier model does not prove source-to-Core or Haskell-to-Rocq universal refinement, native Map/Set representation correspondence, general soundness, progress, fairness, deadlock freedom, architectural authority or normative semantics. Partner selection, activation, nominal identities, selected root, closure/disposal rights, environmental scheduler choices and assurance all remain explicit external inputs. This does not complete FSEM-02.
+
+The unprivileged [strict-Haskell/Rocq focused preflight](../../.github/workflows/fsem02-four-fault-repair-order-confluence-preflight.yml) must pass on the claimed branch before opening a draft PR. Broad exact-head CI, a fresh post-ready FSEM claim guard, protected expected-head merge and trusted exact claim release are separate mandatory gates. Only the previously established nonrequired main-only INT-011 release publish skip can be tolerated on PR; no other skipped required job is permitted.
