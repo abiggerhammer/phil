@@ -5,7 +5,7 @@
 module Main (main) where
 
 import Control.Monad (foldM)
-import Data.List (permutations)
+import Data.List (permutations, subsequences)
 import qualified Data.Map.Strict as Map
 import qualified Data.Text as Text
 import qualified Data.Text.IO as TextIO
@@ -3355,6 +3355,48 @@ sourcePingThreeDisjointTerminalSchedules accepted rejected = do
                   assert (replayBounce == afterSuffix)
                     (label <> ": post-bounce authorized suffix changed"))
               firstSiteBounceOrders)
+            -- All 16 partial fault masks: each of four observation sites
+            -- is probed, repaired, and recontaminated independently.
+            -- These are EXTERNAL interventions, never Phil source steps.
+            let partialFaultMasks = subsequences allReinjectionSites
+            assert (length partialFaultMasks == 16
+                    && (9 * 4 * 4 * length fourFaultCases
+                        * length partialFaultMasks
+                        * length allReinjectionSites :: Int) == 36864)
+              "adaptive full partial-mask reversibility census changed"
+            mapM_ (\badSites -> do
+              let partiallyBad = foldl (flip reinjectSite) closedPrefix badSites
+                  alreadyHealthy = filter (\site -> notElem site badSites)
+                    allReinjectionSites
+              assert (committedUnchanged partiallyBad
+                      && spectatorLoanUnchanged partiallyBad)
+                (label <> ": partial-mask fault altered independent owners")
+              checkRemaining alreadyHealthy partiallyBad
+              mapM_ (\probeSite -> do
+                let probed = reinjectSite probeSite partiallyBad
+                    twiceProbed = reinjectSite probeSite probed
+                    healthyAfterProbe = filter
+                      (\site -> notElem site (probeSite : badSites))
+                      allReinjectionSites
+                    repairedProbe = repairOne probeSite probed
+                    directlyRepaired = repairOne probeSite partiallyBad
+                    probedAgain = reinjectSite probeSite repairedProbe
+                assert (probed == twiceProbed)
+                  (label <> ": partial-mask reinjection was not idempotent")
+                assert (committedUnchanged probed
+                        && spectatorLoanUnchanged probed)
+                  (label <> ": partial-mask probe changed unrelated state")
+                checkRemaining healthyAfterProbe probed
+                assert (repairedProbe == directlyRepaired
+                        && committedUnchanged repairedProbe
+                        && spectatorLoanUnchanged repairedProbe)
+                  (label <> ": repair failed observation-local absorption")
+                checkRemaining (probeSite : healthyAfterProbe) repairedProbe
+                assert (probedAgain == probed)
+                  (label <> ": repair/reinjection failed exact reversibility")
+                checkRemaining healthyAfterProbe probedAgain)
+                allReinjectionSites)
+              partialFaultMasks
             fourFaultCases
           assert (committedUnchanged bothHeads && spectatorLoanUnchanged bothHeads)
             "two malformed projected heads disturbed committed state"
