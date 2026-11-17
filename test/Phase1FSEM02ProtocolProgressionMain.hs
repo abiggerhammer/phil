@@ -3212,7 +3212,7 @@ sourcePingThreeDisjointTerminalSchedules accepted rejected = do
               let twiceRegressed = reinjectSite siteB
                     (reinjectSite siteA closedPrefix)
                   unaffectedSites = filter
-                    (\site -> site /= siteA && site /= siteB)
+                    (\remainingSite -> remainingSite /= siteA && remainingSite /= siteB)
                     allReinjectionSites
               assert (reinjectSite siteA closedPrefix /= closedPrefix
                       && reinjectSite siteB closedPrefix /= closedPrefix
