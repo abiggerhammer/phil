@@ -3149,6 +3149,52 @@ sourcePingThreeDisjointTerminalSchedules accepted rejected = do
               assert (replayOrdered == afterSuffix)
                 (label <> ": repair order changed authorized suffix"))
               repairOrders)
+            -- One newly reintroduced observation fault after full recovery
+            -- must again refuse the original request. Repair remains an
+            -- external test intervention, not a language transition.
+            reinjBadClientCtx <- maybe
+              (Left (label <> ": missing corrupted Client context"))
+              Right (Map.lookup freeClient faulty)
+            reinjBadServerCtx <- maybe
+              (Left (label <> ": missing corrupted Server context"))
+              Right (Map.lookup freeServer faulty)
+            let allReinjectionSites =
+                  [ RepairClientHead, RepairServerHead
+                  , RepairClientResource, RepairServerResource ]
+                reinjectSite repairSite contexts =
+                  case repairSite of
+                    RepairClientHead -> Map.adjust
+                      (\ctx -> ctx { protocolEndpoints = protocolEndpoints reinjBadClientCtx })
+                      freeClient contexts
+                    RepairServerHead -> Map.adjust
+                      (\ctx -> ctx { protocolEndpoints = protocolEndpoints reinjBadServerCtx })
+                      freeServer contexts
+                    RepairClientResource -> Map.adjust
+                      (\ctx -> ctx { protocolResources = protocolResources reinjBadClientCtx })
+                      freeClient contexts
+                    RepairServerResource -> Map.adjust
+                      (\ctx -> ctx { protocolResources = protocolResources reinjBadServerCtx })
+                      freeServer contexts
+            assert ((9 * 4 * 4 * length fourFaultCases * length allReinjectionSites :: Int)
+                     == 2304)
+              "adaptive single-site post-repair reinjection census changed"
+            mapM_ (\repairSite -> do
+              let regressed = reinjectSite repairSite closedPrefix
+                  stillRepaired = filter (/= repairSite) allReinjectionSites
+              assert (regressed /= closedPrefix)
+                (label <> ": post-repair regression had no effect")
+              assert (committedUnchanged regressed && spectatorLoanUnchanged regressed)
+                (label <> ": reinjection altered committed owners or spectator")
+              checkRemaining stillRepaired regressed
+              let restored = repairOne repairSite regressed
+              assert (restored == closedPrefix)
+                (label <> ": re-repair did not recover exact native prefix")
+              replayAgain <- foldM
+                (\contexts req -> mapLeft show (run contexts req))
+                restored suffix
+              assert (replayAgain == afterSuffix)
+                (label <> ": re-repair changed authorized suffix replay"))
+              allReinjectionSites
             fourFaultCases
           assert (committedUnchanged bothHeads && spectatorLoanUnchanged bothHeads)
             "two malformed projected heads disturbed committed state"
