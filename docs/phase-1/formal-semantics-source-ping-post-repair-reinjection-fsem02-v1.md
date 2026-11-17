@@ -1,0 +1,15 @@
+# FSEM-02 — post-repair single-site fault reinjection and replay
+
+**Status: bounded, non-normative; FSEM-02 remains open.** This follows the [four-fault repair-order confluence slice](formal-semantics-source-ping-four-fault-repair-order-confluence-fsem02-v1.md) and tracks [#1613](https://github.com/abiggerhammer/phil/issues/1613). The prior 24 repair permutations covered monotone removal of faults, not recontamination after all four fields had been repaired.
+
+## Source and production witness
+
+The accepted complete Grammar-v1 [Ping source](../../test/fixtures/fsem02-protocol-progression-v1/accepted.phil) gives the checked typed U8 Send/Receive and End Done. The minimal [stale-Close rejection](../../test/fixtures/fsem02-protocol-progression-v1/stale-close.phil) must keep its exact GrammarV1ComponentSendCloseCloseMismatch class. Nominal instance, partner, activation, root, terminal disposal, scheduler and assurance are externally supplied.
+
+The [production Haskell source/native replay test](../../test/Phase1FSEM02ProtocolProgressionMain.hs) starts from 576 independently hostile four-fault states (9 partner choices × 4 committed nonempty terminal prefixes × 4 remaining partner orders × 4 wrong-type/wrong-session resource combinations). After explicitly repairing all four projected-head/linear-resource fields to the exact original state, it reintroduces **one** malformed field at a time: Client head, Server head, Client linear resource, or Server linear resource, giving **2,304 new post-repair regression and re-repair cycles**. The actual production request must reject with the precise remaining native constructor. The committed Close prefix, unrelated process resources and affine spectator loan remain intact. Restoring only the regressed field must reconstitute the exact prior map and replay the independently admitted suffix to the identical outcome. Fault injection and repair are external **test operations**, never Phil source transitions.
+
+## Checked abstract law and trust boundary
+
+[Conditional Rocq 9.2 theorem](../../proof/Phil/Core/FSEM02PingPostRepairReinjection.v) proves all four single-site regressions refuse a successful successor and complete restoration exposes only the previously admitted phase-step result (which itself may be blocked). No new axioms, parameters or admits are introduced. The finite nat-carrier proof does not establish universal source/Haskell-to-Rocq implementation refinement, Map/Set representation equivalence, new authority, scheduling guarantees, global progress or normative semantics.
+
+The unprivileged [strict focused preflight](../../.github/workflows/fsem02-post-repair-reinjection-preflight.yml) requires GHC 9.6.7 warning-free executable source tests and Rocq 9.2 proof checks on the claimed work branch **before** any draft PR. Broad exact-head required checks, fresh post-ready claim guard, protected expected-HEAD squash merge and matching trusted claim release remain mandatory. The sole allowed skipped job is the previously established **nonrequired main-only INT-011 publish** on PR events; any other skip stops merge.
