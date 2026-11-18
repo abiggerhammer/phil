@@ -150,7 +150,7 @@ Proof.
   assert (Q4096 : (n / 64) / 64 = n / 4096) by lia.
   split; [lia |].
   split; [lia |].
-  replace 262144 with (4096 * 64) by (vm_compute; reflexivity).
+  replace 262144 with (4096 * 64) by lia.
   lia.
 Qed.
 
