@@ -356,6 +356,16 @@ Proof.
     as LeftBounds.
   pose proof (p8_h8_wellformed_width_bounds right ValidRight)
     as RightBounds.
+  assert (Radix : 262144 = 4096 * 64).
+  { apply Nat.eqb_eq. vm_compute. reflexivity. }
+  assert (ThreeCap : 65535 = 15 * 4096 + 63 * 64 + 63).
+  { apply Nat.eqb_eq. vm_compute. reflexivity. }
+  assert (FourFloor : 65536 = 16 * 4096).
+  { apply Nat.eqb_eq. vm_compute. reflexivity. }
+  assert (FourCap :
+      1114111 = 4 * (4096 * 64) + 15 * 4096 + 63 * 64 + 63).
+  { apply Nat.eqb_eq. vm_compute. reflexivity. }
+  rewrite Radix, ThreeCap, FourFloor, FourCap in *.
   destruct left; destruct right;
     cbn [p8_utf8_scalar_value] in *;
     try lia;
