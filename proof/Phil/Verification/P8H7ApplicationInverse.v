@@ -177,7 +177,7 @@ Proof.
       (p8_e1_frame_count (p8_e1_fields_count fields) ++
         (p8_e2_put_arguments fields ++ suffix))))
     ValidDeclaration).
-  cbn [p8_e2_expect].
+  cbn [Nat.eqb p8_e2_expect].
   rewrite (p8_f1_text_prefix_roundtrip interface
     (p8_e1_frame_count (p8_e1_fields_count fields) ++
       (p8_e2_put_arguments fields ++ suffix))
