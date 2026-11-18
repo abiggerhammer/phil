@@ -365,12 +365,19 @@ Proof.
   assert (FourCap :
       1114111 = 4 * (4096 * 64) + 15 * 4096 + 63 * 64 + 63).
   { apply Nat.eqb_eq. vm_compute. reflexivity. }
-  rewrite Radix, ThreeCap, FourFloor, FourCap in *.
   destruct left; destruct right;
     cbn [p8_utf8_scalar_value] in *;
+    try (rewrite Radix in *);
+    try (rewrite ThreeCap in *);
+    try (rewrite FourFloor in *);
+    try (rewrite FourCap in *);
     try lia;
     cbn [p8_utf8_scalar_wellformed] in ValidLeft, ValidRight;
     unfold p8_octet_between in ValidLeft, ValidRight;
+    repeat match goal with
+    | H : context [if ?test then _ else _] |- _ =>
+        destruct test eqn:?
+    end;
     p8_h8_unpack_octets;
     f_equal; lia.
 Qed.
