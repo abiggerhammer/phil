@@ -150,7 +150,7 @@ Proof.
   assert (Q4096 : (n / 64) / 64 = n / 4096) by lia.
   split; [lia |].
   split; [lia |].
-  nia.
+  lia.
 Qed.
 
 (* A numeric round trip, including out-of-range n. Shape validity is a
