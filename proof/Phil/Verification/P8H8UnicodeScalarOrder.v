@@ -222,6 +222,9 @@ Proof.
     + apply Nat.ltb_ge in Two.
       destruct (n <? 65536) eqn:Three.
       * apply Nat.ltb_lt in Three.
+        assert (Bound65536 : 65536 = 4096 * 16).
+        { apply Nat.eqb_eq. vm_compute. reflexivity. }
+        rewrite Bound65536 in Three.
         cbn [p8_utf8_scalar_wellformed].
         unfold p8_octet_between.
         repeat rewrite andb_true_iff.
