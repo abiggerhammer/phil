@@ -46,3 +46,8 @@ jobs:
           cd "$RUNNER_TEMP/p9-steve"
           sha256sum -c phil-steve-0.1.0-phase1-x86_64-linux.tar.gz.sha256
           test -s phil-steve-0.1.0-phase1-x86_64-linux.tar.gz
+      - name: Execute exactly the built linked Steve package and validate native return paths
+        run: |
+          cd "$RUNNER_TEMP/p9-steve"
+          tar -xzf phil-steve-0.1.0-phase1-x86_64-linux.tar.gz
+          ./phil-steve-0.1.0-phase1-x86_64-linux/smoke-test.sh
