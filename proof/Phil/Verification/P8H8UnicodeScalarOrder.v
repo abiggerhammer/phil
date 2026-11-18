@@ -70,20 +70,40 @@ Proof.
       cbn [p8_utf8_scalar_wellformed p8_utf8_scalar_value] in *;
       unfold p8_octet_between in Valid;
       p8_h8_unpack_octets; first [lia | left; lia | right; lia].
-  - apply p8_h8_scalar_of_numeric_bounds;
+  - assert (ThreeThresholds :
+        15 * 4096 + 63 * 64 + 63 <= 65535 /\
+        12 * 4096 + 63 * 64 + 63 < 55296 /\
+        13 * 4096 + 31 * 64 + 63 < 55296 /\
+        57343 < 14 * 4096).
+    { repeat split; first [apply Nat.leb_le | apply Nat.ltb_lt];
+        vm_compute; reflexivity. }
+    destruct ThreeThresholds as [ThreeMax [ThreeLow [ThreeMiddle ThreeHigh]]].
+    apply p8_h8_scalar_of_numeric_bounds;
       cbn [p8_utf8_scalar_wellformed p8_utf8_scalar_value] in *;
       unfold p8_octet_between in Valid;
       destruct (a =? 224) eqn:E224;
       destruct (a =? 237) eqn:E237;
+      destruct (a <? 237) eqn:Below237;
       cbn in Valid;
-      p8_h8_unpack_octets; first [lia | left; lia | right; lia].
-  - apply p8_h8_scalar_of_numeric_bounds;
+      p8_h8_unpack_octets;
+      first [nia | left; nia | right; nia].
+  - assert (FourThresholds :
+        3 * 262144 + 63 * 4096 + 63 * 64 + 63 <= 1114111 /\
+        4 * 262144 + 15 * 4096 + 63 * 64 + 63 <= 1114111 /\
+        57343 < 16 * 4096 /\
+        57343 < 262144).
+    { repeat split; first [apply Nat.leb_le | apply Nat.ltb_lt];
+        vm_compute; reflexivity. }
+    destruct FourThresholds as [FourLowMax [FourHighMax [FourLowMin FourHighMin]]].
+    apply p8_h8_scalar_of_numeric_bounds;
       cbn [p8_utf8_scalar_wellformed p8_utf8_scalar_value] in *;
       unfold p8_octet_between in Valid;
       destruct (a =? 240) eqn:E240;
       destruct (a =? 244) eqn:E244;
+      destruct (a <? 244) eqn:Below244;
       cbn in Valid;
-      p8_h8_unpack_octets; first [lia | left; lia | right; lia].
+      p8_h8_unpack_octets;
+      first [nia | left; nia | right; nia].
 Qed.
 
 (* Canonical numeric encoder candidate, not yet a proved inverse. *)
