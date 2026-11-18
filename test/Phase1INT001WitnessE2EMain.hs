@@ -397,6 +397,28 @@ p9SteveStructuralGate putSource getSource = do
   case verifySteveGetLLVMPointerFlow wrongReadInvocation of
     Left SteveGetLLVMReadResultSlotMissing -> Right ()
     other -> Left ("P9 accepted wrong LLVM native read invocation: " <> show other)
+  -- A read-looking invocation in get_not_found does not initialize the
+  -- get_entry read.found slot or select the original source predecessor.
+  -- The old global substring counts accepted this forged modeled artifact.
+  let exactReadCall =
+        "@phil_runtime_choice_SteveGet_get_entry_BlobProvider_read(ptr %get_id, ptr %phil_runtime_choice_payload_slot_SteveGet_get_entry_get_bytes)"
+      readInstruction =
+        "  %phil_runtime_choice_tag_SteveGet_get_entry = call i32 " <> exactReadCall
+      syntheticFoundTag =
+        "  %phil_runtime_choice_tag_SteveGet_get_entry = add i32 0, 0"
+      readMissingFromEntry = Text.replace readInstruction syntheticFoundTag
+        originalLLVM
+      relocatedReadLLVM = Text.replace "get_not_found:\n"
+        ("get_not_found:\n  %p9_wrong_block_read = call i32 "
+          <> exactReadCall <> "\n") readMissingFromEntry
+  assert (readMissingFromEntry /= originalLLVM
+      && relocatedReadLLVM /= readMissingFromEntry
+      && Text.count exactReadCall relocatedReadLLVM == 1
+      && Text.count readInstruction relocatedReadLLVM == 0)
+    "P9 wrong-block read negative did not relocate the genuine read call"
+  case verifySteveGetLLVMPointerFlow relocatedReadLLVM of
+    Left SteveGetLLVMReadWrongSite -> Right ()
+    other -> Left ("P9 accepted read.found call relocated outside get_entry: " <> show other)
   let withoutLoad = Text.replace
         "get_check:\n  %get_bytes = load ptr, ptr %phil_runtime_choice_payload_slot_SteveGet_get_entry_get_bytes"
         "get_check:\n  %get_bytes = inttoptr i64 0 to ptr"
