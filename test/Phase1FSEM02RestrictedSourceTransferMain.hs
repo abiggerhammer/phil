@@ -749,8 +749,8 @@ binderResourceAtomicityPriority source = do
   acceptedReplay authorized
   -- A minimally bad complete source Close operand rejects before all three
   -- separately forged authority/resource faults.
-  let original = "let done = send payload on endpoint;\\n  close done;"
-      modified = "let done = send payload on endpoint;\\n  close endpoint;"
+  let original = "let done = send payload on endpoint;\n  close done;"
+      modified = "let done = send payload on endpoint;\n  close endpoint;"
       rejected = Text.replace original modified source
   assert (Text.isInfixOf original source && rejected /= source)
     "resource priority invalid whole-source witness did not isolate Close edit"
