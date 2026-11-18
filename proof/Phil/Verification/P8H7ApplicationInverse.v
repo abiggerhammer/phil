@@ -195,8 +195,13 @@ Proof.
               (p8_e2_put_arguments fields ++ suffix))))))))
     suffix ValidFields).
   2: {
-    (* Normalize lengths after each exposed cons/append association. *)
-    repeat (rewrite length_app || progress cbn [length]).
+    (* Expose each cons-headed length, then normalize newly visible appends. *)
+    cbn [length].
+    repeat rewrite length_app.
+    cbn [length].
+    repeat rewrite length_app.
+    cbn [length].
+    repeat rewrite length_app.
     lia.
   }
   reflexivity.
