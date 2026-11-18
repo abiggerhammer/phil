@@ -7,9 +7,8 @@
 -- semantics soundness theorem, or source-to-machine certificate.
 module Main (main) where
 
-import Control.Monad (guard, unless)
+import Control.Monad (guard)
 import qualified Data.Map.Strict as Map
-import qualified Data.Set as Set
 import Data.Text (Text)
 import qualified Data.Text as Text
 import qualified Data.Text.IO as TextIO
@@ -188,14 +187,12 @@ releaseThenReturn :: Located Block -> Bool
 releaseThenReturn block = case blockStatements (locatedValue block) of
   [first, second] -> case (locatedValue first, locatedValue second) of
     (ExpressionStatement rel, ReturnStatement ret) ->
-      locatedValue rel == ReleaseExpression (varAt rel "bytes")
-        && locatedValue ret == UnitExpression
+      case locatedValue rel of
+        ReleaseExpression owner ->
+          isVar "bytes" owner && locatedValue ret == UnitExpression
+        _ -> False
     _ -> False
   _ -> False
-
--- Only the semantic variable spelling matters, not the source span.
-varAt :: Located SurfaceExpression -> Text -> Located SurfaceExpression
-varAt outer name = Located (locatedSpan outer) (VariableExpression name)
 
 matchesCore :: CoreSystemsProgram -> Bool
 matchesCore program =
