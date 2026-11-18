@@ -13,7 +13,7 @@ on:
       - 'docs/phase-1/typing-and-semantics-reader-guide-v1.md'
       - 'phil-core.cabal'
       - 'docs/phase-1/formal-semantics-loaned-occupied-receiver-fsem02-v1.md'
-      - '.github/workflows/fsem02-loaned-occupied-receiver-prefix-preflight.yml'
+      - '.github/workflows/fsem02-loaned-occupied-receiver-preflight.yml'
   pull_request:
     paths:
       - 'src/Phil/Core/Context.hs'
@@ -24,7 +24,7 @@ on:
       - 'docs/phase-1/typing-and-semantics-reader-guide-v1.md'
       - 'phil-core.cabal'
       - 'docs/phase-1/formal-semantics-loaned-occupied-receiver-fsem02-v1.md'
-      - '.github/workflows/fsem02-loaned-occupied-receiver-prefix-preflight.yml'
+      - '.github/workflows/fsem02-loaned-occupied-receiver-preflight.yml'
 
 concurrency:
   group: fsem02-loaned-occupied-receiver-${{ github.ref }}
