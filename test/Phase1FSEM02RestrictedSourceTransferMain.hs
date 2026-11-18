@@ -8,7 +8,7 @@ import Data.Text (Text)
 import qualified Data.Text as Text
 import qualified Data.Text.IO as TextIO
 import Phil.Core.CheckedBindingMode (CheckedTypeMode (..))
-import Phil.Core.Context (CheckError (..), ResourceContext (..), insertBinding)
+import Phil.Core.Context (CheckError (..), ResourceContext (..), insertBinding, startSharedLoan)
 import Phil.Core.Generic (GenericStaticParameterKey (..), strictGenericInstantiationPolicy)
 import Phil.Core.Process
 import Phil.Core.ProcessActivation
@@ -58,6 +58,7 @@ main = do
           , binderResourceAtomicityPriority accepted
           , senderResourceTypeBeforeReceiverSlot accepted
           , crossModeReceiverNameCollision accepted
+          , borrowedSenderTransferRefusal accepted
           , wrongSessionHeadRejects fx
           , sourceCloseReplay fx
           , sourceCloseRejectsForgedRequest fx
@@ -927,6 +928,69 @@ crossModeReceiverNameCollision source = do
         Left (RestrictedSourceSendError
           (GrammarV1ComponentSendCloseCloseMismatch _ _)) -> Right ()
         other -> Left ("cross-mode faulty source error was masked: " <> show (mode, other))
+
+
+-- FSEM-02 NON-NORMATIVE: a sender payload with an outstanding shared loan
+-- cannot be consumed for ownership transfer. The actual Core consumeLinear
+-- checks OwnerBorrowed before receiver insertion, so an independently
+-- occupied receiver cannot hide the outstanding loan. Corrupted states here
+-- are deliberately not fresh activations; no source grants loan authority.
+borrowedSenderTransferRefusal :: Text -> Either String ()
+borrowedSenderTransferRefusal source = do
+  fx <- fixture source
+  let original = fxBefore fx
+      contexts = communicationProtocolContexts original
+      ownerName = fxPayloadOwner fx
+      receiverName = fxPayloadReceiver fx
+      replay state = checked fx (fxSender fx) (fxReceiver fx) state
+  sender <- requireProtocol (fxClientProcess fx) original
+  receiver <- requireProtocol (fxServerProcess fx) original
+  loanedResources <- mapLeft show $
+    startSharedLoan ownerName (protocolResources sender)
+  assert (Set.member ownerName (sharedLoans loanedResources)
+       && Map.lookup ownerName (linearBindings loanedResources) == Just payloadTy)
+    "borrowed-sender witness changed the owner's type or lost the active loan"
+  busyResources <- mapLeft show $
+    insertBinding Linear receiverName payloadTy (protocolResources receiver)
+  let loanedSender = sender { protocolResources = loanedResources }
+      busyReceiver = receiver { protocolResources = busyResources }
+      onlyLoaned = original { communicationProtocolContexts =
+        Map.insert (fxClientProcess fx) loanedSender contexts }
+      onlyBusy = original { communicationProtocolContexts =
+        Map.insert (fxServerProcess fx) busyReceiver contexts }
+      both = original { communicationProtocolContexts =
+        Map.insert (fxClientProcess fx) loanedSender $
+          Map.insert (fxServerProcess fx) busyReceiver contexts }
+      requiresBorrowed state = case replay state of
+        Left (RestrictedSourceCoreError
+          (RestrictedMessageSenderResourceError process (OwnerBorrowed name))) ->
+            assert (process == fxClientProcess fx && name == ownerName)
+              "active sender loan lost its exact process and owner name"
+        other -> Left ("borrowed sender was not rejected precisely: " <> show other)
+  -- Even a competing receiver insertion fault must not mask the sender loan.
+  requiresBorrowed both
+  requiresBorrowed onlyLoaned
+  assert (replay both == replay both)
+    "borrowed sender replay changed its result or produced a partial successor"
+  case replay onlyBusy of
+    Left (RestrictedSourceCoreError
+      (RestrictedMessageReceiverResourceError process (DuplicateBinding name))) ->
+        assert (process == fxServerProcess fx && name == receiverName)
+          "ending only the sender loan failed to expose the receiver collision"
+    other -> Left ("receiver collision was hidden after loan repair: " <> show other)
+  -- Repairing both independently supplied resource states permits only the
+  -- already-authorized source transition and exact endpoint/payload frame.
+  acceptedReplay fx
+  let valid = "let done = send payload on endpoint;\n  close done;"
+      invalid = "let done = send payload on endpoint;\n  close endpoint;"
+      badSource = Text.replace valid invalid source
+  assert (Text.isInfixOf valid source && badSource /= source)
+    "borrowed-sender source negative did not isolate one Close operand"
+  (_, rejectedSender, _) <- parseParts badSource
+  case checked fx rejectedSender (fxReceiver fx) both of
+    Left (RestrictedSourceSendError
+      (GrammarV1ComponentSendCloseCloseMismatch _ _)) -> Right ()
+    other -> Left ("borrowed-sender resource errors masked source rejection: " <> show other)
 
 wrongSessionHeadRejects :: Fixture -> Either String ()
 wrongSessionHeadRejects fx = do
