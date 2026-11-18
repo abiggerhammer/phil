@@ -465,6 +465,129 @@ Proof.
   - now subst.
 Qed.
 
+(* A list comparison consumes corresponding prefixes until the first
+   differing octet. The following generic law needs equal prefix lengths;
+   it is deliberately NOT asserted for arbitrary prefix-related byte lists. *)
+Lemma p8_h8_byte_compare_equal_width_suffix :
+  forall xs ys suffix1 suffix2,
+    length xs = length ys ->
+    p8_d2_compare_bytes (xs ++ suffix1) (ys ++ suffix2) =
+    match p8_d2_compare_bytes xs ys with
+    | Eq => p8_d2_compare_bytes suffix1 suffix2
+    | other => other
+    end.
+Proof.
+  induction xs as [|a xs IH]; intros ys suffix1 suffix2 SameLength;
+    destruct ys as [|b ys]; simpl in SameLength;
+    try discriminate.
+  - reflexivity.
+  - apply Nat.succ_inj in SameLength.
+    simpl.
+    destruct (Nat.compare a b) eqn:Compared; simpl;
+      try reflexivity.
+    now rewrite (IH ys suffix1 suffix2 SameLength).
+Qed.
+
+(* Strict UTF-8 lead-byte ranges separate all DIFFERENT widths. Even when
+   the following suffix is arbitrary, it cannot decide their comparison. *)
+Lemma p8_h8_scalar_byte_append :
+  forall left right suffix1 suffix2,
+    p8_utf8_scalar_wellformed left = true ->
+    p8_utf8_scalar_wellformed right = true ->
+    p8_d2_compare_bytes
+      (p8_utf8_scalar_bytes left ++ suffix1)
+      (p8_utf8_scalar_bytes right ++ suffix2) =
+    match p8_d2_compare_bytes
+      (p8_utf8_scalar_bytes left)
+      (p8_utf8_scalar_bytes right) with
+    | Eq => p8_d2_compare_bytes suffix1 suffix2
+    | other => other
+    end.
+Proof.
+  intros left right suffix1 suffix2 VL VR.
+  destruct left as [a | a b | a b c | a b c d];
+    destruct right as [u | u v | u v w | u v w x];
+    cbn [p8_utf8_scalar_bytes];
+    try (rewrite p8_h8_byte_compare_equal_width_suffix
+           by reflexivity; reflexivity);
+    cbn [p8_utf8_scalar_wellformed] in VL, VR;
+    unfold p8_octet_between in VL, VR;
+    p8_h8_unpack_octets;
+    simpl;
+    destruct (Nat.compare a u) eqn:Lead;
+      try reflexivity;
+    apply Nat.compare_eq_iff in Lead;
+    lia.
+Qed.
+
+(* The scalar-stream comparison is a finite lexicographic comparison of
+   NUMERIC Unicode code points, not an assumed Haskell Ord Text instance. *)
+Fixpoint p8_h8_compare_scalar_values
+  (xs ys : list P8Utf8ScalarOctets) {struct xs} : comparison :=
+  match xs, ys with
+  | [], [] => Eq
+  | [], _ :: _ => Lt
+  | _ :: _, [] => Gt
+  | x :: tail, y :: rest =>
+      match Nat.compare (p8_utf8_scalar_value x)
+                        (p8_utf8_scalar_value y) with
+      | Eq => p8_h8_compare_scalar_values tail rest
+      | other => other
+      end
+  end.
+
+Theorem p8_h8_d1_stream_lex_numeric_compare :
+  forall xs ys,
+    p8_d1_valid xs = true ->
+    p8_d1_valid ys = true ->
+    p8_d2_compare_bytes (p8_d1_encode xs) (p8_d1_encode ys) =
+    p8_h8_compare_scalar_values xs ys.
+Proof.
+  induction xs as [|a xs IH]; intros ys VL VR;
+    destruct ys as [|b ys];
+    cbn [p8_d1_encode p8_h8_compare_scalar_values] in *.
+  - reflexivity.
+  - destruct b; reflexivity.
+  - destruct a; reflexivity.
+  - unfold p8_d1_valid in VL, VR.
+    cbn [forallb] in VL, VR.
+    apply andb_true_iff in VL as [Va Vxs].
+    apply andb_true_iff in VR as [Vb Vys].
+    rewrite (p8_h8_scalar_byte_append
+      a b (p8_d1_encode xs) (p8_d1_encode ys) Va Vb).
+    rewrite (p8_h8_scalar_bytes_numeric_compare a b Va Vb).
+    destruct (Nat.compare
+      (p8_utf8_scalar_value a) (p8_utf8_scalar_value b));
+      try reflexivity.
+    now apply IH.
+Qed.
+
+Theorem p8_h8_d1_stream_strict_lex_iff :
+  forall xs ys,
+    p8_d1_valid xs = true ->
+    p8_d1_valid ys = true ->
+    (p8_d2_compare_bytes (p8_d1_encode xs) (p8_d1_encode ys) = Lt
+      <-> p8_h8_compare_scalar_values xs ys = Lt).
+Proof.
+  intros xs ys VL VR.
+  now rewrite (p8_h8_d1_stream_lex_numeric_compare xs ys VL VR).
+Qed.
+
+Example p8_h8_d1_empty_before_nonempty :
+  p8_d2_compare_bytes (p8_d1_encode [])
+    (p8_d1_encode [P8Utf8One 0]) = Lt.
+Proof. reflexivity. Qed.
+Example p8_h8_d1_proper_scalar_prefix :
+  p8_d2_compare_bytes
+    (p8_d1_encode [P8Utf8One 65])
+    (p8_d1_encode [P8Utf8One 65; P8Utf8One 0]) = Lt.
+Proof. reflexivity. Qed.
+Example p8_h8_d1_equal_identical :
+  p8_d2_compare_bytes
+    (p8_d1_encode [P8Utf8One 65; P8Utf8Two 195 169])
+    (p8_d1_encode [P8Utf8One 65; P8Utf8Two 195 169]) = Eq.
+Proof. reflexivity. Qed.
+
 (* Discriminating canonical boundary witnesses are model computations only. *)
 Example p8_h8_nul :
   p8_h8_encode_if_scalar 0 = Some (P8Utf8One 0).
@@ -516,3 +639,7 @@ Print Assumptions p8_h8_encoder_c1_inverse.
 Print Assumptions p8_h8_scalar_bytes_numeric_compare.
 Print Assumptions p8_h8_scalar_byte_less_iff.
 Print Assumptions p8_h8_scalar_byte_eq_iff.
+Print Assumptions p8_h8_byte_compare_equal_width_suffix.
+Print Assumptions p8_h8_scalar_byte_append.
+Print Assumptions p8_h8_d1_stream_lex_numeric_compare.
+Print Assumptions p8_h8_d1_stream_strict_lex_iff.
