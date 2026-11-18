@@ -172,6 +172,85 @@ Proof.
       * cbn [p8_utf8_scalar_value]. lia.
 Qed.
 
+(* The accepted numeric domain is an explicit bound and exclusion,
+   not a property assumed of the native Haskell Char or Text types. *)
+Lemma p8_h8_unicode_scalar_bounds :
+  forall n, p8_unicode_scalar n = true ->
+    n <= 1114111 /\ (n < 55296 \/ 57343 < n).
+Proof.
+  intros n Valid.
+  unfold p8_unicode_scalar in Valid.
+  apply andb_true_iff in Valid as [Upper Outside].
+  apply Nat.leb_le in Upper.
+  apply negb_true_iff in Outside.
+  apply andb_false_iff in Outside as [Before | After].
+  - apply Nat.leb_gt in Before. split; [lia | left; lia].
+  - apply Nat.leb_gt in After. split; [lia | right; lia].
+Qed.
+
+(* This theorem is intentionally restricted to the admitted Unicode
+   scalar numbers. The raw constructor has no wellformedness guarantee
+   for numbers beyond U+10FFFF or within the surrogate interval. *)
+Theorem p8_h8_numeric_encoder_wellformed :
+  forall n, p8_unicode_scalar n = true ->
+    p8_utf8_scalar_wellformed (p8_h8_encode_scalar n) = true.
+Proof.
+  intros n Valid.
+  pose proof (p8_h8_unicode_scalar_bounds n Valid) as [Upper Outside].
+  pose proof (p8_h8_numeric_division_facts n) as
+    [D64 [D4096 D262144]].
+  pose proof (Nat.mod_upper_bound n 64 ltac:(lia)) as M64.
+  pose proof (Nat.mod_upper_bound (n / 64) 64 ltac:(lia)) as M64_64.
+  pose proof (Nat.mod_upper_bound (n / 4096) 64 ltac:(lia)) as M4096_64.
+  unfold p8_h8_encode_scalar.
+  destruct (n <? 128) eqn:One.
+  - apply Nat.ltb_lt in One.
+    cbn [p8_utf8_scalar_wellformed].
+    unfold p8_octet_between.
+    repeat rewrite andb_true_iff.
+    repeat split; apply Nat.leb_le; lia.
+  - apply Nat.ltb_ge in One.
+    destruct (n <? 2048) eqn:Two.
+    + apply Nat.ltb_lt in Two.
+      cbn [p8_utf8_scalar_wellformed].
+      unfold p8_octet_between.
+      repeat rewrite andb_true_iff.
+      repeat split; apply Nat.leb_le; lia.
+    + apply Nat.ltb_ge in Two.
+      destruct (n <? 65536) eqn:Three.
+      * apply Nat.ltb_lt in Three.
+        cbn [p8_utf8_scalar_wellformed].
+        unfold p8_octet_between.
+        repeat rewrite andb_true_iff.
+        repeat split; try (apply Nat.leb_le; lia).
+        destruct (224 + n / 4096 =? 224) eqn:LeadE0.
+        -- apply Nat.eqb_eq in LeadE0.
+           repeat rewrite andb_true_iff.
+           repeat split; apply Nat.leb_le; lia.
+        -- destruct (224 + n / 4096 =? 237) eqn:LeadED.
+           ++ apply Nat.eqb_eq in LeadED.
+              destruct Outside as [Low | High].
+              ** repeat rewrite andb_true_iff.
+                 repeat split; apply Nat.leb_le; lia.
+              ** repeat rewrite andb_true_iff.
+                 repeat split; apply Nat.leb_le; lia.
+           ++ reflexivity.
+      * apply Nat.ltb_ge in Three.
+        cbn [p8_utf8_scalar_wellformed].
+        unfold p8_octet_between.
+        repeat rewrite andb_true_iff.
+        repeat split; try (apply Nat.leb_le; lia).
+        destruct (240 + n / 262144 =? 240) eqn:LeadF0.
+        -- apply Nat.eqb_eq in LeadF0.
+           repeat rewrite andb_true_iff.
+           repeat split; apply Nat.leb_le; lia.
+        -- destruct (240 + n / 262144 =? 244) eqn:LeadF4.
+           ++ apply Nat.eqb_eq in LeadF4.
+              repeat rewrite andb_true_iff.
+              repeat split; apply Nat.leb_le; lia.
+           ++ reflexivity.
+Qed.
+
 (* Discriminating canonical boundary witnesses are model computations only. *)
 Example p8_h8_nul :
   p8_h8_encode_if_scalar 0 = Some (P8Utf8One 0).
@@ -214,3 +293,4 @@ Proof. split; reflexivity. Qed.
 Print Assumptions p8_h8_scalar_of_numeric_bounds.
 Print Assumptions p8_h8_c1_valid_scalar_value.
 Print Assumptions p8_h8_numeric_encoder_value.
+Print Assumptions p8_h8_numeric_encoder_wellformed.
