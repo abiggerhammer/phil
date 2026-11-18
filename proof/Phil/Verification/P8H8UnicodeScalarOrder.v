@@ -150,6 +150,7 @@ Proof.
   assert (Q4096 : (n / 64) / 64 = n / 4096) by lia.
   split; [lia |].
   split; [lia |].
+  Show.
   lia.
 Qed.
 
