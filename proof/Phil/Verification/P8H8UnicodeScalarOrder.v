@@ -168,7 +168,10 @@ Proof.
     + cbn [p8_utf8_scalar_value]. lia.
     + destruct (n <? 65536) eqn:Three.
       * cbn [p8_utf8_scalar_value]. lia.
-      * cbn [p8_utf8_scalar_value]. lia.
+      * cbn [p8_utf8_scalar_value].
+        assert (Radix : 262144 = 4096 * 64) by (vm_compute; reflexivity).
+        rewrite Radix.
+        lia.
 Qed.
 
 (* The accepted numeric domain is an explicit bound and exclusion,
