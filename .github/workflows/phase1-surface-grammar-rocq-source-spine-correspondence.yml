@@ -106,14 +106,15 @@ jobs:
             proof/Phil/Surface/GrammarAstRecordDataRecursiveGroupingImplementationRepresentationExtraction.vo \
             proof/Phil/Surface/GrammarAstRecordDataRecursiveGroupingImplementationAdmissionExamples.vo \
             proof/Phil/Surface/GrammarAstRecordDataRecursiveGroupingTaggedAdmission.vo \
-            proof/Phil/Surface/GrammarAstRecordDataRecursiveGroupingTaggedAdmissionInjectivity.vo
+            proof/Phil/Surface/GrammarAstRecordDataRecursiveGroupingTaggedAdmissionInjectivity.vo \
+            proof/Phil/Surface/GrammarAstRecordDataRecursiveGroupingTaggedAdmissionStability.vo
 
       - name: Compile new generic-requirement modules with all warnings enabled
         shell: bash
         run: |
           set -euo pipefail
           export PATH="/home/rocq/.opam/${COMPILER}/bin:$PATH"
-          for module in GrammarAstGenericRequirementRecursiveGroupingSpine GrammarAstGenericRequirementRecursiveGroupingSpineTotality GrammarAstGenericRequirementRecursiveGroupingExamples GrammarAstGenericRequirementsRecursiveGroupingSpine GrammarAstGenericRequirementsRecursiveGroupingSpineTotality GrammarAstGenericRequirementsRecursiveGroupingExamples GrammarAstRecordDataGenericRequirementRecursiveGroupingSpine GrammarAstRecordDataGenericRequirementRecursiveGroupingTotality GrammarAstRecordDataGenericRequirementRecursiveGroupingExamples GrammarAstRecordDataRecursiveGroupingImplementationRepresentation GrammarAstRecordDataRecursiveGroupingImplementationRepresentationExtraction GrammarAstRecordDataRecursiveGroupingImplementationAdmissionExamples GrammarAstRecordDataRecursiveGroupingTaggedAdmission GrammarAstRecordDataRecursiveGroupingTaggedAdmissionInjectivity; do
+          for module in GrammarAstGenericRequirementRecursiveGroupingSpine GrammarAstGenericRequirementRecursiveGroupingSpineTotality GrammarAstGenericRequirementRecursiveGroupingExamples GrammarAstGenericRequirementsRecursiveGroupingSpine GrammarAstGenericRequirementsRecursiveGroupingSpineTotality GrammarAstGenericRequirementsRecursiveGroupingExamples GrammarAstRecordDataGenericRequirementRecursiveGroupingSpine GrammarAstRecordDataGenericRequirementRecursiveGroupingTotality GrammarAstRecordDataGenericRequirementRecursiveGroupingExamples GrammarAstRecordDataRecursiveGroupingImplementationRepresentation GrammarAstRecordDataRecursiveGroupingImplementationRepresentationExtraction GrammarAstRecordDataRecursiveGroupingImplementationAdmissionExamples GrammarAstRecordDataRecursiveGroupingTaggedAdmission GrammarAstRecordDataRecursiveGroupingTaggedAdmissionInjectivity GrammarAstRecordDataRecursiveGroupingTaggedAdmissionStability; do
             rocq c -w +all -Q proof/Phil Phil "proof/Phil/Surface/${module}.v"
           done
 
@@ -160,7 +161,8 @@ jobs:
             GrammarAstRecordDataRecursiveGroupingImplementationRepresentation
             GrammarAstRecordDataRecursiveGroupingImplementationAdmissionExamples
             GrammarAstRecordDataRecursiveGroupingTaggedAdmission
-            GrammarAstRecordDataRecursiveGroupingTaggedAdmissionInjectivity.
+            GrammarAstRecordDataRecursiveGroupingTaggedAdmissionInjectivity
+            GrammarAstRecordDataRecursiveGroupingTaggedAdmissionStability.
           Print Assumptions phase1_surface_normalize_recursive_grouping_fuel_round_trip.
           Print Assumptions phase1_surface_grouping_well_formed_from_derivation_mutual.
           Print Assumptions phase1_surface_recursive_grouping_sufficient_fuel.
@@ -239,13 +241,16 @@ jobs:
           Print Assumptions phase1_surface_recursive_grouping_tagged_record_data_disjoint.
           Print Assumptions phase1_surface_tagged_requirements_presence_separated.
           Print Assumptions phase1_surface_tagged_requirements_presence_not_collapsed.
+          Print Assumptions phase1_surface_recursive_grouping_tagged_admission_replay.
+          Print Assumptions phase1_surface_recursive_grouping_tagged_admission_replay_unique.
+          Print Assumptions phase1_surface_recursive_grouping_tagged_admission_cross_tag_exclusion.
           EOF
           rocq c -Q proof/Phil Phil RecursiveGroupingAssumptions.v \
             | tee recursive-grouping-assumptions.txt
           python3 - <<'PY'
           from pathlib import Path
           output = Path("recursive-grouping-assumptions.txt").read_text()
-          assert output.count("Closed under the global context") == 78, output
+          assert output.count("Closed under the global context") == 81, output
           assert "Axioms:" not in output, output
           PY
           rocq check -silent -Q proof/Phil Phil \
@@ -279,7 +284,8 @@ jobs:
             Phil.Surface.GrammarAstRecordDataRecursiveGroupingImplementationRepresentationExtraction \
             Phil.Surface.GrammarAstRecordDataRecursiveGroupingImplementationAdmissionExamples \
             Phil.Surface.GrammarAstRecordDataRecursiveGroupingTaggedAdmission \
-            Phil.Surface.GrammarAstRecordDataRecursiveGroupingTaggedAdmissionInjectivity
+            Phil.Surface.GrammarAstRecordDataRecursiveGroupingTaggedAdmissionInjectivity \
+            Phil.Surface.GrammarAstRecordDataRecursiveGroupingTaggedAdmissionStability
 
       - name: Record source representation and recursive grouping identities
         shell: bash
@@ -337,6 +343,8 @@ jobs:
           cp proof/Phil/Surface/GrammarAstRecordDataRecursiveGroupingTaggedAdmission.vo surface-grammar-ast-representation/
           cp proof/Phil/Surface/GrammarAstRecordDataRecursiveGroupingTaggedAdmissionInjectivity.v surface-grammar-ast-representation/
           cp proof/Phil/Surface/GrammarAstRecordDataRecursiveGroupingTaggedAdmissionInjectivity.vo surface-grammar-ast-representation/
+          cp proof/Phil/Surface/GrammarAstRecordDataRecursiveGroupingTaggedAdmissionStability.v surface-grammar-ast-representation/
+          cp proof/Phil/Surface/GrammarAstRecordDataRecursiveGroupingTaggedAdmissionStability.vo surface-grammar-ast-representation/
           cp SurfaceGrammarAstRecordDataRecursiveGroupingKernel.hs surface-grammar-ast-representation/
           cp recursive-grouping-assumptions.txt surface-grammar-ast-representation/
           sha256sum \
@@ -443,6 +451,8 @@ jobs:
             proof/Phil/Surface/GrammarAstRecordDataRecursiveGroupingTaggedAdmission.vo \
             proof/Phil/Surface/GrammarAstRecordDataRecursiveGroupingTaggedAdmissionInjectivity.v \
             proof/Phil/Surface/GrammarAstRecordDataRecursiveGroupingTaggedAdmissionInjectivity.vo \
+            proof/Phil/Surface/GrammarAstRecordDataRecursiveGroupingTaggedAdmissionStability.v \
+            proof/Phil/Surface/GrammarAstRecordDataRecursiveGroupingTaggedAdmissionStability.vo \
             SurfaceGrammarAstRecordDataRecursiveGroupingKernel.hs \
             > surface-grammar-ast-representation/identities.sha256
           cat surface-grammar-ast-representation/identities.sha256
