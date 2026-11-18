@@ -54,6 +54,7 @@ main = do
           , senderBinderDisplayRenamePreservesActivationBoundary accepted
           , dualBinderDisplayCollisionKeepsAuthorityDisjoint accepted
           , dualAuthorityErrorPriority accepted
+          , projectedHeadBinderPriority accepted
           , wrongSessionHeadRejects fx
           , sourceCloseReplay fx
           , sourceCloseRejectsForgedRequest fx
@@ -598,6 +599,101 @@ dualAuthorityErrorPriority source = do
       assert (expected == payloadTy && actual == TyUInt 8)
         "source receiver type error lost exact checked types"
     other -> Left ("source receiver type error did not preempt owner gate: " <> show other)
+
+
+-- The restricted production transfer checks its exact activation owner before
+-- any endpoint head, checks sender then receiver head/resource agreement, and
+-- checks the independently authorized protocol message binder only after
+-- both session steps. Repairing one defect cannot silently admit the next.
+-- This diagnostic ordering is specifically for this source fixture.
+projectedHeadBinderPriority :: Text -> Either String ()
+projectedHeadBinderPriority source = do
+  let forgedBinder = Name "value"
+  fx <- fixtureWithMessageBinder (Just forgedBinder) source
+  let before = fxBefore fx
+  sender <- requireProtocol (fxClientProcess fx) before
+  receiver <- requireProtocol (fxServerProcess fx) before
+  senderBinding <- maybe (Left "priority sender endpoint metadata absent") Right $
+    Map.lookup (fxClientOld fx) (protocolEndpoints sender)
+  receiverBinding <- maybe (Left "priority receiver endpoint metadata absent") Right $
+    Map.lookup (fxServerOld fx) (protocolEndpoints receiver)
+  let malformedSender = sender { protocolEndpoints =
+        Map.insert (fxClientOld fx)
+          (senderBinding { protocolEndpointSession = End doneOutcome })
+          (protocolEndpoints sender) }
+      malformedReceiver = receiver { protocolEndpoints =
+        Map.insert (fxServerOld fx)
+          (receiverBinding { protocolEndpointSession = End doneOutcome })
+          (protocolEndpoints receiver) }
+      originalContexts = communicationProtocolContexts before
+      wrongBoth = before { communicationProtocolContexts =
+        Map.insert (fxClientProcess fx) malformedSender $
+          Map.insert (fxServerProcess fx) malformedReceiver originalContexts }
+      wrongReceiver = before { communicationProtocolContexts =
+        Map.insert (fxServerProcess fx) malformedReceiver originalContexts }
+      ownerAndHeads = wrongBoth { communicationRestrictedOwners =
+        Map.insert payloadOccurrence (fxClientProcess fx, fxPayloadReceiver fx)
+          (communicationRestrictedOwners wrongBoth) }
+  assert (protocolEndpointSession senderBinding /= End doneOutcome
+       && protocolEndpointSession receiverBinding /= End doneOutcome)
+    "priority negative was already at a terminal session head"
+  -- All four independent faults coexist. Sender activation owner refusal wins.
+  case checked fx (fxSender fx) (fxReceiver fx) ownerAndHeads of
+    Left (RestrictedSourceCoreError
+      (RestrictedMessageOwnerMismatch occurrence expectedProcess
+        expectedName actualProcess actualName)) ->
+      assert (occurrence == payloadOccurrence
+           && expectedProcess == fxClientProcess fx
+           && expectedName == fxPayloadOwner fx
+           && actualProcess == fxClientProcess fx
+           && actualName == fxPayloadReceiver fx)
+        "owner/head/binder priority lost exact sender-owner rejection"
+    other -> Left ("joint owner/head/binder faults missed owner gate: " <> show other)
+  -- Only owner repaired: the sender's metadata/session mismatch is first.
+  case checked fx (fxSender fx) (fxReceiver fx) wrongBoth of
+    Left (RestrictedSourceCoreError
+      (RendezvousProtocolError process
+        (ProtocolEndpointSessionMismatch endpoint expected actual))) ->
+      assert (process == fxClientProcess fx
+           && endpoint == fxClientOld fx
+           && expected == End doneOutcome
+           && actual == protocolEndpointSession senderBinding)
+        "sender projected head refusal lost exact context and session evidence"
+    other -> Left ("sender projected head fault was not first: " <> show other)
+  -- Sender head repaired only: receiver head must still refuse before binder.
+  case checked fx (fxSender fx) (fxReceiver fx) wrongReceiver of
+    Left (RestrictedSourceCoreError
+      (RendezvousProtocolError process
+        (ProtocolEndpointSessionMismatch endpoint expected actual))) ->
+      assert (process == fxServerProcess fx
+           && endpoint == fxServerOld fx
+           && expected == End doneOutcome
+           && actual == protocolEndpointSession receiverBinding)
+        "receiver projected head refusal lost exact context and session evidence"
+    other -> Left ("receiver projected head fault was not second: " <> show other)
+  -- Both heads repaired: only the independently wrong protocol binder remains.
+  case checked fx (fxSender fx) (fxReceiver fx) before of
+    Left (RestrictedSourceCoreError
+      (RestrictedMessageReceiverBinderMismatch expected actual)) ->
+      assert (expected == forgedBinder && actual == fxPayloadReceiver fx)
+        "wrong authorized binder did not survive both head repairs"
+    other -> Left ("unrepaired message binder was admitted: " <> show other)
+  -- Repair the external protocol authorization separately: real source/Core
+  -- progression succeeds and the exact owners, endpoints and affine frame hold.
+  authorized <- fixture source
+  acceptedReplay authorized
+  -- One minimally invalid whole-source Close operand must preempt all four
+  -- independent environmental faults, not turn into an external-identity error.
+  let valid = "let done = send payload on endpoint;\n  close done;"
+      invalid = "let done = send payload on endpoint;\n  close endpoint;"
+      staleSource = Text.replace valid invalid source
+  assert (Text.isInfixOf valid source && staleSource /= source)
+    "priority rejected source did not isolate the Close operand edit"
+  (_, rejectedSender, _) <- parseParts staleSource
+  case checked fx rejectedSender (fxReceiver fx) ownerAndHeads of
+    Left (RestrictedSourceSendError
+      (GrammarV1ComponentSendCloseCloseMismatch _ _)) -> Right ()
+    other -> Left ("invalid source lost Close error before external faults: " <> show other)
 
 wrongSessionHeadRejects :: Fixture -> Either String ()
 wrongSessionHeadRejects fx = do
