@@ -116,7 +116,7 @@ Theorem lorRepairedResourcesPermitModeledLinearTransfer :
               lorSpectatorFrame := spectator |}.
 Proof. reflexivity. Qed.
 
-Theorem lorNoBusyDestinationHasSuccessor :
+Theorem lorBusyDestinationHasNoSuccessor :
   forall source authority senderLoan loan affine spectator,
     lorStep source authority
       {| lorSenderLoan := senderLoan;
@@ -149,7 +149,11 @@ Theorem lorCoherentSuccessHasNoDanglingReceiverLoan :
     lorReceiverLoan s = false.
 Proof.
   intros source authority [sender busy loan affine spectator] next Hcoh Hstep.
-  destruct source, authority, sender, busy, loan;
-    simpl in Hstep; try discriminate; simpl; auto.
-  exfalso. apply Hcoh. reflexivity.
+  destruct source, authority, sender, busy;
+    simpl in Hstep; try discriminate.
+  destruct loan; simpl; [exfalso | reflexivity].
+  unfold lorCoherent in Hcoh.
+  simpl in Hcoh.
+  specialize (Hcoh eq_refl).
+  discriminate.
 Qed.
