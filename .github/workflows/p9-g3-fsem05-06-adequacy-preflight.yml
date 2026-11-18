@@ -1,0 +1,86 @@
+name: P9 G3 FSEM-05/06 closed-fragment adequacy preflight
+
+on:
+  push:
+    branches:
+      - 'scratch/p9-g3-fsem05-06-adequacy-20261118'
+    paths:
+      - 'proof/Phil/Verification/P9G3SteveGetExecutableFragment.v'
+      - 'proof/Phil/Verification/P9G3SteveGetClosedRefinement.v'
+      - 'test/P9G3SteveGetSelectedShapeMain.hs'
+      - 'docs/phase-1/p9-g3-fsem05-06-adequacy-preflight-v1.md'
+      - '.github/workflows/p9-g3-fsem05-06-adequacy-preflight.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  rocq-executable-fragment:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 35
+    container:
+      image: rocq/rocq-prover:9.2.0
+      options: --user root
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          persist-credentials: false
+      - name: Reject untracked admitted or axiomatic steps
+        shell: bash
+        run: |
+          set -euo pipefail
+          if grep -nE '^[[:space:]]*(Axiom|Axioms|Parameter|Parameters|Admitted|admit|Abort)[[:space:].]' \
+             proof/Phil/Verification/P9G3SteveGetClosedRefinement.v \
+             proof/Phil/Verification/P9G3SteveGetExecutableFragment.v; then
+            echo 'No trusted premises or proof holes permitted in P9 fragment' >&2
+            exit 1
+          fi
+      - name: Compile exact predecessor+fragment, check proof objects and hash
+        shell: bash
+        run: |
+          set -euo pipefail
+          export PATH="/home/rocq/.opam/${COMPILER}/bin:$PATH"
+          rocq -v
+          : >/tmp/p9-g3-fsem05-06-assumptions.log
+          for name in P9G3SteveGetClosedRefinement P9G3SteveGetExecutableFragment; do
+            rocq c -Q proof/Phil Phil "proof/Phil/Verification/$name.v" \
+              | tee -a /tmp/p9-g3-fsem05-06-assumptions.log
+          done
+          count="$(grep -c 'Closed under the global context' /tmp/p9-g3-fsem05-06-assumptions.log || true)"
+          test "$count" -ge 11 || { echo "Only $count/11 closed reports" >&2; exit 1; }
+          for name in P9G3SteveGetClosedRefinement P9G3SteveGetExecutableFragment; do
+            rocq check -Q proof/Phil Phil "Phil.Verification.$name"
+          done
+          git -c safe.directory="$PWD" rev-parse HEAD
+          sha256sum \
+            proof/Phil/Verification/P9G3SteveGetClosedRefinement.v \
+            proof/Phil/Verification/P9G3SteveGetExecutableFragment.v \
+            proof/Phil/Verification/P9G3SteveGetClosedRefinement.vo \
+            proof/Phil/Verification/P9G3SteveGetExecutableFragment.vo \
+            /tmp/p9-g3-fsem05-06-assumptions.log
+
+  selected-source-core-ast:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          persist-credentials: false
+      - uses: haskell-actions/setup@v2
+        with:
+          ghc-version: '9.6.7'
+          cabal-version: 'latest'
+      - name: Strict actual Haskell compiler and selected structural validation
+        run: |
+          set -euo pipefail
+          cabal build all --enable-tests --ghc-options=-Werror
+          cabal exec -- runghc -isrc -itest -Wall -Werror \
+            test/P9G3SteveGetSelectedShapeMain.hs
+          cabal exec -- runghc -isrc -itest -Wall -Werror \
+            test/Phase1INT001WitnessE2EMain.hs
+          git rev-parse HEAD
+          sha256sum \
+            examples/steve/get.phil \
+            src/Phil/Examples/Phase1/SystemsWitnesses.hs \
+            src/Phil/Compiler/SourceCorePolicy.hs \
+            test/P9G3SteveGetSelectedShapeMain.hs
