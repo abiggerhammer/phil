@@ -320,7 +320,8 @@ Proof.
   - destruct (a =? 224) eqn:E224;
       destruct (a =? 237) eqn:E237;
       cbv iota in Valid;
-      p8_h8_unpack_octets; split; lia.
+      p8_h8_unpack_octets; split; try lia.
+    Show.
   - destruct (a =? 240) eqn:E240;
       destruct (a =? 244) eqn:E244;
       cbv iota in Valid;
