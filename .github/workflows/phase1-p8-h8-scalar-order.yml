@@ -1,0 +1,39 @@
+name: Phase 1 P8-H8 scalar-order mathematical preflight
+
+on:
+  push:
+    branches:
+      - scratch/p8-h8-scalar-proof-preflight-20261118
+    paths:
+      - 'proof/Phil/Verification/P8H8UnicodeScalarOrder.v'
+      - 'docs/phase-1/p8-h8-scalar-order-v1.md'
+      - '.github/workflows/phase1-p8-h8-scalar-order.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  rocq-scalar-order:
+    runs-on: ubuntu-24.04
+    container:
+      image: rocq/rocq-prover:9.2.0
+      options: --user root
+    steps:
+      - uses: actions/checkout@v4
+      - name: Compile entire unchanged C1/D1/D2 chain and H8 preflight
+        shell: bash
+        run: |
+          set -euo pipefail
+          export PATH="/home/rocq/.opam/$COMPILER/bin:$PATH"
+          rocq -v
+          if grep -nE '(Admitted|Axiom|Parameter)[.]?' proof/Phil/Verification/P8H8UnicodeScalarOrder.v; then
+            echo 'H8 placeholder or trusted declarations forbidden' >&2
+            exit 1
+          fi
+          for name in P8UnicodeUtf8Model P8D1UnicodeStreamModel P8D2StructuralOrderModel P8H8UnicodeScalarOrder; do
+            rocq c -Q proof/Phil Phil "proof/Phil/Verification/$name.v" | tee -a /tmp/p8-h8-assumptions.log
+          done
+          for name in P8UnicodeUtf8Model P8D1UnicodeStreamModel P8D2StructuralOrderModel P8H8UnicodeScalarOrder; do
+            rocq check -Q proof/Phil Phil "Phil.Verification.$name"
+          done
+          sha256sum proof/Phil/Verification/P8{UnicodeUtf8Model,D1UnicodeStreamModel,D2StructuralOrderModel,H8UnicodeScalarOrder}.vo /tmp/p8-h8-assumptions.log
