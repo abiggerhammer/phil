@@ -1,0 +1,72 @@
+name: P9 G3 R1b R2 proof-only scratch preflight
+
+on:
+  push:
+    branches:
+      - 'scratch/p9-g3-r1r2-proof-20261118'
+    paths:
+      - 'proof/Phil/Verification/P9G3SteveGetClosedRefinement.v'
+      - 'docs/phase-1/p9-g3-r1r2-closed-proof-preflight-v1.md'
+      - '.github/workflows/p9-g3-r1r2-proof-preflight.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  rocq-candidate-proof:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    container:
+      image: rocq/rocq-prover:9.2.0
+      options: --user root
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          persist-credentials: false
+      - name: No new trusted hypotheses or proof holes
+        shell: bash
+        run: |
+          set -euo pipefail
+          if grep -nE '^[[:space:]]*(Axiom|Axioms|Parameter|Parameters|Admitted|admit|Abort)[[:space:].]' proof/Phil/Verification/P9G3SteveGetClosedRefinement.v; then
+            echo 'R1b/R2 candidate must have no new admitted claims' >&2
+            exit 1
+          fi
+      - name: Compile, read closed assumptions, recursively check object and hash
+        shell: bash
+        run: |
+          set -euo pipefail
+          export PATH="/home/rocq/.opam/${COMPILER}/bin:$PATH"
+          rocq -v
+          rocq c -Q proof/Phil Phil proof/Phil/Verification/P9G3SteveGetClosedRefinement.v | tee /tmp/p9-g3-r1r2-assumptions.log
+          count="$(grep -c 'Closed under the global context' /tmp/p9-g3-r1r2-assumptions.log || true)"
+          test "$count" -eq 7 || { echo "Only $count/7 closed assumptions reports" >&2; exit 1; }
+          rocq check -Q proof/Phil Phil Phil.Verification.P9G3SteveGetClosedRefinement
+          git -c safe.directory="$PWD" rev-parse HEAD
+          sha256sum proof/Phil/Verification/P9G3SteveGetClosedRefinement.v \
+            proof/Phil/Verification/P9G3SteveGetClosedRefinement.vo \
+            /tmp/p9-g3-r1r2-assumptions.log
+
+  actual-source-core-regression:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          persist-credentials: false
+      - uses: haskell-actions/setup@v2
+        with:
+          ghc-version: '9.6.7'
+          cabal-version: 'latest'
+      - name: Strict selected Phil source/Core witness and adversarial regressions
+        run: |
+          set -euo pipefail
+          cabal build all --enable-tests --ghc-options=-Werror
+          cabal exec -- runghc -isrc -itest -Wall -Werror test/Phase1INT001WitnessE2EMain.hs
+          git rev-parse HEAD
+          sha256sum \
+            examples/steve/get.phil \
+            src/Phil/Examples/Phase1/SystemsWitnesses.hs \
+            src/Phil/Compiler/SourceCorePolicy.hs \
+            src/Phil/Compiler/SourceCore.hs \
+            proof/Phil/Verification/P9G3SteveGetClosedRefinement.v
