@@ -283,13 +283,25 @@ verifySteveGetLLVMPointerFlow emitted = do
       digestCall =
         "@phil_runtime_choice_SteveGet_get_check_DigestProvider_check(ptr %get_id, ptr %get_bytes)"
       releaseCall = "call void @phil_runtime_release(ptr %get_bytes)"
-      count textValue = Text.count textValue emitted
+      -- The emitted LLVM includes declarations and trace comments. A forged
+      -- comment containing the expected ABI call is not an executed
+      -- instruction and must never satisfy a pointer-flow check.
+      instructions = Text.unlines
+        (map (Text.takeWhile (/= ';')) (Text.lines emitted))
+      count textValue = Text.count textValue instructions
+      digestAtSite =
+        payloadLoad <> "\n  %phil_runtime_choice_tag_SteveGet_get_check = call i32 "
+          <> digestCall
   if count readSlot == 1 && count readCall == 2
        && count exactReadCall == 1
     then Right () else Left SteveGetLLVMReadResultSlotMissing
   if count payloadLoad == 1
     then Right () else Left SteveGetLLVMPayloadLoadMissing
-  if count digestCall == 1
+  -- Seeing the right call elsewhere in a function is insufficient:
+  -- require the genuine digest invocation immediately after the selected
+  -- found-result load in get_check. The source/runtime refinement remains
+  -- a separate unproved obligation.
+  if count digestCall == 1 && count digestAtSite == 1
     then Right () else Left SteveGetLLVMDigestOwnerSubstituted
   -- Counting two releases alone is not sufficient: a release hoisted
   -- before the digest call can leave that count unchanged while closing
