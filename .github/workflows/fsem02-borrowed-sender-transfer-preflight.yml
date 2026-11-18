@@ -12,7 +12,7 @@ on:
       - 'test/fixtures/fsem02-restricted-source-transfer-v1/**'
       - 'docs/phase-1/typing-and-semantics-reader-guide-v1.md'
       - 'phil-core.cabal'
-      - 'docs/phase-1/formal-semantics-borrowed-sender-collision-fsem02-v1.md'
+      - 'docs/phase-1/formal-semantics-borrowed-sender-transfer-fsem02-v1.md'
       - '.github/workflows/fsem02-borrowed-sender-transfer-preflight.yml'
   pull_request:
     paths:
@@ -23,7 +23,7 @@ on:
       - 'test/fixtures/fsem02-restricted-source-transfer-v1/**'
       - 'docs/phase-1/typing-and-semantics-reader-guide-v1.md'
       - 'phil-core.cabal'
-      - 'docs/phase-1/formal-semantics-borrowed-sender-collision-fsem02-v1.md'
+      - 'docs/phase-1/formal-semantics-borrowed-sender-transfer-fsem02-v1.md'
       - '.github/workflows/fsem02-borrowed-sender-transfer-preflight.yml'
 
 concurrency:
