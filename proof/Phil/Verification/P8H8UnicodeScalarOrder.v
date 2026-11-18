@@ -49,25 +49,25 @@ Proof.
   - apply p8_h8_scalar_of_numeric_bounds;
       cbn [p8_utf8_scalar_wellformed p8_utf8_scalar_value] in *;
       unfold p8_octet_between in Valid;
-      p8_h8_unpack_octets; lia.
+      p8_h8_unpack_octets; first [lia | left; lia | right; lia].
   - apply p8_h8_scalar_of_numeric_bounds;
       cbn [p8_utf8_scalar_wellformed p8_utf8_scalar_value] in *;
       unfold p8_octet_between in Valid;
-      p8_h8_unpack_octets; lia.
+      p8_h8_unpack_octets; first [lia | left; lia | right; lia].
   - apply p8_h8_scalar_of_numeric_bounds;
       cbn [p8_utf8_scalar_wellformed p8_utf8_scalar_value] in *;
       unfold p8_octet_between in Valid;
       destruct (a =? 224) eqn:E224;
       destruct (a =? 237) eqn:E237;
       cbn in Valid;
-      p8_h8_unpack_octets; lia.
+      p8_h8_unpack_octets; first [lia | left; lia | right; lia].
   - apply p8_h8_scalar_of_numeric_bounds;
       cbn [p8_utf8_scalar_wellformed p8_utf8_scalar_value] in *;
       unfold p8_octet_between in Valid;
       destruct (a =? 240) eqn:E240;
       destruct (a =? 244) eqn:E244;
       cbn in Valid;
-      p8_h8_unpack_octets; lia.
+      p8_h8_unpack_octets; first [lia | left; lia | right; lia].
 Qed.
 
 (* Canonical numeric encoder candidate, not yet a proved inverse. *)
