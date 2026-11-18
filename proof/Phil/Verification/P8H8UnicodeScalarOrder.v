@@ -45,13 +45,21 @@ Theorem p8_h8_c1_valid_scalar_value :
     p8_unicode_scalar (p8_utf8_scalar_value scalar) = true.
 Proof.
   intros scalar Valid.
+  assert (BasicLimits :
+    127 <= 1114111 /\ 127 < 55296 /\
+    2047 <= 1114111 /\ 2047 < 55296 /\
+    65535 <= 1114111 /\ 57343 < 65536).
+  { repeat split;
+      first [apply Nat.leb_le | apply Nat.ltb_lt];
+      vm_compute; reflexivity. }
+  destruct BasicLimits as
+    [MaxOne [SurOne [MaxTwo [SurTwo [MaxThree SurFour]]]]].
   destruct scalar as [a | a b | a b c | a b c d].
   - apply p8_h8_scalar_of_numeric_bounds.
     + cbn [p8_utf8_scalar_value].
       cbn [p8_utf8_scalar_wellformed] in Valid.
       unfold p8_octet_between in Valid.
       p8_h8_unpack_octets.
-      Show.
       lia.
     + cbn [p8_utf8_scalar_value].
       cbn [p8_utf8_scalar_wellformed] in Valid.
