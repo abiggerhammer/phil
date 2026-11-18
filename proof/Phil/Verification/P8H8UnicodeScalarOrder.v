@@ -148,7 +148,9 @@ Proof.
   pose proof (Nat.mod_upper_bound n 4096 ltac:(lia)) as B4096.
   pose proof (Nat.mod_upper_bound (n / 4096) 64 ltac:(lia)) as B4096_64.
   assert (Q4096 : (n / 64) / 64 = n / 4096) by lia.
-  repeat split; lia.
+  split; [lia |].
+  split; [lia |].
+  nia.
 Qed.
 
 (* A numeric round trip, including out-of-range n. Shape validity is a
