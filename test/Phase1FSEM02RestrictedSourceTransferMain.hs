@@ -57,6 +57,7 @@ main = do
           , projectedHeadBinderPriority accepted
           , binderResourceAtomicityPriority accepted
           , senderResourceTypeBeforeReceiverSlot accepted
+          , crossModeReceiverNameCollision accepted
           , wrongSessionHeadRejects fx
           , sourceCloseReplay fx
           , sourceCloseRejectsForgedRequest fx
@@ -847,6 +848,85 @@ senderResourceTypeBeforeReceiverSlot source = do
     Left (RestrictedSourceSendError
       (GrammarV1ComponentSendCloseCloseMismatch _ _)) -> Right ()
     other -> Left ("invalid whole source lost priority over resource faults: " <> show other)
+
+
+-- FSEM-02 NON-NORMATIVE: the receiving name is globally exclusive across all
+-- three structural resource maps, not merely within the incoming Linear map.
+-- This probes a pre-existing Affine or Unrestricted receiver name even though
+-- its linear slot is empty. Deliberately corrupted states are not activations.
+crossModeReceiverNameCollision :: Text -> Either String ()
+crossModeReceiverNameCollision source = do
+  fx <- fixture source
+  sequence_ [checkMode fx Affine, checkMode fx Unrestricted]
+  acceptedReplay fx
+  where
+    checkMode :: Fixture -> Mode -> Either String ()
+    checkMode fx mode = do
+      let original = fxBefore fx
+          contexts = communicationProtocolContexts original
+          receiverName = fxPayloadReceiver fx
+      sender <- requireProtocol (fxClientProcess fx) original
+      receiver <- requireProtocol (fxServerProcess fx) original
+      occupied <- mapLeft show $ insertBinding mode receiverName TyBool
+        (protocolResources receiver)
+      assert (Map.notMember receiverName (linearBindings occupied))
+        "cross-mode fixture unexpectedly occupied its linear destination"
+      case mode of
+        Affine -> assert (Map.lookup receiverName (affineBindings occupied) == Just TyBool)
+          "affine receiver collision is missing"
+        Unrestricted -> assert (Map.lookup receiverName (unrestrictedBindings occupied) == Just TyBool)
+          "unrestricted receiver collision is missing"
+        Linear -> Left "cross-mode witness cannot use a linear receiver collision"
+      let senderResources = protocolResources sender
+          badResources = senderResources { linearBindings =
+            Map.insert (fxPayloadOwner fx) (TyUInt 8)
+              (linearBindings senderResources) }
+          badSender = sender { protocolResources = badResources }
+          busyReceiver = receiver { protocolResources = occupied }
+          onlyBadSender = original { communicationProtocolContexts =
+            Map.insert (fxClientProcess fx) badSender contexts }
+          onlyBusyReceiver = original { communicationProtocolContexts =
+            Map.insert (fxServerProcess fx) busyReceiver contexts }
+          both = original { communicationProtocolContexts =
+            Map.insert (fxClientProcess fx) badSender $
+              Map.insert (fxServerProcess fx) busyReceiver contexts }
+          replay state = checked fx (fxSender fx) (fxReceiver fx) state
+      -- Actual sender type is checked before attempting ANY mode of receiver
+      -- insertion, even though the duplicate name is absent from Linear.
+      case replay both of
+        Left (RestrictedSourceCoreError
+          (RestrictedMessageTransferTypeMismatch expected actual)) ->
+            assert (expected == payloadTy && actual == TyUInt 8)
+              "cross-mode hostile state lost exact sender type mismatch"
+        other -> Left ("cross-mode double fault admitted: " <> show (mode, other))
+      case replay onlyBadSender of
+        Left (RestrictedSourceCoreError
+          (RestrictedMessageTransferTypeMismatch expected actual)) ->
+            assert (expected == payloadTy && actual == TyUInt 8)
+              "repairing receiver unexpectedly changed sender type error"
+        other -> Left ("sender type error lost on receiver repair: " <> show (mode, other))
+      -- Repair only sender, leaving a same-name Affine/Unrestricted resource.
+      -- insertBinding must refuse the Linear transfer with exact provenance.
+      case replay onlyBusyReceiver of
+        Left (RestrictedSourceCoreError
+          (RestrictedMessageReceiverResourceError process (DuplicateBinding name))) ->
+            assert (process == fxServerProcess fx && name == receiverName)
+              "cross-mode collision lost exact receiver process and binder"
+        other -> Left ("nonlinear same-name receiver was admitted: " <> show (mode, other))
+      assert (replay both == replay both)
+        "cross-mode hostile replay was nondeterministic"
+      -- A minimally rejected whole-source Close operand still wins before
+      -- either external resource fault, with the original complete program.
+      let valid = "let done = send payload on endpoint;\n  close done;"
+          invalid = "let done = send payload on endpoint;\n  close endpoint;"
+          badSource = Text.replace valid invalid source
+      assert (Text.isInfixOf valid source && badSource /= source)
+        "cross-mode source negative did not change the exact Close operand"
+      (_, rejectedSender, _) <- parseParts badSource
+      case checked fx rejectedSender (fxReceiver fx) both of
+        Left (RestrictedSourceSendError
+          (GrammarV1ComponentSendCloseCloseMismatch _ _)) -> Right ()
+        other -> Left ("cross-mode faulty source error was masked: " <> show (mode, other))
 
 wrongSessionHeadRejects :: Fixture -> Either String ()
 wrongSessionHeadRejects fx = do
