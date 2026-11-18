@@ -134,7 +134,7 @@ Lemma p8_h8_numeric_division_facts :
     n = 64 * (n / 64) + n mod 64 /\
     n = 4096 * (n / 4096) +
       64 * ((n / 64) mod 64) + n mod 64 /\
-    n = 262144 * ((n / 4096) / 64) +
+    n = (4096 * 64) * ((n / 4096) / 64) +
       4096 * ((n / 4096) mod 64) +
       64 * ((n / 64) mod 64) + n mod 64.
 Proof.
@@ -150,7 +150,6 @@ Proof.
   assert (Q4096 : (n / 64) / 64 = n / 4096) by lia.
   split; [lia |].
   split; [lia |].
-  replace 262144 with (4096 * 64) by lia.
   lia.
 Qed.
 
