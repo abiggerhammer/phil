@@ -320,11 +320,11 @@ Proof.
   - destruct (a =? 224) eqn:E224;
       destruct (a =? 237) eqn:E237;
       cbv iota in Valid;
-      p8_h8_unpack_octets; lia.
+      p8_h8_unpack_octets; split; lia.
   - destruct (a =? 240) eqn:E240;
       destruct (a =? 244) eqn:E244;
       cbv iota in Valid;
-      p8_h8_unpack_octets; lia.
+      p8_h8_unpack_octets; split; lia.
 Qed.
 
 (* Injectivity of the ORIGINAL C1 numeric interpretation on exactly its
