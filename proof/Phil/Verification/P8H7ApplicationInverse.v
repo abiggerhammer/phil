@@ -171,8 +171,7 @@ Proof.
     reflexivity.
   }
   unfold p8_e2_parse_application_raw.
-  cbn [p8_e2_expect].
-  Show.
+  cbn [Nat.eqb p8_e2_expect].
   rewrite (p8_f1_text_prefix_roundtrip declaration
     (86 :: (p8_e1_put_text interface ++
       (p8_e1_frame_count (p8_e1_fields_count fields) ++
