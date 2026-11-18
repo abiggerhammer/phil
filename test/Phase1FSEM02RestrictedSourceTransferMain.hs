@@ -52,6 +52,7 @@ main = do
           , wrongProtocolBinderRejects accepted
           , receiverBinderDisplayRenamePreservesAuthorityBoundary accepted
           , senderBinderDisplayRenamePreservesActivationBoundary accepted
+          , dualBinderDisplayCollisionKeepsAuthorityDisjoint accepted
           , wrongSessionHeadRejects fx
           , sourceCloseReplay fx
           , sourceCloseRejectsForgedRequest fx
@@ -461,6 +462,78 @@ senderBinderDisplayRenamePreservesActivationBoundary source = do
              && actualName == Name "cargo")
           "forged activation owner lost exact Core diagnostic"
     other -> Left ("forged sender display owner was admitted: " <> show other)
+
+
+-- Independent component scopes can share a display spelling without sharing
+-- declaration-rooted semantic identity or external transfer authority.
+dualBinderDisplayCollisionKeepsAuthorityDisjoint :: Text -> Either String ()
+dualBinderDisplayCollisionKeepsAuthorityDisjoint source = do
+  let senderOld = "endpoint : Client[OwnedPing], payload : Bytes[8]"
+      senderNew = "endpoint : Client[OwnedPing], cargo : Bytes[8]"
+      sendOld = "let done = send payload on endpoint;"
+      sendNew = "let done = send cargo on endpoint;"
+      bindOld = "bind client.payload = payload;"
+      bindNew = "bind client.cargo = payload;"
+      receiverOld = "let (done, received) = receive Bytes[8] on endpoint;"
+      receiverNew = "let (done, cargo) = receive Bytes[8] on endpoint;"
+      changed = Text.replace receiverOld receiverNew $
+        Text.replace bindOld bindNew $
+        Text.replace sendOld sendNew $
+        Text.replace senderOld senderNew source
+  assert (all (\s -> Text.isInfixOf s source)
+            [senderOld, sendOld, bindOld, receiverOld]
+       && changed /= source
+       && Text.isInfixOf receiverNew changed
+       && Text.isInfixOf senderNew changed)
+    "joint source display collision did not change both scoped declarations"
+  original <- fixture source
+  fx <- fixture changed
+  assert (fxPayloadOwner fx == fxPayloadOwner original
+       && fxPayloadReceiver fx == fxPayloadReceiver original
+       && fxPayloadOwner fx /= fxPayloadReceiver fx
+       && fxPayloadOwner fx /= Name "cargo"
+       && fxPayloadReceiver fx /= Name "cargo")
+    "colliding display names unexpectedly merged independent semantic binders"
+  acceptedReplay fx
+  -- A sender's ACTUAL semantic owner is not the externally authorized
+  -- receiver binder merely because both source spellings are cargo.
+  wrongProtocol <- fixtureWithMessageBinder (Just (fxPayloadOwner fx)) changed
+  case checked wrongProtocol (fxSender wrongProtocol) (fxReceiver wrongProtocol)
+      (fxBefore wrongProtocol) of
+    Left (RestrictedSourceCoreError
+      (RestrictedMessageReceiverBinderMismatch expected actual)) ->
+        assert (expected == fxPayloadOwner fx
+             && actual == fxPayloadReceiver fx)
+          "sender identity forged as protocol receiver lost exact mismatch"
+    other -> Left ("cross-scoped sender as receiver was admitted: " <> show other)
+  -- Likewise a receiver semantic binder is not an activated sender owner.
+  let before = fxBefore fx
+      forged = before { communicationRestrictedOwners =
+        Map.insert payloadOccurrence (fxClientProcess fx, fxPayloadReceiver fx)
+          (communicationRestrictedOwners before) }
+  case checked fx (fxSender fx) (fxReceiver fx) forged of
+    Left (RestrictedSourceCoreError
+      (RestrictedMessageOwnerMismatch occurrence expectedProcess
+        expectedName actualProcess actualName)) ->
+        assert (occurrence == payloadOccurrence
+             && expectedProcess == fxClientProcess fx
+             && expectedName == fxPayloadOwner fx
+             && actualProcess == fxClientProcess fx
+             && actualName == fxPayloadReceiver fx)
+          "receiver identity forged as activation owner lost exact mismatch"
+    other -> Left ("cross-scoped receiver as sender was admitted: " <> show other)
+  -- This is independently a rejected *source*, not a forged external
+  -- admission or an unresolved proof obligation.
+  let validPrefix = "let done = send cargo on endpoint;\n  close done;"
+      stalePrefix = "let done = send cargo on endpoint;\n  close endpoint;"
+      stale = Text.replace validPrefix stalePrefix changed
+  assert (Text.isInfixOf validPrefix changed && stale /= changed)
+    "jointly renamed source stale-close negative failed to isolate one edit"
+  (_, rejectedSender, _) <- parseParts stale
+  case checked fx rejectedSender (fxReceiver fx) (fxBefore fx) of
+    Left (RestrictedSourceSendError
+      (GrammarV1ComponentSendCloseCloseMismatch _ _)) -> Right ()
+    other -> Left ("joint-display stale-close source lost exact error: " <> show other)
 
 wrongSessionHeadRejects :: Fixture -> Either String ()
 wrongSessionHeadRejects fx = do
