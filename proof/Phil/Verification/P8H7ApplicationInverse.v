@@ -167,7 +167,9 @@ Proof.
   2: {
     unfold p8_e2_put_application.
     cbn [p8_d2_declaration p8_d2_interface p8_d2_arguments app].
-    repeat rewrite <- app_assoc.
+    repeat rewrite app_assoc.
+    cbn [app].
+    repeat rewrite app_assoc.
     reflexivity.
   }
   unfold p8_e2_parse_application_raw.
