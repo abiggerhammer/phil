@@ -31,6 +31,8 @@ There are several layers of authority; they must not be conflated.
 → the specific proof and implementation correspondence for any claim you want
 to challenge.
 
+The [non-normative FSEM-02 simultaneous authority diagnostic-priority gate](formal-semantics-dual-authority-error-priority-fsem02-v1.md) tests actual source Close/type rejection before forged activation and protocol identity, exact owner-mismatch precedence when both external premises are wrong, and the receiver-binder mismatch exposed by repairing only the sender owner. Its six conditional Rocq classifier lemmas do not confer transfer authority or Haskell-to-Rocq refinement.
+
 The [non-normative FSEM-02 joint sender/receiver semantic-identity gate](formal-semantics-dual-binder-disjoint-authority-fsem02-v1.md) reparses accepted source with identical 'cargo' display spellings in two distinct component scopes. It checks that declaration-rooted identities stay disjoint, exact native refusals for swapped external authority, and a minimally rejected stale-close source. Its six conditional Rocq lemmas compose the two independent semantic-equality gates without supplying protocol, message, activation or assurance authority.
 
 The [non-normative FSEM-02 partial-mask reversibility regression](formal-semantics-source-ping-partial-mask-reversibility-fsem02-v1.md) probes all 16 four-observation fault masks at four individual sites across 576 source-derived contexts (36,864 native cycles). Its separately checked Rocq site algebra proves absorption, reinjection idempotence and disjoint-site commutation, not implementation refinement or new protocol authority.
