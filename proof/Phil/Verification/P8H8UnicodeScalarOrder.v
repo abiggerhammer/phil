@@ -46,10 +46,18 @@ Theorem p8_h8_c1_valid_scalar_value :
 Proof.
   intros scalar Valid.
   destruct scalar as [a | a b | a b c | a b c d].
-  - apply p8_h8_scalar_of_numeric_bounds;
-      cbn [p8_utf8_scalar_wellformed p8_utf8_scalar_value] in *;
-      unfold p8_octet_between in Valid;
-      p8_h8_unpack_octets; first [lia | left; lia | right; lia].
+  - apply p8_h8_scalar_of_numeric_bounds.
+    + cbn [p8_utf8_scalar_value].
+      cbn [p8_utf8_scalar_wellformed] in Valid.
+      unfold p8_octet_between in Valid.
+      p8_h8_unpack_octets.
+      Show.
+      lia.
+    + cbn [p8_utf8_scalar_value].
+      cbn [p8_utf8_scalar_wellformed] in Valid.
+      unfold p8_octet_between in Valid.
+      p8_h8_unpack_octets.
+      left; lia.
   - apply p8_h8_scalar_of_numeric_bounds;
       cbn [p8_utf8_scalar_wellformed p8_utf8_scalar_value] in *;
       unfold p8_octet_between in Valid;
