@@ -365,6 +365,29 @@ p9SteveStructuralGate putSource getSource = do
   case verifySteveGetLLVMPointerFlow wrongOwnerLLVM of
     Left SteveGetLLVMDigestOwnerSubstituted -> Right ()
     other -> Left ("P9 accepted wrong LLVM native owner: " <> show other)
+  -- The correct call text in a TRACE COMMENT is not an executable
+  -- invocation. An unfiltered substring count could mistake it for one.
+  let digestCallText =
+        "@phil_runtime_choice_SteveGet_get_check_DigestProvider_check(ptr %get_id, ptr %get_bytes)"
+      commentSpoofedLLVM = wrongOwnerLLVM <> "\n; " <> digestCallText <> "\n"
+  assert (Text.count digestCallText wrongOwnerLLVM == 0
+      && Text.count digestCallText commentSpoofedLLVM == 1)
+    "P9 LLVM comment-spoof negative did not preserve the expected text"
+  case verifySteveGetLLVMPointerFlow commentSpoofedLLVM of
+    Left SteveGetLLVMDigestOwnerSubstituted -> Right ()
+    other -> Left ("P9 accepted comment-spoofed LLVM digest call: " <> show other)
+  -- A correct invocation relocated to the wrong block is equally
+  -- insufficient; get_check must use the owner loaded from read.found.
+  let wrongBlockLabel = "get_not_found:\n"
+      displacedLLVM = Text.replace wrongBlockLabel
+        (wrongBlockLabel <> "  %p9_fake = call i32 " <> digestCallText <> "\n")
+        wrongOwnerLLVM
+  assert (displacedLLVM /= wrongOwnerLLVM
+      && Text.count digestCallText displacedLLVM == 1)
+    "P9 LLVM wrong-block digest negative did not mutate the actual artifact"
+  case verifySteveGetLLVMPointerFlow displacedLLVM of
+    Left SteveGetLLVMDigestOwnerSubstituted -> Right ()
+    other -> Left ("P9 accepted digest invocation outside get_check: " <> show other)
   let wrongReadInvocation = Text.replace
         "@phil_runtime_choice_SteveGet_get_entry_BlobProvider_read(ptr %get_id, ptr %phil_runtime_choice_payload_slot_SteveGet_get_entry_get_bytes)"
         "@phil_runtime_choice_SteveGet_get_entry_BlobProvider_read(ptr %get_bytes, ptr %phil_runtime_choice_payload_slot_SteveGet_get_entry_get_bytes)"
