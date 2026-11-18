@@ -119,7 +119,7 @@ Definition p8_h8_encode_scalar (n : nat) : P8Utf8ScalarOctets :=
     P8Utf8Three (224 + n / 4096)
       (128 + (n / 64) mod 64) (128 + n mod 64)
   else
-    P8Utf8Four (240 + n / 262144)
+    P8Utf8Four (240 + (n / 4096) / 64)
       (128 + (n / 4096) mod 64)
       (128 + (n / 64) mod 64) (128 + n mod 64).
 
@@ -134,23 +134,20 @@ Lemma p8_h8_numeric_division_facts :
     n = 64 * (n / 64) + n mod 64 /\
     n = 4096 * (n / 4096) +
       64 * ((n / 64) mod 64) + n mod 64 /\
-    n = 262144 * (n / 262144) +
+    n = 262144 * ((n / 4096) / 64) +
       4096 * ((n / 4096) mod 64) +
       64 * ((n / 64) mod 64) + n mod 64.
 Proof.
   intro n.
-  pose proof (Nat.div_mod n 64 ltac:(vm_compute; lia)) as E64.
-  pose proof (Nat.div_mod (n / 64) 64 ltac:(vm_compute; lia)) as E64_64.
-  pose proof (Nat.div_mod n 4096 ltac:(vm_compute; lia)) as E4096.
-  pose proof (Nat.div_mod (n / 4096) 64 ltac:(vm_compute; lia)) as E4096_64.
-  pose proof (Nat.div_mod n 262144 ltac:(vm_compute; lia)) as E262144.
-  pose proof (Nat.mod_upper_bound n 64 ltac:(vm_compute; lia)) as B64.
-  pose proof (Nat.mod_upper_bound (n / 64) 64 ltac:(vm_compute; lia)) as B64_64.
-  pose proof (Nat.mod_upper_bound n 4096 ltac:(vm_compute; lia)) as B4096.
-  pose proof (Nat.mod_upper_bound (n / 4096) 64 ltac:(vm_compute; lia)) as B4096_64.
-  pose proof (Nat.mod_upper_bound n 262144 ltac:(vm_compute; lia)) as B262144.
+  pose proof (Nat.div_mod n 64 ltac:(lia)) as E64.
+  pose proof (Nat.div_mod (n / 64) 64 ltac:(lia)) as E64_64.
+  pose proof (Nat.div_mod n 4096 ltac:(lia)) as E4096.
+  pose proof (Nat.div_mod (n / 4096) 64 ltac:(lia)) as E4096_64.
+  pose proof (Nat.mod_upper_bound n 64 ltac:(lia)) as B64.
+  pose proof (Nat.mod_upper_bound (n / 64) 64 ltac:(lia)) as B64_64.
+  pose proof (Nat.mod_upper_bound n 4096 ltac:(lia)) as B4096.
+  pose proof (Nat.mod_upper_bound (n / 4096) 64 ltac:(lia)) as B4096_64.
   assert (Q4096 : (n / 64) / 64 = n / 4096) by lia.
-  assert (Q262144 : (n / 4096) / 64 = n / 262144) by lia.
   repeat split; lia.
 Qed.
 
@@ -199,9 +196,9 @@ Proof.
   pose proof (p8_h8_unicode_scalar_bounds n Valid) as [Upper Outside].
   pose proof (p8_h8_numeric_division_facts n) as
     [D64 [D4096 D262144]].
-  pose proof (Nat.mod_upper_bound n 64 ltac:(vm_compute; lia)) as M64.
-  pose proof (Nat.mod_upper_bound (n / 64) 64 ltac:(vm_compute; lia)) as M64_64.
-  pose proof (Nat.mod_upper_bound (n / 4096) 64 ltac:(vm_compute; lia)) as M4096_64.
+  pose proof (Nat.mod_upper_bound n 64 ltac:(lia)) as M64.
+  pose proof (Nat.mod_upper_bound (n / 64) 64 ltac:(lia)) as M64_64.
+  pose proof (Nat.mod_upper_bound (n / 4096) 64 ltac:(lia)) as M4096_64.
   unfold p8_h8_encode_scalar.
   destruct (n <? 128) eqn:One.
   - apply Nat.ltb_lt in One.
@@ -240,11 +237,11 @@ Proof.
         unfold p8_octet_between.
         repeat rewrite andb_true_iff.
         repeat split; try (apply Nat.leb_le; lia).
-        destruct (240 + n / 262144 =? 240) eqn:LeadF0.
+        destruct (240 + (n / 4096) / 64 =? 240) eqn:LeadF0.
         -- apply Nat.eqb_eq in LeadF0.
            repeat rewrite andb_true_iff.
            repeat split; apply Nat.leb_le; lia.
-        -- destruct (240 + n / 262144 =? 244) eqn:LeadF4.
+        -- destruct (240 + (n / 4096) / 64 =? 244) eqn:LeadF4.
            ++ apply Nat.eqb_eq in LeadF4.
               repeat rewrite andb_true_iff.
               repeat split; apply Nat.leb_le; lia.
