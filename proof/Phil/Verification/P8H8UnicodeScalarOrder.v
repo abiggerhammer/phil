@@ -127,6 +127,51 @@ Definition p8_h8_encode_if_scalar (n : nat)
   : option P8Utf8ScalarOctets :=
   if p8_unicode_scalar n then Some (p8_h8_encode_scalar n) else None.
 
+(* Division facts are exact for *all* naturals; unlike checked
+   examples they do not rely on finite Unicode enumeration. *)
+Lemma p8_h8_numeric_division_facts :
+  forall n,
+    n = 64 * (n / 64) + n mod 64 /\
+    n = 4096 * (n / 4096) +
+      64 * ((n / 64) mod 64) + n mod 64 /\
+    n = 262144 * (n / 262144) +
+      4096 * ((n / 4096) mod 64) +
+      64 * ((n / 64) mod 64) + n mod 64.
+Proof.
+  intro n.
+  pose proof (Nat.div_mod n 64 ltac:(lia)) as E64.
+  pose proof (Nat.div_mod (n / 64) 64 ltac:(lia)) as E64_64.
+  pose proof (Nat.div_mod n 4096 ltac:(lia)) as E4096.
+  pose proof (Nat.div_mod (n / 4096) 64 ltac:(lia)) as E4096_64.
+  pose proof (Nat.div_mod n 262144 ltac:(lia)) as E262144.
+  pose proof (Nat.mod_upper_bound n 64 ltac:(lia)) as B64.
+  pose proof (Nat.mod_upper_bound (n / 64) 64 ltac:(lia)) as B64_64.
+  pose proof (Nat.mod_upper_bound n 4096 ltac:(lia)) as B4096.
+  pose proof (Nat.mod_upper_bound (n / 4096) 64 ltac:(lia)) as B4096_64.
+  pose proof (Nat.mod_upper_bound n 262144 ltac:(lia)) as B262144.
+  assert (Q4096 : (n / 64) / 64 = n / 4096) by lia.
+  assert (Q262144 : (n / 4096) / 64 = n / 262144) by lia.
+  repeat split; lia.
+Qed.
+
+(* A numeric round trip, including out-of-range n. Shape validity is a
+   *separate* theorem and is only asserted for admitted Unicode scalars. *)
+Theorem p8_h8_numeric_encoder_value :
+  forall n, p8_utf8_scalar_value (p8_h8_encode_scalar n) = n.
+Proof.
+  intros n.
+  pose proof (p8_h8_numeric_division_facts n) as
+    [D64 [D4096 D262144]].
+  unfold p8_h8_encode_scalar.
+  destruct (n <? 128) eqn:One.
+  - reflexivity.
+  - destruct (n <? 2048) eqn:Two.
+    + cbn [p8_utf8_scalar_value]. lia.
+    + destruct (n <? 65536) eqn:Three.
+      * cbn [p8_utf8_scalar_value]. lia.
+      * cbn [p8_utf8_scalar_value]. lia.
+Qed.
+
 (* Discriminating canonical boundary witnesses are model computations only. *)
 Example p8_h8_nul :
   p8_h8_encode_if_scalar 0 = Some (P8Utf8One 0).
@@ -168,3 +213,4 @@ Proof. split; reflexivity. Qed.
 
 Print Assumptions p8_h8_scalar_of_numeric_bounds.
 Print Assumptions p8_h8_c1_valid_scalar_value.
+Print Assumptions p8_h8_numeric_encoder_value.
