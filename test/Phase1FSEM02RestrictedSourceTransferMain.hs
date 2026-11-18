@@ -50,6 +50,7 @@ main = do
           , wrongSourcePayloadModeRejects fx accepted
           , wrongWrittenReceiveTypeRejects fx accepted
           , wrongProtocolBinderRejects accepted
+          , receiverBinderDisplayRenamePreservesAuthorityBoundary accepted
           , wrongSessionHeadRejects fx
           , sourceCloseReplay fx
           , sourceCloseRejectsForgedRequest fx
@@ -401,6 +402,25 @@ wrongProtocolBinderRejects source = do
         assert (expected == Name "value" && actual == fxPayloadReceiver fx)
           "protocol receiver-binder mismatch lost exact checked source identity"
     other -> Left ("unmatched external protocol binder was admitted: " <> show other)
+
+-- Renaming only the source receiver's DISPLAY binder does not replace its
+-- declaration-rooted semantic identity. A separately authorized protocol
+-- with that exact resolved identity still progresses, while a protocol
+-- using the bare source-level display name is rejected by the native Core
+-- receiver-binder check. No nominal authority is inferred by this test.
+receiverBinderDisplayRenamePreservesAuthorityBoundary :: Text -> Either String ()
+receiverBinderDisplayRenamePreservesAuthorityBoundary source = do
+  let original = "let (done, received) = receive Bytes[8] on endpoint;"
+      renamed = "let (done, delivery) = receive Bytes[8] on endpoint;"
+      renamedSource = Text.replace original renamed source
+  assert (Text.isInfixOf original source && renamedSource /= source)
+    "receiver binder alpha-rename source fixture changed shape"
+  originalFx <- fixture source
+  renamedFx <- fixture renamedSource
+  assert (fxPayloadReceiver renamedFx == fxPayloadReceiver originalFx)
+    "receiver display alpha-renaming changed declaration-rooted binder identity"
+  acceptedReplay renamedFx
+  wrongProtocolBinderRejects renamedSource
 
 wrongSessionHeadRejects :: Fixture -> Either String ()
 wrongSessionHeadRejects fx = do
