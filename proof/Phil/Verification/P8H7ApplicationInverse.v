@@ -195,9 +195,11 @@ Proof.
               (p8_e2_put_arguments fields ++ suffix))))))))
     suffix ValidFields).
   2: {
-    unfold p8_e2_put_application in Enough.
-    cbn [p8_d2_declaration p8_d2_interface p8_d2_arguments] in Enough.
-    exact Enough.
+    (* Length is invariant under the prefix's list-association normal form. *)
+    repeat rewrite length_app in Enough.
+    repeat rewrite length_app.
+    simpl in Enough |- *.
+    lia.
   }
   reflexivity.
 Qed.
