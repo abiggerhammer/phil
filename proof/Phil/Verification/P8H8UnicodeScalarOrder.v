@@ -103,7 +103,10 @@ Proof.
       destruct (a <? 244) eqn:Below244;
       cbn in Valid;
       p8_h8_unpack_octets;
-      first [nia | left; nia | right; nia].
+      try nia;
+      try (left; nia);
+      try (right; nia).
+    Show.
 Qed.
 
 (* Canonical numeric encoder candidate, not yet a proved inverse. *)
