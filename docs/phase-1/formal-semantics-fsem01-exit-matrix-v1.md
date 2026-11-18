@@ -10,6 +10,8 @@
 
 > **DATA-05B bounded Surface replay proposed (2026-11-16):** [Two-stage source/Surface evidence](formal-semantics-nested-product-data05b-fsem01-v1.md) uses actual parsed nested sources, source-rooted leaf binders and production checked flat product eliminations twice, independently checking original/outer/inner Core states and negative classes. The intermediate is test-generated; general production nested Grammar-v1 elaboration and FSEM-01 R14/R15 remain open. P9/Engine/checker code is untouched.
 
+> **DATA-05C opt-in source-owned adapter proposed (2026-11-16):** [Production nested product fragment](formal-semantics-nested-product-data05c-fsem01-v1.md) accepts one explicitly bounded two-level original-source pattern, checks exact source owner/mode/leaf identity, allocates a distinct internal Core owner, derives both checked product contracts internally, and replays actual Surface production transitions. This is not general nested type-checking authority, original source-byte authentication, proposition discharge or R14/R15 closure. DATA-04/05 remain **gap**.
+
 > **Review finding: FSEM-01 remains OPEN.** This is a non-normative
 > coverage/acceptance audit, not a new language rule, a proof of the general
 > Haskell implementation, or an FSEM-01 completion claim.

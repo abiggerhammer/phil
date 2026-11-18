@@ -1,0 +1,96 @@
+name: FSEM-01 DATA-05C Production Source Nested Product Preflight
+
+on:
+  push:
+    branches:
+      - formal-semantics/fsem01-data05c-production-source-nested
+    paths:
+      - 'src/Phil/Surface/GrammarV1/SourceNestedProductElimination.hs'
+      - 'test/Phase1FSEM01Data05CSourceAdmissionMain.hs'
+      - 'proof/Phil/Surface/SurfaceNestedProductSourceD05C.v'
+      - 'docs/phase-1/formal-semantics-nested-product-data05c-fsem01-v1.md'
+      - 'phil-core.cabal'
+      - '.github/workflows/fsem01-data05c-source-nested-preflight.yml'
+  pull_request:
+    paths:
+      - 'src/Phil/Surface/GrammarV1/SourceNestedProductElimination.hs'
+      - 'test/Phase1FSEM01Data05CSourceAdmissionMain.hs'
+      - 'proof/Phil/Surface/SurfaceNestedProductSourceD05C.v'
+      - 'docs/phase-1/formal-semantics-nested-product-data05c-fsem01-v1.md'
+      - 'phil-core.cabal'
+      - '.github/workflows/fsem01-data05c-source-nested-preflight.yml'
+
+concurrency:
+  group: data05c-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  strict-production-nested-source:
+    name: Strict GHC production source owned nested adapter and Core/Surface checks
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: haskell-actions/setup@v2
+        with:
+          ghc-version: '9.6.7'
+          cabal-version: 'latest'
+          cabal-update: false
+      - name: Bounded Hackage HTTP1 retry
+        run: bash scripts/ci/cabal-update-retry.sh
+      - name: Warning-clean library, nested source and prior product regressions
+        shell: bash
+        run: |
+          set -euo pipefail
+          cabal build lib:phil-core --ghc-options=-Werror
+          for test in \
+            Phase1FSEM01FlatProductMain \
+            Phase1FSEM01SourceProductEliminationMain \
+            Phase1FSEM01Data05ANestedProductMain \
+            Phase1FSEM01Data05BSourceSurfaceMain \
+            Phase1FSEM01Data05CSourceAdmissionMain
+          do
+            cabal exec -- ghc -isrc -itest -Wall -Werror -fno-code "test/$test.hs"
+            cabal exec -- runghc -isrc -itest -Wall -Werror "test/$test.hs"
+          done
+          sha256sum \
+            src/Phil/Surface/GrammarV1/SourceNestedProductElimination.hs \
+            test/Phase1FSEM01Data05CSourceAdmissionMain.hs \
+            src/Phil/Core/DataMode.hs \
+            src/Phil/Surface/Check/Engine.hs
+
+  rocq-source-owned-contract:
+    name: Rocq conditional source-owned staging and globally fresh inner owner
+    runs-on: ubuntu-24.04
+    container:
+      image: rocq/rocq-prover:9.2.0
+      options: --user root
+    steps:
+      - uses: actions/checkout@v4
+      - name: Kernel compile previous source/product models and DATA-05C
+        shell: bash
+        run: |
+          set -euo pipefail
+          export PATH="/home/rocq/.opam/$COMPILER/bin:$PATH"
+          for file in \
+            proof/Phil/Core/Syntax.v \
+            proof/Phil/Core/Context.v \
+            proof/Phil/Core/DataMode.v \
+            proof/Phil/Core/DataProduct.v \
+            proof/Phil/Surface/SurfaceNestedProductFoundationD05A.v \
+            proof/Phil/Surface/SurfaceNestedProductSurfaceD05B.v \
+            proof/Phil/Surface/SurfaceNestedProductSourceD05C.v
+          do
+            rocq c -Q proof/Phil Phil "$file"
+          done
+          rocq check -Q proof/Phil Phil Phil.Surface.SurfaceNestedProductSourceD05C
+          if grep -nE '^[[:space:]]*(Admitted[.]|Axiom[[:space:]]|Parameter[[:space:]])' \
+            proof/Phil/Surface/SurfaceNestedProductSourceD05C.v; then
+            echo "Unproved DATA-05C source owned theorem" >&2
+            exit 1
+          fi
+          sha256sum \
+            proof/Phil/Surface/SurfaceNestedProductSourceD05C.v \
+            proof/Phil/Surface/SurfaceNestedProductSourceD05C.vo
