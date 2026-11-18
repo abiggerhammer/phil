@@ -263,6 +263,7 @@ verifyOriginalSteveGetModeledABI canonical@(VerifiedSteveGetCanonicalSource
 -- It is not a linked-binary verifier, execution trace, or source-loan proof.
 data SteveGetLLVMPointerFlowError
   = SteveGetLLVMReadResultSlotMissing
+  | SteveGetLLVMReadWrongSite
   | SteveGetLLVMPayloadLoadMissing
   | SteveGetLLVMDigestOwnerSubstituted
   | SteveGetLLVMReleaseMissing
@@ -278,6 +279,9 @@ verifySteveGetLLVMPointerFlow emitted = do
         "@phil_runtime_choice_SteveGet_get_entry_BlobProvider_read("
       exactReadCall =
         "@phil_runtime_choice_SteveGet_get_entry_BlobProvider_read(ptr %get_id, ptr %phil_runtime_choice_payload_slot_SteveGet_get_entry_get_bytes)"
+      readInstruction =
+        "  %phil_runtime_choice_tag_SteveGet_get_entry = call i32 "
+          <> exactReadCall
       payloadLoad =
         "get_check:\n  %get_bytes = load ptr, ptr %phil_runtime_choice_payload_slot_SteveGet_get_entry_get_bytes"
       digestCall =
@@ -289,12 +293,23 @@ verifySteveGetLLVMPointerFlow emitted = do
       instructions = Text.unlines
         (map (Text.takeWhile (/= ';')) (Text.lines emitted))
       count textValue = Text.count textValue instructions
+      -- A globally present call can execute in the wrong basic block,
+      -- leaving get_entry to branch on a forged tag and unloaded out-slot.
+      -- Insist that its actual producer invocation occurs in get_entry.
+      entryInstructions =
+        case dropWhile (/= "get_entry:") (Text.lines instructions) of
+          [] -> []
+          (_ : body) -> takeWhile
+            (not . Text.isSuffixOf ":" . Text.strip) body
       digestAtSite =
         payloadLoad <> "\n  %phil_runtime_choice_tag_SteveGet_get_check = call i32 "
           <> digestCall
   if count readSlot == 1 && count readCall == 2
        && count exactReadCall == 1
     then Right () else Left SteveGetLLVMReadResultSlotMissing
+  if count readInstruction == 1
+       && readInstruction `elem` entryInstructions
+    then Right () else Left SteveGetLLVMReadWrongSite
   if count payloadLoad == 1
     then Right () else Left SteveGetLLVMPayloadLoadMissing
   -- Seeing the right call elsewhere in a function is insufficient:
