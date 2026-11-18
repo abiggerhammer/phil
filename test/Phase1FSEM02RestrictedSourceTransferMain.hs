@@ -8,7 +8,7 @@ import Data.Text (Text)
 import qualified Data.Text as Text
 import qualified Data.Text.IO as TextIO
 import Phil.Core.CheckedBindingMode (CheckedTypeMode (..))
-import Phil.Core.Context (CheckError (..), ResourceContext (..), insertBinding, startSharedLoan)
+import Phil.Core.Context (CheckError (..), ResourceContext (..), endSharedLoan, insertBinding, startSharedLoan)
 import Phil.Core.Generic (GenericStaticParameterKey (..), strictGenericInstantiationPolicy)
 import Phil.Core.Process
 import Phil.Core.ProcessActivation
@@ -59,6 +59,7 @@ main = do
           , senderResourceTypeBeforeReceiverSlot accepted
           , crossModeReceiverNameCollision accepted
           , borrowedSenderTransferRefusal accepted
+          , borrowedEndpointPrefixPriority accepted
           , wrongSessionHeadRejects fx
           , sourceCloseReplay fx
           , sourceCloseRejectsForgedRequest fx
@@ -991,6 +992,103 @@ borrowedSenderTransferRefusal source = do
     Left (RestrictedSourceSendError
       (GrammarV1ComponentSendCloseCloseMismatch _ _)) -> Right ()
     other -> Left ("borrowed-sender resource errors masked source rejection: " <> show other)
+
+-- FSEM-02 NON-NORMATIVE: independently borrowed sender/receiver endpoint
+-- predecessors must refuse before a concurrently borrowed sender payload and
+-- a busy receiver destination. Explicitly ending each real shared loan
+-- reveals the next exact fault, without endpoint or owner-index progression.
+-- These hostile resource contexts are NOT certified activations.
+borrowedEndpointPrefixPriority :: Text -> Either String ()
+borrowedEndpointPrefixPriority source = do
+  fx <- fixture source
+  let original = fxBefore fx
+      contexts = communicationProtocolContexts original
+      senderKey = fxClientProcess fx
+      receiverKey = fxServerProcess fx
+      senderEndpoint = fxClientOld fx
+      receiverEndpoint = fxServerOld fx
+      payloadOwner = fxPayloadOwner fx
+      payloadDestination = fxPayloadReceiver fx
+      replay state = checked fx (fxSender fx) (fxReceiver fx) state
+  sender <- requireProtocol senderKey original
+  receiver <- requireProtocol receiverKey original
+  -- Use the actual Context API rather than mutating loan sets by hand.
+  senderEndpointLoaned <- mapLeft show $
+    startSharedLoan senderEndpoint (protocolResources sender)
+  senderBothLoaned <- mapLeft show $
+    startSharedLoan payloadOwner senderEndpointLoaned
+  receiverEndpointLoaned <- mapLeft show $
+    startSharedLoan receiverEndpoint (protocolResources receiver)
+  receiverBusy <- mapLeft show $
+    insertBinding Linear payloadDestination payloadTy receiverEndpointLoaned
+  senderEndpointRepaired <- mapLeft show $
+    endSharedLoan senderEndpoint senderBothLoaned
+  receiverEndpointRepaired <- mapLeft show $
+    endSharedLoan receiverEndpoint receiverBusy
+  payloadRepaired <- mapLeft show $
+    endSharedLoan payloadOwner senderEndpointRepaired
+  let asState senderResources receiverResources =
+        original { communicationProtocolContexts =
+          Map.insert senderKey (sender { protocolResources = senderResources }) $
+            Map.insert receiverKey (receiver { protocolResources = receiverResources })
+              contexts }
+      allFaults = asState senderBothLoaned receiverBusy
+      senderEndpointFixed = asState senderEndpointRepaired receiverBusy
+      endpointPairFixed = asState senderEndpointRepaired receiverEndpointRepaired
+      allLoansFixed = asState payloadRepaired receiverEndpointRepaired
+      allFixed = asState payloadRepaired (protocolResources receiver)
+      requiresBorrowedEndpoint expectedProcess expectedName state =
+        case replay state of
+          Left (RestrictedSourceCoreError
+            (RendezvousProtocolError process
+              (ProtocolSessionError
+                (SessionResourceError (OwnerBorrowed owner))))) ->
+              assert (process == expectedProcess && owner == expectedName)
+                "endpoint shared loan rejection lost its exact process/name"
+          other -> Left ("borrowed endpoint predecessor admitted: " <> show other)
+  assert (senderEndpoint /= payloadOwner && senderEndpoint /= receiverEndpoint)
+    "endpoint-prefix fixture failed to isolate distinct owners"
+  assert (Set.member senderEndpoint (sharedLoans senderBothLoaned)
+       && Set.member payloadOwner (sharedLoans senderBothLoaned)
+       && Set.member receiverEndpoint (sharedLoans receiverBusy))
+    "endpoint-prefix hostile state did not activate all three real loans"
+  -- ProtocolSendRequest is checked first; no sender endpoint consumption.
+  requiresBorrowedEndpoint senderKey senderEndpoint allFaults
+  -- Removing only the sender endpoint loan exposes the receiver's loan.
+  requiresBorrowedEndpoint receiverKey receiverEndpoint senderEndpointFixed
+  -- Both predecessor loans gone: the sender payload still cannot transfer.
+  case replay endpointPairFixed of
+    Left (RestrictedSourceCoreError
+      (RestrictedMessageSenderResourceError process (OwnerBorrowed name))) ->
+        assert (process == senderKey && name == payloadOwner)
+          "repairing endpoint loans failed to expose sender payload loan"
+    other -> Left ("payload loan priority lost: " <> show other)
+  -- All three loans gone: destination collision is now the sole fault.
+  case replay allLoansFixed of
+    Left (RestrictedSourceCoreError
+      (RestrictedMessageReceiverResourceError process (DuplicateBinding name))) ->
+        assert (process == receiverKey && name == payloadDestination)
+          "repairing all loans failed to expose receiver collision"
+    other -> Left ("receiver collision priority lost: " <> show other)
+  assert (replay allFaults == replay allFaults
+       && replay endpointPairFixed == replay endpointPairFixed)
+    "borrowed endpoint trace was not a deterministic pure refusal"
+  -- Repairs restore exactly the original checked Core state, not fresh
+  -- nominal, protocol, activation, root, or disposal authority.
+  assert (allFixed == original && replay allFixed == replay original)
+    "all four repairs failed to restore the exact admitted state"
+  acceptedReplay fx
+  -- The minimally rejected complete source changes only the Close operand.
+  let valid = "let done = send payload on endpoint;\n  close done;"
+      invalid = "let done = send payload on endpoint;\n  close endpoint;"
+      badSource = Text.replace valid invalid source
+  assert (Text.isInfixOf valid source && badSource /= source)
+    "endpoint-prefix minimally rejected source did not change one operand"
+  (_, rejectedSender, _) <- parseParts badSource
+  case checked fx rejectedSender (fxReceiver fx) allFaults of
+    Left (RestrictedSourceSendError
+      (GrammarV1ComponentSendCloseCloseMismatch _ _)) -> Right ()
+    other -> Left ("endpoint resource faults masked source rejection: " <> show other)
 
 wrongSessionHeadRejects :: Fixture -> Either String ()
 wrongSessionHeadRejects fx = do
