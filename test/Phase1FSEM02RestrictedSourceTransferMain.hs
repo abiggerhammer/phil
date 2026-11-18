@@ -51,6 +51,7 @@ main = do
           , wrongWrittenReceiveTypeRejects fx accepted
           , wrongProtocolBinderRejects accepted
           , receiverBinderDisplayRenamePreservesAuthorityBoundary accepted
+          , senderBinderDisplayRenamePreservesActivationBoundary accepted
           , wrongSessionHeadRejects fx
           , sourceCloseReplay fx
           , sourceCloseRejectsForgedRequest fx
@@ -421,6 +422,45 @@ receiverBinderDisplayRenamePreservesAuthorityBoundary source = do
     "receiver display alpha-renaming changed declaration-rooted binder identity"
   acceptedReplay renamedFx
   wrongProtocolBinderRejects renamedSource
+
+-- A display rename is not authority for rewriting the activated owner
+-- ledger: the checked sender identity is declaration-rooted and stable.
+senderBinderDisplayRenamePreservesActivationBoundary :: Text -> Either String ()
+senderBinderDisplayRenamePreservesActivationBoundary source = do
+  let oldParameter = "endpoint : Client[OwnedPing], payload : Bytes[8]"
+      newParameter = "endpoint : Client[OwnedPing], cargo : Bytes[8]"
+      oldSend = "let done = send payload on endpoint;"
+      newSend = "let done = send cargo on endpoint;"
+      oldArchitecture = "bind client.payload = payload;"
+      newArchitecture = "bind client.cargo = payload;"
+      changed = Text.replace oldArchitecture newArchitecture
+        (Text.replace oldSend newSend
+          (Text.replace oldParameter newParameter source))
+  assert (all (`Text.isInfixOf` source)
+            [oldParameter, oldSend, oldArchitecture] && changed /= source)
+    "sender parameter rename did not match complete-source fixture"
+  originalFx <- fixture source
+  renamedFx <- fixture changed
+  assert (fxPayloadOwner renamedFx == fxPayloadOwner originalFx
+       && fxPayloadReceiver renamedFx == fxPayloadReceiver originalFx
+       && fxPayloadOwner renamedFx /= Name "cargo")
+    "sender display rename changed declaration-rooted semantic owner"
+  acceptedReplay renamedFx
+  let before = fxBefore renamedFx
+      forged = before { communicationRestrictedOwners =
+        Map.insert payloadOccurrence (fxClientProcess renamedFx, Name "cargo")
+          (communicationRestrictedOwners before) }
+  case checked renamedFx (fxSender renamedFx) (fxReceiver renamedFx) forged of
+    Left (RestrictedSourceCoreError
+      (RestrictedMessageOwnerMismatch occurrence expectedProcess
+        expectedName actualProcess actualName)) ->
+        assert (occurrence == payloadOccurrence
+             && expectedProcess == fxClientProcess renamedFx
+             && expectedName == fxPayloadOwner renamedFx
+             && actualProcess == fxClientProcess renamedFx
+             && actualName == Name "cargo")
+          "forged activation owner lost exact Core diagnostic"
+    other -> Left ("forged sender display owner was admitted: " <> show other)
 
 wrongSessionHeadRejects :: Fixture -> Either String ()
 wrongSessionHeadRejects fx = do
