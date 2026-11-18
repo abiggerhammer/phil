@@ -268,6 +268,102 @@ Proof.
            ++ reflexivity.
 Qed.
 
+
+(* This is a total-on-admitted-numerals mathematical specification.
+   It does not assert anything about a Haskell Text constructor. *)
+Theorem p8_h8_numeric_encoder_admitted :
+  forall n, p8_unicode_scalar n = true ->
+    p8_h8_encode_if_scalar n = Some (p8_h8_encode_scalar n) /\
+    p8_utf8_scalar_wellformed (p8_h8_encode_scalar n) = true /\
+    p8_utf8_scalar_value (p8_h8_encode_scalar n) = n.
+Proof.
+  intros n Valid.
+  split.
+  - unfold p8_h8_encode_if_scalar. now rewrite Valid.
+  - split.
+    + now apply p8_h8_numeric_encoder_wellformed.
+    + apply p8_h8_numeric_encoder_value.
+Qed.
+
+Theorem p8_h8_numeric_encoder_injective :
+  forall n m,
+    p8_h8_encode_scalar n = p8_h8_encode_scalar m -> n = m.
+Proof.
+  intros n m Equal.
+  pose proof (f_equal p8_utf8_scalar_value Equal) as Values.
+  rewrite !p8_h8_numeric_encoder_value in Values.
+  exact Values.
+Qed.
+
+(* Each original C1 constructor has a disjoint numerical width interval.
+   The E0/ED and F0/F4 guards are essential to the lower/upper bounds. *)
+Lemma p8_h8_wellformed_width_bounds :
+  forall s, p8_utf8_scalar_wellformed s = true ->
+    match s with
+    | P8Utf8One _ => p8_utf8_scalar_value s <= 127
+    | P8Utf8Two _ _ =>
+        128 <= p8_utf8_scalar_value s /\
+        p8_utf8_scalar_value s <= 2047
+    | P8Utf8Three _ _ _ =>
+        2048 <= p8_utf8_scalar_value s /\
+        p8_utf8_scalar_value s <= 65535
+    | P8Utf8Four _ _ _ _ =>
+        65536 <= p8_utf8_scalar_value s /\
+        p8_utf8_scalar_value s <= 1114111
+    end.
+Proof.
+  intros [a | a b | a b c | a b c d] Valid;
+    cbn [p8_utf8_scalar_wellformed p8_utf8_scalar_value] in *;
+    unfold p8_octet_between in Valid.
+  - p8_h8_unpack_octets. lia.
+  - p8_h8_unpack_octets. lia.
+  - destruct (a =? 224) eqn:E224;
+      destruct (a =? 237) eqn:E237;
+      cbv iota in Valid;
+      p8_h8_unpack_octets; lia.
+  - destruct (a =? 240) eqn:E240;
+      destruct (a =? 244) eqn:E244;
+      cbv iota in Valid;
+      p8_h8_unpack_octets; lia.
+Qed.
+
+(* Injectivity of the ORIGINAL C1 numeric interpretation on exactly its
+   wellformed domain; this is distinct from encoder injectivity above.
+   Finite width partitions and radix remainders force every octet equal. *)
+Theorem p8_h8_c1_value_injective_on_valid :
+  forall left right,
+    p8_utf8_scalar_wellformed left = true ->
+    p8_utf8_scalar_wellformed right = true ->
+    p8_utf8_scalar_value left = p8_utf8_scalar_value right ->
+    left = right.
+Proof.
+  intros left right ValidLeft ValidRight EqualValue.
+  pose proof (p8_h8_wellformed_width_bounds left ValidLeft)
+    as LeftBounds.
+  pose proof (p8_h8_wellformed_width_bounds right ValidRight)
+    as RightBounds.
+  destruct left; destruct right;
+    cbn [p8_utf8_scalar_value] in *;
+    try lia;
+    cbn [p8_utf8_scalar_wellformed] in ValidLeft, ValidRight;
+    unfold p8_octet_between in ValidLeft, ValidRight;
+    p8_h8_unpack_octets;
+    f_equal; lia.
+Qed.
+
+Theorem p8_h8_encoder_c1_inverse :
+  forall scalar,
+    p8_utf8_scalar_wellformed scalar = true ->
+    p8_h8_encode_scalar (p8_utf8_scalar_value scalar) = scalar.
+Proof.
+  intros scalar Valid.
+  apply p8_h8_c1_value_injective_on_valid.
+  - apply p8_h8_numeric_encoder_wellformed.
+    now apply p8_h8_c1_valid_scalar_value.
+  - exact Valid.
+  - apply p8_h8_numeric_encoder_value.
+Qed.
+
 (* Discriminating canonical boundary witnesses are model computations only. *)
 Example p8_h8_nul :
   p8_h8_encode_if_scalar 0 = Some (P8Utf8One 0).
@@ -311,3 +407,8 @@ Print Assumptions p8_h8_scalar_of_numeric_bounds.
 Print Assumptions p8_h8_c1_valid_scalar_value.
 Print Assumptions p8_h8_numeric_encoder_value.
 Print Assumptions p8_h8_numeric_encoder_wellformed.
+Print Assumptions p8_h8_numeric_encoder_admitted.
+Print Assumptions p8_h8_numeric_encoder_injective.
+Print Assumptions p8_h8_wellformed_width_bounds.
+Print Assumptions p8_h8_c1_value_injective_on_valid.
+Print Assumptions p8_h8_encoder_c1_inverse.
