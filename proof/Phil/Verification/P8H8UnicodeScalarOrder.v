@@ -432,7 +432,8 @@ Proof.
     end;
     simpl;
     try reflexivity;
-    exfalso; lia.
+    try (exfalso; lia).
+  Show.
 Qed.
 
 Theorem p8_h8_scalar_byte_less_iff :
