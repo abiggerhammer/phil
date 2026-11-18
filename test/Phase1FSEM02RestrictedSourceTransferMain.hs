@@ -61,6 +61,7 @@ main = do
           , borrowedSenderTransferRefusal accepted
           , borrowedEndpointPrefixPriority accepted
           , borrowedOccupiedReceiverCollision accepted
+          , crossModeSenderPayloadRefusal accepted
           , wrongSessionHeadRejects fx
           , sourceCloseReplay fx
           , sourceCloseRejectsForgedRequest fx
@@ -1184,6 +1185,103 @@ borrowedOccupiedReceiverCollision source = do
         Left (RestrictedSourceSendError
           (GrammarV1ComponentSendCloseCloseMismatch _ _)) -> Right ()
         other -> Left ("borrowed occupied Core faults masked source rejection: " <> show (mode, other))
+
+-- FSEM-02 NON-NORMATIVE: source demands a Linear Bytes[8] sender payload.
+-- A same-name, same-type Affine or Unrestricted Core sender binding does not
+-- satisfy that demand. The real consumeLinear reports WrongStructuralMode
+-- before attempting ANY occupied receiver destination; these adversarial
+-- resource maps are not validated activations or new protocol authority.
+crossModeSenderPayloadRefusal :: Text -> Either String ()
+crossModeSenderPayloadRefusal source = do
+  fx <- fixture source
+  sequence_ [checkModes fx senderMode receiverMode
+    | senderMode <- [Affine, Unrestricted]
+    , receiverMode <- [Linear, Affine, Unrestricted]]
+  acceptedReplay fx
+  where
+    checkModes :: Fixture -> Mode -> Mode -> Either String ()
+    checkModes fx senderMode receiverMode = do
+      let original = fxBefore fx
+          senderKey = fxClientProcess fx
+          receiverKey = fxServerProcess fx
+          senderName = fxPayloadOwner fx
+          receiverName = fxPayloadReceiver fx
+          contexts = communicationProtocolContexts original
+          replay state = checked fx (fxSender fx) (fxReceiver fx) state
+      sender <- requireProtocol senderKey original
+      receiver <- requireProtocol receiverKey original
+      let senderResources = protocolResources sender
+          receiverResources = protocolResources receiver
+          withoutLinearSender = senderResources { linearBindings =
+            Map.delete senderName (linearBindings senderResources) }
+      assert (Map.lookup senderName (linearBindings senderResources) == Just payloadTy)
+        "source-derived sender did not begin with exact linear Bytes[8]"
+      wrongModeSender <- mapLeft show $
+        insertBinding senderMode senderName payloadTy withoutLinearSender
+      restoredSender <- mapLeft show $
+        insertBinding Linear senderName payloadTy withoutLinearSender
+      busyReceiver <- mapLeft show $
+        insertBinding receiverMode receiverName TyBool receiverResources
+      assert (restoredSender == senderResources
+           && Map.notMember senderName (linearBindings wrongModeSender))
+        "same-type sender mode corruption failed to isolate structural mode"
+      case senderMode of
+        Affine -> assert
+          (Map.lookup senderName (affineBindings wrongModeSender) == Just payloadTy)
+          "affine sender corruption lost exact Bytes[8] payload"
+        Unrestricted -> assert
+          (Map.lookup senderName (unrestrictedBindings wrongModeSender) == Just payloadTy)
+          "unrestricted sender corruption lost exact Bytes[8] payload"
+        Linear -> Left "wrong-mode sender test cannot choose Linear"
+      let asState sr rr = original { communicationProtocolContexts =
+            Map.insert senderKey (sender { protocolResources = sr }) $
+              Map.insert receiverKey (receiver { protocolResources = rr })
+                contexts }
+          wrongSenderOnly = asState wrongModeSender receiverResources
+          receiverBusyOnly = asState senderResources busyReceiver
+          both = asState wrongModeSender busyReceiver
+          restored = asState restoredSender receiverResources
+          expectModeError state = case replay state of
+            Left (RestrictedSourceCoreError
+              (RestrictedMessageSenderResourceError process
+                (WrongStructuralMode name expected actual))) ->
+                  assert (process == senderKey && name == senderName
+                       && expected == Linear && actual == senderMode)
+                    "same-type wrong-mode sender lost exact process/name/mode error"
+            other -> Left
+              ("wrong-mode sender or receiver collision admitted: " <>
+                show (senderMode, receiverMode, other))
+          expectDuplicate state = case replay state of
+            Left (RestrictedSourceCoreError
+              (RestrictedMessageReceiverResourceError process
+                (DuplicateBinding name))) ->
+                  assert (process == receiverKey && name == receiverName)
+                    "wrong-mode repair lost exact occupied receiver diagnostic"
+            other -> Left
+              ("receiver collision admitted after sender mode repair: " <>
+                show (senderMode, receiverMode, other))
+      -- Core consumes the typed sender's required *linear* resource before
+      -- attempting any receiver insertion, including cross-mode duplicates.
+      expectModeError both
+      expectModeError wrongSenderOnly
+      expectDuplicate receiverBusyOnly
+      assert (restored == original && replay restored == replay original
+           && replay both == replay both)
+        "structural mode repair changed previously authorized replay"
+      -- One exact edit to an otherwise accepted complete source rejects
+      -- before hostile Core mode/collision faults.
+      let valid = "let done = send payload on endpoint;\n  close done;"
+          invalid = "let done = send payload on endpoint;\n  close endpoint;"
+          badSource = Text.replace valid invalid source
+      assert (Text.isInfixOf valid source && badSource /= source)
+        "wrong-mode sender source negative did not isolate Close operand"
+      (_, badSender, _) <- parseParts badSource
+      case checked fx badSender (fxReceiver fx) both of
+        Left (RestrictedSourceSendError
+          (GrammarV1ComponentSendCloseCloseMismatch _ _)) -> Right ()
+        other -> Left
+          ("malformed source lost priority over wrong-mode resource: " <>
+            show (senderMode, receiverMode, other))
 
 wrongSessionHeadRejects :: Fixture -> Either String ()
 wrongSessionHeadRejects fx = do
