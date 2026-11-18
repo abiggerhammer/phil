@@ -60,6 +60,7 @@ main = do
           , crossModeReceiverNameCollision accepted
           , borrowedSenderTransferRefusal accepted
           , borrowedEndpointPrefixPriority accepted
+          , borrowedOccupiedReceiverCollision accepted
           , wrongSessionHeadRejects fx
           , sourceCloseReplay fx
           , sourceCloseRejectsForgedRequest fx
@@ -1089,6 +1090,100 @@ borrowedEndpointPrefixPriority source = do
     Left (RestrictedSourceSendError
       (GrammarV1ComponentSendCloseCloseMismatch _ _)) -> Right ()
     other -> Left ("endpoint resource faults masked source rejection: " <> show other)
+
+
+-- FSEM-02 NON-NORMATIVE: a receiver destination already owned in Linear or
+-- Affine mode may itself have an actual active shared loan. The loan does not
+-- hide its cross-map name collision from restricted Linear payload insertion.
+-- An independent sender payload loan must be refused *earlier* than this
+-- occupied receiver binding. These are intentionally hostile Core states,
+-- never fresh source-derived activation or protocol authority.
+borrowedOccupiedReceiverCollision :: Text -> Either String ()
+borrowedOccupiedReceiverCollision source = do
+  fx <- fixture source
+  sequence_ [checkMode fx Linear, checkMode fx Affine]
+  acceptedReplay fx
+  where
+    checkMode :: Fixture -> Mode -> Either String ()
+    checkMode fx mode = do
+      let original = fxBefore fx
+          contexts = communicationProtocolContexts original
+          senderKey = fxClientProcess fx
+          receiverKey = fxServerProcess fx
+          senderName = fxPayloadOwner fx
+          receiverName = fxPayloadReceiver fx
+          replay state = checked fx (fxSender fx) (fxReceiver fx) state
+          occupiedType = case mode of
+            Linear -> payloadTy
+            Affine -> TyBool
+            Unrestricted -> TyBool
+      sender <- requireProtocol senderKey original
+      receiver <- requireProtocol receiverKey original
+      occupied <- mapLeft show $
+        insertBinding mode receiverName occupiedType (protocolResources receiver)
+      receiverLoaned <- mapLeft show $ startSharedLoan receiverName occupied
+      receiverLoanEnded <- mapLeft show $ endSharedLoan receiverName receiverLoaned
+      senderLoaned <- mapLeft show $
+        startSharedLoan senderName (protocolResources sender)
+      senderLoanEnded <- mapLeft show $ endSharedLoan senderName senderLoaned
+      let asState sr rr = original { communicationProtocolContexts =
+            Map.insert senderKey (sender { protocolResources = sr }) $
+              Map.insert receiverKey (receiver { protocolResources = rr })
+                contexts }
+          bothLoaned = asState senderLoaned receiverLoaned
+          onlyReceiverLoaned = asState (protocolResources sender) receiverLoaned
+          receiverLoanEndedState = asState (protocolResources sender) receiverLoanEnded
+          onlySenderLoaned = asState senderLoaned (protocolResources receiver)
+          fullyRestored = asState senderLoanEnded (protocolResources receiver)
+          expectDuplicate state = case replay state of
+            Left (RestrictedSourceCoreError
+              (RestrictedMessageReceiverResourceError process (DuplicateBinding name))) ->
+                assert (process == receiverKey && name == receiverName)
+                  "borrowed occupied receiver lost exact process/binder collision"
+            other -> Left ("loaned occupied receiver admitted: " <> show (mode, other))
+          expectSenderLoan state = case replay state of
+            Left (RestrictedSourceCoreError
+              (RestrictedMessageSenderResourceError process (OwnerBorrowed name))) ->
+                assert (process == senderKey && name == senderName)
+                  "sender loan lost precedence or exact owner provenance"
+            other -> Left ("sender/occupied receiver priority lost: " <> show (mode, other))
+      assert (Set.member receiverName (sharedLoans receiverLoaned)
+           && Set.member senderName (sharedLoans senderLoaned)
+           && receiverLoanEnded == occupied
+           && senderLoanEnded == protocolResources sender)
+        "real shared-loan start/end failed to preserve the occupied resource"
+      case mode of
+        Affine ->
+          assert (Map.lookup receiverName (affineBindings receiverLoaned) == Just TyBool
+               && Map.notMember receiverName (linearBindings receiverLoaned))
+            "borrowed affine occupancy silently became linear"
+        Linear ->
+          assert (Map.lookup receiverName (linearBindings receiverLoaned) == Just payloadTy)
+            "borrowed linear destination lost its exact checked type"
+        Unrestricted -> Left "unrestricted destination cannot start a shared owner loan"
+      -- The actual sender's outstanding loan precedes destination insertion.
+      expectSenderLoan bothLoaned
+      expectSenderLoan onlySenderLoaned
+      -- Repairing ONLY sender exposes exact receiver collision even though the
+      -- receiver name remains on loan; ending its loan does not unbind it.
+      expectDuplicate onlyReceiverLoaned
+      expectDuplicate receiverLoanEndedState
+      assert (replay onlyReceiverLoaned == replay onlyReceiverLoaned
+           && replay bothLoaned == replay bothLoaned)
+        "borrowed occupied destination refusal was not deterministic"
+      assert (fullyRestored == original && replay fullyRestored == replay original)
+        "removing occupied destination and ending both loans altered authority"
+      -- The source-level exact rejection must preempt both hostile Core faults.
+      let valid = "let done = send payload on endpoint;\n  close done;"
+          invalid = "let done = send payload on endpoint;\n  close endpoint;"
+          badSource = Text.replace valid invalid source
+      assert (Text.isInfixOf valid source && badSource /= source)
+        "borrowed occupied receiver source negative did not isolate Close edit"
+      (_, rejectedSender, _) <- parseParts badSource
+      case checked fx rejectedSender (fxReceiver fx) bothLoaned of
+        Left (RestrictedSourceSendError
+          (GrammarV1ComponentSendCloseCloseMismatch _ _)) -> Right ()
+        other -> Left ("borrowed occupied Core faults masked source rejection: " <> show (mode, other))
 
 wrongSessionHeadRejects :: Fixture -> Either String ()
 wrongSessionHeadRejects fx = do
