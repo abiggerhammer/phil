@@ -395,6 +395,76 @@ Proof.
   - apply p8_h8_numeric_encoder_value.
 Qed.
 
+(* An actual C1 byte comparator theorem, not a native Text.Ord claim.
+   Width changes imply different lead bytes and nonoverlapping scalar
+   ranges. Within one width, the first differing base-64 digit decides
+   the numeral; the 0..63 lower digits cannot reverse it. *)
+Theorem p8_h8_scalar_bytes_numeric_compare :
+  forall left right,
+    p8_utf8_scalar_wellformed left = true ->
+    p8_utf8_scalar_wellformed right = true ->
+    p8_d2_compare_bytes
+      (p8_utf8_scalar_bytes left)
+      (p8_utf8_scalar_bytes right) =
+    Nat.compare
+      (p8_utf8_scalar_value left)
+      (p8_utf8_scalar_value right).
+Proof.
+  intros left right ValidLeft ValidRight.
+  pose proof (p8_h8_wellformed_width_bounds left ValidLeft)
+    as LeftBounds.
+  pose proof (p8_h8_wellformed_width_bounds right ValidRight)
+    as RightBounds.
+  destruct left as [a | a b | a b c | a b c d];
+    destruct right as [u | u v | u v w | u v w x];
+    cbn [p8_utf8_scalar_bytes p8_d2_compare_bytes
+         p8_utf8_scalar_value] in *;
+    cbn [p8_utf8_scalar_wellformed] in ValidLeft, ValidRight;
+    unfold p8_octet_between in ValidLeft, ValidRight;
+    p8_h8_unpack_octets;
+    repeat match goal with
+    | |- context [Nat.compare ?n ?m] =>
+        let E := fresh "ByteCompare" in
+        destruct (Nat.compare n m) eqn:E;
+          [apply Nat.compare_eq_iff in E |
+           apply Nat.compare_lt_iff in E |
+           apply Nat.compare_gt_iff in E]
+    end;
+    simpl;
+    try reflexivity;
+    exfalso; lia.
+Qed.
+
+Theorem p8_h8_scalar_byte_less_iff :
+  forall left right,
+    p8_utf8_scalar_wellformed left = true ->
+    p8_utf8_scalar_wellformed right = true ->
+    (p8_d2_compare_bytes
+      (p8_utf8_scalar_bytes left)
+      (p8_utf8_scalar_bytes right) = Lt <->
+     p8_utf8_scalar_value left < p8_utf8_scalar_value right).
+Proof.
+  intros left right VL VR.
+  rewrite (p8_h8_scalar_bytes_numeric_compare left right VL VR).
+  apply Nat.compare_lt_iff.
+Qed.
+
+Theorem p8_h8_scalar_byte_eq_iff :
+  forall left right,
+    p8_utf8_scalar_wellformed left = true ->
+    p8_utf8_scalar_wellformed right = true ->
+    (p8_d2_compare_bytes
+      (p8_utf8_scalar_bytes left)
+      (p8_utf8_scalar_bytes right) = Eq <-> left = right).
+Proof.
+  intros left right VL VR.
+  rewrite (p8_h8_scalar_bytes_numeric_compare left right VL VR).
+  rewrite Nat.compare_eq_iff.
+  split; intro H.
+  - now apply p8_h8_c1_value_injective_on_valid.
+  - now subst.
+Qed.
+
 (* Discriminating canonical boundary witnesses are model computations only. *)
 Example p8_h8_nul :
   p8_h8_encode_if_scalar 0 = Some (P8Utf8One 0).
@@ -443,3 +513,6 @@ Print Assumptions p8_h8_numeric_encoder_injective.
 Print Assumptions p8_h8_wellformed_width_bounds.
 Print Assumptions p8_h8_c1_value_injective_on_valid.
 Print Assumptions p8_h8_encoder_c1_inverse.
+Print Assumptions p8_h8_scalar_bytes_numeric_compare.
+Print Assumptions p8_h8_scalar_byte_less_iff.
+Print Assumptions p8_h8_scalar_byte_eq_iff.
