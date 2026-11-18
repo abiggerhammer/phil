@@ -5,7 +5,7 @@ module Main (main) where
 import Control.Exception (bracket)
 import Control.Monad (unless)
 import qualified Data.ByteString.Char8 as Bytes
-import Foreign (Ptr, alloca, peek)
+import Foreign (Ptr, alloca, nullPtr, peek)
 import Foreign.C.Types (CInt (..))
 import Phil.Compiler.SteveCAS (InstallResult (..), installBlob)
 import SteveProviderBridge
@@ -62,6 +62,22 @@ main = tempRoot $ \root -> do
   freeOwnedBytesHandle ownerC1
   freeOwnedBytesHandle ownerC2
   freeContentIdHandle idC
+  -- Invalid pointer representations must not be dereferenced before the
+  -- native read.found selection is checked. Failed substitutions preserve
+  -- the rightful selected invocation.
+  idD <- newContentIdHandle root contentId
+  ownerD <- found idD
+  expect "null pointer rejected without dereference" 1 =<< checkCall idD nullPtr
+  expect "foreign ContentId handle rejected as OwnedBytes" 1 =<< checkCall idD idD
+  expect "selected owner survives pointer spoofs" 0 =<< checkCall idD ownerD
+  freeOwnedBytesHandle ownerD
+  -- Release of a still-selected owner revokes its digest permission before
+  -- the native caller can attempt to reuse its stale (now freed) pointer.
+  released <- found idD
+  freeOwnedBytesHandle released
+  expect "released selected owner rejected without dereference" 1
+    =<< checkCall idD released
+  freeContentIdHandle idD
   freeOwnedBytesHandle ownerA
   freeOwnedBytesHandle ownerA2
   freeOwnedBytesHandle ownerB

@@ -10,8 +10,9 @@ module SteveProviderBridge
   , providerCheckContentId
   ) where
 
+import Control.Concurrent.MVar (MVar, modifyMVar_, newMVar, withMVar)
 import Data.ByteString (ByteString)
-import Data.IORef (IORef, atomicModifyIORef', newIORef, readIORef, writeIORef)
+import Data.IORef (IORef, atomicModifyIORef', newIORef, writeIORef)
 import Foreign.C.Types (CInt (..))
 import Foreign.Ptr (Ptr)
 import Foreign.StablePtr
@@ -41,7 +42,7 @@ import Phil.Compiler.SteveCAS
 data NativeOwnedBytes = NativeOwnedBytes
   { nativeBytesRoot :: FilePath
   , nativeBytesPayload :: ByteString
-  , nativeOwnerLive :: IORef Bool
+  , nativeOwnerLive :: MVar Bool
   }
 
 -- | Host representation for ContentId[SHA256]. The same provider capability
@@ -50,12 +51,12 @@ data NativeOwnedBytes = NativeOwnedBytes
 data NativeContentId = NativeContentId
   { nativeContentRoot :: FilePath
   , nativeContentId :: ContentId
-  , nativeSelectedOwner :: IORef (Maybe (IORef Bool))
+  , nativeSelectedOwner :: IORef (Maybe (Ptr (), NativeOwnedBytes))
   }
 
 newOwnedBytesHandle :: FilePath -> ByteString -> IO (Ptr ())
 newOwnedBytesHandle root bytes = do
-  live <- newIORef True
+  live <- newMVar True
   castStablePtrToPtr <$> newStablePtr (NativeOwnedBytes root bytes live)
 
 newContentIdHandle :: FilePath -> ContentId -> IO (Ptr ())
@@ -66,7 +67,7 @@ newContentIdHandle root contentId = do
 freeOwnedBytesHandle :: Ptr () -> IO ()
 freeOwnedBytesHandle ptr = do
   owner <- deRefStablePtr (ownedBytesStablePtr ptr)
-  writeIORef (nativeOwnerLive owner) False
+  modifyMVar_ (nativeOwnerLive owner) (const (pure False))
   freeStablePtr (ownedBytesStablePtr ptr)
 
 freeContentIdHandle :: Ptr () -> IO ()
@@ -137,7 +138,7 @@ steveBlobRead contentIdPtr resultSlot = do
     Right (BlobFound bytes) -> do
       resultPtr <- newOwnedBytesHandle (nativeContentRoot content) bytes
       owner <- deRefStablePtr (ownedBytesStablePtr resultPtr)
-      writeIORef (nativeSelectedOwner content) (Just (nativeOwnerLive owner))
+      writeIORef (nativeSelectedOwner content) (Just (resultPtr, owner))
       poke resultSlot resultPtr
       pure readFoundTag
     Right BlobNotFound -> pure readNotFoundTag
@@ -151,23 +152,29 @@ foreign export ccall
 steveDigestCheck :: Ptr () -> Ptr () -> IO CInt
 steveDigestCheck contentIdPtr bytesPtr = do
   content <- deRefStablePtr (contentIdStablePtr contentIdPtr)
-  bytes <- deRefStablePtr (ownedBytesStablePtr bytesPtr)
-  -- Only the exact owner minted by the last actual read.found may enter
-  -- this SteveGet digest call. An A/B swap leaves A's rightful selection
-  -- intact; an exact match atomically spends it, even on digest rejection.
-  -- This prevents a second/replayed native call claiming the same result.
-  -- It does NOT prove source-loan identity, source execution, linked
-  -- artifact provenance, or SHA-256/provider semantic assumptions.
+  -- The selected pointer and owned record come ONLY from the actual native
+  -- read.found producer. Do not dereference caller-supplied bytesPtr: a
+  -- swapped, null, released or foreign pointer must be rejected as a value,
+  -- not interpreted as an arbitrary StablePtr before identity checking.
+  -- A mismatch leaves the rightful selection available; a match consumes
+  -- it atomically even if the digest itself rejects.
   selected <- atomicModifyIORef' (nativeSelectedOwner content) $ \current ->
-    if current == Just (nativeOwnerLive bytes)
-      then (Nothing, True)
-      else (current, False)
-  live <- readIORef (nativeOwnerLive bytes)
-  if selected && live
-      && nativeContentRoot content == nativeBytesRoot bytes
-      && providerCheckContentId (nativeContentId content) (nativeBytesPayload bytes)
-    then pure digestAcceptedTag
-    else pure digestRejectedTag
+    case current of
+      Just (selectedPtr, owner) | selectedPtr == bytesPtr ->
+        (Nothing, Just owner)
+      _ -> (current, Nothing)
+  case selected of
+    Nothing -> pure digestRejectedTag
+    Just bytes ->
+      -- Release takes the same owner lock, so the selected byte object
+      -- cannot become released between the live check and digest invocation.
+      -- This is a native lifetime gate, not source-loan/linked-build proof.
+      withMVar (nativeOwnerLive bytes) $ \live ->
+        pure $ if live
+          && nativeContentRoot content == nativeBytesRoot bytes
+          && providerCheckContentId (nativeContentId content) (nativeBytesPayload bytes)
+          then digestAcceptedTag
+          else digestRejectedTag
 
 foreign export ccall "phil_runtime_release"
   steveReleaseOwnedBytes :: Ptr () -> IO ()
