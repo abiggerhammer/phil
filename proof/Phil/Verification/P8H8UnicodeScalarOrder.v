@@ -169,7 +169,8 @@ Proof.
     + destruct (n <? 65536) eqn:Three.
       * cbn [p8_utf8_scalar_value]. lia.
       * cbn [p8_utf8_scalar_value].
-        assert (Radix : 262144 = 4096 * 64) by (vm_compute; reflexivity).
+        assert (Radix : 262144 = 4096 * 64).
+        { apply Nat.eqb_eq. vm_compute. reflexivity. }
         rewrite Radix.
         lia.
 Qed.
