@@ -53,6 +53,7 @@ main = do
           , receiverBinderDisplayRenamePreservesAuthorityBoundary accepted
           , senderBinderDisplayRenamePreservesActivationBoundary accepted
           , dualBinderDisplayCollisionKeepsAuthorityDisjoint accepted
+          , dualAuthorityErrorPriority accepted
           , wrongSessionHeadRejects fx
           , sourceCloseReplay fx
           , sourceCloseRejectsForgedRequest fx
@@ -534,6 +535,69 @@ dualBinderDisplayCollisionKeepsAuthorityDisjoint source = do
     Left (RestrictedSourceSendError
       (GrammarV1ComponentSendCloseCloseMismatch _ _)) -> Right ()
     other -> Left ("joint-display stale-close source lost exact error: " <> show other)
+
+
+-- FSEM-02: diagnostic priority is observable when *independent* protocol
+-- binder and activation owner evidence are both forged. This checks
+-- production source validation -> activation owner -> protocol binder
+-- ordering; it does not derive any of those authorities from source.
+dualAuthorityErrorPriority :: Text -> Either String ()
+dualAuthorityErrorPriority source = do
+  let forgedProtocolBinder = Name "value"
+  fx <- fixtureWithMessageBinder (Just forgedProtocolBinder) source
+  let before = fxBefore fx
+      forged = before { communicationRestrictedOwners =
+        Map.insert payloadOccurrence (fxClientProcess fx, fxPayloadReceiver fx)
+          (communicationRestrictedOwners before) }
+  -- The owner's exact occurrence/process/semantic name fails before
+  -- Core's independently invalid receive-message protocol binder.
+  case checked fx (fxSender fx) (fxReceiver fx) forged of
+    Left (RestrictedSourceCoreError
+      (RestrictedMessageOwnerMismatch occurrence expectedProcess
+        expectedName actualProcess actualName)) ->
+      assert (occurrence == payloadOccurrence
+           && expectedProcess == fxClientProcess fx
+           && expectedName == fxPayloadOwner fx
+           && actualProcess == fxClientProcess fx
+           && actualName == fxPayloadReceiver fx)
+        "simultaneous authority faults did not prioritize exact owner mismatch"
+    other -> Left ("both forged authorities lost sender-first error: " <> show other)
+  -- Repair only the owner evidence; protocol binder mismatch must become
+  -- the next precise refusal, without manufacturing an intermediate state.
+  case checked fx (fxSender fx) (fxReceiver fx) before of
+    Left (RestrictedSourceCoreError
+      (RestrictedMessageReceiverBinderMismatch expected actual)) ->
+      assert (expected == forgedProtocolBinder
+           && actual == fxPayloadReceiver fx)
+        "repair of activation owner did not expose protocol-binder error"
+    other -> Left ("unrepaired protocol binder was admitted: " <> show other)
+  -- The admitted source and both independently matched authorities do
+  -- produce the original exact owner/endpoint/spectator transition.
+  authorized <- fixture source
+  acceptedReplay authorized
+  -- A single source Close operand error precedes both external authority
+  -- errors, and remains a source-invalid verdict, not an owner/protocol one.
+  let good = "let done = send payload on endpoint;\n  close done;"
+      bad = "let done = send payload on endpoint;\n  close endpoint;"
+      stale = Text.replace good bad source
+  assert (Text.isInfixOf good source && stale /= source)
+    "priority source negative did not isolate its one edited operand"
+  (_, rejectedSender, _) <- parseParts stale
+  case checked fx rejectedSender (fxReceiver fx) forged of
+    Left (RestrictedSourceSendError
+      (GrammarV1ComponentSendCloseCloseMismatch _ _)) -> Right ()
+    other -> Left ("source stale Close did not preempt authority errors: " <> show other)
+  -- A source-written receiver type error is likewise prior to the native
+  -- owner/protocol gates even while both independent authorities are forged.
+  let wrongType = Text.replace "receive Bytes[8] on endpoint"
+        "receive U8 on endpoint" source
+  assert (wrongType /= source) "priority receiver source type negative not formed"
+  (_, _, rejectedReceiver) <- parseParts wrongType
+  case checked fx (fxSender fx) rejectedReceiver forged of
+    Left (RestrictedSourceMessageTypeMismatch expected actual) ->
+      assert (expected == payloadTy && actual == TyUInt 8)
+        "source receiver type error lost exact checked types"
+    other -> Left ("source receiver type error did not preempt owner gate: " <> show other)
 
 wrongSessionHeadRejects :: Fixture -> Either String ()
 wrongSessionHeadRejects fx = do
