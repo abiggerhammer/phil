@@ -82,12 +82,12 @@ Theorem p9_fsem05_fragment_step_sound :
     p9_source_next s input = Some s' -> p9_source_step s s'.
 Proof.
   intros s input s' Step.
-  destruct s; destruct input; simpl in Step; try discriminate;
-    try (destruct (p9_owner_eqb p0 claimed_owner &&
-                   p9_loan_eqb p1 claimed_loan &&
-                   Nat.eqb (p9_content_id p) claimed_content);
-         simpl in Step; try discriminate);
-    inversion Step; subst; constructor.
+  destruct s; destruct input; simpl in Step; try discriminate.
+  all: repeat match goal with
+       | H : (if ?condition then _ else _) = Some _ |- _ =>
+           destruct condition eqn:Guard; simpl in H; try discriminate
+       end.
+  all: inversion Step; subst; constructor.
 Qed.
 
 Theorem p9_fsem05_fragment_step_complete :
