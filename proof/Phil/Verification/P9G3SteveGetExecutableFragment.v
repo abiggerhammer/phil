@@ -87,7 +87,19 @@ Proof.
        | H : (if ?condition then _ else _) = Some _ |- _ =>
            destruct condition eqn:Guard; simpl in H; try discriminate
        end.
-  all: inversion Step; subst; constructor.
+  all: inversion Step; subst;
+    first
+      [ apply P9SrcCall
+      | apply P9SrcFound
+      | apply P9SrcMissing
+      | apply P9SrcStorage
+      | apply P9SrcOpen
+      | apply P9SrcDigest
+      | apply P9SrcClose
+      | apply P9SrcRelease
+      | apply P9SrcReturnFound
+      | apply P9SrcReturnOther
+      ].
 Qed.
 
 Theorem p9_fsem05_fragment_step_complete :
