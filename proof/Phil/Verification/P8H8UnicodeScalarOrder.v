@@ -422,15 +422,18 @@ Proof.
     cbn [p8_utf8_scalar_wellformed] in ValidLeft, ValidRight;
     unfold p8_octet_between in ValidLeft, ValidRight;
     p8_h8_unpack_octets;
-    repeat match goal with
-    | |- context [Nat.compare ?n ?m] =>
-        let E := fresh "ByteCompare" in
-        destruct (Nat.compare n m) eqn:E;
-          [apply Nat.compare_eq_iff in E |
-           apply Nat.compare_lt_iff in E |
-           apply Nat.compare_gt_iff in E]
-    end;
-    simpl;
+    repeat (
+      cbn [p8_d2_compare_bytes];
+      match goal with
+      | |- context [Nat.compare ?n ?m] =>
+          let E := fresh "ByteCompare" in
+          destruct (Nat.compare n m) eqn:E;
+            [apply Nat.compare_eq_iff in E |
+             apply Nat.compare_lt_iff in E |
+             apply Nat.compare_gt_iff in E]
+      end
+    );
+    cbn [p8_d2_compare_bytes];
     try reflexivity;
     try (exfalso; lia).
   Show.
