@@ -103,10 +103,10 @@ selectedSource (SurfaceFile [locatedComponent]) = do
   guard (locatedValue provided == SurfaceUnitType)
   [statement] <- pure (blockStatements (locatedValue (componentBody component)))
   root <- expressionStatement statement
-  (readCall, readArms) <- decide root
+  (readCall, sourceReadArms) <- decide root
   (readName, [contentId]) <- call readCall
   guard (readName == "blob_read" && isVar "contentId" contentId)
-  [found, missing, failure] <- pure readArms
+  [found, missing, failure] <- pure sourceReadArms
   guard (patternIs "found" ["bytes"] found
     && patternIs "not-found" [] missing
     && patternIs "storage-failure" ["reason"] failure)
