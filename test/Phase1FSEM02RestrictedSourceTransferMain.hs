@@ -55,6 +55,7 @@ main = do
           , dualBinderDisplayCollisionKeepsAuthorityDisjoint accepted
           , dualAuthorityErrorPriority accepted
           , projectedHeadBinderPriority accepted
+          , binderResourceAtomicityPriority accepted
           , wrongSessionHeadRejects fx
           , sourceCloseReplay fx
           , sourceCloseRejectsForgedRequest fx
@@ -694,6 +695,92 @@ projectedHeadBinderPriority source = do
     Left (RestrictedSourceSendError
       (GrammarV1ComponentSendCloseCloseMismatch _ _)) -> Right ()
     other -> Left ("invalid source lost Close error before external faults: " <> show other)
+
+-- FSEM-02: message-binder authority is checked before native resource
+-- consumption. A corrupted sender payload map and duplicate receiver slot
+-- are independent hostile state faults, not valid activation evidence.
+-- Every refusal is a Left with no partial successor; only separate repair of
+-- binder, sender payload and receiver slot admits the real transfer.
+binderResourceAtomicityPriority :: Text -> Either String ()
+binderResourceAtomicityPriority source = do
+  forged <- fixtureWithMessageBinder (Just (Name "value")) source
+  authorized <- fixture source
+  forgedBoth <- corruptBoth forged
+  goodBinderBoth <- corruptBoth authorized
+  goodBinderReceiverOnly <- corruptReceiver authorized
+  assert (fxPayloadReceiver forged /= Name "value")
+    "forged external protocol binder unexpectedly matched source receiver"
+  -- The receiver message's independently authorized binder is checked before
+  -- either resource-map defect, even though both are present simultaneously.
+  case checked forged (fxSender forged) (fxReceiver forged) forgedBoth of
+    Left (RestrictedSourceCoreError
+      (RestrictedMessageReceiverBinderMismatch expected actual)) ->
+      assert (expected == Name "value" && actual == fxPayloadReceiver forged)
+        "wrong protocol binder lost precedence over both resource faults"
+    other -> Left ("forged binder/resource three-fault input admitted: " <> show other)
+  -- Repairing ONLY external message authority exposes missing actual sender
+  -- linear payload even though its separately activated owner index is intact.
+  case checked authorized (fxSender authorized) (fxReceiver authorized)
+      goodBinderBoth of
+    Left (RestrictedSourceCoreError
+      (RestrictedMessageSenderResourceError process (UnknownBinding name))) ->
+      assert (process == fxClientProcess authorized
+           && name == fxPayloadOwner authorized)
+        "missing sender resource lost exact process and binder identity"
+    other -> Left ("missing sender resource admitted after binder repair: " <> show other)
+  -- Restoring that sender linear payload alone exposes the receiver's
+  -- already occupied target slot, not a spurious partial transfer.
+  case checked authorized (fxSender authorized) (fxReceiver authorized)
+      goodBinderReceiverOnly of
+    Left (RestrictedSourceCoreError
+      (RestrictedMessageReceiverResourceError process (DuplicateBinding name))) ->
+      assert (process == fxServerProcess authorized
+           && name == fxPayloadReceiver authorized)
+        "occupied receiver slot lost exact resource error identity"
+    other -> Left ("duplicate receiver slot admitted after sender repair: " <> show other)
+  -- Pure rejection must be replayable; the hostile input is not consumed.
+  assert (checked authorized (fxSender authorized) (fxReceiver authorized)
+            goodBinderBoth
+       == checked authorized (fxSender authorized) (fxReceiver authorized)
+            goodBinderBoth)
+    "rejected original resource state was not replay deterministic"
+  -- All independently repaired: exact source-derived successor, linear owner
+  -- movement and borrowed spectator preservation are checked as before.
+  acceptedReplay authorized
+  -- A minimally bad complete source Close operand rejects before all three
+  -- separately forged authority/resource faults.
+  let original = "let done = send payload on endpoint;\n  close done;"
+      modified = "let done = send payload on endpoint;\n  close endpoint;"
+      rejected = Text.replace original modified source
+  assert (Text.isInfixOf original source && rejected /= source)
+    "resource priority invalid whole-source witness did not isolate Close edit"
+  (_, rejectedSender, _) <- parseParts rejected
+  case checked forged rejectedSender (fxReceiver forged) forgedBoth of
+    Left (RestrictedSourceSendError
+      (GrammarV1ComponentSendCloseCloseMismatch _ _)) -> Right ()
+    other -> Left ("malformed source did not preempt external resource faults: " <> show other)
+  where
+    corruptReceiver fx = do
+      let state = fxBefore fx
+      receiver <- requireProtocol (fxServerProcess fx) state
+      duplicated <- mapLeft show $ insertBinding Linear
+        (fxPayloadReceiver fx) payloadTy (protocolResources receiver)
+      let changed = receiver { protocolResources = duplicated }
+      Right state { communicationProtocolContexts =
+        Map.insert (fxServerProcess fx) changed
+          (communicationProtocolContexts state) }
+
+    corruptBoth fx = do
+      receiverBad <- corruptReceiver fx
+      sender <- requireProtocol (fxClientProcess fx) receiverBad
+      let resource = protocolResources sender
+          withoutPayload = resource { linearBindings =
+            Map.delete (fxPayloadOwner fx) (linearBindings resource) }
+          changed = sender { protocolResources = withoutPayload }
+      Right receiverBad { communicationProtocolContexts =
+        Map.insert (fxClientProcess fx) changed
+          (communicationProtocolContexts receiverBad) }
+
 
 wrongSessionHeadRejects :: Fixture -> Either String ()
 wrongSessionHeadRejects fx = do
