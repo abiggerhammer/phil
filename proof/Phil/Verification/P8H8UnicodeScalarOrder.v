@@ -415,10 +415,25 @@ Proof.
     as LeftBounds.
   pose proof (p8_h8_wellformed_width_bounds right ValidRight)
     as RightBounds.
+  (* Rocq keeps large nat numerals abstract; expose their exact radix
+     polynomials BEFORE asking Presburger arithmetic to compare them. *)
+  assert (Radix : 262144 = 4096 * 64)
+    by (apply Nat.eqb_eq; vm_compute; reflexivity).
+  assert (ThreeCap : 65535 = 15 * 4096 + 63 * 64 + 63)
+    by (apply Nat.eqb_eq; vm_compute; reflexivity).
+  assert (FourFloor : 65536 = 16 * 4096)
+    by (apply Nat.eqb_eq; vm_compute; reflexivity).
+  assert (FourCap :
+    1114111 = 4 * (4096 * 64) + 15 * 4096 + 63 * 64 + 63)
+    by (apply Nat.eqb_eq; vm_compute; reflexivity).
   destruct left as [a | a b | a b c | a b c d];
     destruct right as [u | u v | u v w | u v w x];
     cbn [p8_utf8_scalar_bytes p8_d2_compare_bytes
          p8_utf8_scalar_value] in *;
+    try (rewrite Radix in *);
+    try (rewrite ThreeCap in *);
+    try (rewrite FourFloor in *);
+    try (rewrite FourCap in *);
     cbn [p8_utf8_scalar_wellformed] in ValidLeft, ValidRight;
     unfold p8_octet_between in ValidLeft, ValidRight;
     p8_h8_unpack_octets;
