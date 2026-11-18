@@ -406,24 +406,38 @@ p9SteveStructuralGate putSource getSource = do
   case verifySteveGetLLVMPointerFlow withoutLoad of
     Left SteveGetLLVMPayloadLoadMissing -> Right ()
     other -> Left ("P9 accepted forged LLVM owner load: " <> show other)
-  -- Move the get.ok cleanup release into get.check *before* the actual
-  -- digest call. The old count-only discriminator admitted this broken
-  -- lexical lifetime because two total releases still occurred.
+  -- Relocating the get.ok release before the digest invocation breaks
+  -- the load -> call adjacency, which is checked *before* release placement.
+  -- The old count-only discriminator admitted this negative.
   let releaseLine = "  call void @phil_runtime_release(ptr %get_bytes)"
       okRelease = "get_ok:\n" <> releaseLine
       nativeLoad =
         "get_check:\n  %get_bytes = load ptr, ptr %phil_runtime_choice_payload_slot_SteveGet_get_entry_get_bytes"
-      movedRelease = Text.replace nativeLoad
-        (nativeLoad <> "\n" <> releaseLine)
-        (Text.replace okRelease "get_ok:\n  ; !phil omitted cleanup release"
-          originalLLVM)
-  assert (movedRelease /= originalLLVM
+      withoutOkRelease = Text.replace okRelease
+        "get_ok:\n  ; !phil omitted cleanup release" originalLLVM
+      beforeDigestRelease = Text.replace nativeLoad
+        (nativeLoad <> "\n" <> releaseLine) withoutOkRelease
+  assert (beforeDigestRelease /= originalLLVM
       && Text.count releaseLine originalLLVM == 2
-      && Text.count releaseLine movedRelease == 2)
-    "P9 LLVM early-release mutation did not preserve two release calls"
-  case verifySteveGetLLVMPointerFlow movedRelease of
-    Left SteveGetLLVMReleaseWrongSite -> Right ()
+      && Text.count releaseLine beforeDigestRelease == 2)
+    "P9 LLVM pre-digest release mutation did not preserve two release calls"
+  case verifySteveGetLLVMPointerFlow beforeDigestRelease of
+    Left SteveGetLLVMDigestOwnerSubstituted -> Right ()
     other -> Left ("P9 accepted pre-digest release of live owner: " <> show other)
+  -- A second relocation keeps the call immediately after the load, but
+  -- removes get.ok's required cleanup by moving it *after* that call.
+  -- Now the independent successor release-site gate must reject it.
+  let digestInstruction =
+        "  %phil_runtime_choice_tag_SteveGet_get_check = call i32 " <> digestCallText
+      afterDigestRelease = Text.replace digestInstruction
+        (digestInstruction <> "\n" <> releaseLine) withoutOkRelease
+  assert (Text.count digestInstruction originalLLVM == 1
+      && afterDigestRelease /= originalLLVM
+      && Text.count releaseLine afterDigestRelease == 2)
+    "P9 LLVM post-digest release mutation did not preserve exact call/two releases"
+  case verifySteveGetLLVMPointerFlow afterDigestRelease of
+    Left SteveGetLLVMReleaseWrongSite -> Right ()
+    other -> Left ("P9 accepted release outside get.ok cleanup: " <> show other)
   let produced = verifiedSteveGetCanonicalSourceProduction checkedCanonical
       conditions = verifiedSteveGetCanonicalSelectedAssumptions checkedCanonical
       expectedConditions = Set.fromList
