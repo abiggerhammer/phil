@@ -55,7 +55,7 @@ jobs:
           for name in P8UnicodeUtf8Model P8D1UnicodeStreamModel P8D2StructuralOrderModel P8H8UnicodeScalarOrder; do
             rocq check -Q proof/Phil Phil "Phil.Verification.$name"
           done
-          git rev-parse HEAD
+          git -c safe.directory="$PWD" rev-parse HEAD
           sha256sum \
             proof/Phil/Verification/P8UnicodeUtf8Model.v \
             proof/Phil/Verification/P8D1UnicodeStreamModel.v \
