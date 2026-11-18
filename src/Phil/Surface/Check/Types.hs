@@ -334,6 +334,17 @@ data SourceEvidenceUse
   | SourceCallableResidualEvidence Text Proposition Name
   | SourceBeginPolicyEvidence Name Ty
   | SourceParsedCommitEvidence Name (Maybe Name) SurfaceShape
+  -- | An actual checked call's ordered readable argument types/shapes. This
+  -- is diagnostic observation, NEVER evidence of a provider result, qualified
+  -- law, executed branch or original proof consumption.
+  | SourceCheckedProviderCall Text [(Ty, SurfaceShape)]
+  -- | Real checked branch payload. This is NOT an authenticated provider law
+  -- or runtime incarnation, even when the primitive was named blob_read.
+  | SourceCheckedProviderFound Text SourceSpan Name Ty
+  -- | Emitted by the ordinary loan transitions, not inferred from AST spans.
+  -- Static checker event only; not a dynamic loan ID or runtime credential.
+  | SourceCheckedLoanOpened Name Name
+  | SourceCheckedLoanClosed Name Name
   deriving (Eq, Show)
 
 data SourceEvidenceEvent = SourceEvidenceEvent

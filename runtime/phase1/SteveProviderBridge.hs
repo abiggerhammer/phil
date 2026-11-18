@@ -10,7 +10,9 @@ module SteveProviderBridge
   , providerCheckContentId
   ) where
 
+import Control.Concurrent.MVar (MVar, modifyMVar_, newMVar, withMVar)
 import Data.ByteString (ByteString)
+import Data.IORef (IORef, atomicModifyIORef', newIORef, writeIORef)
 import Foreign.C.Types (CInt (..))
 import Foreign.Ptr (Ptr)
 import Foreign.StablePtr
@@ -40,6 +42,7 @@ import Phil.Compiler.SteveCAS
 data NativeOwnedBytes = NativeOwnedBytes
   { nativeBytesRoot :: FilePath
   , nativeBytesPayload :: ByteString
+  , nativeOwnerLive :: MVar Bool
   }
 
 -- | Host representation for ContentId[SHA256]. The same provider capability
@@ -48,18 +51,24 @@ data NativeOwnedBytes = NativeOwnedBytes
 data NativeContentId = NativeContentId
   { nativeContentRoot :: FilePath
   , nativeContentId :: ContentId
+  , nativeSelectedOwner :: IORef (Maybe (Ptr (), NativeOwnedBytes))
   }
 
 newOwnedBytesHandle :: FilePath -> ByteString -> IO (Ptr ())
-newOwnedBytesHandle root bytes =
-  castStablePtrToPtr <$> newStablePtr (NativeOwnedBytes root bytes)
+newOwnedBytesHandle root bytes = do
+  live <- newMVar True
+  castStablePtrToPtr <$> newStablePtr (NativeOwnedBytes root bytes live)
 
 newContentIdHandle :: FilePath -> ContentId -> IO (Ptr ())
-newContentIdHandle root contentId =
-  castStablePtrToPtr <$> newStablePtr (NativeContentId root contentId)
+newContentIdHandle root contentId = do
+  selected <- newIORef Nothing
+  castStablePtrToPtr <$> newStablePtr (NativeContentId root contentId selected)
 
 freeOwnedBytesHandle :: Ptr () -> IO ()
-freeOwnedBytesHandle = freeStablePtr . ownedBytesStablePtr
+freeOwnedBytesHandle ptr = do
+  owner <- deRefStablePtr (ownedBytesStablePtr ptr)
+  modifyMVar_ (nativeOwnerLive owner) (const (pure False))
+  freeStablePtr (ownedBytesStablePtr ptr)
 
 freeContentIdHandle :: Ptr () -> IO ()
 freeContentIdHandle = freeStablePtr . contentIdStablePtr
@@ -123,10 +132,13 @@ foreign export ccall
 steveBlobRead :: Ptr () -> Ptr (Ptr ()) -> IO CInt
 steveBlobRead contentIdPtr resultSlot = do
   content <- deRefStablePtr (contentIdStablePtr contentIdPtr)
+  writeIORef (nativeSelectedOwner content) Nothing
   result <- providerReadBlob (nativeContentRoot content) (nativeContentId content)
   case result of
     Right (BlobFound bytes) -> do
       resultPtr <- newOwnedBytesHandle (nativeContentRoot content) bytes
+      owner <- deRefStablePtr (ownedBytesStablePtr resultPtr)
+      writeIORef (nativeSelectedOwner content) (Just (resultPtr, owner))
       poke resultSlot resultPtr
       pure readFoundTag
     Right BlobNotFound -> pure readNotFoundTag
@@ -140,11 +152,29 @@ foreign export ccall
 steveDigestCheck :: Ptr () -> Ptr () -> IO CInt
 steveDigestCheck contentIdPtr bytesPtr = do
   content <- deRefStablePtr (contentIdStablePtr contentIdPtr)
-  bytes <- deRefStablePtr (ownedBytesStablePtr bytesPtr)
-  if nativeContentRoot content == nativeBytesRoot bytes
-      && providerCheckContentId (nativeContentId content) (nativeBytesPayload bytes)
-    then pure digestAcceptedTag
-    else pure digestRejectedTag
+  -- The selected pointer and owned record come ONLY from the actual native
+  -- read.found producer. Do not dereference caller-supplied bytesPtr: a
+  -- swapped, null, released or foreign pointer must be rejected as a value,
+  -- not interpreted as an arbitrary StablePtr before identity checking.
+  -- A mismatch leaves the rightful selection available; a match consumes
+  -- it atomically even if the digest itself rejects.
+  selected <- atomicModifyIORef' (nativeSelectedOwner content) $ \current ->
+    case current of
+      Just (selectedPtr, owner) | selectedPtr == bytesPtr ->
+        (Nothing, Just owner)
+      _ -> (current, Nothing)
+  case selected of
+    Nothing -> pure digestRejectedTag
+    Just bytes ->
+      -- Release takes the same owner lock, so the selected byte object
+      -- cannot become released between the live check and digest invocation.
+      -- This is a native lifetime gate, not source-loan/linked-build proof.
+      withMVar (nativeOwnerLive bytes) $ \live ->
+        pure $ if live
+          && nativeContentRoot content == nativeBytesRoot bytes
+          && providerCheckContentId (nativeContentId content) (nativeBytesPayload bytes)
+          then digestAcceptedTag
+          else digestRejectedTag
 
 foreign export ccall "phil_runtime_release"
   steveReleaseOwnedBytes :: Ptr () -> IO ()
