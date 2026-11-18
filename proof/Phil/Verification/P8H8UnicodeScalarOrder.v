@@ -37,6 +37,10 @@ Ltac p8_h8_unpack_octets :=
       apply Nat.eqb_eq in H
   | H : (_ =? _) = false |- _ =>
       apply Nat.eqb_neq in H
+  | H : (_ <? _) = true |- _ =>
+      apply Nat.ltb_lt in H
+  | H : (_ <? _) = false |- _ =>
+      apply Nat.ltb_ge in H
   end.
 
 Theorem p8_h8_c1_valid_scalar_value :
@@ -84,7 +88,7 @@ Proof.
       destruct (a =? 224) eqn:E224;
       destruct (a =? 237) eqn:E237;
       destruct (a <? 237) eqn:Below237;
-      cbn in Valid;
+      cbv iota in Valid;
       p8_h8_unpack_octets;
       first [nia | left; nia | right; nia].
   - assert (FourThresholds :
@@ -101,12 +105,9 @@ Proof.
       destruct (a =? 240) eqn:E240;
       destruct (a =? 244) eqn:E244;
       destruct (a <? 244) eqn:Below244;
-      cbn in Valid;
+      cbv iota in Valid;
       p8_h8_unpack_octets;
-      try nia;
-      try (left; nia);
-      try (right; nia).
-    Show.
+      first [lia | nia | left; nia | right; nia].
 Qed.
 
 (* Canonical numeric encoder candidate, not yet a proved inverse. *)
