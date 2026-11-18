@@ -247,6 +247,12 @@ Proof.
                  repeat split; apply Nat.leb_le; lia.
            ++ reflexivity.
       * apply Nat.ltb_ge in Three.
+        assert (Bound65536 : 65536 = 4096 * 16).
+        { apply Nat.eqb_eq. vm_compute. reflexivity. }
+        rewrite Bound65536 in Three.
+        assert (MaxPlus : 1114111 + 1 = 4096 * 272).
+        { apply Nat.eqb_eq. vm_compute. reflexivity. }
+        assert (UpperStrict : n < 4096 * 272) by lia.
         cbn [p8_utf8_scalar_wellformed].
         unfold p8_octet_between.
         repeat rewrite andb_true_iff.
