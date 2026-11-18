@@ -225,6 +225,11 @@ Proof.
         assert (Bound65536 : 65536 = 4096 * 16).
         { apply Nat.eqb_eq. vm_compute. reflexivity. }
         rewrite Bound65536 in Three.
+        assert (SurStart : 55296 = 4096 * 13 + 2048).
+        { apply Nat.eqb_eq. vm_compute. reflexivity. }
+        assert (SurEnd : 57343 = 4096 * 14 - 1).
+        { apply Nat.eqb_eq. vm_compute. reflexivity. }
+        rewrite SurStart, SurEnd in Outside.
         cbn [p8_utf8_scalar_wellformed].
         unfold p8_octet_between.
         repeat rewrite andb_true_iff.
