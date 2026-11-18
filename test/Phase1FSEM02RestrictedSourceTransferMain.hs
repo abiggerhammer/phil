@@ -56,6 +56,7 @@ main = do
           , dualAuthorityErrorPriority accepted
           , projectedHeadBinderPriority accepted
           , binderResourceAtomicityPriority accepted
+          , senderResourceTypeBeforeReceiverSlot accepted
           , wrongSessionHeadRejects fx
           , sourceCloseReplay fx
           , sourceCloseRejectsForgedRequest fx
@@ -781,6 +782,71 @@ binderResourceAtomicityPriority source = do
         Map.insert (fxClientProcess fx) changed
           (communicationProtocolContexts receiverBad) }
 
+
+-- FSEM-02: a present but incorrectly typed sender linear binding must be
+-- rejected *after* independently admitted protocol/message authority and
+-- *before* any receiver-slot insertion. Owner occurrence and endpoint heads
+-- remain unchanged. The hostile resource map is not a valid activation.
+senderResourceTypeBeforeReceiverSlot :: Text -> Either String ()
+senderResourceTypeBeforeReceiverSlot source = do
+  fx <- fixture source
+  let original = fxBefore fx
+  sender <- requireProtocol (fxClientProcess fx) original
+  receiver <- requireProtocol (fxServerProcess fx) original
+  duplicate <- mapLeft show $ insertBinding Linear
+    (fxPayloadReceiver fx) payloadTy (protocolResources receiver)
+  let senderResources = protocolResources sender
+      badSenderResources = senderResources { linearBindings =
+        Map.insert (fxPayloadOwner fx) (TyUInt 8)
+          (linearBindings senderResources) }
+      badSender = sender { protocolResources = badSenderResources }
+      occupiedReceiver = receiver { protocolResources = duplicate }
+      contexts = communicationProtocolContexts original
+      onlyBadSender = original { communicationProtocolContexts =
+        Map.insert (fxClientProcess fx) badSender contexts }
+      onlyOccupiedReceiver = original { communicationProtocolContexts =
+        Map.insert (fxServerProcess fx) occupiedReceiver contexts }
+      both = original { communicationProtocolContexts =
+        Map.insert (fxClientProcess fx) badSender $
+          Map.insert (fxServerProcess fx) occupiedReceiver contexts }
+      replay state = checked fx (fxSender fx) (fxReceiver fx) state
+  -- The protocol-message boundary still authorizes Bytes[8], but a forged
+  -- native resource holds U8. A receiver collision must not mask this error.
+  case replay both of
+    Left (RestrictedSourceCoreError
+      (RestrictedMessageTransferTypeMismatch expected actual)) ->
+        assert (expected == payloadTy && actual == TyUInt 8)
+          "wrong sender type lost the exact checked payload mismatch"
+    other -> Left ("wrong sender type and receiver collision admitted: " <> show other)
+  case replay onlyBadSender of
+    Left (RestrictedSourceCoreError
+      (RestrictedMessageTransferTypeMismatch expected actual)) ->
+        assert (expected == payloadTy && actual == TyUInt 8)
+          "receiver repair incorrectly removed sender type refusal"
+    other -> Left ("wrong sender type survived receiver repair: " <> show other)
+  -- Repairing ONLY the sender's actual resource type reveals the distinct
+  -- receiver collision, without changing the external message authority.
+  case replay onlyOccupiedReceiver of
+    Left (RestrictedSourceCoreError
+      (RestrictedMessageReceiverResourceError process (DuplicateBinding name))) ->
+        assert (process == fxServerProcess fx && name == fxPayloadReceiver fx)
+          "receiver collision lost its exact process/binder after type repair"
+    other -> Left ("receiver collision admitted after sender type repair: " <> show other)
+  assert (replay both == replay both)
+    "typed sender rejection unexpectedly changed the supplied hostile state"
+  -- A separate wholly valid source/state still transfers exact owners and
+  -- endpoint successors; resource repairs do not manufacture authority.
+  acceptedReplay fx
+  let valid = "let done = send payload on endpoint;\n  close done;"
+      invalid = "let done = send payload on endpoint;\n  close endpoint;"
+      badSource = Text.replace valid invalid source
+  assert (Text.isInfixOf valid source && badSource /= source)
+    "source negative did not isolate the single Close operand"
+  (_, rejectedSender, _) <- parseParts badSource
+  case checked fx rejectedSender (fxReceiver fx) both of
+    Left (RestrictedSourceSendError
+      (GrammarV1ComponentSendCloseCloseMismatch _ _)) -> Right ()
+    other -> Left ("invalid whole source lost priority over resource faults: " <> show other)
 
 wrongSessionHeadRejects :: Fixture -> Either String ()
 wrongSessionHeadRejects fx = do
