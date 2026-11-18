@@ -195,10 +195,8 @@ Proof.
               (p8_e2_put_arguments fields ++ suffix))))))))
     suffix ValidFields).
   2: {
-    (* Length is invariant under the prefix's list-association normal form. *)
-    repeat rewrite length_app in Enough.
-    repeat rewrite length_app.
-    simpl in Enough |- *.
+    (* Normalize lengths after each exposed cons/append association. *)
+    repeat (rewrite length_app || progress cbn [length]).
     lia.
   }
   reflexivity.
