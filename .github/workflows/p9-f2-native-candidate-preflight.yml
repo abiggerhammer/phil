@@ -1,0 +1,48 @@
+name: P9 F2 Native Candidate Preflight (temporary)
+on:
+  push:
+    branches:
+      - 'p9-preflight/f2-native-20261116'
+      - 'p9-preflight/f2-reconciled-20261116'
+      - 'p9-preflight/f2-g3-20261118'
+permissions:
+  contents: read
+jobs:
+  strict-native:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+      - uses: haskell-actions/setup@v2
+        with:
+          ghc-version: '9.6.7'
+          cabal-version: 'latest'
+      - name: Strict full Haskell build
+        run: cabal build all --enable-tests --ghc-options=-Werror
+      - name: Strict source/Core and P9 candidate executable
+        run: |
+          cabal exec -- ghc -isrc -itest -Wall -Werror -fno-code test/Phase1INT001WitnessE2EMain.hs
+          cabal exec -- runghc -isrc -itest -Wall -Werror test/Phase1INT001WitnessE2EMain.hs
+      - name: Existing non-bypassable witness-neutral SourceSystems invariant
+        run: |
+          if grep -Eq 'Upload|Steve|examples/upload|examples/steve' src/Phil/Compiler/SourceSystems.hs; then
+            echo 'FAIL: SourceSystems must remain witness-neutral (INT-001 existing gate)'
+            exit 1
+          fi
+      - name: Compile and execute genuine native FFI owner-swap discriminator
+        run: |
+          cabal exec -- ghc -isrc -iruntime/phase1 -itest -Wall -Werror \
+            test/P9SteveGetNativeOwnerGateMain.hs runtime/phase1/SteveProviderBridge.hs \
+            -o "$RUNNER_TEMP/p9-native-owner-gate"
+          "$RUNNER_TEMP/p9-native-owner-gate"
+      - name: Recheck shipped LLVM/ABI and Steve provider release regression
+        run: |
+          cabal exec -- runghc -isrc -itest -Wall -Werror test/Phase1INT006RuntimeChoiceLLVMMain.hs
+          cabal exec -- runghc -isrc -itest -Wall -Werror test/Phase1INT006RuntimeChoiceABIMain.hs
+      - name: Build and inspect linked Steve package in candidate checkout
+        run: |
+          mkdir -p "$RUNNER_TEMP/p9-steve"
+          scripts/release/build-steve-phase1-package.sh "$RUNNER_TEMP/p9-steve"
+          cd "$RUNNER_TEMP/p9-steve"
+          sha256sum -c phil-steve-0.1.0-phase1-x86_64-linux.tar.gz.sha256
+          test -s phil-steve-0.1.0-phase1-x86_64-linux.tar.gz

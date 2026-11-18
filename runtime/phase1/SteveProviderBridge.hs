@@ -11,6 +11,7 @@ module SteveProviderBridge
   ) where
 
 import Data.ByteString (ByteString)
+import Data.IORef (IORef, atomicModifyIORef', newIORef, readIORef, writeIORef)
 import Foreign.C.Types (CInt (..))
 import Foreign.Ptr (Ptr)
 import Foreign.StablePtr
@@ -40,6 +41,7 @@ import Phil.Compiler.SteveCAS
 data NativeOwnedBytes = NativeOwnedBytes
   { nativeBytesRoot :: FilePath
   , nativeBytesPayload :: ByteString
+  , nativeOwnerLive :: IORef Bool
   }
 
 -- | Host representation for ContentId[SHA256]. The same provider capability
@@ -48,18 +50,24 @@ data NativeOwnedBytes = NativeOwnedBytes
 data NativeContentId = NativeContentId
   { nativeContentRoot :: FilePath
   , nativeContentId :: ContentId
+  , nativeSelectedOwner :: IORef (Maybe (IORef Bool))
   }
 
 newOwnedBytesHandle :: FilePath -> ByteString -> IO (Ptr ())
-newOwnedBytesHandle root bytes =
-  castStablePtrToPtr <$> newStablePtr (NativeOwnedBytes root bytes)
+newOwnedBytesHandle root bytes = do
+  live <- newIORef True
+  castStablePtrToPtr <$> newStablePtr (NativeOwnedBytes root bytes live)
 
 newContentIdHandle :: FilePath -> ContentId -> IO (Ptr ())
-newContentIdHandle root contentId =
-  castStablePtrToPtr <$> newStablePtr (NativeContentId root contentId)
+newContentIdHandle root contentId = do
+  selected <- newIORef Nothing
+  castStablePtrToPtr <$> newStablePtr (NativeContentId root contentId selected)
 
 freeOwnedBytesHandle :: Ptr () -> IO ()
-freeOwnedBytesHandle = freeStablePtr . ownedBytesStablePtr
+freeOwnedBytesHandle ptr = do
+  owner <- deRefStablePtr (ownedBytesStablePtr ptr)
+  writeIORef (nativeOwnerLive owner) False
+  freeStablePtr (ownedBytesStablePtr ptr)
 
 freeContentIdHandle :: Ptr () -> IO ()
 freeContentIdHandle = freeStablePtr . contentIdStablePtr
@@ -123,10 +131,13 @@ foreign export ccall
 steveBlobRead :: Ptr () -> Ptr (Ptr ()) -> IO CInt
 steveBlobRead contentIdPtr resultSlot = do
   content <- deRefStablePtr (contentIdStablePtr contentIdPtr)
+  writeIORef (nativeSelectedOwner content) Nothing
   result <- providerReadBlob (nativeContentRoot content) (nativeContentId content)
   case result of
     Right (BlobFound bytes) -> do
       resultPtr <- newOwnedBytesHandle (nativeContentRoot content) bytes
+      owner <- deRefStablePtr (ownedBytesStablePtr resultPtr)
+      writeIORef (nativeSelectedOwner content) (Just (nativeOwnerLive owner))
       poke resultSlot resultPtr
       pure readFoundTag
     Right BlobNotFound -> pure readNotFoundTag
@@ -141,7 +152,19 @@ steveDigestCheck :: Ptr () -> Ptr () -> IO CInt
 steveDigestCheck contentIdPtr bytesPtr = do
   content <- deRefStablePtr (contentIdStablePtr contentIdPtr)
   bytes <- deRefStablePtr (ownedBytesStablePtr bytesPtr)
-  if nativeContentRoot content == nativeBytesRoot bytes
+  -- Only the exact owner minted by the last actual read.found may enter
+  -- this SteveGet digest call. An A/B swap leaves A's rightful selection
+  -- intact; an exact match atomically spends it, even on digest rejection.
+  -- This prevents a second/replayed native call claiming the same result.
+  -- It does NOT prove source-loan identity, source execution, linked
+  -- artifact provenance, or SHA-256/provider semantic assumptions.
+  selected <- atomicModifyIORef' (nativeSelectedOwner content) $ \current ->
+    if current == Just (nativeOwnerLive bytes)
+      then (Nothing, True)
+      else (current, False)
+  live <- readIORef (nativeOwnerLive bytes)
+  if selected && live
+      && nativeContentRoot content == nativeBytesRoot bytes
       && providerCheckContentId (nativeContentId content) (nativeBytesPayload bytes)
     then pure digestAcceptedTag
     else pure digestRejectedTag
