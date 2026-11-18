@@ -317,12 +317,25 @@ Proof.
     unfold p8_octet_between in Valid.
   - p8_h8_unpack_octets. lia.
   - p8_h8_unpack_octets. lia.
-  - destruct (a =? 224) eqn:E224;
+  - assert (MaxThree :
+        65535 = 15 * 4096 + 63 * 64 + 63).
+    { apply Nat.eqb_eq. vm_compute. reflexivity. }
+    rewrite MaxThree.
+    destruct (a =? 224) eqn:E224;
       destruct (a =? 237) eqn:E237;
       cbv iota in Valid;
-      p8_h8_unpack_octets; split; try lia.
-    Show.
-  - destruct (a =? 240) eqn:E240;
+      p8_h8_unpack_octets; split; lia.
+  - assert (Radix : 262144 = 4096 * 64).
+    { apply Nat.eqb_eq. vm_compute. reflexivity. }
+    rewrite Radix.
+    assert (MinFour : 65536 = 16 * 4096).
+    { apply Nat.eqb_eq. vm_compute. reflexivity. }
+    assert (MaxFour :
+        1114111 = 4 * (4096 * 64) + 15 * 4096 +
+                  63 * 64 + 63).
+    { apply Nat.eqb_eq. vm_compute. reflexivity. }
+    rewrite MinFour, MaxFour.
+    destruct (a =? 240) eqn:E240;
       destruct (a =? 244) eqn:E244;
       cbv iota in Valid;
       p8_h8_unpack_octets; split; lia.
