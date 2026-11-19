@@ -7,12 +7,15 @@ from __future__ import annotations
 
 import fnmatch
 import os
+import shutil
 from pathlib import Path
 import re
 import subprocess
 import tempfile
 import textwrap
 import unittest
+
+import yaml
 
 ROOT = Path(__file__).resolve().parents[1]
 WORKFLOWS = ROOT / ".github" / "workflows"
@@ -25,73 +28,109 @@ UNBOUNDED_LEGACY = {
 }
 
 
-def push_properties(source: str):
-    """Extract simple top-level on.push branch filters; reject unfamiliar syntax.
+# This dependency is pinned by the read-only ATC replay job. BaseLoader
+# preserves the literal YAML key "on" (SafeLoader's YAML 1.1 boolean coercion
+# would silently erase the GitHub Actions event key).
+SUPPORTED_EVENTS = frozenset({
+    "push", "pull_request", "workflow_dispatch", "schedule",
+    "repository_dispatch", "pull_request_target", "workflow_run",
+})
+SUPPORTED_PUSH_FIELDS = frozenset({
+    "branches", "branches-ignore", "tags", "tags-ignore",
+    "paths", "paths-ignore",
+})
 
-    This is a deliberately conservative source-policy check, not a general YAML
-    parser or a substitute for GitHub's trigger semantics.
+
+class StrictWorkflowLoader(yaml.BaseLoader):
+    """Decode real YAML, rejecting aliases and duplicate/merged mapping keys."""
+
+    def compose_node(self, parent, index):
+        event = self.peek_event()
+        if isinstance(event, yaml.events.AliasEvent) or getattr(event, "anchor", None):
+            raise ValueError("YAML aliases and anchors are not permitted in G1 policy")
+        return super().compose_node(parent, index)
+
+    def construct_mapping(self, node, deep=False):
+        if not isinstance(node, yaml.MappingNode):
+            raise ValueError("expected YAML mapping")
+        result = {}
+        for key_node, value_node in node.value:
+            if not isinstance(key_node, yaml.ScalarNode):
+                raise ValueError("non-scalar YAML mapping key")
+            key = self.construct_object(key_node, deep=deep)
+            if not isinstance(key, str) or key in result or key == "<<":
+                raise ValueError("duplicate, merged or invalid YAML mapping key")
+            result[key] = self.construct_object(value_node, deep=deep)
+        return result
+
+
+def parse_workflow_events(source: str) -> dict:
+    """Decode a single workflow document; unknown event grammar denies."""
+    try:
+        doc = yaml.load(source, Loader=StrictWorkflowLoader)
+    except yaml.YAMLError as exc:
+        raise ValueError("invalid workflow YAML") from exc
+    if not isinstance(doc, dict) or "on" not in doc:
+        raise ValueError("missing or malformed workflow on event")
+    events = doc["on"]
+    if isinstance(events, str):
+        events = {events: ""}
+    elif isinstance(events, list):
+        if not events or any(not isinstance(name, str) or not name for name in events):
+            raise ValueError("malformed workflow event list")
+        if len(set(events)) != len(events):
+            raise ValueError("duplicate workflow event")
+        events = {name: "" for name in events}
+    if not isinstance(events, dict) or not events:
+        raise ValueError("unrecognized workflow event mapping")
+    if any(not isinstance(name, str) or name not in SUPPORTED_EVENTS
+           for name in events):
+        raise ValueError("unreviewed workflow event kind")
+    return events
+
+
+def push_properties(source: str):
+    """Return real decoded on.push branch selectors, or None for no push.
+
+    On a scalar/list push event or empty push mapping, return empty selectors:
+    no branch filter means the workflow is UNSAFE on staged refs.
     """
-    lines = source.splitlines()
-    starts = [(i, line) for i, line in enumerate(lines)
-              if re.match(r"^on\s*:", line)]
-    if len(starts) != 1 or not re.fullmatch(r"on:\s*(?:#.*)?", starts[0][1]):
-        raise ValueError("missing or unsupported top-level on event shape")
-    events = []
-    for line in lines[starts[0][0] + 1:]:
-        if line.strip() and not line[0].isspace() and not line.startswith("#"):
-            break
-        events.append(line)
-    indices = [i for i, line in enumerate(events)
-               if re.match(r"^  push\s*:", line)]
-    if not indices:
+    events = parse_workflow_events(source)
+    if "push" not in events:
         return None
-    if len(indices) != 1 or not re.fullmatch(
-            r"  push:\s*(?:#.*)?", events[indices[0]]):
-        raise ValueError("unsupported or repeated push trigger")
-    body = []
-    for line in events[indices[0] + 1:]:
-        if re.match(r"^  [a-zA-Z_][a-zA-Z0-9_-]*\s*:", line):
-            break
-        body.append(line)
-    props = {}
-    for i, line in enumerate(body):
-        m = re.fullmatch(r"    (branches|branches-ignore):\s*(.*)", line)
-        if m is None:
-            continue
-        key, rest = m.groups()
+    props = events["push"]
+    if props == "":  # A YAML "push:" without filters
+        props = {}
+    if not isinstance(props, dict):
+        raise ValueError("unsupported push event configuration")
+    if any(key not in SUPPORTED_PUSH_FIELDS for key in props):
+        raise ValueError("unreviewed push event field")
+    out = {}
+    for key in ("branches", "branches-ignore"):
         if key in props:
-            raise ValueError("duplicate branch policy key")
-        if rest and not rest.startswith("#"):
-            if not (rest.startswith("[") and rest.endswith("]")):
-                raise ValueError("unsupported inline branch policy")
-            values = [v.strip().strip("'\"") for v in rest[1:-1].split(",")]
-        else:
-            values = []
-            for item in body[i + 1:]:
-                if not item.strip() or item.lstrip().startswith("#"):
-                    continue
-                if item.startswith("      - "):
-                    values.append(item.strip()[2:].strip().strip("'\""))
-                else:
-                    break
-        if not values or any(not v for v in values):
-            raise ValueError("empty/unknown branch policy")
-        props[key] = values
-    return props
+            branches = props[key]
+            if not isinstance(branches, list) or not branches or any(
+                    not isinstance(item, str) or not item for item in branches):
+                raise ValueError("invalid push branch selector list")
+            if len(set(branches)) != len(branches):
+                raise ValueError("duplicate push branch selector")
+            out[key] = branches
+    if set(out) == {"branches", "branches-ignore"}:
+        raise ValueError("mutually exclusive push branch selectors")
+    return out
 
 
 def branch_pattern_disjoint_from_staged(pattern: str) -> bool:
-    """Conservative literal-prefix proof, not a permissive glob simulator.
+    """Sound restriction for current allowlists, not GitHub glob simulation.
 
-    A branch allow pattern is safe only when its fixed prefix is provably
-    incompatible with hamster/staged/. Otherwise deny, even if a particular
-    example candidate fails to match it. Supports named Phase 1/hamster lanes
-    while rejecting 'hamster/**', '**' and direct staged selectors.
+    Only literal names and * or ** at the VERY END are admitted. No optional
+    characters, classes, braces, escapes, negation or interior wildcard can
+    change the mandatory literal prefix. Any unsupported form denies.
     """
-    if pattern.startswith("!"):
-        return False  # Glob negation needs a separate ordered-pattern proof.
-    marker = re.search(r"[*?\[\]{}!+@()\\]", pattern)
-    literal_prefix = pattern[:marker.start()] if marker else pattern
+    if not isinstance(pattern, str) or not re.fullmatch(
+            r"[A-Za-z0-9._/-]+(?:\*|\*\*)?", pattern):
+        return False
+    literal_prefix = pattern.rstrip("*")
     staged_prefix = "hamster/staged/"
     return not (staged_prefix.startswith(literal_prefix) or
                 literal_prefix.startswith(staged_prefix))
@@ -102,25 +141,33 @@ def excludes_staged_push(source: str) -> bool:
     if props is None:
         return True
     if set(props) == {"branches"}:
-        # Allow alternate named lanes only when ALL selectors are provably
-        # disjoint from the entire staged namespace, not one sample branch.
         return all(branch_pattern_disjoint_from_staged(p)
                    for p in props["branches"])
     if set(props) == {"branches-ignore"}:
-        return "hamster/staged/**" in props["branches-ignore"]
-    # No branch restriction, both mutually exclusive keys, or unknown form.
+        # Exactly one reviewed exclusion. Extra rules, including GitHub's
+        # negated-pattern syntax, require another review rather than guesses.
+        return props["branches-ignore"] == ["hamster/staged/**"]
     return False
+
+
+def audit_workflow_inventory(root: Path) -> int:
+    """Fail on ANY unsafe workflow using the same path as hosted CI."""
+    workflows = sorted(root.glob("*.yml")) + sorted(root.glob("*.yaml"))
+    if len(workflows) < 500:
+        raise ValueError("workflow inventory is incomplete")
+    for path in workflows:
+        try:
+            safe = excludes_staged_push(path.read_text(encoding="utf-8"))
+        except ValueError as exc:
+            raise ValueError(f"{path.name}: malformed or unsupported trigger: {exc}") from exc
+        if not safe:
+            raise ValueError(f"{path.name}: push may reach hamster/staged/**")
+    return len(workflows)
 
 
 class StagedPushIsolationTests(unittest.TestCase):
     def test_all_workflow_push_triggers_reject_staged_namespace(self):
-        workflows = sorted(WORKFLOWS.glob("*.yml")) + sorted(
-            WORKFLOWS.glob("*.yaml"))
-        self.assertGreater(len(workflows), 500, "workflow audit corpus missing")
-        for path in workflows:
-            with self.subTest(workflow=path.name):
-                self.assertTrue(excludes_staged_push(path.read_text()),
-                                "push is not restricted to main or excludes staged refs")
+        self.assertGreater(audit_workflow_inventory(WORKFLOWS), 500)
 
     def test_global_audit_is_registered_for_every_future_workflow_change(self):
         ci = (WORKFLOWS / "mhb-atc-tests.yml").read_text()
@@ -152,7 +199,10 @@ class StagedPushIsolationTests(unittest.TestCase):
                 self.assertTrue(branch_pattern_disjoint_from_staged(pattern))
         for pattern in ("**", "*", "hamster/**", "hamster/staged/**",
                         "hamster/staged/phase2-selfhost/x",
-                        "ham?ter/staged/**", "!hamster/staged/**"):
+                        "ham?ter/staged/**", "!hamster/staged/**",
+                        "hamster/stagedx?/**", "x?hamster/staged/**",
+                        "hamster/[s]taged/**", "hamster/staged{,x}/**",
+                        "hamster/staged\\x/**"):
             with self.subTest(pattern=pattern):
                 self.assertFalse(branch_pattern_disjoint_from_staged(pattern))
 
@@ -171,6 +221,64 @@ class StagedPushIsolationTests(unittest.TestCase):
                 except ValueError:
                     safe = False
                 self.assertFalse(safe)
+
+
+    def test_real_yaml_variants_and_duplicate_keys_are_fail_closed(self):
+        # G1-01: these are real YAML structures. The formerly hand-rolled
+        # parser either missed push or borrowed a different event's policy.
+        hostile = [
+            'on:\n  "push":\n    paths: ["src/**"]\n',
+            'on:\n    push:\n        paths: ["src/**"]\n',
+            'on:\n  - push\n  - pull_request\n',
+            'on:\n  push:\n    paths: ["src/**"]\n  "pull_request":\n    branches: [main]\n',
+            'on:\n  push:\n    branches-ignore: ["hamster/staged/**,suffix"]\n',
+            'on:\n  push:\n    branches: ["hamster/stagedx?/**"]\n',
+            'on:\n  push:\n    branches: ["x?hamster/staged/**"]\n',
+            'on:\n  push:\n    branches: [main]\n  push:\n    paths: ["src/**"]\n',
+            'on:\n  push:\n    branches: [main]\n    branches: [other]\n',
+            'on:\n  push: &unsafe\n    paths: ["src/**"]\n',
+            'on: [push, pull_request]\n',
+            'on: push\n',
+        ]
+        for trigger in hostile:
+            with self.subTest(trigger=trigger):
+                try:
+                    accepted = excludes_staged_push(trigger)
+                except ValueError:
+                    accepted = False
+                self.assertFalse(accepted, trigger)
+        # Safe nonstandard spelling and indentation are actually parsed.
+        self.assertTrue(excludes_staged_push(
+            'on:\n    "push":\n        branches-ignore: ["hamster/staged/**"]\n'))
+        self.assertTrue(excludes_staged_push(
+            'on:\n  push:\n    branches: [main]\n  "pull_request":\n    branches: [main]\n'))
+        self.assertTrue(excludes_staged_push('on: ["pull_request"]\n'))
+
+    def test_hostile_618th_workflow_fails_the_real_inventory_audit(self):
+        # This exercises the PUBLIC global path, not just isolated helpers.
+        # Every hostile workflow gets a legitimate jobs stanza.
+        cases = {
+            "quoted-push": 'on:\n  "push":\n    paths: ["src/**"]\n',
+            "four-spaces": 'on:\n    push:\n        paths: ["src/**"]\n',
+            "block-list": 'on:\n  - push\n  - pull_request\n',
+            "quoted-sibling": 'on:\n  push:\n    paths: ["src/**"]\n  "pull_request":\n    branches: [main]\n',
+            "quoted-comma": 'on:\n  push:\n    branches-ignore: ["hamster/staged/**,suffix"]\n',
+            "optional-tail": 'on:\n  push:\n    branches: ["hamster/stagedx?/**"]\n',
+            "optional-head": 'on:\n  push:\n    branches: ["x?hamster/staged/**"]\n',
+            "duplicate-event": 'on:\n  push:\n    branches: [main]\n  push:\n    branches: [main]\n',
+        }
+        with tempfile.TemporaryDirectory() as td:
+            destination = Path(td) / "workflows"
+            shutil.copytree(WORKFLOWS, destination)
+            self.assertGreater(audit_workflow_inventory(destination), 500)
+            hostile_file = destination / "new-staged-execution.yml"
+            for name, trigger in cases.items():
+                hostile_file.write_text(
+                    "name: hostile G1 fixture\n" + trigger +
+                    "jobs:\n  danger:\n    runs-on: ubuntu-latest\n"
+                    "    steps:\n      - run: echo forbidden\n")
+                with self.subTest(case=name), self.assertRaises(ValueError):
+                    audit_workflow_inventory(destination)
 
     def test_broker_guard_rejects_historical_and_modified_workflow_trees(self):
         # Execute the literal trusted workflow's guard against actual Git
