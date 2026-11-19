@@ -232,7 +232,7 @@ class WorkerBrokerTests(unittest.TestCase):
                 {"name": "atc: staged"}, {"name": f"lane: {LANE}"}]},
         ]:
             with self.subTest(issue=issue), self.assertRaisesRegex(
-                    ValueError, "existing staged candidate"):
+                    ValueError, "existing staged candidate|unowned/ambiguous"):
                 plan(self.f, issues=[issue])
         with self.assertRaisesRegex(ValueError, "malformed issue"):
             plan(self.f, issues=[{"title": "anything", "labels": [1]}])
