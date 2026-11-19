@@ -336,6 +336,10 @@ class WorkerBrokerTests(unittest.TestCase):
         self.assertIn("--force-with-lease=", text)
         self.assertIn("gh api --method POST", text)
         self.assertIn("permission-contents: write", text)
+        self.assertIn('GH_TOKEN="$WORKER_TOKEN" gh api "installation/repositories"', text)
+        self.assertIn('(.total_count == 1)', text)
+        self.assertLess(text.index('GH_TOKEN="$WORKER_TOKEN" gh api "installation/repositories"'),
+                        text.index('push --porcelain'))
         self.assertNotIn("permission-pull-requests:", text)
         self.assertNotIn("gh pr create", text)
         self.assertNotIn("git checkout ", text)
