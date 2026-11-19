@@ -461,6 +461,105 @@ Proof.
         simpl. rewrite Kxz. reflexivity.
 Defined.
 
+(* The member-list converse now follows from TRUE strict transitivity
+   of original recursively ordered D2 forms, without a foreign Ord axiom. *)
+Lemma p8_h9_member_less_transitive :
+  forall x y z,
+    p8_d2_less x y = true ->
+    p8_d2_less y z = true ->
+    p8_d2_less x z = true.
+Proof.
+  intros x y z Hxy Hyz.
+  unfold p8_d2_less in *.
+  destruct (p8_d2_compare_form x y) eqn:XY; simpl in Hxy;
+    try discriminate.
+  destruct (p8_d2_compare_form y z) eqn:YZ; simpl in Hyz;
+    try discriminate.
+  rewrite (p8_h9_compare_form_lt_transitive x y z XY YZ).
+  reflexivity.
+Qed.
+
+Lemma p8_h9_member_less_all_transitive :
+  forall x y rest,
+    p8_d2_less x y = true ->
+    p8_d2_all_later_less y rest = true ->
+    p8_d2_all_later_less x rest = true.
+Proof.
+  intros x y rest Hxy.
+  induction rest as [| member tail IH]; simpl.
+  - intro _. reflexivity.
+  - intro Hall.
+    apply andb_true_iff in Hall as [Hym Htail].
+    apply andb_true_iff. split.
+    + eapply p8_h9_member_less_transitive; eauto.
+    + apply IH. exact Htail.
+Qed.
+
+Theorem p8_h9_adjacent_implies_pairwise_members :
+  forall members,
+    p8_h9_adjacent_members members = true ->
+    p8_d2_strict_members members = true.
+Proof.
+  induction members as [| member tail IH]; simpl.
+  - intro _. reflexivity.
+  - destruct tail as [| next more]; simpl.
+    + intro _. reflexivity.
+    + intro Adj.
+      apply andb_true_iff in Adj as [MemberLess AdjTail].
+      specialize (IH AdjTail).
+      simpl in IH.
+      apply andb_true_iff in IH as [NextAll MorePair].
+      apply andb_true_iff. split.
+      * apply andb_true_iff. split.
+        -- exact MemberLess.
+        -- eapply p8_h9_member_less_all_transitive; eauto.
+      * apply andb_true_iff. split; assumption.
+Qed.
+
+Theorem p8_h9_adjacent_iff_pairwise_members :
+  forall members,
+    p8_h9_adjacent_members members = true <->
+    p8_d2_strict_members members = true.
+Proof.
+  intro members. split.
+  - apply p8_h9_adjacent_implies_pairwise_members.
+  - apply p8_h9_pairwise_implies_adjacent_members.
+Qed.
+
+Example p8_h9_unicode_nfc_nfd_distinct :
+  p8_d2_compare_form
+    (P8D2Atom [101; 204; 129])
+    (P8D2Atom [195; 169]) = Lt.
+Proof. reflexivity. Qed.
+
+Example p8_h9_structural_rank_not_wire_tag :
+  p8_d2_compare_form (P8D2Unordered P8D2Nil)
+    (P8D2Record P8D2FieldNil) = Lt /\
+  (117 <? 114) = false.
+Proof. split; reflexivity. Qed.
+
+Example p8_h9_member_prefix_order :
+  p8_d2_compare_forms P8D2Nil
+    (P8D2Cons (P8D2Atom [0]) P8D2Nil) = Lt.
+Proof. reflexivity. Qed.
+
+Example p8_h9_reversed_members_not_adjacent :
+  p8_h9_adjacent_members
+    (P8D2Cons (P8D2Atom [98])
+      (P8D2Cons (P8D2Atom [97]) P8D2Nil)) = false.
+Proof. reflexivity. Qed.
+
+Example p8_h9_duplicate_keys_not_adjacent :
+  p8_h9_adjacent_keys
+    (P8D2FieldCons [97] (P8D2Atom [])
+      (P8D2FieldCons [97] (P8D2Atom []) P8D2FieldNil)) = false.
+Proof. reflexivity. Qed.
+
+Print Assumptions p8_h9_member_less_transitive.
+Print Assumptions p8_h9_member_less_all_transitive.
+Print Assumptions p8_h9_adjacent_implies_pairwise_members.
+Print Assumptions p8_h9_adjacent_iff_pairwise_members.
+
 Print Assumptions p8_h9_compare_form_lt_rank_le.
 Print Assumptions p8_h9_compare_form_lt_transitive.
 Print Assumptions p8_h9_compare_forms_lt_transitive.
