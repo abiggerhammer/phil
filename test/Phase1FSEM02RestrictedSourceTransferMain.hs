@@ -1448,18 +1448,28 @@ dualStaleCloseRepairDiamond :: Text -> Text -> Text -> Text -> Either String ()
 dualStaleCloseRepairDiamond accepted senderOnly receiverOnly both = do
   let validClose = "  close done;"
       staleClose = "  close endpoint;"
-  assert (Text.count validClose accepted == 2
-       && both == Text.replace validClose staleClose accepted
-       && both /= senderOnly && both /= receiverOnly)
-    "dual stale-Close witness is not exactly two source-operand edits"
+  -- Exact source-byte reconstruction establishes that the three negatives
+  -- differ from the accepted fixture only at the stated Close operands.
+  -- Parsed declarations carry source offsets; changing the sender operand's
+  -- length shifts the receiver's locations even when its text is unchanged.
+  case Text.splitOn validClose accepted of
+    [beforeSender, between, afterReceiver] ->
+      assert (senderOnly == beforeSender <> staleClose <> between <> validClose <> afterReceiver
+           && receiverOnly == beforeSender <> validClose <> between <> staleClose <> afterReceiver
+           && both == beforeSender <> staleClose <> between <> staleClose <> afterReceiver)
+        "dual stale-Close witness changed text beyond the two operands"
+    _ -> Left "accepted source does not have exactly two Close operands"
   fx <- fixture accepted
-  (_, badSender, senderFixtureReceiver) <- parseParts senderOnly
+  (_, badSender, _) <- parseParts senderOnly
   (_, receiverFixtureSender, badReceiver) <- parseParts receiverOnly
   (_, bothSender, bothReceiver) <- parseParts both
-  assert (bothSender == badSender && bothReceiver == badReceiver
-       && senderFixtureReceiver == fxReceiver fx
-       && receiverFixtureSender == fxSender fx)
-    "dual stale-Close witness changed declarations beyond the two operands"
+  -- The sender occurs before either changed receiver operand, so its
+  -- location-bearing parsed declaration can be compared exactly.
+  assert (bothSender == badSender && receiverFixtureSender == fxSender fx)
+    "dual stale-Close sender declarations changed unexpectedly"
+  -- Both receiver variants are parsed below; source-exactness above is the
+  -- invariant for their unchanged contents across shifted source offsets.
+  let _parsedBothReceiver = bothReceiver
   let replay sender receiver = checked fx sender receiver (fxBefore fx)
       expectBadSender actual =
         case actual of
