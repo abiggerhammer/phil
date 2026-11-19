@@ -286,6 +286,77 @@ Proof.
     apply p8_h9_compare_fields_reversal.
 Defined.
 
+(* The key-list half of the pairwise/adjacent equivalence can be
+   completed independently of structural-form transitivity: original record
+   ordering compares keys by the actual D2 strict byte comparator. *)
+Lemma p8_h9_key_less_transitive :
+  forall x y z,
+    p8_d2_key_less x y = true ->
+    p8_d2_key_less y z = true ->
+    p8_d2_key_less x z = true.
+Proof.
+  intros x y z Hxy Hyz.
+  unfold p8_d2_key_less in *.
+  destruct (p8_d2_compare_bytes x y) eqn:XY; simpl in Hxy;
+    try discriminate.
+  destruct (p8_d2_compare_bytes y z) eqn:YZ; simpl in Hyz;
+    try discriminate.
+  rewrite (p8_h9_compare_bytes_lt_transitive x y z XY YZ).
+  reflexivity.
+Qed.
+
+Lemma p8_h9_key_less_all_transitive :
+  forall x y rest,
+    p8_d2_key_less x y = true ->
+    p8_d2_all_later_keys y rest = true ->
+    p8_d2_all_later_keys x rest = true.
+Proof.
+  intros x y rest Hxy.
+  induction rest as [| key value tail IH]; simpl.
+  - intro _. reflexivity.
+  - intro Hall.
+    apply andb_true_iff in Hall as [Hyk Htail].
+    apply andb_true_iff. split.
+    + eapply p8_h9_key_less_transitive; eauto.
+    + apply IH. exact Htail.
+Qed.
+
+Theorem p8_h9_adjacent_implies_pairwise_keys :
+  forall fields,
+    p8_h9_adjacent_keys fields = true ->
+    p8_d2_strict_keys fields = true.
+Proof.
+  induction fields as [| key value tail IH]; simpl.
+  - intro _. reflexivity.
+  - destruct tail as [| next nextvalue more]; simpl.
+    + intro _. reflexivity.
+    + intro Adj.
+      apply andb_true_iff in Adj as [KeyLess AdjTail].
+      specialize (IH AdjTail).
+      simpl in IH.
+      apply andb_true_iff in IH as [NextAll MorePair].
+      apply andb_true_iff. split.
+      * apply andb_true_iff. split.
+        -- exact KeyLess.
+        -- eapply p8_h9_key_less_all_transitive; eauto.
+      * apply andb_true_iff. split; assumption.
+Qed.
+
+Theorem p8_h9_adjacent_iff_pairwise_keys :
+  forall fields,
+    p8_h9_adjacent_keys fields = true <->
+    p8_d2_strict_keys fields = true.
+Proof.
+  intro fields. split.
+  - apply p8_h9_adjacent_implies_pairwise_keys.
+  - apply p8_h9_pairwise_implies_adjacent_keys.
+Qed.
+
+Print Assumptions p8_h9_key_less_transitive.
+Print Assumptions p8_h9_key_less_all_transitive.
+Print Assumptions p8_h9_adjacent_implies_pairwise_keys.
+Print Assumptions p8_h9_adjacent_iff_pairwise_keys.
+
 Print Assumptions p8_h9_compare_form_reversal.
 Print Assumptions p8_h9_compare_forms_reversal.
 Print Assumptions p8_h9_compare_fields_reversal.
