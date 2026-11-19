@@ -239,10 +239,15 @@ class WorkerBrokerTests(unittest.TestCase):
 
     def test_one_active_admitted_and_one_staged_successor_allowed(self):
         accepted = {"title": f"ATC candidate: hamster/staged/{LANE}/previous",
+                    "user": {"login": "github-actions[bot]", "id": 41898282},
                     "labels": [{"name": f"lane: {LANE}"},
                                {"name": "atc: admitted"}]}
         got = plan(self.f, issues=[accepted])
         self.assertEqual(got["decision"], "validated-read-only-plan")
+        forged = copy.deepcopy(accepted)
+        forged["user"]["login"] = "attacker"
+        with self.assertRaisesRegex(ValueError, "trusted ATC bot"):
+            plan(self.f, issues=[forged])
         second = copy.deepcopy(accepted)
         second["labels"][-1]["name"] = "atc: admitting"
         with self.assertRaisesRegex(ValueError, "multiple active"):
