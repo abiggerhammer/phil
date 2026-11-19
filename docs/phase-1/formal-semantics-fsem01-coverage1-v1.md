@@ -1,5 +1,14 @@
 # FSEM-01 COVERAGE-1 — Grammar-v1 resource/local-typing competence register
 
+> **Frozen historical baseline (2026-11-10, through #1712).** The
+> 18 bounded / 20 gap / 8 handoff classifications and JSON validator
+> preserve their original explicit evidence cutoff; they are not a
+> live total or a completion estimate. See the
+> [2026-11-19 FSEM-01 closeout reconciliation](formal-semantics-fsem01-closeout-2026-11-19.md)
+> for merged #1829/#1847/#1853/#1857/#1861/#1864 and outstanding
+> general gaps. DATA-04/05 and JOIN-05 remain gaps despite new
+> narrowly checked fragments.
+
 > **Non-normative audit; FSEM-01 remains OPEN.** Tracks [#1613](https://github.com/abiggerhammer/phil/issues/1613) and the [exit matrix](formal-semantics-fsem01-exit-matrix-v1.md), after bounded C-1 [#1712](https://github.com/abiggerhammer/phil/pull/1712).
 > Evidence baseline: main `b70223bacd4cf05afa117d4366b3028f9720ee9a` (through merged #1712 and infrastructure #1713). A register entry is not a whole-program proof, adopted typing rule, or permission to graduate FSEM-01.
 
