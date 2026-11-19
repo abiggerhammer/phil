@@ -253,9 +253,9 @@ Proof.
   unfold valid_issue_ledger.
   inversion Hstep; subst; simpl in *;
     try (split; assumption);
-    split;
-      [now apply issue_preserves_history_bound
-      |now apply issue_preserves_no_duplicates].
+    (split;
+      [eapply issue_preserves_history_bound; eassumption
+      |eapply issue_preserves_no_duplicates; eassumption]).
 Qed.
 
 Inductive selected_steps : state -> state -> Prop :=
