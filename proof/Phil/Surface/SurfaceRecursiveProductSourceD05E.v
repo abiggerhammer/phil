@@ -19,37 +19,37 @@ Inductive ProductTree : Type :=
 | TreeFork
     (members : list D.ProductElementContract)
     (successors : list Syntax.Name)
-    (left right : ProductTree).
+    (leftTree rightTree : ProductTree).
 
 Fixpoint treeStageCount (tree : ProductTree) : nat :=
   match tree with
   | TreeLeaf _ => 0
-  | TreeFork _ _ left right =>
-      S (treeStageCount left + treeStageCount right)
+  | TreeFork _ _ leftTree rightTree =>
+      S (treeStageCount leftTree + treeStageCount rightTree)
   end.
 
 Fixpoint treeAccepted (tree : ProductTree) : Prop :=
   match tree with
   | TreeLeaf _ => True
-  | TreeFork members successors left right =>
+  | TreeFork members successors leftTree rightTree =>
       D.ProductEliminationAccepted members successors /\
-      treeAccepted left /\ treeAccepted right
+      treeAccepted leftTree /\ treeAccepted rightTree
   end.
 
-(* One reached restoration, then the recursive left and right source
+(* One reached restoration, then the recursive leftTree and rightTree source
    subtrees in preorder; a failed stage has no fabricated successor. *)
 Fixpoint replayProductTree (tree : ProductTree)
   : option (list (list D.RestoredProductBinding)) :=
   match tree with
   | TreeLeaf _ => Some []
-  | TreeFork members successors left right =>
+  | TreeFork members successors leftTree rightTree =>
       match D.productRestorationPlan members successors with
       | None => None
       | Some restored =>
-          match replayProductTree left with
+          match replayProductTree leftTree with
           | None => None
           | Some leftTrace =>
-              match replayProductTree right with
+              match replayProductTree rightTree with
               | None => None
               | Some rightTrace =>
                   Some (restored :: leftTrace ++ rightTrace)
@@ -63,7 +63,7 @@ Theorem data05e_accepted_finite_tree_replays :
     treeAccepted tree ->
     exists trace, replayProductTree tree = Some trace.
 Proof.
-  induction tree as [leaf | members successors left IHleft right IHright].
+  induction tree as [leaf | members successors leftTree IHleft rightTree IHright].
   - intros _. exists []. reflexivity.
   - simpl. intros [Hroot [Hleft Hright]].
     destruct Hroot as [restored [Hplan _]].
@@ -74,38 +74,38 @@ Proof.
 Qed.
 
 Theorem data05e_failed_root_never_replays :
-  forall members successors left right,
+  forall members successors leftTree rightTree,
     D.productRestorationPlan members successors = None ->
     replayProductTree
-      (TreeFork members successors left right) = None.
+      (TreeFork members successors leftTree rightTree) = None.
 Proof.
-  intros members successors left right H.
+  intros members successors leftTree rightTree H.
   simpl. now rewrite H.
 Qed.
 
 Theorem data05e_failed_left_subtree_never_replays :
-  forall members successors left right,
-    replayProductTree left = None ->
+  forall members successors leftTree rightTree,
+    replayProductTree leftTree = None ->
     replayProductTree
-      (TreeFork members successors left right) = None.
+      (TreeFork members successors leftTree rightTree) = None.
 Proof.
-  intros members successors left right H.
+  intros members successors leftTree rightTree H.
   simpl.
   destruct (D.productRestorationPlan members successors);
     [now rewrite H|reflexivity].
 Qed.
 
 Theorem data05e_failed_right_subtree_never_replays :
-  forall members successors left right,
-    replayProductTree right = None ->
+  forall members successors leftTree rightTree,
+    replayProductTree rightTree = None ->
     replayProductTree
-      (TreeFork members successors left right) = None.
+      (TreeFork members successors leftTree rightTree) = None.
 Proof.
-  intros members successors left right H.
+  intros members successors leftTree rightTree H.
   simpl.
   destruct (D.productRestorationPlan members successors);
     [|reflexivity].
-  destruct (replayProductTree left); [now rewrite H|reflexivity].
+  destruct (replayProductTree leftTree); [now rewrite H|reflexivity].
 Qed.
 
 (* Stage count follows the *tree*, rather than a hardcoded 2/3-level case. *)
@@ -114,15 +114,15 @@ Theorem data05e_successful_replay_has_exact_stage_count :
     replayProductTree tree = Some trace ->
     List.length trace = treeStageCount tree.
 Proof.
-  induction tree as [leaf | members successors left IHleft right IHright];
+  induction tree as [leaf | members successors leftTree IHleft rightTree IHright];
     intros trace H.
   - simpl in H. inversion H. reflexivity.
   - simpl in H.
     destruct (D.productRestorationPlan members successors) as [root|]
       eqn:Hroot; try discriminate.
-    destruct (replayProductTree left) as [leftTrace|] eqn:Hleft;
+    destruct (replayProductTree leftTree) as [leftTrace|] eqn:Hleft;
       try discriminate.
-    destruct (replayProductTree right) as [rightTrace|] eqn:Hright;
+    destruct (replayProductTree rightTree) as [rightTrace|] eqn:Hright;
       try discriminate.
     inversion H; subst; clear H.
     simpl.
@@ -134,9 +134,9 @@ Qed.
 (* The returned root restoration never fabricates a leaf, changes a mode
    or silently swaps the positional product type/name contract. *)
 Theorem data05e_replayed_fork_preserves_exact_root_element :
-  forall members successors left right trace
+  forall members successors leftTree rightTree trace
          index member owner,
-    replayProductTree (TreeFork members successors left right) =
+    replayProductTree (TreeFork members successors leftTree rightTree) =
       Some trace ->
     nth_error members index = Some member ->
     nth_error successors index = Some owner ->
@@ -146,14 +146,14 @@ Theorem data05e_replayed_fork_preserves_exact_root_element :
         Some (D.mkRestoredProductBinding owner
           (D.productElementMode member) (D.productElementType member)).
 Proof.
-  intros members successors left right trace index member owner
+  intros members successors leftTree rightTree trace index member owner
     Hreplay Hmember Howner.
   simpl in Hreplay.
   destruct (D.productRestorationPlan members successors) as [first|]
     eqn:Hfirst; try discriminate.
-  destruct (replayProductTree left) as [leftTrace|]
+  destruct (replayProductTree leftTree) as [leftTrace|]
     eqn:Hleft; try discriminate.
-  destruct (replayProductTree right) as [rightTrace|]
+  destruct (replayProductTree rightTree) as [rightTrace|]
     eqn:Hright; try discriminate.
   inversion Hreplay; subst; clear Hreplay.
   exists first, (leftTrace ++ rightTrace).
