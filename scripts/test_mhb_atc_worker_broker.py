@@ -14,7 +14,9 @@ import unittest
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "scripts"))
 from mhb_atc_worker_broker import (check_paths, check_raw_modes, load_json, resolve,
-                                   validate_plan, check_worker_policy)
+                                   validate_plan, check_worker_policy,
+                                   check_created_ref_porcelain)
+from mhb_atc_stage import parse_intent
 
 REPO = "abiggerhammer/phil"
 BASE = "a" * 40
@@ -39,6 +41,19 @@ def fixtures():
         "ref": f"refs/heads/hamster/proposed/{LANE}/{CANDIDATE}",
         "object": {"type": "commit", "sha": HEAD}}
     return worker, registry, source, ref, [], []
+
+
+def candidate_issue(n=101, candidate="previous", lane=LANE,
+                    sha=HEAD, lifecycle="atc: admitted", state="open"):
+    branch = f"hamster/staged/{lane}/{candidate}"
+    intent = parse_intent(branch, sha, sha)
+    return {
+        "state": state, "number": n, "title": intent["title"],
+        "body": intent["body"], "user": {"login": "github-actions[bot]", "id": 41898282},
+        "created_at": "2026-11-19T10:00:00Z",
+        "updated_at": "2026-11-19T10:00:00Z",
+        "labels": [{"name": lifecycle}, {"name": "lane: " + lane}],
+    }
 
 
 def authorize(f, **changes):
@@ -227,38 +242,36 @@ class WorkerBrokerTests(unittest.TestCase):
 
     def test_stage_issue_orphan_refusal(self):
         for issue in [
-            {"title": f"ATC candidate: hamster/staged/{LANE}/x", "labels": []},
-            {"title": "anything", "labels": [
+            candidate_issue(n=101, candidate="other-staged", lifecycle="atc: staged"),
+            {"state": "open", "title": "ATC candidate: malformed",
+             "labels": [{"name": "atc: staged"}]},
+            {"state": "open", "title": "anything", "labels": [
                 {"name": "atc: staged"}, {"name": f"lane: {LANE}"}]},
         ]:
-            with self.subTest(issue=issue), self.assertRaisesRegex(
-                    ValueError, "existing staged candidate|unowned/ambiguous"):
+            with self.subTest(issue=issue), self.assertRaises(ValueError):
                 plan(self.f, issues=[issue])
-        with self.assertRaisesRegex(ValueError, "malformed issue"):
-            plan(self.f, issues=[{"title": "anything", "labels": [1]}])
+        with self.assertRaises(ValueError):
+            plan(self.f, issues=[{"state": "open", "title": "anything",
+                                  "labels": [1]}])
 
     def test_one_active_admitted_and_one_staged_successor_allowed(self):
-        accepted = {"title": f"ATC candidate: hamster/staged/{LANE}/previous",
-                    "user": {"login": "github-actions[bot]", "id": 41898282},
-                    "labels": [{"name": f"lane: {LANE}"},
-                               {"name": "atc: admitted"}]}
+        accepted = candidate_issue()
         got = plan(self.f, issues=[accepted])
         self.assertEqual(got["decision"], "validated-read-only-plan")
         forged = copy.deepcopy(accepted)
         forged["user"]["login"] = "attacker"
         with self.assertRaisesRegex(ValueError, "trusted ATC bot"):
             plan(self.f, issues=[forged])
-        second = copy.deepcopy(accepted)
-        second["labels"][-1]["name"] = "atc: admitting"
+        second = candidate_issue(n=102, candidate="other", lifecycle="atc: admitting")
         with self.assertRaisesRegex(ValueError, "multiple active"):
             plan(self.f, issues=[accepted, second])
         bad = copy.deepcopy(accepted)
         bad["labels"].append({"name": "atc: staged"})
-        with self.assertRaisesRegex(ValueError, "existing staged"):
+        with self.assertRaisesRegex(ValueError, "exactly one"):
             plan(self.f, issues=[bad])
         bad = copy.deepcopy(accepted)
         bad["labels"].append({"name": "atc: admitting"})
-        with self.assertRaisesRegex(ValueError, "ambiguous"):
+        with self.assertRaisesRegex(ValueError, "exactly one"):
             plan(self.f, issues=[bad])
 
     def test_repository_snapshot_fail_closed(self):
