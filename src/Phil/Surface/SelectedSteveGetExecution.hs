@@ -75,8 +75,8 @@ data SelectedSourceError
   | SelectedSourceQualificationMismatch
   deriving (Eq, Show)
 
--- | Constructors deliberately private: callers cannot submit an already
--- checked AST, invent K/I, or replace the occurrence after admission.
+-- | The qualified provider response ref remains constructible so tests can
+-- submit malformed provider identities. It is not an admitted source object.
 data QualifiedProviderRef = QualifiedProviderRef
   { qualifiedProviderOperation :: Text
   , qualifiedProviderInterface :: InterfaceRevision
@@ -84,15 +84,31 @@ data QualifiedProviderRef = QualifiedProviderRef
   }
   deriving (Eq, Show)
 
+-- | Admission-only positional constructor: exporting six getter functions
+-- cannot grant record-update syntax to a client holding SelectedSteveGet.
+-- No source identity or qualification field is writable outside this module.
 data SelectedSteveGet = SelectedSteveGet
-  { selectedReadOccurrence :: SourceSpan
-  , selectedDigestOccurrence :: SourceSpan
-  , selectedDeclarationKey :: DeclarationKey
-  , selectedInstanceKey :: InstanceKey
-  , selectedReadProvider :: QualifiedProviderRef
-  , selectedDigestProvider :: QualifiedProviderRef
-  }
+  !SourceSpan !SourceSpan !DeclarationKey !InstanceKey
+  !QualifiedProviderRef !QualifiedProviderRef
   deriving (Eq, Show)
+
+selectedReadOccurrence :: SelectedSteveGet -> SourceSpan
+selectedReadOccurrence (SelectedSteveGet site _ _ _ _ _) = site
+
+selectedDigestOccurrence :: SelectedSteveGet -> SourceSpan
+selectedDigestOccurrence (SelectedSteveGet _ site _ _ _ _) = site
+
+selectedDeclarationKey :: SelectedSteveGet -> DeclarationKey
+selectedDeclarationKey (SelectedSteveGet _ _ key _ _ _) = key
+
+selectedInstanceKey :: SelectedSteveGet -> InstanceKey
+selectedInstanceKey (SelectedSteveGet _ _ _ key _ _) = key
+
+selectedReadProvider :: SelectedSteveGet -> QualifiedProviderRef
+selectedReadProvider (SelectedSteveGet _ _ _ _ provider _) = provider
+
+selectedDigestProvider :: SelectedSteveGet -> QualifiedProviderRef
+selectedDigestProvider (SelectedSteveGet _ _ _ _ _ provider) = provider
 
 -- | Canonical *original free* contentId binder. The separately defined shell
 -- callable's formal parameter does not represent get.phil's zero-arity source.
@@ -178,14 +194,9 @@ prepareSelectedSteveGet originalRaw = do
     _ -> Left SelectedSourceShapeMismatch
   case sourceOccurrences (checkedSourceComponent unit) of
     Just (readAt, digestAt) ->
-      Right SelectedSteveGet
-        { selectedReadOccurrence = readAt
-        , selectedDigestOccurrence = digestAt
-        , selectedDeclarationKey = key
-        , selectedInstanceKey = checkedSourceArchitectureInstanceKey architecture
-        , selectedReadProvider = readProvider
-        , selectedDigestProvider = digestProvider
-        }
+      Right (SelectedSteveGet readAt digestAt key
+        (checkedSourceArchitectureInstanceKey architecture)
+        readProvider digestProvider)
     Nothing -> Left SelectedSourceShapeMismatch
 
 -- | Complete selected whole-AST discriminator, not a substring match or a
@@ -411,6 +422,10 @@ stepSelectedSteveGet (SelectedRun (SelectedWorld ref) token) response =
 
 transition :: WorldState -> Active -> Maybe SuppliedResponse -> (WorldState, StepResult)
 transition w a supplied = case (activePhase a, supplied) of
+  -- NeedRead/NeedDigest each represent a single pending selected request
+  -- with immutable occurrence/provider/id (and loan/view for digest). A
+  -- Nothing response preserves the same Active and never reissues a call;
+  -- SourceEvent is a completed-event projection, not a request log.
   (NeedRead, Nothing) -> (w, NeedsReadResponse)
   (NeedRead, Just (ReadResponse site provider actualId outcome))
     | site == selectedReadOccurrence (activeSelected a)

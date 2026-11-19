@@ -46,8 +46,11 @@ main = do
     =<< runSelectedFuel 2 first []
   require "bounded driver reports unanswered read" . (== DriveWaitingForResponse)
     =<< runSelectedFuel 2 first [Nothing]
+  pendingRead <- snapshotSelectedWorld world
   requireResult "missing first response waits" NeedsReadResponse
     =<< stepSelectedSteveGet first Nothing
+  require "waiting read does not reissue event or alter H" . (== pendingRead)
+    =<< snapshotSelectedWorld world
   beforeBad <- snapshotSelectedWorld world
   requireRejected "wrong read occurrence"
     =<< stepSelectedSteveGet first (Just
@@ -105,8 +108,11 @@ main = do
     =<< stepSelectedSteveGet first (Just
       (ReadResponse (selectedReadOccurrence selected)
         readProvider "sha256:exact-id" (ReadNotFound)))
+  pendingDigest <- snapshotSelectedWorld world
   requireResult "wait for digest" NeedsDigestResponse
     =<< stepSelectedSteveGet first Nothing
+  require "waiting digest does not reissue event or alter H" . (== pendingDigest)
+    =<< snapshotSelectedWorld world
   requireAdvanced "digest only under live loan"
     =<< stepSelectedSteveGet first (Just
       (DigestResponse (selectedDigestOccurrence selected)

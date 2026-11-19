@@ -49,6 +49,44 @@ jobs:
           # other diagnostics without widening the maintainer-authorized Cabal edit.
           cabal build lib:phil-core --ghc-options='-Werror -Wno-missing-home-modules'
           cabal exec -- ghc -isrc -itest -Wall -Werror -fno-code test/FSEM05SteveGetSelectedSourceEventMain.hs
+          # Real external importing clients: ordinary getters must compile,
+          # but every attempted SelectedSteveGet record update must fail
+          # SPECIFICALLY because the identifier is not a record selector.
+          tmpdir="$(mktemp -d)"
+          trap 'rm -rf "$tmpdir"' EXIT
+          cat > "$tmpdir/GetterClient.hs" <<'HS'
+          module GetterClient (admittedGetters) where
+          import Phil.Surface.SelectedSteveGetExecution
+          import Phil.Surface.Syntax (SourceSpan)
+          import Phil.Core.Static (DeclarationKey, InstanceKey)
+          admittedGetters :: SelectedSteveGet
+            -> (SourceSpan, SourceSpan, DeclarationKey, InstanceKey,
+                QualifiedProviderRef, QualifiedProviderRef)
+          admittedGetters s =
+            ( selectedReadOccurrence s, selectedDigestOccurrence s
+            , selectedDeclarationKey s, selectedInstanceKey s
+            , selectedReadProvider s, selectedDigestProvider s )
+          HS
+          cabal exec -- ghc -isrc -Wall -Werror -fno-code "$tmpdir/GetterClient.hs"
+          for field in selectedReadOccurrence selectedDigestOccurrence \
+                       selectedDeclarationKey selectedInstanceKey \
+                       selectedReadProvider selectedDigestProvider; do
+            cat > "$tmpdir/ForbiddenUpdate.hs" <<HS
+          module ForbiddenUpdate where
+          import Phil.Surface.SelectedSteveGetExecution
+          cannotUpdate :: SelectedSteveGet -> SelectedSteveGet
+          cannotUpdate selected = selected { ${field} = ${field} selected }
+          HS
+            if cabal exec -- ghc -isrc -Wall -Werror -fno-code \
+                "$tmpdir/ForbiddenUpdate.hs" >"$tmpdir/error.log" 2>&1; then
+              echo "BUG: external descriptor update compiled for $field" >&2
+              exit 1
+            fi
+            grep -Fq "$field" "$tmpdir/error.log" || { cat "$tmpdir/error.log"; exit 1; }
+            grep -Eq '(not a record selector|not a record field|not a field of)' \
+              "$tmpdir/error.log" || { cat "$tmpdir/error.log"; exit 1; }
+            echo "PASS: cannot record-update admitted descriptor field $field"
+          done
           cabal exec -- runghc -isrc -itest -Wall -Werror test/FSEM05SteveGetSelectedSourceEventMain.hs
           git hash-object examples/steve/get.phil
           sha256sum src/Phil/Surface/SelectedSteveGetExecution.hs \

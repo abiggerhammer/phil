@@ -305,6 +305,288 @@ Proof.
   - constructor.
 Qed.
 
+(* A canonical, phase-sensitive RESOURCE invariant. This is strictly
+   stronger than issuance freshness: it states which issued origins remain
+   live (issued but not retired) at each selected source phase. Unreachable
+   malformed states may satisfy valid_issue_ledger without satisfying this. *)
+Definition state_retired (s : state) : list nat :=
+  match s with
+  | Idle _ _ retired => retired
+  | AwaitRead _ _ retired => retired
+  | AwaitBorrow _ _ retired _ => retired
+  | AwaitDigest _ _ retired _ _ => retired
+  | AwaitClose _ _ retired _ _ _ => retired
+  | AwaitRelease _ _ retired _ _ _ => retired
+  | Done _ _ retired _ => retired
+  end.
+
+Definition live_issued (issued retired : list nat) (origin : nat) : Prop :=
+  In origin issued /\ ~ In origin retired.
+
+Definition phase_lifetime (s : state) : Prop :=
+  match s with
+  | Idle _ issued retired =>
+      forall k, ~ live_issued issued retired k
+  | AwaitRead _ issued retired =>
+      forall k, ~ live_issued issued retired k
+  | AwaitBorrow _ issued retired owner =>
+      live_issued issued retired owner /\
+      (forall k, live_issued issued retired k -> k = owner)
+  | AwaitDigest _ issued retired owner loan =>
+      owner <> loan /\ live_issued issued retired owner /\
+      live_issued issued retired loan /\
+      (forall k, live_issued issued retired k -> k = owner \/ k = loan)
+  | AwaitClose _ issued retired owner loan _ =>
+      owner <> loan /\ live_issued issued retired owner /\
+      live_issued issued retired loan /\
+      (forall k, live_issued issued retired k -> k = owner \/ k = loan)
+  | AwaitRelease _ issued retired owner loan _ =>
+      owner <> loan /\ In loan retired /\
+      live_issued issued retired owner /\
+      (forall k, live_issued issued retired k -> k = owner)
+  | Done _ issued retired _ =>
+      forall k, ~ live_issued issued retired k
+  end.
+
+Definition canonical_lifecycle (s : state) : Prop :=
+  valid_issue_ledger s /\
+  NoDup (state_retired s) /\
+  (forall k, In k (state_retired s) -> In k (state_issued s)) /\
+  phase_lifetime s.
+
+Lemma live_after_issue :
+  forall n issued retired k,
+    ~ In n retired ->
+    (live_issued (n :: issued) retired k
+      <-> k = n \/ live_issued issued retired k).
+Proof.
+  intros n issued retired k Hfresh.
+  unfold live_issued; simpl.
+  split.
+  - intros [[Heq | Hin] Hnot].
+    + now left.
+    + right; auto.
+  - intros [Heq | [Hin Hnot]].
+    + subst; split; [now left | exact Hfresh].
+    + split; [now right | exact Hnot].
+Qed.
+
+Lemma live_after_retire :
+  forall issued retired loan k,
+    live_issued issued (loan :: retired) k
+      <-> live_issued issued retired k /\ k <> loan.
+Proof.
+  intros issued retired loan k.
+  unfold live_issued; simpl.
+  split.
+  - intros [Hin Hnot].
+    split.
+    + split; [exact Hin | intro Hr; apply Hnot; right; exact Hr].
+    + intro Heq; apply Hnot; left; symmetry; exact Heq.
+  - intros [[Hin Hnot] Hneq].
+    split; [exact Hin |].
+    intros [Heq | Hr].
+    + apply Hneq; symmetry; exact Heq.
+    + apply Hnot; exact Hr.
+Qed.
+
+Lemma fresh_not_retired :
+  forall n issued retired,
+    Forall (fun k => k < n) issued ->
+    (forall k, In k retired -> In k issued) ->
+    ~ In n retired.
+Proof.
+  intros n issued retired Hbound Hsubset Hret.
+  apply (fresh_not_in_issued n issued Hbound).
+  apply Hsubset; exact Hret.
+Qed.
+
+Theorem canonical_lifecycle_step :
+  forall s event next,
+    canonical_lifecycle s ->
+    selected_source_step s event next ->
+    canonical_lifecycle next.
+Proof.
+  intros s event next [Hissued [HnodupR [Hsubset Hphase]]] Hstep.
+  assert (HissuedNext : valid_issue_ledger next).
+  { eapply selected_step_preserves_issue_ledger; eauto. }
+  split; [exact HissuedNext |].
+  destruct Hstep; simpl in *.
+  - (* Idle -> AwaitRead: same empty live set. *)
+    repeat split; assumption.
+  - (* Found: the one new owner is the sole live origin. *)
+    destruct Hissued as [Hbound _].
+    assert (HfreshR : ~ In n retired).
+    { eapply fresh_not_retired; eauto. }
+    split; [exact HnodupR |].
+    split.
+    + intros k Hk; right; apply Hsubset; exact Hk.
+    + split.
+      * apply (proj2 (live_after_issue n issued retired n HfreshR)).
+        left; reflexivity.
+      * intros k Hlive.
+        apply (proj1 (live_after_issue n issued retired k HfreshR))
+          in Hlive.
+        destruct Hlive as [Heq | Hold].
+        -- exact Heq.
+        -- exfalso; apply (Hphase k); exact Hold.
+  - (* NotFound: no new owner and no live resource. *)
+    repeat split; assumption.
+  - (* StorageFailure: likewise. *)
+    repeat split; assumption.
+  - (* Borrow: the new loan differs from owner, both alone live. *)
+    destruct Hissued as [Hbound _].
+    assert (HfreshI : ~ In n issued).
+    { apply fresh_not_in_issued; exact Hbound. }
+    assert (HfreshR : ~ In n retired).
+    { eapply fresh_not_retired; eauto. }
+    destruct Hphase as [Howner Honly].
+    assert (Hdistinct : owner <> n).
+    { intro Heq; subst; apply HfreshI; exact (proj1 Howner). }
+    split; [exact HnodupR |].
+    split.
+    + intros k Hk; right; apply Hsubset; exact Hk.
+    + repeat split.
+      * exact Hdistinct.
+      * apply (proj2 (live_after_issue n issued retired owner HfreshR)).
+        right; exact Howner.
+      * apply (proj2 (live_after_issue n issued retired n HfreshR)).
+        left; reflexivity.
+      * intros k Hlive.
+        apply (proj1 (live_after_issue n issued retired k HfreshR))
+          in Hlive.
+        destruct Hlive as [Heq | Hold].
+        -- right; exact Heq.
+        -- left; apply Honly; exact Hold.
+  - (* Digest accepted: two live origins are preserved. *)
+    repeat split; assumption.
+  - (* Digest rejected: same live identities. *)
+    repeat split; assumption.
+  - (* Close: loan retired once, owner is the only survivor. *)
+    destruct Hphase as [Hdistinct [Howner [Hloan Honly]]].
+    split.
+    + constructor; [exact (proj2 Hloan) | exact HnodupR].
+    + split.
+      * intros k [Heq | Hk].
+        -- subst; exact (proj1 Hloan).
+        -- apply Hsubset; exact Hk.
+      * repeat split.
+        -- exact Hdistinct.
+        -- now left.
+        -- apply (proj2 (live_after_retire issued retired loan owner)).
+           split; [exact Howner | exact Hdistinct].
+        -- intros k Hlive.
+           apply (proj1 (live_after_retire issued retired loan k))
+             in Hlive.
+           destruct Hlive as [Hold Hneq].
+           destruct (Honly k Hold) as [Heq | Heq].
+           ++ exact Heq.
+           ++ exfalso; apply Hneq; exact Heq.
+  - (* Release: owner retired exactly once; no live resource at Unit. *)
+    destruct Hphase as [Hdistinct [HloanRet [Howner Honly]]].
+    split.
+    + constructor; [exact (proj2 Howner) | exact HnodupR].
+    + split.
+      * intros k [Heq | Hk].
+        -- subst; exact (proj1 Howner).
+        -- apply Hsubset; exact Hk.
+      * intros k Hlive.
+        apply (proj1 (live_after_retire issued retired owner k))
+          in Hlive.
+        destruct Hlive as [Hold Hneq].
+        apply Hneq; apply Honly; exact Hold.
+  - (* Completed Unit -> idle: no live resources are resurrected. *)
+    repeat split; assumption.
+Qed.
+
+Theorem canonical_lifecycle_reachable :
+  forall target,
+    selected_steps (Idle 0 [] []) target ->
+    canonical_lifecycle target.
+Proof.
+  assert (Hinitial : canonical_lifecycle (Idle 0 [] [])).
+  { unfold canonical_lifecycle, valid_issue_ledger.
+    simpl; repeat split; try constructor.
+    - intros k H; inversion H.
+    - intros k [H _]; inversion H.
+  }
+  intros target Hsteps.
+  induction Hsteps.
+  - exact Hinitial.
+  - apply IHHsteps.
+    eapply canonical_lifecycle_step; eauto.
+Qed.
+
+Theorem reachable_digest_has_live_exact_owner_and_loan :
+  forall n issued retired owner loan,
+    selected_steps (Idle 0 [] []) (AwaitDigest n issued retired owner loan) ->
+    owner <> loan /\ live_issued issued retired owner /\
+      live_issued issued retired loan.
+Proof.
+  intros n issued retired owner loan Hreach.
+  pose proof (canonical_lifecycle_reachable _ Hreach)
+    as [_ [_ [_ Hphase]]].
+  exact Hphase.
+Qed.
+
+Theorem reachable_close_has_live_loan :
+  forall n issued retired owner loan decision,
+    selected_steps (Idle 0 [] [])
+      (AwaitClose n issued retired owner loan decision) ->
+    selected_source_step
+      (AwaitClose n issued retired owner loan decision) NoInput
+      (AwaitRelease n issued (loan :: retired) owner loan decision)
+    /\ owner <> loan /\ live_issued issued retired owner /\
+      live_issued issued retired loan /\ ~ In loan retired.
+Proof.
+  intros n issued retired owner loan decision Hreach.
+  pose proof (canonical_lifecycle_reachable _ Hreach)
+    as [_ [_ [_ Hphase]]].
+  destruct Hphase as [Hdistinct [Howner [Hloan _]]].
+  repeat split; try constructor; assumption || exact (proj2 Hloan).
+Qed.
+
+Theorem reachable_release_is_exactly_once :
+  forall n issued retired owner loan decision,
+    selected_steps (Idle 0 [] [])
+      (AwaitRelease n issued retired owner loan decision) ->
+    selected_source_step
+      (AwaitRelease n issued retired owner loan decision) NoInput
+      (Done n issued (owner :: retired)
+        (if decision then UnitAccepted else UnitRejected))
+    /\ In loan retired /\ ~ In owner retired
+    /\ NoDup (owner :: retired).
+Proof.
+  intros n issued retired owner loan decision Hreach.
+  pose proof (canonical_lifecycle_reachable _ Hreach)
+    as [_ [HnodupR [_ Hphase]]].
+  destruct Hphase as [_ [Hloan [Howner _]]].
+  repeat split; try constructor; auto.
+  - exact (proj2 Howner).
+  - constructor; [exact (proj2 Howner) | exact HnodupR].
+Qed.
+
+Theorem reachable_unit_has_no_live_resource :
+  forall n issued retired outcome,
+    selected_steps (Idle 0 [] []) (Done n issued retired outcome) ->
+    forall k, ~ live_issued issued retired k.
+Proof.
+  intros n issued retired outcome Hreach.
+  pose proof (canonical_lifecycle_reachable _ Hreach)
+    as [_ [_ [_ Hphase]]].
+  exact Hphase.
+Qed.
+
+(* Selected request semantics are defined at state entry, independent of
+   whether the projection has yet recorded a completed provider event.
+   NoInput at AwaitRead/AwaitDigest preserves their exact pending state. *)
+Theorem waiting_preserves_pending_request :
+  forall n issued retired owner loan,
+    selected_step_fn (AwaitRead n issued retired) NoInput = Waiting
+    /\ selected_step_fn
+      (AwaitDigest n issued retired owner loan) NoInput = Waiting.
+Proof. intros; split; reflexivity. Qed.
+
 (* A consecutive complete accepted first invocation preserves history
    and the same byte payload cannot cause a second owner-origin alias. *)
 Theorem two_identical_found_payloads_fresh :
@@ -360,6 +642,7 @@ Qed.
 Inductive fuel_result : Type :=
 | FuelComplete (outcome : unit_branch)
 | FuelWaiting (paused : state)
+| FuelInputPrefixEnded (paused : state)
 | FuelRejected
 | FuelExhausted.
 
@@ -372,7 +655,7 @@ Fixpoint run_fuel (fuel : nat) (s : state) (inputs : list offered)
     | O => FuelExhausted
     | S rest =>
       match inputs with
-      | [] => FuelWaiting s
+      | [] => FuelInputPrefixEnded s
       | next :: tail =>
         match selected_step_fn s next with
         | Advanced nextState => run_fuel rest nextState tail
@@ -395,6 +678,18 @@ Theorem out_of_fuel_is_not_rejection :
       FuelExhausted.
 Proof. reflexivity. Qed.
 
+Theorem empty_scheduler_prefix_is_not_provider_wait :
+  forall n issued retired owner,
+    run_fuel 1 (AwaitBorrow n issued retired owner) [] =
+      FuelInputPrefixEnded (AwaitBorrow n issued retired owner).
+Proof. reflexivity. Qed.
+
+Theorem empty_digest_prefix_is_not_provider_wait :
+  forall n issued retired owner loan,
+    run_fuel 1 (AwaitDigest n issued retired owner loan) [] =
+      FuelInputPrefixEnded (AwaitDigest n issued retired owner loan).
+Proof. reflexivity. Qed.
+
 End SelectedSteveGetEvents.
 
 Print Assumptions SelectedSteveGetEvents.selected_step_sound.
@@ -408,3 +703,12 @@ Print Assumptions SelectedSteveGetEvents.issue_preserves_no_duplicates.
 Print Assumptions SelectedSteveGetEvents.nonfound_issues_no_origin.
 Print Assumptions SelectedSteveGetEvents.finite_wait_is_not_rejection.
 Print Assumptions SelectedSteveGetEvents.out_of_fuel_is_not_rejection.
+Print Assumptions SelectedSteveGetEvents.canonical_lifecycle_step.
+Print Assumptions SelectedSteveGetEvents.canonical_lifecycle_reachable.
+Print Assumptions SelectedSteveGetEvents.reachable_digest_has_live_exact_owner_and_loan.
+Print Assumptions SelectedSteveGetEvents.reachable_close_has_live_loan.
+Print Assumptions SelectedSteveGetEvents.reachable_release_is_exactly_once.
+Print Assumptions SelectedSteveGetEvents.reachable_unit_has_no_live_resource.
+Print Assumptions SelectedSteveGetEvents.waiting_preserves_pending_request.
+Print Assumptions SelectedSteveGetEvents.empty_scheduler_prefix_is_not_provider_wait.
+Print Assumptions SelectedSteveGetEvents.empty_digest_prefix_is_not_provider_wait.

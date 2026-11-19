@@ -26,6 +26,19 @@ existing owned-buffer release transition from the Steve shell.
 The unrelated external `SteveGet` callable signature is **not** used as
 source-parameter evidence.
 
+**Descriptor admission is sealed:** `SelectedSteveGet` uses a private
+positional constructor and exports six ordinary read-only getter functions
+(`selectedReadOccurrence`, `selectedDigestOccurrence`,
+`selectedDeclarationKey`, `selectedInstanceKey`,
+`selectedReadProvider`, `selectedDigestProvider`).
+None is a record selector; an importing client cannot update the admitted
+occurrence, qualification, declaration or instance after rechecking.
+The focused GHC check includes an actual external positive getter client
+and six external negative record-update clients, requiring compiler
+rejection for the non-selector reason (not an unrelated module error).
+The previously reviewed record-selector API was **unsound** and is not
+an accepted basis for source authority.
+
 The whole selected ordinary `Phil.Surface.Syntax` AST is shape-reflected:
 `decide blob_read(contentId)`; found `bytes`; the sole lexical
 `borrow bytes as bytesView {digest_check(contentId,bytesView)}`;
@@ -53,6 +66,19 @@ argument. It contains **no** owner, loan, serial or history. Mismatched
 site, provider, id, view, program counter or response type **reject**
 without mutation. Missing read/digest response **waits**; it does not
 invent a found arm, assert provider fairness, or turn a timeout into a fatal.
+At entry to `NeedRead`, the admitted immutable descriptor and the captured
+free `contentId` establish **one pending read request** at the original
+occurrence against its fixed qualified Blob provider. At entry to
+`NeedDigest` the same descriptor, captured id and current *live, exact*
+owner-linked `bytesView` establish **one pending digest request** at the
+original digest occurrence. Matching typed E responses discharge these
+requests exactly once; `Nothing` preserves the phase, pending request,
+world H and completed event history. Polling/wait observation does **not**
+issue another provider operation. A `SourceEvent` records only completed
+outcomes and lifecycle transitions; `snapshotEvents` alone is **not**
+a pending-call log or evidence that an actual native call occurred.
+The response-supplying E is held fixed through the selected invocation;
+it is not externally authenticated native provider-event provenance.
 
 A private, persistent per-session `SelectedWorld` supplies
 `H=(namespace,nextOrigin,issued,retired,active,events)`. The only
@@ -87,12 +113,39 @@ The corresponding independent Rocq definition is
 `proof/Phil/Verification/FSEM05SteveGetSelectedSourceEvents.v`.
 `selected_step_fn` is executable; `selected_source_step` has ten
 independent declarative cases, not a graph-of-function definition.
-Soundness, coverage, determinism, fresh owner/loan ordinal separation,
-persistent issued/retired history across two identical-payload found
-invocations, nonfound no-issue, wrong event rejection, waiting vs rejection
-and fuel partiality are *proposed* named closed lemmas. The Rocq record
-uses abstract naturals and does **not** itself establish concrete
-Haskell `SourceSpan` or IORef-to-Rocq simulation.
+The previously compiled eleven lemmas cover soundness, coverage,
+determinism, issuance freshness, and two-identical-payload selected
+invocations; they **did not prove full resource-lifecycle safety**.
+The bounded repair introduces a stronger proposed
+`canonical_lifecycle` invariant over the *reachable* canonical initial
+state: issued origins are unique and below the cursor; retired origins are
+a duplicate-free subset of issued; live means issued minus retired.
+Idle/AwaitRead/Done have no live origins; AwaitBorrow has exactly its
+found owner live; AwaitDigest/AwaitClose have exactly distinct owner and
+loan live; AwaitRelease has only the owner live and the loan retired.
+Proposed named theorems establish step preservation and canonical
+reachability, live exact owner/loan during digest, live loan at close,
+loan-retired-before-release, exact-once retirement and no live resource on
+Unit completion. They do **not** assert that every arbitrary malformed
+unreachable Rocq state is safe, nor that the Haskell implementation
+universally refines Rocq.
+
+The revised Rocq driver separately returns `FuelInputPrefixEnded` for an
+empty scheduler/event list at a nonterminal state; `FuelWaiting` is
+reserved for a supplied `NoInput` response at an actual provider
+await phase. This matches the key Haskell
+`DriveInputPrefixEnded` versus `DriveWaitingForResponse` distinction.
+Neither finer interpretation of scheduler input as real-world provider
+calls nor a general Haskell↔Rocq simulation is claimed. There are still
+administrative model steps (Done→Idle→AwaitRead) versus the Haskell
+explicit begin and invocation token, and a zero-fuel terminal precedence
+difference: they remain **OPEN** for future representation proof.
+
+The Rocq model uses abstract naturals and does **not** itself establish
+concrete Haskell `SourceSpan`, token, E authenticity or IORef-to-Rocq
+simulation. No new `Axiom`, `Admitted`, `Parameter` or trusted `Prop`
+is permitted; refreshed focused GHC/Rocq CI and recursive object checks
+must pass before any theorem is cited as compiled evidence.
 
 ## Exact clause → authority → definition → producer/consumer
 
@@ -132,7 +185,15 @@ caller-provided `serial`.
   different `GrammarV1Block` AST.
 - No theorem in the Rocq file asserts that GHC's actual AST/IORef
   transition implements its constructors. This source↔Rocq
-  refinement/representation proof is independent remaining work.
+  refinement/representation proof is independent remaining work, including
+  admission-to-Rocq state encoding, driver administrative steps,
+  invocation tokens and all runtime pending-request correspondence.
+- Independent Astra source-rule review of the earlier candidate
+  `56935072194e0be775ad867a9d8d801c06a2ad6a` returned
+  **REQUEST CHANGES**, not acceptance. Descriptor sealing, pending-call
+  convention, driver prefix distinction and reachable lifecycle proofs
+  are a proposed in-scope repair only. A new independent semantic-owner
+  decision at the **repaired exact SHA** is required before opening a PR.
 - No LLVM or native FFI trace correspondence; no `StablePtr`
   identity, cross-process durability or ABA safety proof;
   no general program evaluator, arbitrary cancellation,
