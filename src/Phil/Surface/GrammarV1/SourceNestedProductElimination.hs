@@ -11,6 +11,8 @@ module Phil.Surface.GrammarV1.SourceNestedProductElimination
   ( GrammarV1NestedProductError (..)
   , GrammarV1NestedProductTrace (..)
   , grammarV1CheckedNestedProductElimination
+  , GrammarV1ThreeLevelProductTrace (..)
+  , grammarV1CheckedThreeLevelProductElimination
   ) where
 
 import qualified Data.Map.Strict as Map
@@ -359,3 +361,250 @@ grammarV1CheckedNestedProductElimination static declarationKey source
                     , nestedProductSecondCut = secondCut
                     , nestedProductAccepted = accepted
                     }
+
+
+-- DATA-04/05D: opt-in three-level nested pair from one original source AST.
+-- DATA-05C's two-level entry point remains unchanged and independent.
+data GrammarV1ThreeLevelProductTrace = GrammarV1ThreeLevelProductTrace
+  { threeLevelDeclarationKey :: DeclarationKey
+  , threeLevelOriginalOwner :: GrammarV1ResolvedBinder
+  , threeLevelOriginalLeaves :: [GrammarV1ResolvedBinder]
+  , threeLevelMiddleOwner :: Name
+  , threeLevelDeepOwner :: Name
+  , threeLevelOuterContract :: [ProductElementType]
+  , threeLevelMiddleContract :: [ProductElementType]
+  , threeLevelDeepContract :: [ProductElementType]
+  , threeLevelDeclaredReturn :: CheckedTypeMode
+  , threeLevelFirstCut :: ProductEliminationRun
+  , threeLevelSecondCut :: ProductEliminationRun
+  , threeLevelThirdCut :: ProductEliminationRun
+  , threeLevelAccepted :: SurfaceCheckResult
+  }
+  deriving (Eq, Show)
+
+threeLevelPatternSpans
+  :: Located GrammarV1Pattern -> Maybe (SourceSpan, SourceSpan)
+threeLevelPatternSpans
+    (Located _ (GrammarV1TuplePattern [flag, middle])) =
+  case middle of
+    Located middleSpan (GrammarV1TuplePattern [before, deep]) ->
+      case deep of
+        Located deepSpan (GrammarV1TuplePattern [payload, after])
+          | all isSourceName [flag,before,payload,after] ->
+              Just (middleSpan, deepSpan)
+        _ -> Nothing
+    _ -> Nothing
+threeLevelPatternSpans _ = Nothing
+
+threeLevelDeepElements :: [ProductElementType]
+threeLevelDeepElements =
+  [ ProductElementType Linear bytes8
+  , ProductElementType Unrestricted TyUnit ]
+
+threeLevelDeepTy :: Ty
+threeLevelDeepTy = TyProduct threeLevelDeepElements
+
+threeLevelMiddleElements :: [ProductElementType]
+threeLevelMiddleElements =
+  [ ProductElementType Unrestricted TyUnit
+  , ProductElementType Linear threeLevelDeepTy ]
+
+threeLevelMiddleTy :: Ty
+threeLevelMiddleTy = TyProduct threeLevelMiddleElements
+
+threeLevelOuterElements :: [ProductElementType]
+threeLevelOuterElements =
+  [ ProductElementType Unrestricted TyBool
+  , ProductElementType Linear threeLevelMiddleTy ]
+
+-- Only checked original source and its declaration root may supply authority.
+-- Caller-provided Surface environments, contracts or synthetic owner names
+-- are impossible inputs. Unsupported source forms remain noncompetence.
+grammarV1CheckedThreeLevelProductElimination
+  :: StaticContext
+  -> DeclarationKey
+  -> GrammarV1FunctionDecl
+  -> Maybe (Either GrammarV1NestedProductError GrammarV1ThreeLevelProductTrace)
+grammarV1CheckedThreeLevelProductElimination static declarationKey source
+  | grammarV1FunctionRecursive source = Nothing
+  | not (null (grammarV1FunctionGenericParams source)) = Nothing
+  | not (null (grammarV1FunctionRequirements source)) = Nothing
+  | otherwise = do
+      [Located _ parameter] <- pure (grammarV1FunctionTermParams source)
+      declaredResult <- grammarV1FunctionResultType source
+      [Located letSpan (GrammarV1LetStatement sourcePattern _),
+       Located returnSpan (GrammarV1ReturnStatement _)] <-
+        pure (grammarV1BlockStatements
+          (locatedValue (grammarV1FunctionBody source)))
+      (middleSpan,deepSpan) <- threeLevelPatternSpans sourcePattern
+      -- An unresolved local could mean a static/global value, not invalid
+      -- language. Preserve DATA-05C's noncompetence boundary.
+      case grammarV1FunctionParameterScope declarationKey source of
+        Right (_, parameterScope) ->
+          case grammarV1CheckedLetPatternBlockInScope parameterScope
+              (grammarV1FunctionBody source) of
+            Nothing -> Nothing
+            _ -> Just ()
+        Left _ -> Just ()
+      typedInput <- checkedPair static (grammarV1TermParamType parameter)
+      typedResult <- checkedPair static declaredResult
+      case (typedInput,typedResult) of
+        (Left err,_) -> Just (Left (NestedProductLeafTypeError err))
+        (_,Left err) -> Just (Left (NestedProductLeafTypeError err))
+        (Right inputType,Right resultType) ->
+          Just $ do
+            (owner,leaves,flagBinder,beforeBinder,payloadBinder,afterBinder) <-
+              case grammarV1FunctionParameterScope declarationKey source of
+                Left err -> Left (NestedProductParameterError err)
+                Right ([ownerBinder],initialScope) ->
+                  case grammarV1CheckedLetPatternBlockInScope initialScope
+                      (grammarV1FunctionBody source) of
+                    Nothing -> failShape "three-level lexical source is unsupported"
+                    Just (Left err) -> Left (NestedProductLetError err)
+                    Just (Right
+                      ([GrammarV1CheckedLetBindingStep _ input binders,
+                        GrammarV1CheckedLetOccurrenceStep _ returned],_)) ->
+                      case binders of
+                        [flagLeaf,beforeLeaf,payloadLeaf,afterLeaf]
+                          | not (sameBinder
+                              (grammarV1CheckedLocalValueBinder input)
+                              ownerBinder) ->
+                              failShape "three-level initializer differs from checked source owner"
+                          | not (sameBinder
+                              (grammarV1CheckedLocalValueBinder returned)
+                              payloadLeaf) ->
+                              failShape "three-level returned source occurrence differs from Bytes leaf"
+                          | otherwise ->
+                              Right (ownerBinder,binders,flagLeaf,beforeLeaf,
+                                payloadLeaf,afterLeaf)
+                        _ -> failShape "three-level source needs four exact leaves"
+                    Just (Right _) -> failShape "unsupported three-level lexical sequence"
+                Right _ -> failShape "one checked source parameter required"
+            if inputType /= CheckedTypeMode
+                (TyProduct threeLevelOuterElements) Linear
+              then failShape "three-level source product element types or modes differ"
+              else Right ()
+            if resultType /= CheckedTypeMode bytes8 Linear
+              then failShape "three-level declared return must be Linear Bytes[8]"
+              else Right ()
+            let packet = binderName owner
+                flag = binderName flagBinder
+                before = binderName beforeBinder
+                payload = binderName payloadBinder
+                after = binderName afterBinder
+                middle = Name ("$phil.data05d.middle:" <> unName packet)
+                deep = Name ("$phil.data05d.deep:" <> unName packet)
+                sourceNames = [packet,flag,before,payload,after,middle,deep]
+            if Set.size (Set.fromList sourceNames) /= length sourceNames
+              then failShape "three-level source/Core owner identities collide"
+              else Right ()
+            let firstLet = flatLet letSpan packet [flag,middle]
+                secondLet = flatLet middleSpan middle [before,deep]
+                thirdLet = flatLet deepSpan deep [payload,after]
+                finalReturn = flatReturn returnSpan payload
+                sourceName = locatedValue (grammarV1FunctionName source)
+                qualified = Map.fromList
+                  [ (unName packet,threeLevelOuterElements)
+                  , (unName middle,threeLevelMiddleElements)
+                  , (unName deep,threeLevelDeepElements) ]
+                initialEnv = (emptySurfaceEnvironment static)
+                  { surfaceInitialBindings = Map.singleton
+                      (unName packet)
+                      (initialBinding Linear (checkedBindingType inputType))
+                  , surfaceExpectedProductEliminations = qualified }
+                middleEnv = initialEnv
+                  { surfaceInitialBindings = Map.fromList
+                      [ (unName flag,initialBinding Unrestricted TyBool)
+                      , (unName middle,initialBinding Linear threeLevelMiddleTy) ] }
+                deepEnv = initialEnv
+                  { surfaceInitialBindings = Map.fromList
+                      [ (unName flag,initialBinding Unrestricted TyBool)
+                      , (unName before,initialBinding Unrestricted TyUnit)
+                      , (unName deep,initialBinding Linear threeLevelDeepTy) ] }
+                context0 = Core.ResourceContext Map.empty Map.empty
+                  (Map.singleton packet (checkedBindingType inputType)) Set.empty
+                context1 = Core.ResourceContext
+                  (Map.singleton flag TyBool) Map.empty
+                  (Map.singleton middle threeLevelMiddleTy) Set.empty
+                context2 = Core.ResourceContext
+                  (Map.fromList [(flag,TyBool),(before,TyUnit)]) Map.empty
+                  (Map.singleton deep threeLevelDeepTy) Set.empty
+                context3 = Core.ResourceContext
+                  (Map.fromList [(flag,TyBool),(before,TyUnit),(after,TyUnit)])
+                  Map.empty (Map.singleton payload bytes8) Set.empty
+                firstPart = component sourceName letSpan
+                  [firstLet,flatReturn returnSpan flag]
+                secondPart = component sourceName letSpan
+                  [secondLet,flatReturn returnSpan before]
+                thirdPart = component sourceName letSpan
+                  [thirdLet,finalReturn]
+                fullPart = component sourceName letSpan
+                  [firstLet,secondLet,thirdLet,finalReturn]
+                firstResult = checkSurfaceComponent initialEnv firstPart
+                secondResult = checkSurfaceComponent middleEnv secondPart
+                thirdResult = checkSurfaceComponent deepEnv thirdPart
+                fullResult = checkSurfaceComponent initialEnv fullPart
+                expected = SurfaceCheckResult sourceName [Return bytes8]
+            firstCut <- case traceSurfaceProductEliminationComponent
+                initialEnv firstPart of
+              Just cut -> Right cut
+              Nothing -> Left (NestedProductTransitionMismatch
+                "source-derived outer product had no actual Surface cut")
+            secondCut <- case traceSurfaceProductEliminationComponent
+                middleEnv secondPart of
+              Just cut -> Right cut
+              Nothing -> Left (NestedProductTransitionMismatch
+                "source-derived middle product had no actual Surface cut")
+            thirdCut <- case traceSurfaceProductEliminationComponent
+                deepEnv thirdPart of
+              Just cut -> Right cut
+              Nothing -> Left (NestedProductTransitionMismatch
+                "source-derived deep product had no actual Surface cut")
+            if productEliminationBefore firstCut /= Just context0 ||
+               productEliminationAfter firstCut /= Just context1 ||
+               productEliminationBefore secondCut /= Just context1 ||
+               productEliminationAfter secondCut /= Just context2 ||
+               productEliminationBefore thirdCut /= Just context2 ||
+               productEliminationAfter thirdCut /= Just context3
+              then Left (NestedProductTransitionMismatch
+                "actual ordered production cuts differ from original-source Core states")
+              else Right ()
+            case firstResult of
+              Left err | surfaceErrorClass err == LinearCompletion -> Right ()
+              Left err -> Left (NestedProductSurfaceError err)
+              Right _ -> Left (NestedProductTransitionMismatch
+                "first partial return hid a live Linear intermediate")
+            case secondResult of
+              Left err | surfaceErrorClass err == LinearCompletion -> Right ()
+              Left err -> Left (NestedProductSurfaceError err)
+              Right _ -> Left (NestedProductTransitionMismatch
+                "second partial return hid a live Linear intermediate")
+            case thirdResult of
+              Right result | result == expected -> Right ()
+              Left err -> Left (NestedProductSurfaceError err)
+              _ -> Left (NestedProductTransitionMismatch
+                "third-stage return was not exactly Linear Bytes[8]")
+            case fullResult of
+              Right result
+                | result == expected &&
+                  productEliminationOutcome firstCut == firstResult &&
+                  productEliminationOutcome secondCut == secondResult &&
+                  productEliminationOutcome thirdCut == thirdResult ->
+                    Right GrammarV1ThreeLevelProductTrace
+                      { threeLevelDeclarationKey = declarationKey
+                      , threeLevelOriginalOwner = owner
+                      , threeLevelOriginalLeaves = leaves
+                      , threeLevelMiddleOwner = middle
+                      , threeLevelDeepOwner = deep
+                      , threeLevelOuterContract = threeLevelOuterElements
+                      , threeLevelMiddleContract = threeLevelMiddleElements
+                      , threeLevelDeepContract = threeLevelDeepElements
+                      , threeLevelDeclaredReturn = resultType
+                      , threeLevelFirstCut = firstCut
+                      , threeLevelSecondCut = secondCut
+                      , threeLevelThirdCut = thirdCut
+                      , threeLevelAccepted = result
+                      }
+              Left err -> Left (NestedProductSurfaceError err)
+              _ -> Left (NestedProductTransitionMismatch
+                "full three-level Surface run diverged from source-owned plan")
