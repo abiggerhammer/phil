@@ -85,9 +85,9 @@ Qed.
 Theorem data05d_successful_three_stage_exact_arity :
   forall a b c an bn cn first second third,
     replayThreeStages a b c an bn cn = Some (first,second,third) ->
-    length a = length an /\
-    length b = length bn /\
-    length c = length cn.
+    List.length a = List.length an /\
+    List.length b = List.length bn /\
+    List.length c = List.length cn.
 Proof.
   intros a b c an bn cn first second third H.
   unfold replayThreeStages in H.

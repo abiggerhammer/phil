@@ -173,7 +173,8 @@ checkAlpha = do
   pure $ do
     orig <- accepted root source
     alpha <- accepted root renamed
-    ensure (threeLevelOriginalLeaves orig == threeLevelOriginalLeaves alpha &&
+    ensure (map grammarV1ResolvedBinderCoreName (threeLevelOriginalLeaves orig) ==
+            map grammarV1ResolvedBinderCoreName (threeLevelOriginalLeaves alpha) &&
             threeLevelMiddleOwner orig == threeLevelMiddleOwner alpha &&
             threeLevelDeepOwner orig == threeLevelDeepOwner alpha)
       "alpha-renaming changed source owner or generated internal identities"
