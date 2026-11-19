@@ -359,7 +359,7 @@ Qed.
 (* Fuel represents bounded interpreter execution, not fairness or fatality. *)
 Inductive fuel_result : Type :=
 | FuelComplete (outcome : unit_branch)
-| FuelWaiting (at : state)
+| FuelWaiting (paused : state)
 | FuelRejected
 | FuelExhausted.
 
