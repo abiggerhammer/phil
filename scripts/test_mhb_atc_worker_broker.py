@@ -29,7 +29,8 @@ def fixtures():
     worker = json.loads((ROOT / ".github/atc-worker-policy.json").read_text())
     registry = json.loads((ROOT / ".github/atc-worker-lanes.json").read_text())
     registry["lanes"][LANE] = {
-        "enabled": True, "source_repository": FORK, "source_owner": "example"}
+        "enabled": True, "source_repository": FORK, "source_owner": "example",
+        "source_repository_id": 4001, "source_owner_id": 1234}
     source = {
         "id": 4001, "full_name": FORK, "fork": True, "private": False,
         "parent": {"full_name": REPO},
@@ -74,7 +75,9 @@ class WorkerBrokerTests(unittest.TestCase):
                          {"phase2-selfhost", "phase2-embedded"})
         self.assertTrue(all(not x["enabled"] and
                             x["source_repository"] is None and
-                            x["source_owner"] is None
+                            x["source_owner"] is None and
+                            x["source_repository_id"] is None and
+                            x["source_owner_id"] is None
                             for x in actual["lanes"].values()))
         self.assertEqual(check_worker_policy(w), "disabled")
 
@@ -151,6 +154,22 @@ class WorkerBrokerTests(unittest.TestCase):
             w[key] = value
             with self.subTest(key=key), self.assertRaises(ValueError):
                 resolve(w, r, repo=REPO, actor="abiggerhammer",
+                        lane=LANE, candidate=CANDIDATE)
+
+    def test_source_id_mismatch_denied_even_if_names_reused(self):
+        src = copy.deepcopy(self.f[2])
+        src["id"] = 4002
+        with self.assertRaisesRegex(ValueError, "source must be"):
+            plan(self.f, source=src)
+        src = copy.deepcopy(self.f[2])
+        src["owner"]["id"] = 1235
+        with self.assertRaisesRegex(ValueError, "source must be"):
+            plan(self.f, source=src)
+        for field in ("source_repository_id", "source_owner_id"):
+            w, reg, *_ = copy.deepcopy(self.f)
+            reg["lanes"][LANE][field] = None
+            with self.subTest(field=field), self.assertRaises(ValueError):
+                resolve(w, reg, repo=REPO, actor="abiggerhammer",
                         lane=LANE, candidate=CANDIDATE)
 
     def test_actual_fork_and_owner_required(self):
