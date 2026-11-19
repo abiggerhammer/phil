@@ -28,6 +28,10 @@ LOGIN = re.compile(r"[A-Za-z0-9](?:[A-Za-z0-9-]{0,37}[A-Za-z0-9])?\Z")
 REPO_NAME = re.compile(r"[A-Za-z0-9][A-Za-z0-9_.-]{0,99}\Z")
 PREFIX = "hamster/staged/"
 SOURCE_PREFIX = "hamster/proposed/"
+MAX_JSON_BYTES = 8_000_000
+# Full, all-state GitHub issue/PR history needs its own bounded intake.
+# Never use this larger allowance for source policy, fork or ref metadata.
+MAX_HISTORY_JSON_BYTES = 32 * 1024 * 1024
 
 
 def deny(condition: bool, reason: str) -> None:
@@ -41,9 +45,11 @@ def exact_sha(value: object, name: str) -> str:
     return value
 
 
-def load_json(path: str) -> object:
-    raw = Path(path).read_bytes()
-    deny(len(raw) <= 8_000_000, "oversized JSON input")
+def load_json(path: str, *, max_bytes: int = MAX_JSON_BYTES) -> object:
+    # Read one byte beyond the bound at most; never slurp an unbounded file.
+    with Path(path).open("rb") as source:
+        raw = source.read(max_bytes + 1)
+    deny(len(raw) <= max_bytes, "oversized JSON input")
 
     def no_duplicate_keys(pairs):
         obj = {}
@@ -344,7 +350,8 @@ def cli() -> int:
                 source_repository=load_json(args.source_repository_json),
                 source_ref=load_json(args.source_ref_json),
                 staged_refs=load_json(args.staged_refs_json),
-                issues=load_json(args.issues_json))
+                issues=load_json(args.issues_json,
+                                 max_bytes=MAX_HISTORY_JSON_BYTES))
     print(json.dumps(result, sort_keys=True))
     return 0
 
