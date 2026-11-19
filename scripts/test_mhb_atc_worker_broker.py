@@ -287,21 +287,21 @@ class WorkerBrokerTests(unittest.TestCase):
     def test_git_raw_modes_match_paths_and_reject_symlinks_or_gitlinks(self):
         old, new = b"a" * 40, b"b" * 40
         raw = (b":100644 100755 " + old + b" " + new +
-               b" M\\0src/Main.hs\\0")
-        accepted = check_raw_modes(raw, b"src/Main.hs\\0")
+               b" M\0src/Main.hs\0")
+        accepted = check_raw_modes(raw, b"src/Main.hs\0")
         self.assertEqual(accepted["changed_files"], 1)
         for modes in (b"120000 100644", b"100644 120000",
                       b"160000 100644", b"100644 160000"):
-            bad = b":" + modes + b" " + old + b" " + new + b" M\\0src/Main.hs\\0"
+            bad = b":" + modes + b" " + old + b" " + new + b" M\0src/Main.hs\0"
             with self.subTest(modes=modes), self.assertRaisesRegex(
                     ValueError, "mode"):
-                check_raw_modes(bad, b"src/Main.hs\\0")
-        for wrong in (b"other.hs\\0", b"src/Main.hs\\0extra.hs\\0"):
+                check_raw_modes(bad, b"src/Main.hs\0")
+        for wrong in (b"other.hs\0", b"src/Main.hs\0extra.hs\0"):
             with self.subTest(paths=wrong), self.assertRaisesRegex(
                     ValueError, "disagree"):
                 check_raw_modes(raw, wrong)
         with self.assertRaisesRegex(ValueError, "raw-diff"):
-            check_raw_modes(b"bad", b"src/Main.hs\\0")
+            check_raw_modes(b"bad", b"src/Main.hs\0")
 
     def test_load_json_rejects_duplicate_keys(self):
         with tempfile.TemporaryDirectory() as d:
