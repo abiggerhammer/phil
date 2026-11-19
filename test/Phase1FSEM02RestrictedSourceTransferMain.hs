@@ -41,6 +41,8 @@ main = do
     "test/fixtures/fsem02-restricted-source-transfer-v1/rejected-stale-close.phil"
   rejectedReceiver <- TextIO.readFile
     "test/fixtures/fsem02-restricted-source-transfer-v1/rejected-receiver-stale-close.phil"
+  rejectedBoth <- TextIO.readFile
+    "test/fixtures/fsem02-restricted-source-transfer-v1/rejected-both-stale-close.phil"
   let result = do
         fx <- fixture accepted
         sequence_
@@ -66,6 +68,7 @@ main = do
           , crossModeSenderPayloadRefusal accepted
           , missingSenderResourceBeforeReceiverCollision accepted
           , receiverClosePreemptsNativeFaults accepted rejectedReceiver
+          , dualStaleCloseRepairDiamond accepted rejected rejectedReceiver rejectedBoth
           , wrongSessionHeadRejects fx
           , sourceCloseReplay fx
           , sourceCloseRejectsForgedRequest fx
@@ -1436,6 +1439,60 @@ receiverClosePreemptsNativeFaults source badSource = do
   assert (state sr rr == original
        && replay (fxReceiver fx) original == replay (fxReceiver fx) (state sr rr))
     "repairing both native contexts failed to reconstruct the accepted state"
+  acceptedReplay fx
+
+-- Simultaneous stale source Close operands are not two independent admits.
+-- The source-checking order is observable; repairing only one source defect
+-- must expose the other, not admit the rendezvous or mutate its Core state.
+dualStaleCloseRepairDiamond :: Text -> Text -> Text -> Text -> Either String ()
+dualStaleCloseRepairDiamond accepted senderOnly receiverOnly both = do
+  let validClose = "  close done;"
+      staleClose = "  close endpoint;"
+  -- Exact source-byte reconstruction establishes that the three negatives
+  -- differ from the accepted fixture only at the stated Close operands.
+  -- Parsed declarations carry source offsets; changing the sender operand's
+  -- length shifts the receiver's locations even when its text is unchanged.
+  case Text.splitOn validClose accepted of
+    [beforeSender, between, afterReceiver] ->
+      assert (senderOnly == beforeSender <> staleClose <> between <> validClose <> afterReceiver
+           && receiverOnly == beforeSender <> validClose <> between <> staleClose <> afterReceiver
+           && both == beforeSender <> staleClose <> between <> staleClose <> afterReceiver)
+        "dual stale-Close witness changed text beyond the two operands"
+    _ -> Left "accepted source does not have exactly two Close operands"
+  fx <- fixture accepted
+  (_, badSender, _) <- parseParts senderOnly
+  (_, receiverFixtureSender, badReceiver) <- parseParts receiverOnly
+  (_, bothSender, bothReceiver) <- parseParts both
+  -- The sender occurs before either changed receiver operand, so its
+  -- location-bearing parsed declaration can be compared exactly.
+  assert (bothSender == badSender && receiverFixtureSender == fxSender fx)
+    "dual stale-Close sender declarations changed unexpectedly"
+  -- Source-exactness above covers the unchanged receiver contents across
+  -- shifted source offsets; both parsed variants are exercised below.
+  let replay sender receiver = checked fx sender receiver (fxBefore fx)
+      expectBadSender actual =
+        case actual of
+          Left (RestrictedSourceSendError
+            (GrammarV1ComponentSendCloseCloseMismatch wanted got)) ->
+              assert (grammarV1ResolvedBinderCoreName wanted == fxClientNext fx
+                   && grammarV1ResolvedBinderCoreName got == fxClientOld fx)
+                "dual source refusal lost sender successor/predecessor"
+          other -> Left ("dual stale sender Close was not rejected first: " <> show other)
+      expectBadReceiver actual =
+        case actual of
+          Left (RestrictedSourceReceiveError
+            (GrammarV1ComponentReceiveCloseCloseMismatch wanted got)) ->
+              assert (grammarV1ResolvedBinderCoreName wanted == fxServerNext fx
+                   && grammarV1ResolvedBinderCoreName got == fxServerOld fx)
+                "source repair lost receiver successor/predecessor"
+          other -> Left ("receiver stale Close was not exposed after sender repair: " <> show other)
+  expectBadSender (replay badSender badReceiver)
+  expectBadSender (replay badSender (fxReceiver fx))
+  expectBadReceiver (replay (fxSender fx) badReceiver)
+  assert (replay badSender badReceiver == replay bothSender bothReceiver
+       && replay (fxSender fx) (fxReceiver fx)
+          == replay receiverFixtureSender (fxReceiver fx))
+    "source repair replay changed pure refusal or accepted transition"
   acceptedReplay fx
 
 wrongSessionHeadRejects :: Fixture -> Either String ()
