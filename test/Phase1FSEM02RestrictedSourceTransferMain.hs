@@ -62,6 +62,7 @@ main = do
           , borrowedEndpointPrefixPriority accepted
           , borrowedOccupiedReceiverCollision accepted
           , crossModeSenderPayloadRefusal accepted
+          , missingSenderResourceBeforeReceiverCollision accepted
           , wrongSessionHeadRejects fx
           , sourceCloseReplay fx
           , sourceCloseRejectsForgedRequest fx
@@ -1282,6 +1283,75 @@ crossModeSenderPayloadRefusal source = do
         other -> Left
           ("malformed source lost priority over wrong-mode resource: " <>
             show (senderMode, receiverMode, other))
+
+
+-- NON-NORMATIVE FSEM-02: occurrence-index authority does not synthesize
+-- the sender's actual linear resource. This probes native source/Core guards
+-- with intentionally corrupted post-activation resource snapshots.
+missingSenderResourceBeforeReceiverCollision :: Text -> Either String ()
+missingSenderResourceBeforeReceiverCollision source = do
+  fx <- fixture source
+  let initial = fxBefore fx
+      senderKey = fxClientProcess fx
+      receiverKey = fxServerProcess fx
+      senderName = fxPayloadOwner fx
+      receiverName = fxPayloadReceiver fx
+      contexts = communicationProtocolContexts initial
+      replay state = checked fx (fxSender fx) (fxReceiver fx) state
+  sender <- requireProtocol senderKey initial
+  receiver <- requireProtocol receiverKey initial
+  let senderResources = protocolResources sender
+      receiverResources = protocolResources receiver
+      absent = senderResources {
+        linearBindings = Map.delete senderName (linearBindings senderResources) }
+      state sr rr = initial { communicationProtocolContexts =
+        Map.insert senderKey (sender { protocolResources = sr }) $
+          Map.insert receiverKey (receiver { protocolResources = rr }) contexts }
+      expectAbsent st = case replay st of
+        Left (RestrictedSourceCoreError
+          (RestrictedMessageSenderResourceError p (UnknownBinding n))) ->
+            assert (p == senderKey && n == senderName)
+              "missing sender resource lost exact owner/process diagnostic"
+        other -> Left ("missing sender resource admitted: " <> show other)
+      expectDuplicate st = case replay st of
+        Left (RestrictedSourceCoreError
+          (RestrictedMessageReceiverResourceError p (DuplicateBinding n))) ->
+            assert (p == receiverKey && n == receiverName)
+              "receiver collision lost exact process/name diagnostic"
+        other -> Left ("receiver occupied after sender repair: " <> show other)
+  assert (Map.lookup payloadOccurrence (communicationRestrictedOwners initial)
+            == Just (senderKey, senderName)
+       && Map.lookup senderName (linearBindings senderResources) == Just payloadTy
+       && Map.notMember senderName (linearBindings absent))
+    "the owner ledger and actual sender resource were not separated"
+  sequence_ [do
+    occupied <- mapLeft show $
+      insertBinding mode receiverName TyBool receiverResources
+    let missingOnly = state absent receiverResources
+        both = state absent occupied
+        busyOnly = state senderResources occupied
+    -- The correct occurrence ledger does not excuse a missing payload.
+    expectAbsent both
+    expectAbsent missingOnly
+    -- Repairing only sender exposes receiver-name occupancy in every map.
+    expectDuplicate busyOnly
+    assert (state senderResources receiverResources == initial
+         && replay both == replay both
+         && replay initial == replay (state senderResources receiverResources))
+      "missing-sender replay or native resource restoration changed"
+    -- The single-operand source rejection must precede all native faults.
+    let valid = "let done = send payload on endpoint;\n  close done;"
+        invalid = "let done = send payload on endpoint;\n  close endpoint;"
+        badSource = Text.replace valid invalid source
+    assert (Text.isInfixOf valid source && badSource /= source)
+      "missing-sender source edit did not isolate exact Close operand"
+    (_, badSender, _) <- parseParts badSource
+    case checked fx badSender (fxReceiver fx) both of
+      Left (RestrictedSourceSendError
+        (GrammarV1ComponentSendCloseCloseMismatch _ _)) -> Right ()
+      other -> Left ("missing sender masked bad source: " <> show (mode, other))
+    | mode <- [Linear, Affine, Unrestricted]]
+  acceptedReplay fx
 
 wrongSessionHeadRejects :: Fixture -> Either String ()
 wrongSessionHeadRejects fx = do
