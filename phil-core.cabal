@@ -47,6 +47,7 @@ library
       Phil.Core.Discharge
       Phil.Core.Value
       Phil.Surface.Syntax
+      Phil.Surface.SelectedSteveGetExecution
       Phil.Surface.Parser
       Phil.Surface.Elaborate
       Phil.Surface.Check
