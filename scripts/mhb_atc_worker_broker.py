@@ -12,6 +12,12 @@ import re
 import sys
 from pathlib import Path
 
+from mhb_atc_admit import (ADMITTING_LABEL, ACTIVE_LABEL, STAGED_LABEL,
+                           TRUSTED_CREATOR, is_atc_candidate_issue,
+                           machine_record, names)
+from mhb_atc_reconcile import candidate as canonical_candidate
+from mhb_atc_stage import MARKER
+
 REPO = "abiggerhammer/phil"
 APP_ID = 5836223
 APP_SLUG = "phil-atc-worker"
@@ -152,34 +158,60 @@ def validate_plan(binding: dict, *, base_sha: str, head_sha: str,
         if ref["ref"].startswith(stage_prefix):
             raise ValueError("lane has an existing staged ref; no ref reuse or overwrite")
 
-    deny(isinstance(issues, list), "missing open-issue census")
-    target_title_prefix = "ATC candidate: " + PREFIX + binding["lane"] + "/"
-    lane_label = "lane: " + binding["lane"]
+    # The all-state GitHub Issues API snapshot includes closed issues and PRs.
+    # Canonical controller records are interpreted by the SAME validators
+    # used by admission/reconciliation. Edited titles cannot hide lifecycle.
+    deny(isinstance(issues, list), "missing complete all-state issue census")
+    target = binding["staged_branch"]
+    target_title = "ATC candidate: " + target
+    seen_branches: set[str] = set()
     active = 0
     for issue in issues:
-        deny(isinstance(issue, dict) and isinstance(issue.get("title"), str) and
-             isinstance(issue.get("labels"), list),
-             "malformed open-issue census")
-        title = issue["title"]
-        labels = issue["labels"]
-        deny(all(isinstance(lab, dict) and isinstance(lab.get("name"), str)
-                 for lab in labels), "malformed issue labels")
-        names = {lab["name"] for lab in labels}
-        if "atc: staged" in names and lane_label in names:
+        deny(isinstance(issue, dict) and
+             issue.get("state") in ("open", "closed") and
+             isinstance(issue.get("title"), str),
+             "malformed all-state issue/history census")
+        labels = names(issue)
+
+        # Exact historic identity is forbidden across all issue states,
+        # even if a prior candidate was admitted or its issue was closed.
+        if issue["title"] == target_title:
+            raise ValueError("candidate name already used in issue history")
+        creator = issue.get("user")
+        if (isinstance(creator, dict) and
+            creator.get("login") == TRUSTED_CREATOR and
+            isinstance(issue.get("body"), str) and
+            issue["body"].startswith(MARKER + "\n")):
+            record = machine_record(issue)
+            if record["branch"] == target:
+                raise ValueError("candidate machine identity reused in history")
+
+        if issue["state"] != "open":
+            continue
+        if not is_atc_candidate_issue(issue):
+            continue
+        if "pull_request" in issue:
+            # GitHub also returns PR objects in the Issues endpoint.
+            # Existing admitted PRs are not candidate issues.
+            deny(not ({STAGED_LABEL, ADMITTING_LABEL} & labels),
+                 "PR cannot masquerade as staged/admitting candidate issue")
+            continue
+
+        # Checks creator, issue kind, exactly one lifecycle label, canonical
+        # staging marker, body/branch/title equivalence, one lane label,
+        # timestamps, and a valid source SHA. Damage FAILS CLOSED.
+        entry = canonical_candidate(issue)
+        branch = entry["branch"]
+        deny(branch not in seen_branches, "duplicate canonical candidate branch records")
+        seen_branches.add(branch)
+        if entry["lane"] != binding["lane"]:
+            continue
+        if branch == target:
+            raise ValueError("active candidate name reused")
+        if entry["state"] == STAGED_LABEL:
             raise ValueError("lane has an existing staged candidate issue")
-        if title.startswith(target_title_prefix):
-            states = names & {"atc: staged", "atc: admitting", "atc: admitted"}
-            deny(lane_label in names and len(states) == 1,
-                 "unowned/ambiguous same-lane candidate issue")
-            if "atc: staged" in states:
-                raise ValueError("lane has an existing staged candidate issue")
-            creator = issue.get("user")
-            deny(isinstance(creator, dict) and
-                 creator.get("login") == "github-actions[bot]" and
-                 type(creator.get("id")) is int and creator["id"] > 0,
-                 "active candidate issue was not created by trusted ATC bot")
-            active += 1
-            deny(active <= 1, "lane has multiple active admitted candidates")
+        active += 1
+        deny(active <= 1, "lane has multiple active admitted candidates")
 
     return {**binding, "decision": "validated-read-only-plan",
             "base_sha": base, "head_sha": head, "main_sha": main,
@@ -238,6 +270,33 @@ def check_raw_modes(data: bytes, paths_data: bytes) -> dict:
     return {"decision": "candidate-file-modes-reviewed", "changed_files": len(seen)}
 
 
+def check_created_ref_porcelain(data: bytes, *, repo: str, branch: str,
+                               sha: str) -> dict:
+    """Accept exactly Git porcelain's successful new-ref record, never '='.
+
+    Git --force-with-lease=ref: still returns 0 and 'up to date' if another
+    actor created the SAME SHA. A zero exit status is not create evidence.
+    """
+    exact_sha(sha, "pushed SHA")
+    deny(repo == REPO, "unexpected Git push destination repository")
+    deny(isinstance(branch, str) and branch.startswith(PREFIX) and
+         len(branch) < 240 and "\n" not in branch and "\r" not in branch,
+         "invalid staged push destination")
+    deny(isinstance(data, bytes) and 0 < len(data) <= 4096,
+         "missing/oversized Git push porcelain receipt")
+    try:
+        lines = data.decode("utf-8").splitlines()
+    except UnicodeError as exc:
+        raise ValueError("non-UTF8 Git push status") from exc
+    deny(len(lines) == 3 and
+         lines[0] == f"To https://github.com/{repo}.git" and
+         lines[1] == f"*\t{sha}:refs/heads/{branch}\t[new branch]" and
+         lines[2] == "Done",
+         "Git push did not positively create exactly one new staged ref")
+    return {"decision": "new-staged-ref-created",
+            "staged_branch": branch, "head_sha": sha}
+
+
 def cli() -> int:
     p = argparse.ArgumentParser(description=__doc__)
     sub = p.add_subparsers(dest="command", required=True)
@@ -252,11 +311,20 @@ def cli() -> int:
     x = sub.add_parser("paths")
     x.add_argument("--paths-file", required=True)
     x.add_argument("--raw-file", required=True)
+    x = sub.add_parser("created-ref")
+    x.add_argument("--push-output", required=True)
+    x.add_argument("--repo", required=True)
+    x.add_argument("--branch", required=True)
+    x.add_argument("--sha", required=True)
     args = p.parse_args()
     if args.command == "paths":
         paths = Path(args.paths_file).read_bytes()
         result = check_paths(paths)
         result["mode_evidence"] = check_raw_modes(Path(args.raw_file).read_bytes(), paths)
+    elif args.command == "created-ref":
+        result = check_created_ref_porcelain(
+            Path(args.push_output).read_bytes(), repo=args.repo,
+            branch=args.branch, sha=args.sha)
     else:
         worker = load_json(args.worker_policy)
         registry = load_json(args.lane_policy)
