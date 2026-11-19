@@ -26,6 +26,14 @@ main = do
 
   world <- newSelectedWorld
   first <- beginOrDie world selected "sha256:exact-id"
+  require "no reentrant selected invocation" . either (const True) (const False)
+    =<< beginSelectedSteveGet world selected "sha256:exact-id"
+  require "bounded driver reports zero-fuel partiality" . (== DriveFuelExhausted)
+    =<< runSelectedFuel 0 first [Nothing]
+  require "bounded driver reports empty E prefix" . (== DriveInputPrefixEnded)
+    =<< runSelectedFuel 2 first []
+  require "bounded driver reports unanswered read" . (== DriveWaitingForResponse)
+    =<< runSelectedFuel 2 first [Nothing]
   requireResult "missing first response waits" NeedsReadResponse
     =<< stepSelectedSteveGet first Nothing
   beforeBad <- snapshotSelectedWorld world
