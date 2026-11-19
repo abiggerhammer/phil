@@ -1,0 +1,5 @@
+record Packet { flag : Bool, payload : Bytes[16], tag : Unit }
+fn unpack(packet : Packet) -> Bytes[16] satisfies C {
+  let Packet { flag, payload } = packet;
+  return payload;
+}
