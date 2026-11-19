@@ -80,13 +80,32 @@ def push_properties(source: str):
     return props
 
 
+def branch_pattern_disjoint_from_staged(pattern: str) -> bool:
+    """Conservative literal-prefix proof, not a permissive glob simulator.
+
+    A branch allow pattern is safe only when its fixed prefix is provably
+    incompatible with hamster/staged/. Otherwise deny, even if a particular
+    example candidate fails to match it. Supports named Phase 1/hamster lanes
+    while rejecting 'hamster/**', '**' and direct staged selectors.
+    """
+    if pattern.startswith("!"):
+        return False  # Glob negation needs a separate ordered-pattern proof.
+    marker = re.search(r"[*?\\[\\]{}!+@()\\\\]", pattern)
+    literal_prefix = pattern[:marker.start()] if marker else pattern
+    staged_prefix = "hamster/staged/"
+    return not (staged_prefix.startswith(literal_prefix) or
+                literal_prefix.startswith(staged_prefix))
+
+
 def excludes_staged_push(source: str) -> bool:
     props = push_properties(source)
     if props is None:
         return True
     if set(props) == {"branches"}:
-        # A main-only push can never execute from hamster/staged/**.
-        return props["branches"] == ["main"]
+        # Allow alternate named lanes only when ALL selectors are provably
+        # disjoint from the entire staged namespace, not one sample branch.
+        return all(branch_pattern_disjoint_from_staged(p)
+                   for p in props["branches"])
     if set(props) == {"branches-ignore"}:
         return "hamster/staged/**" in props["branches-ignore"]
     # No branch restriction, both mutually exclusive keys, or unknown form.
@@ -125,6 +144,17 @@ class StagedPushIsolationTests(unittest.TestCase):
                 too_narrow = source.replace(
                     "'hamster/staged/**'", "'hamster/proposed/**'")
                 self.assertFalse(excludes_staged_push(too_narrow))
+
+    def test_branch_allow_patterns_must_be_provably_disjoint(self):
+        for pattern in ("main", "scratch/p8-h9-*", "hamster/proof-audit/**",
+                        "hamster/p9-evidence/**", "phase1-int-001-*"):
+            with self.subTest(pattern=pattern):
+                self.assertTrue(branch_pattern_disjoint_from_staged(pattern))
+        for pattern in ("**", "*", "hamster/**", "hamster/staged/**",
+                        "hamster/staged/phase2-selfhost/x",
+                        "ham?ter/staged/**", "!hamster/staged/**"):
+            with self.subTest(pattern=pattern):
+                self.assertFalse(branch_pattern_disjoint_from_staged(pattern))
 
     def test_unrecognized_push_filters_fail_closed(self):
         sample = "name: demo\non:\n  push:\n    paths:\n      - 'src/**'\njobs:\n  test:\n    runs-on: ubuntu-latest\n"
