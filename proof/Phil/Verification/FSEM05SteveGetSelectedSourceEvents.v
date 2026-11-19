@@ -205,6 +205,104 @@ Proof.
   - assumption.
 Qed.
 
+(* Ledger freshness holds for every reachable selected transition, not
+   just the exhibited two-run witness. The cursor is H-owned state and is
+   carried unchanged or incremented; issued history is never cleared. *)
+Definition state_next (s : state) : nat :=
+  match s with
+  | Idle n _ _ => n
+  | AwaitRead n _ _ => n
+  | AwaitBorrow n _ _ _ => n
+  | AwaitDigest n _ _ _ _ => n
+  | AwaitClose n _ _ _ _ _ => n
+  | AwaitRelease n _ _ _ _ _ => n
+  | Done n _ _ _ => n
+  end.
+
+Definition state_issued (s : state) : list nat :=
+  match s with
+  | Idle _ issued _ => issued
+  | AwaitRead _ issued _ => issued
+  | AwaitBorrow _ issued _ _ => issued
+  | AwaitDigest _ issued _ _ _ => issued
+  | AwaitClose _ issued _ _ _ _ => issued
+  | AwaitRelease _ issued _ _ _ _ => issued
+  | Done _ issued _ _ => issued
+  end.
+
+Definition valid_issue_ledger (s : state) : Prop :=
+  Forall (fun k => k < state_next s) (state_issued s)
+    /\ NoDup (state_issued s).
+
+Theorem step_counter_monotone :
+  forall s event next,
+    selected_source_step s event next ->
+    state_next s <= state_next next.
+Proof.
+  intros s event next H.
+  inversion H; subst; simpl; lia.
+Qed.
+
+Theorem selected_step_preserves_issue_ledger :
+  forall s event next,
+    valid_issue_ledger s ->
+    selected_source_step s event next ->
+    valid_issue_ledger next.
+Proof.
+  intros s event next [Hbound Hnodup] Hstep.
+  unfold valid_issue_ledger.
+  inversion Hstep; subst; simpl in *;
+    try (split; assumption);
+    split;
+      [now apply issue_preserves_history_bound
+      |now apply issue_preserves_no_duplicates].
+Qed.
+
+Inductive selected_steps : state -> state -> Prop :=
+| StepsRefl : forall s, selected_steps s s
+| StepsNext : forall s middle final event,
+    selected_source_step s event middle ->
+    selected_steps middle final ->
+    selected_steps s final.
+
+Theorem reachable_ledger_valid :
+  forall s target,
+    selected_steps s target ->
+    valid_issue_ledger s ->
+    valid_issue_ledger target.
+Proof.
+  intros s target Hsteps; induction Hsteps; intros Hvalid.
+  - exact Hvalid.
+  - apply IHHsteps.
+    eapply selected_step_preserves_issue_ledger; eauto.
+Qed.
+
+Theorem fresh_issued_origin_in_every_reachable_state :
+  forall target,
+    selected_steps (Idle 0 [] []) target ->
+    ~ In (state_next target) (state_issued target).
+Proof.
+  intros target Hsteps.
+  apply fresh_not_in_issued.
+  destruct (reachable_ledger_valid _ _ Hsteps) as [Hbound _].
+  - unfold valid_issue_ledger; simpl; split; constructor.
+  - exact Hbound.
+Qed.
+
+Theorem every_reachable_found_chooses_fresh_owner :
+  forall n issued retired payload,
+    selected_steps (Idle 0 [] []) (AwaitRead n issued retired) ->
+    ~ In n issued
+      /\ selected_source_step (AwaitRead n issued retired)
+          (ReadFound payload)
+          (AwaitBorrow (S n) (n :: issued) retired n).
+Proof.
+  intros n issued retired payload Hsteps; split.
+  - apply (fresh_issued_origin_in_every_reachable_state
+      (AwaitRead n issued retired)); assumption.
+  - constructor.
+Qed.
+
 (* A consecutive complete accepted first invocation preserves history
    and the same byte payload cannot cause a second owner-origin alias. *)
 Theorem two_identical_found_payloads_fresh :
@@ -300,7 +398,7 @@ End SelectedSteveGetEvents.
 Print Assumptions SelectedSteveGetEvents.selected_step_sound.
 Print Assumptions SelectedSteveGetEvents.selected_step_coverage.
 Print Assumptions SelectedSteveGetEvents.selected_step_deterministic.
-Print Assumptions SelectedSteveGetEvents.two_identical_found_payloads_fresh.
+Print Assumptions SelectedSteveGetEvents.two_identical_found_payloads_fresh.\nPrint Assumptions SelectedSteveGetEvents.selected_step_preserves_issue_ledger.\nPrint Assumptions SelectedSteveGetEvents.fresh_issued_origin_in_every_reachable_state.\nPrint Assumptions SelectedSteveGetEvents.every_reachable_found_chooses_fresh_owner.
 Print Assumptions SelectedSteveGetEvents.issue_preserves_no_duplicates.
 Print Assumptions SelectedSteveGetEvents.nonfound_issues_no_origin.
 Print Assumptions SelectedSteveGetEvents.finite_wait_is_not_rejection.
