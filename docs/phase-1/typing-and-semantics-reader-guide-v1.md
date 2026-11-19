@@ -555,3 +555,8 @@ The bounded [FSEM-02 typed sender-resource versus occupied receiver priority](fo
 ### FSEM-02 checked restricted source observation wire (non-normative)
 
 The [OBS-V1 restricted source/Core witness](formal-semantics-restricted-observation-wire-fsem02-v1.md) byte-compares five actual production checker verdicts with a finite Rocq 9.2 observation artifact. It binds concrete accepted/rejected source checks to proof-side data without claiming general producer fidelity, semantic authority or universal refinement.
+
+
+### FSEM-02 terminal source/Core observation (non-normative)
+
+The [Terminal OBS-V1 witness](formal-semantics-terminal-observation-wire-fsem02-v1.md) extends the exact source/Core OBS-V1 fixtures through independently supplied terminal outcomes, successively retired endpoint occurrence keys and an exact post-close stale retry refusal. It proves only three finite Rocq observations, not general implementation refinement, terminal authority or FSEM-02 completion.
