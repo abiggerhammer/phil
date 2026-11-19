@@ -56,11 +56,26 @@ Only after those gates does the trusted environment mint a Phil-only Contents-wr
 The `mhb-atc-stage` handler currently runs asynchronously after the dispatch. The broker's successful dispatch is **not** evidence that an issue exists: commissioning must separately verify the issue/receipt. If ref push succeeds but dispatch or issue creation fails, the new staged ref is an orphan and blocks subsequent automatic plans. Investigate/reconcile it; never silently delete it, reuse its name, or force-push a second candidate.
 
 
-## Immediate CI-isolation blocker before *any* real staged push
+## G1 staged-ref push isolation: source defenses, no live publication
 
-A protected, reviewable ATC staging transaction does **not** quarantine its GitHub push from ordinary workflows. Existing `push` workflows in Phil (including `phase1-int-001-source-architecture.yml`, `phase1-int-001-source-systems.yml`, `phase1-int-001-witness-e2e.yml`, and `phase1-int-002-manifest-closure.yml`) can build or run code from a newly staged branch **before** its durable staging issue is created. A worker App token, unlike default `GITHUB_TOKEN`, can trigger these workflows. A later admitted-PR run also needs independent assessment: for instance the Darwin release workflow can run candidate-editable scripts under a signing/notarization environment.
+A Contents-write GitHub App push to `hamster/staged/<lane>/<candidate>` normally triggers GitHub Actions `push` workflows defined **in the candidate's own tree**. W2 must not assume that the staged namespace itself is a CI quarantine. The main-branch source audit found four legacy Phase 1 push workflows whose `on.push.paths` restrictions had no branch restrictions. Each now explicitly adds `on.push.branches-ignore: ['hamster/staged/**']`, preserving ordinary main/feature-branch push and pull-request checks:
 
-Both cases are tracked in [mandatory pre-activation W2-CI issue #1935](https://github.com/abiggerhammer/phil/issues/1935). **Even if this dormant source PR merges, no W2 publish can be commissioned until staged-push CI and privileged admitted-PR execution are independently contained and tested.** Neither this PR nor its offline replay establishes zero candidate execution, safe CI secret inheritance or global CI admission control.
+- `phase1-int-001-source-architecture.yml`
+- `phase1-int-001-source-systems.yml`
+- `phase1-int-001-witness-e2e.yml`
+- `phase1-int-002-manifest-closure.yml`
+
+All other current `.github/workflows` push triggers must remain constrained to `main` or explicitly exclude `hamster/staged/**`. The offline `scripts/test_mhb_atc_staged_push_ci.py` checks this **entire source workflow inventory**, rejects an unbounded newly added push trigger, and tests the four specific exclusions.
+
+**Historical-base defense:** merely fixing the current workflow files is insufficient. W2 accepts a candidate whose `base_sha` is an ancestor of `main`; an older base might still contain the original unbounded triggers. Before generating any publication token, the broker's bare-Git preflight requires the `.github/workflows` **tree object ID** to be identical at `base_sha`, the exact candidate `head_sha`, and its checked trusted `main_sha`. The previous ban on candidate changes to `.github/**` remains in place. A candidate may lag main on ordinary source changes but **must refresh its base** if any workflow tree differs, or publication fails closed. The new regression executes the actual shell guard against real local Git histories: current-policy sources pass; a pre-isolation base or altered candidate workflow tree rejects. The broker never checks out or executes candidate code.
+
+This is a **source-only G1 mitigation**, not yet runtime commissioning evidence. It has not demonstrated GitHub's actual branch-trigger behavior or the absence of workflow fanout after a controlled staged push; record a separately authorized, safe negative push probe and inspect Actions runs before the first W2 broker publish. It also does not prove cross-workflow, direct PR, or privileged environment isolation: `repository_dispatch` stage registration uses trusted main and the FSEM `workflow_run` recovery uses trusted base code, but those controllers retain their own boundaries.
+
+## G2 admitted-PR and privileged execution gate remains mandatory
+
+A staged branch later admitted as a PR can still cause ordinary PR-triggered workflows to evaluate worker-modifiable code. In particular the Darwin release workflow can execute candidate-editable release scripts in its `macos-release` environment. Before any admitted worker PR, independently audit all PR workflows, inherited historical workflow definitions, effective Actions token scopes and environment secret/approval restrictions. Do not treat G1 source safeguards as evidence that this G2 trust boundary is closed.
+
+Both G1 live confirmation and G2 containment are tracked in mandatory pre-activation [W2-CI issue #1935](https://github.com/abiggerhammer/phil/issues/1935). Even if this G1 source patch merges, **all W2 publish gates remain OFF until the independent CI and identity commissioning work is accepted**. No broker key, worker App token, staged ref or live worker proposal is used for these static tests.
 
 The path and mode guards describe only the **base-to-tip net diff**: a proposed commit series could temporarily add then remove a prohibited path. Root `.gitattributes` and `.gitmodules` are forbidden, but nested attribute files are not fully excluded by this guard. A stronger per-commit and nested-path policy must be reviewed if needed for the pilot. The source remains unexecuted in the broker itself.
 
