@@ -173,6 +173,11 @@ def validate_plan(binding: dict, *, base_sha: str, head_sha: str,
                  "unowned/ambiguous same-lane candidate issue")
             if "atc: staged" in states:
                 raise ValueError("lane has an existing staged candidate issue")
+            creator = issue.get("user")
+            deny(isinstance(creator, dict) and
+                 creator.get("login") == "github-actions[bot]" and
+                 type(creator.get("id")) is int and creator["id"] > 0,
+                 "active candidate issue was not created by trusted ATC bot")
             active += 1
             deny(active <= 1, "lane has multiple active admitted candidates")
 
