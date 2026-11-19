@@ -3,6 +3,9 @@ name:               phil-core
 version:            0.0.1.0
 synopsis:           Bootstrap executable kernel for the Phil Core checker
 build-type:          Simple
+extra-source-files:
+  test/fixtures/fsem01-rec01-source-record-v1/accepted-full.phil
+  test/fixtures/fsem01-rec02a-record-origin-v1/accepted.tsv
 
 data-files:
     examples/upload/*.phil
@@ -41,6 +44,7 @@ library
       Phil.Core.Recognition
       Phil.Core.SortCheck
       Phil.Core.Static
+      Phil.Core.IdentityKeys
       Phil.Core.Refinement
       Phil.Core.Focusing
       Phil.Core.Decision
@@ -243,6 +247,7 @@ library
       Phil.Surface.GrammarV1.SourceNestedProductElimination
       Phil.Surface.GrammarV1.SourceRecursiveProductElimination
       Phil.Surface.GrammarV1.SourceRecordFieldDisposition
+      Phil.Surface.GrammarV1.RecordSourceIdentity
       Phil.Surface.GrammarV1.SourceIfJoinResource
       Phil.Surface.GrammarV1.SourceAffineIfJoinResource
       Phil.Surface.GrammarV1.SourceScopedBorrowJoin

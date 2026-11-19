@@ -25,6 +25,7 @@ module Phil.Core.Syntax
   ) where
 
 import Data.Text (Text)
+import Phil.Core.IdentityKeys (DeclarationKey, InterfaceRevision)
 
 newtype Name = Name { unName :: Text }
   deriving (Eq, Ord, Show)
@@ -92,6 +93,7 @@ data Ty
   | TyValidated Text Name Name
   | TyEndpoint Session
   | TyProduct [ProductElementType]
+  | TyRecordNominal DeclarationKey InterfaceRevision
   | TyRefined Name Ty Proposition
   | TyOpaque Text
   | TyOpaqueSorted Text RefSort

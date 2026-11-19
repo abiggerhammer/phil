@@ -320,5 +320,6 @@ checkedCoreTypeMode ty
       TyRefined _ base _ -> checkedCoreTypeMode base
       TyFrame _ -> Nothing
       TyValidated _ _ _ -> Nothing
+      TyRecordNominal _ _ -> Nothing
       TyOpaque _ -> Nothing
       TyOpaqueSorted _ _ -> Nothing
