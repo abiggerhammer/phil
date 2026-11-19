@@ -10,12 +10,16 @@
     "phase2-selfhost": {
       "enabled": false,
       "source_repository": null,
-      "source_owner": null
+      "source_owner": null,
+      "source_repository_id": null,
+      "source_owner_id": null
     },
     "phase2-embedded": {
       "enabled": false,
       "source_repository": null,
-      "source_owner": null
+      "source_owner": null,
+      "source_repository_id": null,
+      "source_owner_id": null
     }
   },
   "note": "No live lane is authorized; enable an exact source fork with an independently reviewed policy change before any credential-bearing broker publication."
