@@ -446,18 +446,19 @@ Proof.
     split; [exact HnodupR |].
     split.
     + intros k Hk; right; apply Hsubset; exact Hk.
-    + repeat split.
-      * exact Hdistinct.
+    + split; [exact Hdistinct |].
+      split.
       * apply (proj2 (live_after_issue n issued retired owner HfreshR)).
         right; exact Howner.
-      * apply (proj2 (live_after_issue n issued retired n HfreshR)).
-        left; reflexivity.
-      * intros k Hlive.
-        apply (proj1 (live_after_issue n issued retired k HfreshR))
-          in Hlive.
-        destruct Hlive as [Heq | Hold].
-        -- right; exact Heq.
-        -- left; apply Honly; exact Hold.
+      * split.
+        -- apply (proj2 (live_after_issue n issued retired n HfreshR)).
+           left; reflexivity.
+        -- intros k Hlive.
+           apply (proj1 (live_after_issue n issued retired k HfreshR))
+             in Hlive.
+           destruct Hlive as [Heq | Hold].
+           ++ right; exact Heq.
+           ++ left; apply Honly; exact Hold.
   - (* Digest accepted: two live origins are preserved. *)
     repeat split; assumption.
   - (* Digest rejected: same live identities. *)
@@ -470,9 +471,9 @@ Proof.
       * intros k [Heq | Hk].
         -- subst; exact (proj1 Hloan).
         -- apply Hsubset; exact Hk.
-      * repeat split.
-        -- exact Hdistinct.
-        -- now left.
+      * split; [exact Hdistinct |].
+        split; [now left |].
+        split.
         -- apply (proj2 (live_after_retire issued retired loan owner)).
            split; [exact Howner | exact Hdistinct].
         -- intros k Hlive.
@@ -499,22 +500,30 @@ Proof.
     repeat split; assumption.
 Qed.
 
+Theorem reachable_lifecycle_valid :
+  forall s target,
+    selected_steps s target ->
+    canonical_lifecycle s ->
+    canonical_lifecycle target.
+Proof.
+  intros s target Hsteps.
+  induction Hsteps; intros Hvalid.
+  - exact Hvalid.
+  - apply IHHsteps.
+    eapply canonical_lifecycle_step; eauto.
+Qed.
+
 Theorem canonical_lifecycle_reachable :
   forall target,
     selected_steps (Idle 0 [] []) target ->
     canonical_lifecycle target.
 Proof.
-  assert (Hinitial : canonical_lifecycle (Idle 0 [] [])).
-  { unfold canonical_lifecycle, valid_issue_ledger.
-    simpl; repeat split; try constructor.
-    - intros k H; inversion H.
-    - intros k [H _]; inversion H.
-  }
   intros target Hsteps.
-  induction Hsteps.
-  - exact Hinitial.
-  - apply IHHsteps.
-    eapply canonical_lifecycle_step; eauto.
+  eapply reachable_lifecycle_valid; [exact Hsteps |].
+  unfold canonical_lifecycle, valid_issue_ledger.
+  simpl; repeat split; try constructor.
+  - intros k H; inversion H.
+  - intros k [H _]; inversion H.
 Qed.
 
 Theorem reachable_digest_has_live_exact_owner_and_loan :
@@ -526,7 +535,9 @@ Proof.
   intros n issued retired owner loan Hreach.
   pose proof (canonical_lifecycle_reachable _ Hreach)
     as [_ [_ [_ Hphase]]].
-  exact Hphase.
+  destruct Hphase as [Hdistinct [Howner [Hloan _]]].
+  split; [exact Hdistinct |].
+  split; [exact Howner | exact Hloan].
 Qed.
 
 Theorem reachable_close_has_live_loan :
@@ -543,7 +554,10 @@ Proof.
   pose proof (canonical_lifecycle_reachable _ Hreach)
     as [_ [_ [_ Hphase]]].
   destruct Hphase as [Hdistinct [Howner [Hloan _]]].
-  repeat split; try constructor; assumption || exact (proj2 Hloan).
+  split; [constructor |].
+  split; [exact Hdistinct |].
+  split; [exact Howner |].
+  split; [exact Hloan | exact (proj2 Hloan)].
 Qed.
 
 Theorem reachable_release_is_exactly_once :
@@ -561,9 +575,11 @@ Proof.
   pose proof (canonical_lifecycle_reachable _ Hreach)
     as [_ [HnodupR [_ Hphase]]].
   destruct Hphase as [_ [Hloan [Howner _]]].
-  repeat split; try constructor; auto.
-  - exact (proj2 Howner).
-  - constructor; [exact (proj2 Howner) | exact HnodupR].
+  split.
+  - constructor.
+  - split; [exact Hloan |].
+    split; [exact (proj2 Howner) |].
+    constructor; [exact (proj2 Howner) | exact HnodupR].
 Qed.
 
 Theorem reachable_unit_has_no_live_resource :
