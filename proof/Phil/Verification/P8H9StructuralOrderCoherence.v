@@ -555,6 +555,87 @@ Example p8_h9_duplicate_keys_not_adjacent :
       (P8D2FieldCons [97] (P8D2Atom []) P8D2FieldNil)) = false.
 Proof. reflexivity. Qed.
 
+(* Disjoint total trichotomy follows from the actual comparator's
+   three constructors, mutual Eq reflection and sign reversal. *)
+Theorem p8_h9_compare_form_trichotomy :
+  forall f g,
+    (p8_d2_compare_form f g = Lt /\
+     p8_d2_compare_form g f = Gt) \/
+    f = g \/
+    (p8_d2_compare_form f g = Gt /\
+     p8_d2_compare_form g f = Lt).
+Proof.
+  intros f g.
+  destruct (p8_d2_compare_form f g) eqn:Cmp.
+  - right. left. apply p8_h9_compare_form_eq_reflect. exact Cmp.
+  - left. split.
+    + exact Cmp.
+    + pose proof (p8_h9_compare_form_reversal f g) as Reverse.
+      rewrite Cmp in Reverse.
+      destruct (p8_d2_compare_form g f); simpl in Reverse;
+        try discriminate; reflexivity.
+  - right. right. split.
+    + exact Cmp.
+    + pose proof (p8_h9_compare_form_reversal f g) as Reverse.
+      rewrite Cmp in Reverse.
+      destruct (p8_d2_compare_form g f); simpl in Reverse;
+        try discriminate; reflexivity.
+Qed.
+
+Theorem p8_h9_compare_forms_trichotomy :
+  forall fs gs,
+    (p8_d2_compare_forms fs gs = Lt /\
+     p8_d2_compare_forms gs fs = Gt) \/
+    fs = gs \/
+    (p8_d2_compare_forms fs gs = Gt /\
+     p8_d2_compare_forms gs fs = Lt).
+Proof.
+  intros fs gs.
+  destruct (p8_d2_compare_forms fs gs) eqn:Cmp.
+  - right. left. apply p8_h9_compare_forms_eq_reflect. exact Cmp.
+  - left. split.
+    + exact Cmp.
+    + pose proof (p8_h9_compare_forms_reversal fs gs) as Reverse.
+      rewrite Cmp in Reverse.
+      destruct (p8_d2_compare_forms gs fs); simpl in Reverse;
+        try discriminate; reflexivity.
+  - right. right. split.
+    + exact Cmp.
+    + pose proof (p8_h9_compare_forms_reversal fs gs) as Reverse.
+      rewrite Cmp in Reverse.
+      destruct (p8_d2_compare_forms gs fs); simpl in Reverse;
+        try discriminate; reflexivity.
+Qed.
+
+Theorem p8_h9_compare_fields_trichotomy :
+  forall fs gs,
+    (p8_d2_compare_fields fs gs = Lt /\
+     p8_d2_compare_fields gs fs = Gt) \/
+    fs = gs \/
+    (p8_d2_compare_fields fs gs = Gt /\
+     p8_d2_compare_fields gs fs = Lt).
+Proof.
+  intros fs gs.
+  destruct (p8_d2_compare_fields fs gs) eqn:Cmp.
+  - right. left. apply p8_h9_compare_fields_eq_reflect. exact Cmp.
+  - left. split.
+    + exact Cmp.
+    + pose proof (p8_h9_compare_fields_reversal fs gs) as Reverse.
+      rewrite Cmp in Reverse.
+      destruct (p8_d2_compare_fields gs fs); simpl in Reverse;
+        try discriminate; reflexivity.
+  - right. right. split.
+    + exact Cmp.
+    + pose proof (p8_h9_compare_fields_reversal fs gs) as Reverse.
+      rewrite Cmp in Reverse.
+      destruct (p8_d2_compare_fields gs fs); simpl in Reverse;
+        try discriminate; reflexivity.
+Qed.
+
+Print Assumptions p8_h9_compare_form_trichotomy.
+Print Assumptions p8_h9_compare_forms_trichotomy.
+Print Assumptions p8_h9_compare_fields_trichotomy.
+
 Print Assumptions p8_h9_member_less_transitive.
 Print Assumptions p8_h9_member_less_all_transitive.
 Print Assumptions p8_h9_adjacent_implies_pairwise_members.
