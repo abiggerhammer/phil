@@ -14,11 +14,13 @@ STEPS = (
     "Compile source correspondence, representation bridges, and grouping consumers",
     "Compile new generic-requirement modules with all warnings enabled",
     "Check recursive grouping and carrier composition theorem assumptions",
+    "Record source representation and recursive grouping identities",
 )
 MODULES = (
     "GrammarAstGenericRequirementRecursiveGroupingSpine",
     "GrammarAstGenericRequirementRecursiveGroupingSpineTotality",
     "GrammarAstGenericRequirementRecursiveGroupingExamples",
+    "GrammarAstRecordDataRecursiveGroupingProductionObservables",
 )
 
 
@@ -79,6 +81,9 @@ def main() -> None:
         print(f"CI-exact preflight: {name}", flush=True)
         subprocess.run(["bash", "-euo", "pipefail", "-c", step_script(lines, name)],
                        check=True)
+    # Verify the authoritative identity manifest against exact source/object outputs.
+    subprocess.run(["sha256sum", "-c",
+                    "surface-grammar-ast-representation/identities.sha256"], check=True)
     for name in MODULES:
         path = Path("proof/Phil/Surface") / (name + ".v")
         data = path.read_bytes()
