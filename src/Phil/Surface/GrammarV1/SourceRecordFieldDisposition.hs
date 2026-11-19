@@ -45,7 +45,6 @@ import Phil.Surface.GrammarV1.ParameterBodyScope
 import Phil.Surface.GrammarV1.Parser
   ( GrammarV1Block (..)
   , GrammarV1Declaration (..)
-  , GrammarV1Field (..)
   , GrammarV1FieldPattern (..)
   , GrammarV1FunctionDecl (..)
   , GrammarV1Pattern (..)
