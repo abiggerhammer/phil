@@ -9,7 +9,7 @@ import Data.Text (Text)
 import qualified Data.Text as Text
 import qualified Data.Text.IO as TextIO
 import Phil.Surface.SelectedSteveGetExecution
-import Phil.Surface.Syntax (SourceSpan (..), SourcePoint (..))
+import Phil.Core.Static (DeclarationKey (..), InstanceKey (..))
 import System.Exit (exitFailure)
 
 main :: IO ()
@@ -19,9 +19,9 @@ main = do
     Left problem -> die ("original source recheck failed: " ++ show problem)
     Right value -> pure value
   require "rechecked original source K" $
-    show (selectedDeclarationKey selected) == "DeclarationKey {unDeclarationKey = \"decl:steve.get\"}"
+    selectedDeclarationKey selected == DeclarationKey "decl:steve.get"
   require "rechecked original source I" $
-    show (selectedInstanceKey selected) == "InstanceKey {unInstanceKey = \"inst:phase1.steve\"}"
+    selectedInstanceKey selected == InstanceKey "inst:phase1.steve"
   mapM_ (rejectMutation original) mutations
 
   world <- newSelectedWorld
