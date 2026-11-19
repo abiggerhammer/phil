@@ -22,6 +22,7 @@ MODULES = (
     "GrammarAstGenericRequirementRecursiveGroupingExamples",
     "GrammarAstRecordDataRecursiveGroupingProductionObservables",
     "GrammarAstRecordDataRecursiveGroupingDerivedObservables",
+    "GrammarAstRecordDataRecursiveGroupingObservationSeparation",
 )
 
 
