@@ -15,6 +15,10 @@ import Phil.Core.DataDestruction
 import Phil.Core.Static
 import Phil.Core.Syntax
 import Phil.Core.Value (EqualityBoundary (..), compareTypes)
+import Phil.Surface.Check (SurfaceEnvironment (..), SurfaceCheckError (..), RejectionClass (..), checkSurfaceComponent, emptySurfaceEnvironment)
+import Phil.Surface.Check.Support (messageMode)
+import Phil.Surface.Parser (parseSurfaceFile)
+import Phil.Surface.Syntax (SurfaceFile (..))
 import Phil.Surface.GrammarV1.BinderScope
 import Phil.Surface.GrammarV1.RecordSourceIdentity
 
@@ -78,8 +82,32 @@ main = do
   mapM_ (\(mode,wrong) -> do
       wrongContext <- withOwner mode wrong
       assert "wrong native owner" (reject mismatch (eliminateCheckedRecord checked wrongContext)))
-    [(Affine,ty), (Linear,otherKey), (Linear,otherRevision), (Linear,TyOpaque "Packet")
+    [(Unrestricted,ty), (Affine,ty), (Linear,otherKey), (Linear,otherRevision), (Linear,TyOpaque "Packet")
     , (Linear,ownedFieldType field)]
+  let refined = TyRefined (Name "self") ty (Equal (RefNat 0) (RefNat 0))
+  parsed <- require (parseSurfaceFile "nominal-alias.phil" "component Drop(p: Packet) {}")
+  case parsed of
+    SurfaceFile [component] -> mapM_ (\alias ->
+      let environment = (emptySurfaceEnvironment emptyStaticContext)
+            { surfaceTypeAliases = Map.singleton "Packet" alias }
+      in assert "legacy alias and payload mode reject bare and refined nominal types"
+          (messageMode alias == Nothing &&
+            case checkSurfaceComponent environment component of
+              Left err -> surfaceErrorClass err == TypeMismatch
+                && surfaceErrorDetail err == "nominal record requires a checked structural mode"
+              Right _ -> False)) [ty,refined]
+    _ -> fail "expected one parsed component"
+  refinedOwner <- withOwner Linear refined
+  assert "refined nominal rejects legacy field elimination"
+    (consumeAggregateFields owner [field] [(ownedFieldName field,FieldBound)] refinedOwner
+      == Left (NominalRecordRequiresTypedElimination owner))
+  wrongOwner <- withOwner Linear otherKey
+  assert "missing Linear disposition precedes wrong-owner lookup"
+    (consumeNominalRecordFields key owner [(field,Nothing)] wrongOwner
+      == Left (MissingLinearFieldDisposition (ownedFieldName field)))
+  assert "changed field mode is rejected"
+    (consumeNominalRecordFields key owner [(tag {ownedFieldMode = Affine},Nothing),(field,Just returned)] context
+      == Left NominalRecordSchemaUnsupported)
   unrelated <- require (Core.insertBinding Linear (Name "other") ty Core.emptyContext)
   assert "same type under unrelated owner"
     (reject (RecordNativeRejection (DataDestructionContextError (Core.UnknownBinding owner)))
@@ -114,6 +142,31 @@ main = do
       changedManifest = replace (ASCII.pack (digest source)) (ASCII.pack (digest changed)) manifest
   assert "independently selected source with wrong parameter reference"
     (reject RecordNominalReferenceMismatch (check (changed,changedManifest) (changed,changedManifest)))
+  let checkSelected nextSource =
+        let nextManifest = replace (ASCII.pack (digest source)) (ASCII.pack (digest nextSource)) manifest
+        in check (nextSource,nextManifest) (nextSource,nextManifest)
+  (header, recordRow, functionRow) <- case ASCII.lines manifest of
+    [a,b,c] -> pure (a,b,c)
+    _ -> fail "expected three manifest rows"
+  mapM_ (\(label, expected, manifestMutation) ->
+      assert label (reject expected (withManifest manifestMutation)))
+    [ ("stale source commitment", SelectedOriginMismatch, replace (ASCII.pack (digest source)) "stale")
+    , ("unsupported format", MalformedRecordManifest, replace "phil-record-origin-v1" "phil-record-origin-v2")
+    , ("unsupported grammar", MalformedRecordManifest, replace "grammar-v1" "grammar-v2")
+    , ("omitted row", MalformedRecordManifest, const (ASCII.unlines [header, recordRow]))
+    , ("additional row", MalformedRecordManifest, (<> functionRow <> "\n"))
+    , ("swapped rows", MalformedRecordManifest, const (ASCII.unlines [header, functionRow, recordRow]))
+    , ("reversed span", MalformedRecordManifest, replace "\t60\t179" "\t179\t60")
+    , ("nested span", RecordDeclarationSitesMismatch, replace "\t60\t179" "\t1\t58")
+    , ("phantom end offset", RecordDeclarationSitesMismatch, replace "\t60\t179" "\t60\t180")
+    , ("manifest UTF-8", MalformedRecordManifest, (<> Bytes.singleton 255))
+    ]
+  assert "source UTF-8" (reject MalformedRecordSourceEncoding (checkSelected (Bytes.cons 255 source)))
+  assert "malformed source syntax" $ case checkSelected (replace "record" "recxrd" source) of
+    Left (MalformedRecordSource _) -> True
+    _ -> False
+  assert "wrong pattern constructor"
+    (reject RecordNominalReferenceMismatch (checkSelected (replace "let Packet" "let Foobar" source)))
   let wrongKey = replace "decl.fsem01.rec02a.packet" "decl.fsem01.rec02a.other" manifest
   assert "a copied declaration's different key cannot replace the independently selected manifest"
     (reject SelectedOriginMismatch (checkPinned (source,wrongKey)))

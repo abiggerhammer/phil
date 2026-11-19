@@ -304,22 +304,25 @@ resolveSurfaceType environment state surfaceTy =
       let ty = case elaborated of
             TyOpaque alias -> Map.findWithDefault elaborated alias (surfaceTypeAliases environment)
             _ -> elaborated
-      Right (defaultMode ty, ty, shapeForType ty)
+      mode <- maybe (throw surfaceTy TypeMismatch "nominal record requires a checked structural mode") Right (defaultMode ty)
+      Right (mode, ty, shapeForType ty)
   where
     opaque mode = do
       ty <- mapElaboration surfaceTy $
         elaborateType (elaborationEnv environment state) surfaceTy
       Right (mode, ty, PlainShape)
 
-defaultMode :: Ty -> Mode
+defaultMode :: Ty -> Maybe Mode
 defaultMode ty = case ty of
-  TyEndpoint _ -> Linear
-  TyPendingRecv _ -> Linear
-  _ -> Unrestricted
+  TyEndpoint _ -> Just Linear
+  TyPendingRecv _ -> Just Linear
+  _ -> case stripRefinement ty of
+    TyRecordNominal _ _ -> Nothing
+    _ -> Just Unrestricted
 
-messageMode :: Ty -> Mode
+messageMode :: Ty -> Maybe Mode
 messageMode ty = case stripRefinement ty of
-  TyBytes _ -> Linear
+  TyBytes _ -> Just Linear
   other -> defaultMode other
 
 stripRefinement :: Ty -> Ty

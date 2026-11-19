@@ -232,10 +232,11 @@ materializeBinder staticContext binderTable state resolved
             (locatedValue rewrittenType)
         )
       (ty, _) <- mapLeft GrammarV1ProtocolGuardTypeFocusingError checkedType
+      mode <- maybe (Left (GrammarV1ProtocolGuardTypeCheckNonCompetent rewrittenType)) Right (messageMode ty)
       nextSurface <- mapLeft GrammarV1ProtocolGuardBindingInsertError $
         grammarV1InsertSemanticBinding
           resolved
-          (BindingMeta (messageMode ty) ty (shapeForType ty))
+          (BindingMeta mode ty (shapeForType ty))
           (guardBuildSurfaceState withDependencies)
       Right withDependencies
         { guardBuildSurfaceState = nextSurface

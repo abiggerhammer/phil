@@ -50,12 +50,13 @@ not certify the `satisfies` clause.
 | `Core.SortCheck` | `refSortOfTy` gives no logical sort. `checkTypeSortsWith` has no embedded terms to sort at this leaf. |
 | `Surface.GrammarV1.CheckedType` | A bare nominal type supplies no structural mode. |
 | `Core.DataDestruction` | Native use retrieves the actual owner type and mode. The typed path recomputes I from declared field labels, order, types and modes before comparing actual K/I and Linear mode. The legacy route rejects nominal records, including a refined nominal base. |
+| `Surface.GrammarV1.ProtocolGuardChecking` | The guard binder treats absent message mode as outside its checked fragment. |
 | `Core.DataMode` | Product elimination already requires an actual product. |
 | `Core.Protocol.MessageAdmissibility` | Nominal records obtain no intrinsic Message fact. Explicit boundary evidence remains subject to the existing authority contract. |
-| `Surface.Check.Engine` and `Surface.Check.Support` | Existing leaf defaults introduce no term subjects or field projections for the nominal constructor. REC-02B integration remains a separate gate. |
+| `Surface.Check.Engine` and `Surface.Check.Support` | Legacy aliases and receive/offer payload admission reject nominal and refined-nominal types when deriving a structural mode. Existing leaf defaults introduce no term subjects or field projections. REC-02B integration remains a separate gate. |
 
 Native Core checks the requested owner name, active loans, destination
-freshness and exact successor bindings. Failure returns no successor context.
+freshness and exact successor bindings. Pure schema and disposition validation precedes the owner lookup. A malformed plan can therefore determine the diagnostic even when the owner is wrong. Failure returns no successor context.
 The supplied context must be the current checked native context. Because
 `ResourceContext` is a pure value, the API cannot invalidate retained copies
 of a pre-transition context. The replay regression supplies the actual
