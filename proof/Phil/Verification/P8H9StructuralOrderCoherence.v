@@ -1,4 +1,4 @@
-From Coq Require Import List Bool Arith.PeanoNat Lia.
+From Stdlib Require Import List Bool Arith.PeanoNat Lia.
 From Phil.Verification Require Import P8D2StructuralOrderModel P8H8UnicodeScalarOrder.
 Import ListNotations.
 
