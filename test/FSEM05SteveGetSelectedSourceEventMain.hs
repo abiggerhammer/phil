@@ -9,7 +9,9 @@ import Data.Text (Text)
 import qualified Data.Text as Text
 import qualified Data.Text.IO as TextIO
 import Phil.Surface.SelectedSteveGetExecution
-import Phil.Core.Static\n  ( DeclarationKey (..), InstanceKey (..)\n  , InterfaceRevision (..), DefinitionRevision (..) )
+import Phil.Core.Static
+  ( DeclarationKey (..), InstanceKey (..)
+  , InterfaceRevision (..), DefinitionRevision (..) )
 import System.Exit (exitFailure)
 
 main :: IO ()
