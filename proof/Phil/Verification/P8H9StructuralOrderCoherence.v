@@ -210,6 +210,49 @@ Proof.
       apply p8_h9_compare_fields_reflexive.
 Defined.
 
+(* A comparator result of Eq reflects actual constructor equality, down
+   every recursive form, ordered/unordered list and named field sequence. *)
+Fixpoint p8_h9_compare_form_eq_reflect (f : P8D2Form) {struct f} :
+  forall g, p8_d2_compare_form f g = Eq -> f = g
+with p8_h9_compare_forms_eq_reflect (fs : P8D2Forms) {struct fs} :
+  forall gs, p8_d2_compare_forms fs gs = Eq -> fs = gs
+with p8_h9_compare_fields_eq_reflect (fs : P8D2Fields) {struct fs} :
+  forall gs, p8_d2_compare_fields fs gs = Eq -> fs = gs.
+Proof.
+  - destruct f as [bytes | fs | fs | fs]; intros g H;
+      destruct g as [other | gs | gs | gs]; simpl in H;
+      try discriminate.
+    + apply p8_h9_compare_bytes_eq_iff in H. subst. reflexivity.
+    + apply p8_h9_compare_forms_eq_reflect in H. subst. reflexivity.
+    + apply p8_h9_compare_forms_eq_reflect in H. subst. reflexivity.
+    + apply p8_h9_compare_fields_eq_reflect in H. subst. reflexivity.
+  - destruct fs as [| first rest]; intros gs H;
+      destruct gs as [| second rest']; simpl in H;
+      try discriminate.
+    + reflexivity.
+    + destruct (p8_d2_compare_form first second) eqn:First;
+        try discriminate.
+      apply p8_h9_compare_form_eq_reflect in First.
+      apply p8_h9_compare_forms_eq_reflect in H.
+      subst. reflexivity.
+  - destruct fs as [| key value rest]; intros gs H;
+      destruct gs as [| key' value' rest']; simpl in H;
+      try discriminate.
+    + reflexivity.
+    + destruct (p8_d2_compare_bytes key key') eqn:Key;
+        try discriminate.
+      destruct (p8_d2_compare_form value value') eqn:Value;
+        try discriminate.
+      apply p8_h9_compare_bytes_eq_iff in Key.
+      apply p8_h9_compare_form_eq_reflect in Value.
+      apply p8_h9_compare_fields_eq_reflect in H.
+      subst. reflexivity.
+Defined.
+
+Print Assumptions p8_h9_compare_form_eq_reflect.
+Print Assumptions p8_h9_compare_forms_eq_reflect.
+Print Assumptions p8_h9_compare_fields_eq_reflect.
+
 Print Assumptions p8_h9_compare_form_reflexive.
 Print Assumptions p8_h9_compare_forms_reflexive.
 Print Assumptions p8_h9_compare_fields_reflexive.
