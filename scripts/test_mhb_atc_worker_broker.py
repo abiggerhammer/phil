@@ -262,7 +262,7 @@ class WorkerBrokerTests(unittest.TestCase):
         self.assertEqual(got["decision"], "validated-read-only-plan")
         forged = copy.deepcopy(accepted)
         forged["user"]["login"] = "attacker"
-        with self.assertRaisesRegex(ValueError, "trusted ATC bot"):
+        with self.assertRaisesRegex(ValueError, "untrusted candidate creator"):
             plan(self.f, issues=[forged])
         second = candidate_issue(n=102, candidate="other", lifecycle="atc: admitting")
         with self.assertRaisesRegex(ValueError, "multiple active"):
