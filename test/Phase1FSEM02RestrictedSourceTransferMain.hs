@@ -1467,9 +1467,8 @@ dualStaleCloseRepairDiamond accepted senderOnly receiverOnly both = do
   -- location-bearing parsed declaration can be compared exactly.
   assert (bothSender == badSender && receiverFixtureSender == fxSender fx)
     "dual stale-Close sender declarations changed unexpectedly"
-  -- Both receiver variants are parsed below; source-exactness above is the
-  -- invariant for their unchanged contents across shifted source offsets.
-  let _parsedBothReceiver = bothReceiver
+  -- Source-exactness above covers the unchanged receiver contents across
+  -- shifted source offsets; both parsed variants are exercised below.
   let replay sender receiver = checked fx sender receiver (fxBefore fx)
       expectBadSender actual =
         case actual of
@@ -1492,7 +1491,7 @@ dualStaleCloseRepairDiamond accepted senderOnly receiverOnly both = do
   expectBadReceiver (replay (fxSender fx) badReceiver)
   assert (replay badSender badReceiver == replay bothSender bothReceiver
        && replay (fxSender fx) (fxReceiver fx)
-          == replay receiverFixtureSender senderFixtureReceiver)
+          == replay receiverFixtureSender (fxReceiver fx))
     "source repair replay changed pure refusal or accepted transition"
   acceptedReplay fx
 
