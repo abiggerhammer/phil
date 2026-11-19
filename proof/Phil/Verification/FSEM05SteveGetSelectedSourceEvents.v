@@ -459,10 +459,12 @@ Proof.
            destruct Hlive as [Heq | Hold].
            ++ right; exact Heq.
            ++ left; apply Honly; exact Hold.
-  - (* Digest accepted: two live origins are preserved. *)
-    repeat split; assumption.
-  - (* Digest rejected: same live identities. *)
-    repeat split; assumption.
+  - (* Digest accepted: preserve the entire phase lifetime proposition. *)
+    split; [exact HnodupR |].
+    split; [exact Hsubset | exact Hphase].
+  - (* Digest rejected: preserve the same two live identities. *)
+    split; [exact HnodupR |].
+    split; [exact Hsubset | exact Hphase].
   - (* Close: loan retired once, owner is the only survivor. *)
     destruct Hphase as [Hdistinct [Howner [Hloan Honly]]].
     split.
