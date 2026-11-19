@@ -169,7 +169,7 @@ Proof.
     + apply Nat.compare_eq_iff in CmpAC. subst c.
       eapply IH; eassumption.
     + reflexivity.
-    + rewrite CmpAC in Hyz. discriminate.
+    + discriminate.
   - apply Nat.compare_lt_iff in CmpAB.
     destruct (Nat.compare b c) eqn:CmpBC; simpl in Hyz;
       try discriminate.
