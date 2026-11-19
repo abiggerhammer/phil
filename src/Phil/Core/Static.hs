@@ -55,6 +55,7 @@ import qualified Data.Set as Set
 import Data.Text (Text)
 import qualified Data.Text as Text
 import Phil.Core.SortCheck (SortError, validateRefSort)
+import Phil.Core.IdentityKeys (DeclarationKey (..), InterfaceRevision (..))
 import Phil.Core.Syntax
   ( Name
   , Proposition
@@ -92,12 +93,6 @@ data SemanticForm
   | SemanticOrdered [SemanticForm]
   | SemanticUnordered (Set.Set SemanticForm)
   | SemanticRecord (Map.Map Text SemanticForm)
-  deriving (Eq, Ord, Show)
-
-newtype DeclarationKey = DeclarationKey { unDeclarationKey :: Text }
-  deriving (Eq, Ord, Show)
-
-newtype InterfaceRevision = InterfaceRevision { unInterfaceRevision :: Text }
   deriving (Eq, Ord, Show)
 
 newtype DefinitionRevision = DefinitionRevision { unDefinitionRevision :: Text }

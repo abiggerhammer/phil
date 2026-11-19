@@ -356,6 +356,7 @@ substituteTyTerm target replacement ty =
                 renamed = substituteProposition binder (RefVar fresh) proposition
             Right (TyRefined fresh inner' (substituteProposition target replacement renamed))
           else Right (TyRefined binder inner' (substituteProposition target replacement proposition))
+    TyRecordNominal _ _ -> Right ty
     TyOpaque name -> Right (TyOpaque name)
     TyOpaqueSorted name sort -> Right (TyOpaqueSorted name sort)
   where
@@ -442,6 +443,7 @@ tyNames ty =
     TyProduct elements -> Set.unions (map (tyNames . productElementType) elements)
     TyRefined binder inner proposition ->
       Set.insert binder (tyNames inner `Set.union` propositionNames proposition)
+    TyRecordNominal _ _ -> Set.empty
     TyOpaque _ -> Set.empty
     TyOpaqueSorted _ _ -> Set.empty
 

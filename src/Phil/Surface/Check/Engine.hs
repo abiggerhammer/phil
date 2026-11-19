@@ -2299,8 +2299,10 @@ evalReceiveWithBinding environment state located surfaceMessage endpointExpressi
   step <- instantiateSurfaceMessageStep located actual rawStep
   let state2 = applySessionContext endpoint (stepContext step) state1
   (successor, state3) <- extractLinearTemp (locatedSpan located) temp state2
+  mode <- maybe (throw located TypeMismatch "nominal payload requires a checked structural mode") Right
+    (messageMode (messageType message))
   let received = ScalarValue
-        (messageMode (messageType message))
+        mode
         (messageType message)
         (shapeForType (messageType message))
   Right
@@ -3161,10 +3163,12 @@ bindOfferPayload
   -> SurfaceState
   -> Either SurfaceCheckError SurfaceState
 bindOfferPayload _ Nothing [] state = Right state
-bindOfferPayload located (Just message) [name] state =
+bindOfferPayload located (Just message) [name] state = do
+  mode <- maybe (throw located TypeMismatch "nominal payload requires a checked structural mode") Right
+    (messageMode (messageType message))
   insertBindingMeta (locatedSpan located) name
     (BindingMeta
-      (messageMode (messageType message))
+      mode
       (messageType message)
       (shapeForBinding name (shapeForType (messageType message))))
     state

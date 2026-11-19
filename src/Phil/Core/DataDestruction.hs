@@ -1,3 +1,5 @@
+{-# LANGUAGE OverloadedStrings #-}
+
 module Phil.Core.DataDestruction
   ( OwnedField (..)
   , FieldDisposition (..)
@@ -6,6 +8,8 @@ module Phil.Core.DataDestruction
   , checkOwnedFieldSchema
   , checkFieldDispositions
   , checkAggregateDisposition
+  , nominalRecordIdentity
+  , consumeNominalRecordFields
   , consumeAggregateFields
   ) where
 
@@ -13,6 +17,7 @@ import Control.Monad (foldM, unless)
 import Data.List (nub)
 import Data.Map.Strict (Map)
 import qualified Data.Map.Strict as Map
+import qualified Data.Text as Text
 import Phil.Core.Context
   ( CheckError
   , ResourceContext (..)
@@ -20,7 +25,11 @@ import Phil.Core.Context
   , useBinding
   )
 import qualified Phil.Core.DataEliminationKernelBridge as KernelBridge
-import Phil.Core.Syntax (Mode (..), Name, Ty)
+import Phil.Core.Static
+  ( DeclarationDescriptor (..), DeclarationIdentity (..), DeclarationKey
+  , DeclarationPresentation (..), SemanticForm (..), deriveDeclarationIdentity
+  )
+import Phil.Core.Syntax (Mode (..), Name (..), RefTerm (..), Ty (..))
 
 data OwnedField = OwnedField
   { ownedFieldName :: Name
@@ -47,6 +56,9 @@ data DataDestructionError
   | MissingLinearFieldDisposition Name
   | DataDestructionContextError CheckError
   | AggregateEliminationRequiresRestrictedOwner Name
+  | NominalRecordSchemaUnsupported
+  | NominalRecordOwnerMismatch Name
+  | NominalRecordRequiresTypedElimination Name
   | ImplicitPartialRemainderRejected
   | CertifiedDataEliminationKernelDisagreement
   deriving (Eq, Show)
@@ -103,12 +115,78 @@ consumeAggregateFields
   -> [(Name, FieldDisposition)]
   -> ResourceContext
   -> Either DataDestructionError ResourceContext
-consumeAggregateFields aggregateName fields dispositions context = do
+consumeAggregateFields = consumeFields rejectNominal
+  where
+    rejectNominal name _ ty = case ty of
+      TyRecordNominal _ _ -> Left (NominalRecordRequiresTypedElimination name)
+      TyRefined _ base _ -> rejectNominal name Unrestricted base
+      _ -> Right ()
+
+-- | Derive the interface from the ordered public schema. This checks the
+-- bounded representation, while origin of the schema and key is a caller
+-- premise at Core level.
+nominalRecordIdentity
+  :: DeclarationKey -> [OwnedField] -> Either DataDestructionError DeclarationIdentity
+nominalRecordIdentity key fields = do
+  checkOwnedFieldSchema fields
+  unless (length (filter ((== Linear) . ownedFieldMode) fields) == 1) $
+    Left NominalRecordSchemaUnsupported
+  semantics <- mapM fieldSemantics fields
+  let interface = SemanticOrdered
+        [SemanticAtom "closed-record-v1", SemanticAtom "Linear", SemanticOrdered semantics]
+  Right $ deriveDeclarationIdentity $
+    DeclarationDescriptor (DeclarationPresentation "" []) key interface interface
+  where
+    fieldSemantics (OwnedField (Name label) mode ty) = do
+      typeForm <- case (mode, ty) of
+        (Unrestricted, TyUnit) -> Right [SemanticAtom "Unit"]
+        (Unrestricted, TyBool) -> Right [SemanticAtom "Bool"]
+        (Unrestricted, TyUInt n) | n > 0 -> Right [SemanticAtom "U", number n]
+        (Linear, TyBytes (RefNat n)) | n >= 0 -> Right [SemanticAtom "Bytes", number n]
+        _ -> Left NominalRecordSchemaUnsupported
+      Right $ SemanticOrdered
+        [SemanticAtom label, SemanticAtom (Text.pack (show mode)), SemanticOrdered typeForm]
+    number :: Show a => a -> SemanticForm
+    number = SemanticAtom . Text.pack . show
+
+-- | Bind each original field to at most one fresh destination. The actual
+-- aggregate has to match the independently recomputed interface before
+-- the native transition can commit successor bindings.
+consumeNominalRecordFields
+  :: DeclarationKey
+  -> Name
+  -> [(OwnedField, Maybe Name)]
+  -> ResourceContext
+  -> Either DataDestructionError ResourceContext
+consumeNominalRecordFields key owner plan context = do
+  identity <- nominalRecordIdentity key (map fst plan)
+  checkFieldDispositions (map fst plan)
+    [(ownedFieldName field, FieldBound) | (field, Just _) <- plan]
+  let expected = TyRecordNominal key (identityInterfaceRevision identity)
+      checkOwner name mode actual =
+        unless (mode == Linear && actual == expected) $
+          Left (NominalRecordOwnerMismatch name)
+      destinations =
+        [field { ownedFieldName = destination } | (field, Just destination) <- plan]
+  unless (all ((/= owner) . ownedFieldName) destinations) $
+    Left (NominalRecordOwnerMismatch owner)
+  consumeFields checkOwner owner destinations
+    [(ownedFieldName field, FieldBound) | field <- destinations] context
+
+consumeFields
+  :: (Name -> Mode -> Ty -> Either DataDestructionError ())
+  -> Name
+  -> [OwnedField]
+  -> [(Name, FieldDisposition)]
+  -> ResourceContext
+  -> Either DataDestructionError ResourceContext
+consumeFields checkOwner aggregateName fields dispositions context = do
   checkFieldDispositions fields dispositions
   checkAggregateDisposition WholeAggregateConsumed
   dispositionMap <- buildDispositionMap dispositions
-  (aggregateMode, _, afterAggregate) <-
+  (aggregateMode, aggregateType, afterAggregate) <-
     mapLeft DataDestructionContextError $ useBinding aggregateName context
+  checkOwner aggregateName aggregateMode aggregateType
   case aggregateMode of
     Unrestricted -> Left (AggregateEliminationRequiresRestrictedOwner aggregateName)
     Affine -> Right ()
