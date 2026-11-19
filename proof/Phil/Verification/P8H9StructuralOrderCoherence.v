@@ -3,10 +3,11 @@ From Phil.Verification Require Import P8D2StructuralOrderModel P8H8UnicodeScalar
 Import ListNotations.
 
 (*
-  P8-H9: first pure mathematical preflight of the ORIGINAL D2 comparison.
-  This file deliberately does NOT claim the converse adjacent->pairwise
-  without a proof of comparator transitivity, nor native Text/Ord/Set/Map
-  execution, selected accepted-object transport, or Phase 1 certification.
+  P8-H9: candidate universal mathematical coherence proofs of the ORIGINAL
+  D2 comparator, constructor equality and local adjacent-vs-pairwise order.
+  Each statement requires exact-head hosted Rocq 9.2 validation before it
+  is authoritative. No native Text/Ord/Set/Map equivalence, selected-object
+  transport, or Phase 1 certification is asserted.
   Original D2 model definitions remain unchanged.
 *)
 
@@ -553,6 +554,86 @@ Example p8_h9_duplicate_keys_not_adjacent :
     (P8D2FieldCons [97] (P8D2Atom [])
       (P8D2FieldCons [97] (P8D2Atom []) P8D2FieldNil)) = false.
 Proof. reflexivity. Qed.
+
+
+(* Discriminating finite witnesses supplement, but never replace, the
+   universally quantified proofs above. The native Text/containers semantics
+   are not assumed. *)
+Example p8_h9_empty_and_prefix_cases :
+  p8_d2_compare_forms P8D2Nil P8D2Nil = Eq /\
+  p8_d2_compare_fields P8D2FieldNil P8D2FieldNil = Eq /\
+  p8_d2_compare_fields P8D2FieldNil
+    (P8D2FieldCons [0] (P8D2Atom []) P8D2FieldNil) = Lt.
+Proof. repeat split; reflexivity. Qed.
+
+Example p8_h9_nested_mixed_constructor_order :
+  p8_d2_compare_form
+    (P8D2Ordered (P8D2Cons (P8D2Unordered P8D2Nil) P8D2Nil))
+    (P8D2Ordered (P8D2Cons (P8D2Record P8D2FieldNil) P8D2Nil))
+    = Lt.
+Proof. reflexivity. Qed.
+
+Example p8_h9_record_key_before_nested_value :
+  p8_d2_compare_fields
+    (P8D2FieldCons [97]
+      (P8D2Ordered (P8D2Cons (P8D2Atom [122]) P8D2Nil))
+      P8D2FieldNil)
+    (P8D2FieldCons [98] (P8D2Atom [0]) P8D2FieldNil)
+    = Lt.
+Proof. reflexivity. Qed.
+
+Example p8_h9_record_equal_key_value_breaks_tie :
+  p8_d2_compare_fields
+    (P8D2FieldCons [97] (P8D2Atom [97]) P8D2FieldNil)
+    (P8D2FieldCons [97] (P8D2Atom [98]) P8D2FieldNil)
+    = Lt.
+Proof. reflexivity. Qed.
+
+Example p8_h9_record_equal_key_equal_value :
+  p8_d2_compare_fields
+    (P8D2FieldCons [97] (P8D2Atom [97]) P8D2FieldNil)
+    (P8D2FieldCons [97] (P8D2Atom [97]) P8D2FieldNil)
+    = Eq.
+Proof. reflexivity. Qed.
+
+Example p8_h9_three_members_adjacent_and_pairwise :
+  let xs := P8D2Cons (P8D2Atom [0])
+    (P8D2Cons (P8D2Atom [1])
+      (P8D2Cons (P8D2Atom [2]) P8D2Nil)) in
+  p8_h9_adjacent_members xs = true /\
+  p8_d2_strict_members xs = true.
+Proof. split; reflexivity. Qed.
+
+Example p8_h9_three_keys_adjacent_and_pairwise :
+  let xs := P8D2FieldCons [0] (P8D2Atom [])
+    (P8D2FieldCons [1] (P8D2Atom [])
+      (P8D2FieldCons [2] (P8D2Atom []) P8D2FieldNil)) in
+  p8_h9_adjacent_keys xs = true /\
+  p8_d2_strict_keys xs = true.
+Proof. split; reflexivity. Qed.
+
+Example p8_h9_duplicate_member_rejected_pairwise :
+  p8_d2_strict_members
+    (P8D2Cons (P8D2Atom [97])
+      (P8D2Cons (P8D2Atom [97]) P8D2Nil)) = false.
+Proof. reflexivity. Qed.
+
+(* Canonical UTF-8 examples, including scalar-width discontinuities.
+   The H8 transport theorem above provides the universal ordering law. *)
+Example p8_h9_unicode_boundary_byte_orders :
+  p8_d2_compare_bytes [0] [127] = Lt /\
+  p8_d2_compare_bytes [127] [194; 128] = Lt /\
+  p8_d2_compare_bytes [223; 191] [224; 160; 128] = Lt /\
+  p8_d2_compare_bytes [237; 159; 191] [238; 128; 128] = Lt /\
+  p8_d2_compare_bytes [239; 191; 191] [240; 144; 128; 128] = Lt /\
+  p8_d2_compare_bytes [240; 144; 128; 128] [244; 143; 191; 191] = Lt.
+Proof. repeat split; reflexivity. Qed.
+
+Example p8_h9_invalid_unicode_octets_rejected :
+  p8_d2_text_valid [192; 128] = false /\
+  p8_d2_text_valid [237; 160; 128] = false /\
+  p8_d2_text_valid [244; 144; 128; 128] = false.
+Proof. repeat split; reflexivity. Qed.
 
 (* Disjoint total trichotomy follows from the actual comparator's
    three constructors, mutual Eq reflection and sign reversal. *)

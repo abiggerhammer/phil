@@ -1,21 +1,27 @@
-# P8-H9 — initial structural-order mathematical preflight
+# P8-H9 — D2 structural order coherence (isolated Rocq preflight)
 
-Authority: [P8-H9 #1904](https://github.com/abiggerhammer/phil/issues/1904), parent [P8 #1770](https://github.com/abiggerhammer/phil/issues/1770), original proof tranche [#1810](https://github.com/abiggerhammer/phil/issues/1810); completed H8 [#1894](https://github.com/abiggerhammer/phil/pull/1894).
+Controlling authorization: [#1904](https://github.com/abiggerhammer/phil/issues/1904); parent [#1770](https://github.com/abiggerhammer/phil/issues/1770); proof-tranche ledger [#1810](https://github.com/abiggerhammer/phil/issues/1810); audit [#1584](https://github.com/abiggerhammer/phil/issues/1584). H8 [#1894](https://github.com/abiggerhammer/phil/pull/1894) was already protected-merged. H9 is a **separate one-PR pure mathematical authorization**.
 
-**Status: SCRATCH-ONLY FIRST PRECURSOR; NOT THE H9 COMPLETION CRITERION OR OFFICIAL PR.** Do not present these statements as proved until their exact-source hosted Rocq 9.2 checks pass. No native `Text`, `Ord SemanticForm`, `Set`, `Map`, foreign T1–T4, full Haskell-to-Rocq relation, P8-F2, P8-C3, P10 or release certification is established.
+**Preflight status: CANDIDATE, not certified or merged.** The actual D2 and H8 definitions are unchanged. Do not count any theorem until an exact-source hosted Rocq 9.2.0 workflow has compiled every object, printed closed assumptions, performed recursive `rocq check`, and recorded source and object receipts. Scratch preflight does not itself authorize a published PR.
 
-## What this first precursor attempts
+## Precise mathematical scope
 
-With the existing D2 model kept byte-identical, the new proof-local module introduces:
+The H9 file works directly with the mutually inductive `P8D2Form`, `P8D2Forms`, `P8D2Fields` structures and the original `p8_d2_compare_form/forms/fields` functions, which compare **constructor rank Atom < Ordered < Unordered < Record** (not encoded wire tags). Record fields compare key octets first, then nested values, then the field-list tail. Each list uses lexicographic empty/prefix ordering.
 
-- Exact common-byte-prefix preservation of `p8_d2_compare_bytes`.
-- A proper byte prefix compares strictly less than any nonempty extension.
-- New **adjacent** predicates for `P8D2Forms` and `P8D2Fields` without modifying original `p8_d2_strict_members` and `p8_d2_strict_keys`.
-- The easy universally quantified direction: original **pairwise strict** normalization implies adjacent strict normalization.
-- Smoke examples for empty members, duplicate members and reversed record keys.
+The candidate universal results are:
 
-The important **missing reverse direction** requires a substantive proof of transitivity for the *actual mutually recursive D2 comparator*, not a presumed Haskell foreign `Ord` law. It is intentionally not assumed. Full H9 still needs comparison reflexivity, equality reflection and order coherence for all finite D2 forms/lists/fields, and then both adjacent↔pairwise strict theorems, with nested and Unicode examples.
+1. Original `p8_d2_compare_bytes`: common-prefix and proper-prefix laws, reflexivity, exact `Eq iff list equality`, comparison reversal and strict `Lt` transitivity.
+2. Original mutually recursive form/forms/fields comparisons: reflexivity, `Eq` reflection to actual recursive constructor equality, comparison reversal, strict `Lt` transitivity, and exact trichotomy (equal or one of the two opposite strict comparison directions). These are proofs about every finite mathematical D2 term, so no bounded enumeration, assumed foreign comparator, or caller-supplied proof premise is involved.
+3. New H9-local `p8_h9_adjacent_members` and `p8_h9_adjacent_keys` predicates, with both implication directions against original D2 *pairwise* `p8_d2_strict_members` and `p8_d2_strict_keys`. The original canonical-domain predicates remain unchanged. Strict transitivity is explicitly required to derive adjacent ⇒ pairwise; no deduplication or sorting of output is performed.
+4. Application of H8's universal canonical Unicode scalar octet-order theorem to `P8D2Atom` ordering, **without** asserting anything about Haskell's native `Text` representation or derived `Ord`.
 
-## Scratch verification boundary
+## Discriminating model witnesses
 
-The dedicated unprivileged workflow compiles unchanged C1/D1/D2/H8 and this candidate H9 preflight, checks all proof objects recursively and prints assumptions. This document and source are intentionally on the scratch branch until the complete H9 theorem set, exact-head evidence and one-PR lane gate are satisfied. No change to the 244 normative cases, upstream P8 files, Haskell, grammar, Cabal, privileged CI or TCB.
+The H9-owned tests cover empty and prefix lists/fields; nested Ordered/Unordered/Record forms; constructor rank distinct from wire tag ordering; key-first versus value-first record comparisons, tied keys and distinct or equal values; sorted three-member and three-key sequences, reversed and duplicate member/key rejection; NFC versus NFD distinct octets; NUL; the scalar boundaries U+007F/U+0080, U+07FF/U+0800, U+D7FF/U+E000, U+FFFF/U+10000, and U+10FFFF. Overlong, surrogate and above-max byte sequences must be rejected by the unchanged D1/D2 validity model. These examples are regression witnesses, **not substitutes for universal theorems**.
+
+## Authority and verification discipline
+
+Only three new H9 paths are writable: this note, `proof/Phil/Verification/P8H9StructuralOrderCoherence.v`, and the dedicated unprivileged `phase1-p8-h9-structural-order.yml`. Upstream D2/H8, Haskell, GHC libraries, Cabal, grammar, 244 normative cases, signing, P9/FSEM, P11, privileged CI and the trusted computing base are read-only.
+
+The dedicated workflow must compile unchanged C1/D1/D2/H8 plus H9 using Rocq 9.2.0; reject `Axiom`, `Admitted`, `Parameter` and incomplete proofs; print named assumptions, `rocq check` each compiled object, and hash exact source/object/assumption output. Publication is permitted only after successful hosted proof checks and a fresh one-active-P8-PR census, followed by the normal exact-head protected merge gates. No native↔Rocq commuting theorem, `GHC.Text/Map/Set` operational law, selected-build attestation (#1826), foreign-library signoff (#1827), P8-F2/C3, P10, TCB approval or Phase 1 freeze follows from H9.
+
