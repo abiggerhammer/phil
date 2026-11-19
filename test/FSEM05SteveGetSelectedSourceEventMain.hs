@@ -9,7 +9,7 @@ import Data.Text (Text)
 import qualified Data.Text as Text
 import qualified Data.Text.IO as TextIO
 import Phil.Surface.SelectedSteveGetExecution
-import Phil.Core.Static (DeclarationKey (..), InstanceKey (..))
+import Phil.Core.Static\n  ( DeclarationKey (..), InstanceKey (..)\n  , InterfaceRevision (..), DefinitionRevision (..) )
 import System.Exit (exitFailure)
 
 main :: IO ()
@@ -23,6 +23,16 @@ main = do
   require "rechecked original source I" $
     selectedInstanceKey selected == InstanceKey "inst:phase1.steve"
   mapM_ (rejectMutation original) mutations
+  let readProvider = selectedReadProvider selected
+      digestProvider = selectedDigestProvider selected
+      wrongReadProvider = readProvider
+        { qualifiedProviderOperation = "OtherProvider.read" }
+      wrongReadInterface = readProvider
+        { qualifiedProviderInterface = InterfaceRevision "forged-interface" }
+      wrongReadDefinition = readProvider
+        { qualifiedProviderImplementation = DefinitionRevision "forged-definition" }
+      wrongDigestInterface = digestProvider
+        { qualifiedProviderInterface = InterfaceRevision "forged-interface" }
 
   world <- newSelectedWorld
   first <- beginOrDie world selected "sha256:exact-id"
@@ -40,25 +50,33 @@ main = do
   requireRejected "wrong read occurrence"
     =<< stepSelectedSteveGet first (Just
       (ReadResponse (selectedDigestOccurrence selected)
-        "BlobProvider.read" "sha256:exact-id" (ReadFound "same-payload")))
+        readProvider "sha256:exact-id" (ReadFound "same-payload")))
   requireRejected "wrong provider at read"
     =<< stepSelectedSteveGet first (Just
       (ReadResponse (selectedReadOccurrence selected)
-        "OtherProvider.read" "sha256:exact-id" (ReadFound "same-payload")))
+        wrongReadProvider "sha256:exact-id" (ReadFound "same-payload")))
+  requireRejected "wrong BlobProvider interface revision"
+    =<< stepSelectedSteveGet first (Just
+      (ReadResponse (selectedReadOccurrence selected)
+        wrongReadInterface "sha256:exact-id" (ReadFound "same-payload")))
+  requireRejected "wrong BlobProvider definition revision"
+    =<< stepSelectedSteveGet first (Just
+      (ReadResponse (selectedReadOccurrence selected)
+        wrongReadDefinition "sha256:exact-id" (ReadFound "same-payload")))
   requireRejected "forged read argument"
     =<< stepSelectedSteveGet first (Just
       (ReadResponse (selectedReadOccurrence selected)
-        "BlobProvider.read" "sha256:swapped" (ReadFound "same-payload")))
+        readProvider "sha256:swapped" (ReadFound "same-payload")))
   require "rejections preserve world" . (== beforeBad)
     =<< snapshotSelectedWorld world
   requireRejected "digest before read"
     =<< stepSelectedSteveGet first (Just
       (DigestResponse (selectedDigestOccurrence selected)
-        "DigestProvider.check" "sha256:exact-id" "bytesView" DigestAccepted))
+        digestProvider "sha256:exact-id" "bytesView" DigestAccepted))
   requireAdvanced "qualified actual source found response"
     =<< stepSelectedSteveGet first (Just
       (ReadResponse (selectedReadOccurrence selected)
-        "BlobProvider.read" "sha256:exact-id" (ReadFound "same-payload")))
+        readProvider "sha256:exact-id" (ReadFound "same-payload")))
   require "found allocated one owner" . ((== 1) . Set.size . snapshotIssued)
     =<< snapshotSelectedWorld world
   requireAdvanced "lexical borrow generates loan"
@@ -68,36 +86,40 @@ main = do
   requireRejected "wrong digest occurrence"
     =<< stepSelectedSteveGet first (Just
       (DigestResponse (selectedReadOccurrence selected)
-        "DigestProvider.check" "sha256:exact-id" "bytesView" DigestAccepted))
+        digestProvider "sha256:exact-id" "bytesView" DigestAccepted))
+  requireRejected "wrong DigestProvider interface revision"
+    =<< stepSelectedSteveGet first (Just
+      (DigestResponse (selectedDigestOccurrence selected)
+        wrongDigestInterface "sha256:exact-id" "bytesView" DigestAccepted))
   requireRejected "swapped digest id"
     =<< stepSelectedSteveGet first (Just
       (DigestResponse (selectedDigestOccurrence selected)
-        "DigestProvider.check" "sha256:swapped" "bytesView" DigestAccepted))
+        digestProvider "sha256:swapped" "bytesView" DigestAccepted))
   requireRejected "replaced view"
     =<< stepSelectedSteveGet first (Just
       (DigestResponse (selectedDigestOccurrence selected)
-        "DigestProvider.check" "sha256:exact-id" "otherView" DigestAccepted))
+        digestProvider "sha256:exact-id" "otherView" DigestAccepted))
   requireRejected "premature close attempted by wrong event"
     =<< stepSelectedSteveGet first (Just
       (ReadResponse (selectedReadOccurrence selected)
-        "BlobProvider.read" "sha256:exact-id" (ReadNotFound)))
+        readProvider "sha256:exact-id" (ReadNotFound)))
   requireResult "wait for digest" NeedsDigestResponse
     =<< stepSelectedSteveGet first Nothing
   requireAdvanced "digest only under live loan"
     =<< stepSelectedSteveGet first (Just
       (DigestResponse (selectedDigestOccurrence selected)
-        "DigestProvider.check" "sha256:exact-id" "bytesView" DigestAccepted))
+        digestProvider "sha256:exact-id" "bytesView" DigestAccepted))
   requireRejected "new digest forbidden after source decides"
     =<< stepSelectedSteveGet first (Just
       (DigestResponse (selectedDigestOccurrence selected)
-        "DigestProvider.check" "sha256:exact-id" "bytesView" DigestAccepted))
+        digestProvider "sha256:exact-id" "bytesView" DigestAccepted))
   requireAdvanced "loan close" =<< stepSelectedSteveGet first Nothing
   require "loan close retires only loan" . ((== 1) . Set.size . snapshotRetired)
     =<< snapshotSelectedWorld world
   requireRejected "digest after closed loan"
     =<< stepSelectedSteveGet first (Just
       (DigestResponse (selectedDigestOccurrence selected)
-        "DigestProvider.check" "sha256:exact-id" "bytesView" DigestAccepted))
+        digestProvider "sha256:exact-id" "bytesView" DigestAccepted))
   requireResult "release exact owner and return Unit" (SourceReturnedUnit UnitFoundAccepted)
     =<< stepSelectedSteveGet first Nothing
   requireRejected "replay finished invocation"
@@ -113,11 +135,11 @@ main = do
   requireAdvanced "identical second payload, fresh owner"
     =<< stepSelectedSteveGet second (Just
       (ReadResponse (selectedReadOccurrence selected)
-        "BlobProvider.read" "sha256:exact-id" (ReadFound "same-payload")))
+        readProvider "sha256:exact-id" (ReadFound "same-payload")))
   requireAdvanced "second fresh loan" =<< stepSelectedSteveGet second Nothing
   requireAdvanced "second digest rejected" =<< stepSelectedSteveGet second
     (Just (DigestResponse (selectedDigestOccurrence selected)
-      "DigestProvider.check" "sha256:exact-id" "bytesView" (DigestRejected "wrong-digest")))
+      digestProvider "sha256:exact-id" "bytesView" (DigestRejected "wrong-digest")))
   requireAdvanced "second close" =<< stepSelectedSteveGet second Nothing
   requireResult "second release Unit" (SourceReturnedUnit UnitFoundRejected)
     =<< stepSelectedSteveGet second Nothing
@@ -133,12 +155,12 @@ main = do
   requireResult "not-found returns Unit" (SourceReturnedUnit UnitNotFound)
     =<< stepSelectedSteveGet notFound (Just
       (ReadResponse (selectedReadOccurrence selected)
-        "BlobProvider.read" "sha256:exact-id" ReadNotFound))
+        readProvider "sha256:exact-id" ReadNotFound))
   storageFail <- beginOrDie world selected "sha256:exact-id"
   requireResult "storage failure returns Unit" (SourceReturnedUnit UnitStorageFailure)
     =<< stepSelectedSteveGet storageFail (Just
       (ReadResponse (selectedReadOccurrence selected)
-        "BlobProvider.read" "sha256:exact-id" (ReadStorageFailure "read-failed")))
+        readProvider "sha256:exact-id" (ReadStorageFailure "read-failed")))
   nonFound <- snapshotSelectedWorld world
   require "nonfound allocations empty" $
     snapshotIssued nonFound == snapshotIssued twice
@@ -151,7 +173,7 @@ main = do
   requireAdvanced "new world cannot reuse another world's abstract namespace"
     =<< stepSelectedSteveGet other (Just
       (ReadResponse (selectedReadOccurrence selected)
-        "BlobProvider.read" "sha256:exact-id" (ReadFound "same-payload")))
+        readProvider "sha256:exact-id" (ReadFound "same-payload")))
   otherSnapshot <- snapshotSelectedWorld otherWorld
   require "reset/new world does not equal previous origin" $
     Set.null (Set.intersection (snapshotIssued otherSnapshot) (snapshotIssued twice))
