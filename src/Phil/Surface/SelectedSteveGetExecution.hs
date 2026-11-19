@@ -15,6 +15,9 @@ module Phil.Surface.SelectedSteveGetExecution
   , selectedDigestOccurrence
   , selectedDeclarationKey
   , selectedInstanceKey
+  , QualifiedProviderRef (..)
+  , selectedReadProvider
+  , selectedDigestProvider
   , SelectedWorld
   , SelectedRun
   , Origin
@@ -46,7 +49,7 @@ import Phil.Compiler.SourceArchitecture
 import Phil.Compiler.SourceBundle
   ( CheckedSourceUnit (..), CheckedSourceBundle (..)
   , checkPortableSourceBundle )
-import Phil.Core.Static (DeclarationKey (..), InstanceKey (..), emptyStaticContext)
+import Phil.Core.Static\n  ( DeclarationKey (..), InstanceKey (..)\n  , InterfaceRevision, DefinitionRevision, emptyStaticContext )\nimport Phil.Core.ProviderQualification\n  ( ProviderContract (..), ProviderImplementation (..) )
 import Phil.Core.Syntax (Mode (..), Ty (..))
 import Phil.Examples.Steve.ApplicationShell (steveGetShellEnvironment)
 import Phil.Examples.Steve.ProviderQualifications
@@ -70,11 +73,20 @@ data SelectedSourceError
 
 -- | Constructors deliberately private: callers cannot submit an already
 -- checked AST, invent K/I, or replace the occurrence after admission.
+data QualifiedProviderRef = QualifiedProviderRef
+  { qualifiedProviderOperation :: Text
+  , qualifiedProviderInterface :: InterfaceRevision
+  , qualifiedProviderImplementation :: DefinitionRevision
+  }
+  deriving (Eq, Show)
+
 data SelectedSteveGet = SelectedSteveGet
   { selectedReadOccurrence :: SourceSpan
   , selectedDigestOccurrence :: SourceSpan
   , selectedDeclarationKey :: DeclarationKey
   , selectedInstanceKey :: InstanceKey
+  , selectedReadProvider :: QualifiedProviderRef
+  , selectedDigestProvider :: QualifiedProviderRef
   }
   deriving (Eq, Show)
 
@@ -91,7 +103,19 @@ prepareSelectedSteveGet originalRaw = do
     then Right ()
     else Left SelectedSourceQualificationMismatch
   shell <- mapLeft SelectedSourceRejected steveGetShellEnvironment
-  let expectedRead = PrimitiveProviderDecision [PrimitiveReadOnly]
+  let blob = steveBlobProviderQualification qualifications
+      digest = steveDigestProviderQualification qualifications
+      qualifiedRef operation artifact = QualifiedProviderRef
+        { qualifiedProviderOperation = operation
+        , qualifiedProviderInterface =
+            providerContractInterfaceRevision (steveProviderContract artifact)
+        , qualifiedProviderImplementation =
+            providerImplementationDefinitionRevision
+              (steveProviderImplementation artifact)
+        }
+      readProvider = qualifiedRef "BlobProvider.read" blob
+      digestProvider = qualifiedRef "DigestProvider.check" digest
+      expectedRead = PrimitiveProviderDecision [PrimitiveReadOnly]
         [ ProviderOutcomeSpec "found" [(Linear, TyOpaque "OwnedBytes")]
         , ProviderOutcomeSpec "not-found" []
         , ProviderOutcomeSpec "storage-failure"
@@ -155,6 +179,8 @@ prepareSelectedSteveGet originalRaw = do
         , selectedDigestOccurrence = digestAt
         , selectedDeclarationKey = key
         , selectedInstanceKey = checkedSourceArchitectureInstanceKey architecture
+        , selectedReadProvider = readProvider
+        , selectedDigestProvider = digestProvider
         }
     Nothing -> Left SelectedSourceShapeMismatch
 
@@ -247,8 +273,8 @@ data DigestOutcome = DigestAccepted | DigestRejected Text
 -- location. It cannot choose owner, loan or serial. Its authenticity as a
 -- *native* provider response is deliberately an undischarged boundary.
 data SuppliedResponse
-  = ReadResponse SourceSpan Text Text ReadOutcome
-  | DigestResponse SourceSpan Text Text Text DigestOutcome
+  = ReadResponse SourceSpan QualifiedProviderRef Text ReadOutcome
+  | DigestResponse SourceSpan QualifiedProviderRef Text Text DigestOutcome
   deriving (Eq, Show)
 
 data UnitBranch
@@ -384,7 +410,7 @@ transition w a supplied = case (activePhase a, supplied) of
   (NeedRead, Nothing) -> (w, NeedsReadResponse)
   (NeedRead, Just (ReadResponse site provider actualId outcome))
     | site == selectedReadOccurrence (activeSelected a)
-      && provider == "BlobProvider.read"
+      && provider == selectedReadProvider (activeSelected a)
       && actualId == activeContentId a ->
       case outcome of
         ReadFound payload ->
@@ -408,7 +434,7 @@ transition w a supplied = case (activePhase a, supplied) of
   (NeedDigest, Nothing) -> (w, NeedsDigestResponse)
   (NeedDigest, Just (DigestResponse site provider actualId view decision))
     | site == selectedDigestOccurrence (activeSelected a)
-      && provider == "DigestProvider.check"
+      && provider == selectedDigestProvider (activeSelected a)
       && actualId == activeContentId a && view == "bytesView" ->
       case (activeOwner a, activeLoan a) of
         (Just owner, Just loan)
