@@ -185,6 +185,35 @@ Proof.
   - discriminate.
 Qed.
 
+(* Genuine mutually structural induction on the same three recursive D2
+   datatypes used by the comparator. No fuel or a different surrogate AST. *)
+Fixpoint p8_h9_compare_form_reflexive (f : P8D2Form) {struct f} :
+  p8_d2_compare_form f f = Eq
+with p8_h9_compare_forms_reflexive (xs : P8D2Forms) {struct xs} :
+  p8_d2_compare_forms xs xs = Eq
+with p8_h9_compare_fields_reflexive (xs : P8D2Fields) {struct xs} :
+  p8_d2_compare_fields xs xs = Eq.
+Proof.
+  - destruct f as [bytes | forms | forms | fields]; simpl.
+    + apply p8_h9_compare_bytes_reflexive.
+    + apply p8_h9_compare_forms_reflexive.
+    + apply p8_h9_compare_forms_reflexive.
+    + apply p8_h9_compare_fields_reflexive.
+  - destruct xs as [| head tail]; simpl.
+    + reflexivity.
+    + rewrite (p8_h9_compare_form_reflexive head).
+      apply p8_h9_compare_forms_reflexive.
+  - destruct xs as [| key value tail]; simpl.
+    + reflexivity.
+    + rewrite (p8_h9_compare_bytes_reflexive key).
+      rewrite (p8_h9_compare_form_reflexive value).
+      apply p8_h9_compare_fields_reflexive.
+Defined.
+
+Print Assumptions p8_h9_compare_form_reflexive.
+Print Assumptions p8_h9_compare_forms_reflexive.
+Print Assumptions p8_h9_compare_fields_reflexive.
+
 Print Assumptions p8_h9_compare_bytes_reflexive.
 Print Assumptions p8_h9_compare_bytes_eq_iff.
 Print Assumptions p8_h9_compare_bytes_reversal.
