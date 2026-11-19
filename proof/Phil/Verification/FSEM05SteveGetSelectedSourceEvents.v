@@ -284,9 +284,11 @@ Theorem fresh_issued_origin_in_every_reachable_state :
 Proof.
   intros target Hsteps.
   apply fresh_not_in_issued.
-  destruct (reachable_ledger_valid _ _ Hsteps) as [Hbound _].
-  - unfold valid_issue_ledger; simpl; split; constructor.
-  - exact Hbound.
+  assert (Hinitial : valid_issue_ledger (Idle 0 [] [])).
+  { unfold valid_issue_ledger; simpl; split; constructor. }
+  pose proof (reachable_ledger_valid _ _ Hsteps Hinitial)
+    as [Hbound _].
+  exact Hbound.
 Qed.
 
 Theorem every_reachable_found_chooses_fresh_owner :
@@ -398,7 +400,10 @@ End SelectedSteveGetEvents.
 Print Assumptions SelectedSteveGetEvents.selected_step_sound.
 Print Assumptions SelectedSteveGetEvents.selected_step_coverage.
 Print Assumptions SelectedSteveGetEvents.selected_step_deterministic.
-Print Assumptions SelectedSteveGetEvents.two_identical_found_payloads_fresh.\nPrint Assumptions SelectedSteveGetEvents.selected_step_preserves_issue_ledger.\nPrint Assumptions SelectedSteveGetEvents.fresh_issued_origin_in_every_reachable_state.\nPrint Assumptions SelectedSteveGetEvents.every_reachable_found_chooses_fresh_owner.
+Print Assumptions SelectedSteveGetEvents.two_identical_found_payloads_fresh.
+Print Assumptions SelectedSteveGetEvents.selected_step_preserves_issue_ledger.
+Print Assumptions SelectedSteveGetEvents.fresh_issued_origin_in_every_reachable_state.
+Print Assumptions SelectedSteveGetEvents.every_reachable_found_chooses_fresh_owner.
 Print Assumptions SelectedSteveGetEvents.issue_preserves_no_duplicates.
 Print Assumptions SelectedSteveGetEvents.nonfound_issues_no_origin.
 Print Assumptions SelectedSteveGetEvents.finite_wait_is_not_rejection.
