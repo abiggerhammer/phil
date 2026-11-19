@@ -182,7 +182,6 @@ Proof.
       assert (CmpAC : Nat.compare a c = Lt).
       { apply Nat.compare_lt_iff. lia. }
       rewrite CmpAC. reflexivity.
-  - discriminate.
 Qed.
 
 (* Genuine mutually structural induction on the same three recursive D2
