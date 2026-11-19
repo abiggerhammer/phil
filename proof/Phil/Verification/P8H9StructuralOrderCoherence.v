@@ -351,6 +351,121 @@ Proof.
   - apply p8_h9_pairwise_implies_adjacent_keys.
 Qed.
 
+(* The original D2 constructor rank never decreases along a
+   strict structural comparison. Same-rank recursion is handled below. *)
+Lemma p8_h9_compare_form_lt_rank_le :
+  forall f g,
+    p8_d2_compare_form f g = Lt ->
+    p8_d2_rank f <= p8_d2_rank g.
+Proof.
+  intros f g H.
+  destruct f; destruct g; simpl in *; try discriminate; lia.
+Qed.
+
+(* Mutually structural strict transitivity. The rank proof discharges every
+   cross-constructor case, leaving only the four equal-constructor recursive
+   cases. For field heads, the existing byte and nested-form comparators
+   order key first, value next, before recursive field tails. *)
+Fixpoint p8_h9_compare_form_lt_transitive (f : P8D2Form) {struct f} :
+  forall g h,
+    p8_d2_compare_form f g = Lt ->
+    p8_d2_compare_form g h = Lt ->
+    p8_d2_compare_form f h = Lt
+with p8_h9_compare_forms_lt_transitive (fs : P8D2Forms) {struct fs} :
+  forall gs hs,
+    p8_d2_compare_forms fs gs = Lt ->
+    p8_d2_compare_forms gs hs = Lt ->
+    p8_d2_compare_forms fs hs = Lt
+with p8_h9_compare_fields_lt_transitive (fs : P8D2Fields) {struct fs} :
+  forall gs hs,
+    p8_d2_compare_fields fs gs = Lt ->
+    p8_d2_compare_fields gs hs = Lt ->
+    p8_d2_compare_fields fs hs = Lt.
+Proof.
+  - intros g h Hfg Hgh.
+    pose proof (p8_h9_compare_form_lt_rank_le f g Hfg) as Rfg.
+    pose proof (p8_h9_compare_form_lt_rank_le g h Hgh) as Rgh.
+    destruct (Nat.eq_dec (p8_d2_rank f) (p8_d2_rank h))
+      as [EqualRanks | DifferentRanks].
+    + assert (FGRanks : p8_d2_rank f = p8_d2_rank g) by lia.
+      assert (GHRanks : p8_d2_rank g = p8_d2_rank h) by lia.
+      destruct f; destruct g; destruct h; simpl in *; try lia.
+      * eapply p8_h9_compare_bytes_lt_transitive; eassumption.
+      * eapply p8_h9_compare_forms_lt_transitive; eassumption.
+      * eapply p8_h9_compare_forms_lt_transitive; eassumption.
+      * eapply p8_h9_compare_fields_lt_transitive; eassumption.
+    + apply p8_d2_constructor_rank_lt. lia.
+  - destruct fs as [| x xs]; intros gs hs Hfg Hgh;
+      destruct gs as [| y ys]; destruct hs as [| z zs];
+      simpl in *; try discriminate; try reflexivity.
+    destruct (p8_d2_compare_form x y) eqn:Cxy;
+      simpl in Hfg; try discriminate.
+    + apply p8_h9_compare_form_eq_reflect in Cxy. subst y.
+      destruct (p8_d2_compare_form x z) eqn:Cxz;
+        simpl in Hgh; try discriminate.
+      * apply p8_h9_compare_form_eq_reflect in Cxz. subst z.
+        simpl. rewrite (p8_h9_compare_form_reflexive x).
+        eapply p8_h9_compare_forms_lt_transitive; eassumption.
+      * simpl. rewrite Cxz. reflexivity.
+    + destruct (p8_d2_compare_form y z) eqn:Cyz;
+        simpl in Hgh; try discriminate.
+      * apply p8_h9_compare_form_eq_reflect in Cyz. subst z.
+        simpl. rewrite Cxy. reflexivity.
+      * assert (Cxz : p8_d2_compare_form x z = Lt).
+        { eapply p8_h9_compare_form_lt_transitive; eassumption. }
+        simpl. rewrite Cxz. reflexivity.
+  - destruct fs as [| key value rest]; intros gs hs Hfg Hgh;
+      destruct gs as [| key' value' mid];
+      destruct hs as [| key'' value'' tail];
+      simpl in *; try discriminate; try reflexivity.
+    destruct (p8_d2_compare_bytes key key') eqn:Kxy;
+      simpl in Hfg; try discriminate.
+    + apply p8_h9_compare_bytes_eq_iff in Kxy. subst key'.
+      destruct (p8_d2_compare_bytes key key'') eqn:Kxz.
+      * apply p8_h9_compare_bytes_eq_iff in Kxz. subst key''.
+        destruct (p8_d2_compare_form value value') eqn:Vxy;
+          simpl in Hfg; try discriminate.
+        -- apply p8_h9_compare_form_eq_reflect in Vxy.
+           subst value'.
+           destruct (p8_d2_compare_form value value'') eqn:Vxz;
+             simpl in Hgh; try discriminate.
+           ++ apply p8_h9_compare_form_eq_reflect in Vxz.
+              subst value''.
+              simpl.
+              rewrite (p8_h9_compare_bytes_reflexive key).
+              rewrite (p8_h9_compare_form_reflexive value).
+              eapply p8_h9_compare_fields_lt_transitive; eassumption.
+           ++ simpl.
+              rewrite (p8_h9_compare_bytes_reflexive key).
+              rewrite Vxz. reflexivity.
+        -- destruct (p8_d2_compare_form value' value'') eqn:Vyz;
+             simpl in Hgh; try discriminate.
+           ++ apply p8_h9_compare_form_eq_reflect in Vyz.
+              subst value''.
+              simpl.
+              rewrite (p8_h9_compare_bytes_reflexive key).
+              rewrite Vxy. reflexivity.
+           ++ assert (Vxz : p8_d2_compare_form value value'' = Lt).
+              { eapply p8_h9_compare_form_lt_transitive; eassumption. }
+              simpl.
+              rewrite (p8_h9_compare_bytes_reflexive key).
+              rewrite Vxz. reflexivity.
+      * simpl. rewrite Kxz. reflexivity.
+      * rewrite Kxz in Hgh. discriminate.
+    + destruct (p8_d2_compare_bytes key' key'') eqn:Kyz;
+        simpl in Hgh; try discriminate.
+      * apply p8_h9_compare_bytes_eq_iff in Kyz. subst key''.
+        simpl. rewrite Kxy. reflexivity.
+      * assert (Kxz : p8_d2_compare_bytes key key'' = Lt).
+        { eapply p8_h9_compare_bytes_lt_transitive; eassumption. }
+        simpl. rewrite Kxz. reflexivity.
+Defined.
+
+Print Assumptions p8_h9_compare_form_lt_rank_le.
+Print Assumptions p8_h9_compare_form_lt_transitive.
+Print Assumptions p8_h9_compare_forms_lt_transitive.
+Print Assumptions p8_h9_compare_fields_lt_transitive.
+
 Print Assumptions p8_h9_key_less_transitive.
 Print Assumptions p8_h9_key_less_all_transitive.
 Print Assumptions p8_h9_adjacent_implies_pairwise_keys.
