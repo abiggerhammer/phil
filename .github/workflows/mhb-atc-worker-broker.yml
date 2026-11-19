@@ -216,6 +216,8 @@ jobs:
           HEAD_SHA: ${{ inputs.head_sha }}
           WORKER_TOKEN: ${{ steps.broker_token.outputs.token }}
           WORKER_ACTION_SLUG: ${{ steps.broker_token.outputs.app-slug }}
+          INSTALLATION_ID: ${{ steps.broker_token.outputs.installation-id }}
+          WORKER_APP_ID: ${{ vars.MHB_ATC_WORKER_APP_ID }}
           WORKER_APP_SLUG: ${{ vars.MHB_ATC_WORKER_APP_SLUG }}
         shell: bash
         run: |
@@ -225,6 +227,23 @@ jobs:
           test -n "$WORKER_TOKEN"
           test "$WORKER_ACTION_SLUG" = "$WORKER_APP_SLUG" || {
             echo "Authenticated worker App slug mismatch" >&2; exit 1;
+          }
+          test "$WORKER_APP_ID" = "$(jq -r '.worker_app_id' .github/atc-worker-policy.json)" || {
+            echo "Configured worker App ID differs from reviewed source policy" >&2; exit 1;
+          }
+          [[ "$INSTALLATION_ID" =~ ^[1-9][0-9]*$ ]] || {
+            echo "Minted token lacks authenticated installation ID" >&2; exit 1;
+          }
+          # This checks the actual minted token's repository audience. It is
+          # distinct from, and does not prove, full App installation scope.
+          GH_TOKEN="$WORKER_TOKEN" gh api "installation/repositories" \
+            > /tmp/atc-w2-token-repositories.json
+          jq -e --arg repo "$GH_REPO" '
+            (.total_count == 1) and
+            (.repositories | type == "array" and length == 1) and
+            (.repositories[0].full_name == $repo)
+          ' /tmp/atc-w2-token-repositories.json > /dev/null || {
+            echo "Minted worker token is not restricted to Phil only" >&2; exit 1;
           }
           # This is the output of the trusted pre-credential validation step.
           test "$(jq -r '.decision' /tmp/atc-w2-plan.json)" = "validated-read-only-plan"
