@@ -237,6 +237,25 @@ class WorkerBrokerTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "malformed issue"):
             plan(self.f, issues=[{"title": "anything", "labels": [1]}])
 
+    def test_one_active_admitted_and_one_staged_successor_allowed(self):
+        accepted = {"title": f"ATC candidate: hamster/staged/{LANE}/previous",
+                    "labels": [{"name": f"lane: {LANE}"},
+                               {"name": "atc: admitted"}]}
+        got = plan(self.f, issues=[accepted])
+        self.assertEqual(got["decision"], "validated-read-only-plan")
+        second = copy.deepcopy(accepted)
+        second["labels"][-1]["name"] = "atc: admitting"
+        with self.assertRaisesRegex(ValueError, "multiple active"):
+            plan(self.f, issues=[accepted, second])
+        bad = copy.deepcopy(accepted)
+        bad["labels"].append({"name": "atc: staged"})
+        with self.assertRaisesRegex(ValueError, "existing staged"):
+            plan(self.f, issues=[bad])
+        bad = copy.deepcopy(accepted)
+        bad["labels"].append({"name": "atc: admitting"})
+        with self.assertRaisesRegex(ValueError, "ambiguous"):
+            plan(self.f, issues=[bad])
+
     def test_repository_snapshot_fail_closed(self):
         for name, value in [
             ("source_repository", None), ("source_ref", None),
