@@ -429,9 +429,10 @@ transition w a supplied = case (activePhase a, supplied) of
         { worldNextOrigin = worldNextOrigin original + 1
         , worldIssued = Set.insert origin (worldIssued original) })
     finish original branch event =
-      let ended = record event
-            (original { worldActive = Nothing })
-          done = record (ReturnedUnit branch) ended
+      let ended = record event (original { worldActive = Nothing })
+          done = case event of
+            ReturnedUnit _ -> ended
+            _ -> record (ReturnedUnit branch) ended
       in (done, SourceReturnedUnit branch)
 
 mapLeft :: (a -> b) -> Either a c -> Either b c
