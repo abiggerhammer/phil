@@ -249,6 +249,47 @@ Proof.
       subst. reflexivity.
 Defined.
 
+(* Order reversal also descends through the ORIGINAL mutually
+   inductive D2 comparisons; off-diagonal constructors use D2's fixed
+   Atom < Ordered < Unordered < Record rank, not wire-tag ordering. *)
+Fixpoint p8_h9_compare_form_reversal (f : P8D2Form) {struct f} :
+  forall g, p8_d2_compare_form f g =
+    p8_h9_reverse_compare (p8_d2_compare_form g f)
+with p8_h9_compare_forms_reversal (fs : P8D2Forms) {struct fs} :
+  forall gs, p8_d2_compare_forms fs gs =
+    p8_h9_reverse_compare (p8_d2_compare_forms gs fs)
+with p8_h9_compare_fields_reversal (fs : P8D2Fields) {struct fs} :
+  forall gs, p8_d2_compare_fields fs gs =
+    p8_h9_reverse_compare (p8_d2_compare_fields gs fs).
+Proof.
+  - destruct f as [bytes | fs | fs | fs]; intros g;
+      destruct g as [other | gs | gs | gs]; simpl;
+      try reflexivity.
+    + apply p8_h9_compare_bytes_reversal.
+    + apply p8_h9_compare_forms_reversal.
+    + apply p8_h9_compare_forms_reversal.
+    + apply p8_h9_compare_fields_reversal.
+  - destruct fs as [| head tail]; intros gs;
+      destruct gs as [| other rest]; simpl; try reflexivity.
+    rewrite (p8_h9_compare_form_reversal head other).
+    destruct (p8_d2_compare_form other head); simpl;
+      try reflexivity.
+    apply p8_h9_compare_forms_reversal.
+  - destruct fs as [| key value tail]; intros gs;
+      destruct gs as [| key' value' rest]; simpl; try reflexivity.
+    rewrite (p8_h9_compare_bytes_reversal key key').
+    destruct (p8_d2_compare_bytes key' key); simpl;
+      try reflexivity.
+    rewrite (p8_h9_compare_form_reversal value value').
+    destruct (p8_d2_compare_form value' value); simpl;
+      try reflexivity.
+    apply p8_h9_compare_fields_reversal.
+Defined.
+
+Print Assumptions p8_h9_compare_form_reversal.
+Print Assumptions p8_h9_compare_forms_reversal.
+Print Assumptions p8_h9_compare_fields_reversal.
+
 Print Assumptions p8_h9_compare_form_eq_reflect.
 Print Assumptions p8_h9_compare_forms_eq_reflect.
 Print Assumptions p8_h9_compare_fields_eq_reflect.
