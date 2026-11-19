@@ -1,0 +1,4 @@
+fn unpack(packet : (Unit, (Bool, (U8, (Unit, (Unit, (Bytes[32], Unit))))))) -> Bytes[32] satisfies C {
+  let (a, (b, (c, (d, (e, (payload, f)))))) = packet;
+  return payload;
+}
