@@ -128,8 +128,9 @@ jobs:
             > /tmp/atc-w2-staged-refs.json
           # A candidate name cannot be reused even after closing its issue.
           # Complete all-state pagination also supplies open-issue state below.
+          # Compact JSON preserves every record under the separate 32 MiB history cap.
           gh api --paginate "repos/$GH_REPO/issues?state=all&per_page=100" \
-            | jq -s 'add // []' > /tmp/atc-w2-all-issues.json
+            | jq -sc 'add // []' > /tmp/atc-w2-all-issues.json
 
           python3 scripts/mhb_atc_worker_broker.py plan \
             --worker-policy .github/atc-worker-policy.json \
@@ -268,10 +269,11 @@ jobs:
           }
 
           # Re-run authorization against a fresh complete stage/issue census.
+          # A failed later page stops the step (set -euo pipefail); never use a partial file.
           gh api "repos/$GH_REPO/git/matching-refs/heads/hamster/staged/$LANE/" \
             > /tmp/atc-w2-staged-refs-now.json
           gh api --paginate "repos/$GH_REPO/issues?state=all&per_page=100" \
-            | jq -s 'add // []' > /tmp/atc-w2-all-issues-now.json
+            | jq -sc 'add // []' > /tmp/atc-w2-all-issues-now.json
           python3 scripts/mhb_atc_worker_broker.py plan \
             --worker-policy .github/atc-worker-policy.json \
             --lane-policy .github/atc-worker-lanes.json \
