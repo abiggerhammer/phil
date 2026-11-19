@@ -2,6 +2,9 @@ name: Phase 1 INT-001 Corresponded Systems Admission
 
 on:
   push:
+    # Phase 2 staged refs carry unreviewed worker code; never execute push CI.
+    branches-ignore:
+      - 'hamster/staged/**'
     paths:
       - 'src/Phil/Compiler/SourceBundle.hs'
       - 'src/Phil/Compiler/SourceArchitecture.hs'
