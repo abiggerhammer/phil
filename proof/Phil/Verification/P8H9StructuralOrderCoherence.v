@@ -203,8 +203,8 @@ Proof.
       apply p8_h9_compare_forms_reflexive.
   - destruct xs as [| key value tail]; simpl.
     + reflexivity.
-    + rewrite (p8_h9_compare_bytes_reflexive key).
-      rewrite (p8_h9_compare_form_reflexive value).
+    + try rewrite (p8_h9_compare_bytes_reflexive key).
+      try rewrite (p8_h9_compare_form_reflexive value).
       apply p8_h9_compare_fields_reflexive.
 Defined.
 
@@ -403,7 +403,7 @@ Proof.
       destruct (p8_d2_compare_form x z) eqn:Cxz;
         simpl in Hgh; try discriminate.
       * apply p8_h9_compare_form_eq_reflect in Cxz. subst z.
-        simpl. rewrite (p8_h9_compare_form_reflexive x).
+        simpl. try rewrite (p8_h9_compare_form_reflexive x).
         eapply p8_h9_compare_forms_lt_transitive; eassumption.
       * simpl. rewrite Cxz. reflexivity.
     + destruct (p8_d2_compare_form y z) eqn:Cyz;
@@ -431,24 +431,24 @@ Proof.
            ++ apply p8_h9_compare_form_eq_reflect in Vxz.
               subst value''.
               simpl.
-              rewrite (p8_h9_compare_bytes_reflexive key).
-              rewrite (p8_h9_compare_form_reflexive value).
+              try rewrite (p8_h9_compare_bytes_reflexive key).
+              try rewrite (p8_h9_compare_form_reflexive value).
               eapply p8_h9_compare_fields_lt_transitive; eassumption.
            ++ simpl.
-              rewrite (p8_h9_compare_bytes_reflexive key).
-              rewrite Vxz. reflexivity.
+              try rewrite (p8_h9_compare_bytes_reflexive key).
+              try rewrite Vxz. reflexivity.
         -- destruct (p8_d2_compare_form value' value'') eqn:Vyz;
              simpl in Hgh; try discriminate.
            ++ apply p8_h9_compare_form_eq_reflect in Vyz.
               subst value''.
               simpl.
-              rewrite (p8_h9_compare_bytes_reflexive key).
-              rewrite Vxy. reflexivity.
+              try rewrite (p8_h9_compare_bytes_reflexive key).
+              try rewrite Vxy. reflexivity.
            ++ assert (Vxz : p8_d2_compare_form value value'' = Lt).
               { eapply p8_h9_compare_form_lt_transitive; eassumption. }
               simpl.
-              rewrite (p8_h9_compare_bytes_reflexive key).
-              rewrite Vxz. reflexivity.
+              try rewrite (p8_h9_compare_bytes_reflexive key).
+              try rewrite Vxz. reflexivity.
       * simpl. rewrite Kxz. reflexivity.
       * rewrite Kxz in Hgh. discriminate.
     + destruct (p8_d2_compare_bytes key' key'') eqn:Kyz;
