@@ -4,6 +4,8 @@ from __future__ import annotations
 
 import copy
 import json
+import os
+import textwrap
 from pathlib import Path
 import re
 import subprocess
@@ -273,6 +275,159 @@ class WorkerBrokerTests(unittest.TestCase):
         bad["labels"].append({"name": "atc: admitting"})
         with self.assertRaisesRegex(ValueError, "exactly one"):
             plan(self.f, issues=[bad])
+
+    def test_historical_candidate_name_never_reused(self):
+        for state, lifecycle in [
+            ("open", "atc: admitted"),
+            ("open", "atc: admitting"),
+            ("closed", "atc: staged"),
+            ("closed", "atc: admitted"),
+        ]:
+            former = candidate_issue(candidate=CANDIDATE, state=state,
+                                     lifecycle=lifecycle)
+            with self.subTest(state=state, lifecycle=lifecycle):
+                with self.assertRaisesRegex(ValueError, "history"):
+                    plan(self.f, issues=[former])
+        # A trusted bot's canonical machine record retains identity even
+        # if a privileged editor later rewrites the displayed title.
+        former = candidate_issue(candidate=CANDIDATE, state="closed")
+        former["title"] = "Retitled by operator"
+        with self.assertRaisesRegex(ValueError, "history"):
+            plan(self.f, issues=[former])
+        self.assertEqual(
+            plan(self.f, issues=[candidate_issue(candidate="previous")])["decision"],
+            "validated-read-only-plan")
+
+    def test_canonical_lifecycle_ignores_title_as_classifier_but_checks_it(self):
+        first = candidate_issue(candidate="one")
+        second = candidate_issue(n=102, candidate="two")
+        for issue in (first, second):
+            issue["title"] = "Manually retitled ordinary-looking issue"
+        with self.assertRaisesRegex(ValueError, "title mismatch"):
+            plan(self.f, issues=[first, second])
+        for change in ("bad-body", "wrong-lane", "extra-lane",
+                       "untrusted-author", "missing-state", "pr-shaped"):
+            issue = candidate_issue()
+            if change == "bad-body":
+                issue["body"] = "<!-- MHB-ATC-STAGED-V1 -->\nmalformed"
+            elif change == "wrong-lane":
+                issue["body"] = candidate_issue(lane="phase2-embedded")["body"]
+            elif change == "extra-lane":
+                issue["labels"].append({"name": "lane: phase2-embedded"})
+            elif change == "untrusted-author":
+                issue["user"]["login"] = "wrong-bot"
+                issue["title"] = "Retitled to avoid candidate prefix"
+            elif change == "missing-state":
+                issue["labels"] = [{"name": f"lane: {LANE}"}]
+            elif change == "pr-shaped":
+                issue["pull_request"] = {"url": "https://api.github.com/pulls/201"}
+            with self.subTest(change=change), self.assertRaises(ValueError):
+                plan(self.f, issues=[issue])
+
+    def test_duplicate_branches_and_unrelated_issues(self):
+        first = candidate_issue()
+        dup = candidate_issue(n=102)
+        with self.assertRaisesRegex(ValueError, "duplicate canonical"):
+            plan(self.f, issues=[first, dup])
+        ordinary = {"state": "open", "title": "Help with a parser",
+                    "body": "normal prose", "labels": [],
+                    "user": {"login": "contributor"}}
+        ordinary_pr = {"state": "open", "title": "CI cleanup",
+                       "body": "ordinary Pull request", "labels": [
+                           {"name": "atc: admitted"}],
+                       "pull_request": {"url": "https://api.github.com/pulls/23"},
+                       "user": {"login": "contributor"}}
+        got = plan(self.f, issues=[first, ordinary, ordinary_pr])
+        self.assertEqual(got["decision"], "validated-read-only-plan")
+
+    def test_new_ref_porcelain_exact_transport_receipt(self):
+        branch = f"hamster/staged/{LANE}/{CANDIDATE}"
+        good = (f"To https://github.com/{REPO}.git\n"
+                f"*\t{HEAD}:refs/heads/{branch}\t[new branch]\nDone\n").encode()
+        self.assertEqual(
+            check_created_ref_porcelain(good, repo=REPO, branch=branch, sha=HEAD)["decision"],
+            "new-staged-ref-created")
+        for altered in [
+            good.replace(b"*\t", b"=\t").replace(b"[new branch]", b"[up to date]"),
+            good.replace(b"*\t", b" \t").replace(b"[new branch]", b"123..456"),
+            good.replace(b"[new branch]", b"[deleted]"),
+            good.replace(b"[new branch]", b"[new branch]\n*\tother:refs/heads/a\t[new branch]"),
+            good.replace(b":refs/heads/", b":refs/tags/"),
+            good.replace(HEAD.encode(), BASE.encode()),
+            b"",
+            good + b"Injected\n",
+        ]:
+            with self.subTest(altered=altered[:30]), self.assertRaises(ValueError):
+                check_created_ref_porcelain(
+                    altered, repo=REPO, branch=branch, sha=HEAD)
+
+    def test_real_git_same_sha_is_up_to_date_not_creation(self):
+        # Real local Git transport, no network/credential or remote GitHub
+        # mutation. Exercise the same --force-with-lease=ref: semantics as W2.
+        with tempfile.TemporaryDirectory() as td:
+            remote = str(Path(td) / "remote.git")
+            work = str(Path(td) / "work")
+            def git(*args, cwd=None):
+                return subprocess.run(["git", *args], cwd=cwd, check=False,
+                                      capture_output=True, text=True)
+            self.assertEqual(git("init", "--bare", remote).returncode, 0)
+            self.assertEqual(git("init", work).returncode, 0)
+            self.assertEqual(git("config", "user.name", "Fixture", cwd=work).returncode, 0)
+            self.assertEqual(git("config", "user.email", "fixture@example.test", cwd=work).returncode, 0)
+            file = Path(work) / "a.txt"
+            file.write_text("one\n")
+            self.assertEqual(git("add", "a.txt", cwd=work).returncode, 0)
+            self.assertEqual(git("commit", "-m", "first", cwd=work).returncode, 0)
+            first = git("rev-parse", "HEAD", cwd=work).stdout.strip()
+            branch = f"hamster/staged/{LANE}/{CANDIDATE}"
+            def push(sha):
+                return git("-C", work, "push", "--porcelain",
+                           f"--force-with-lease=refs/heads/{branch}:",
+                           remote, f"{sha}:refs/heads/{branch}")
+            def normalize(value):
+                lines = value.splitlines()
+                self.assertTrue(lines[0].startswith("To "))
+                return ("To https://github.com/" + REPO + ".git\n"
+                        + "\n".join(lines[1:]) + "\n").encode()
+            created = push(first)
+            self.assertEqual(created.returncode, 0, created.stderr)
+            self.assertIn("[new branch]", created.stdout)
+            self.assertEqual(
+                check_created_ref_porcelain(normalize(created.stdout),
+                                          repo=REPO, branch=branch, sha=first)["decision"],
+                "new-staged-ref-created")
+            reused = push(first)
+            self.assertEqual(reused.returncode, 0, reused.stderr)
+            self.assertIn("[up to date]", reused.stdout)
+            with self.assertRaisesRegex(ValueError, "did not positively create"):
+                check_created_ref_porcelain(normalize(reused.stdout),
+                                           repo=REPO, branch=branch, sha=first)
+            file.write_text("two\n")
+            self.assertEqual(git("commit", "-am", "second", cwd=work).returncode, 0)
+            newer = git("rev-parse", "HEAD", cwd=work).stdout.strip()
+            replaced = push(newer)
+            self.assertNotEqual(replaced.returncode, 0)
+            self.assertIn("stale info", replaced.stdout)
+
+    def test_source_bound_app_slug_actual_shell_regression(self):
+        # Run the REAL workflow pre-push identity guard, not merely a
+        # substring assertion. A coherently wrong slug+variable must fail.
+        workflow = (ROOT / ".github/workflows/mhb-atc-worker-broker.yml").read_text()
+        begin = workflow.index('          PINNED_SLUG=')
+        end = workflow.index('          [[ "$INSTALLATION_ID"', begin)
+        guard = "set -euo pipefail\n" + textwrap.dedent(workflow[begin:end])
+        for actual, configured, expected_pass in [
+            ("phil-atc-worker", "phil-atc-worker", True),
+            ("phil-atc-publisher", "phil-atc-publisher", False),
+            ("phil-atc-publisher", "phil-atc-worker", False),
+        ]:
+            env = dict(os.environ, WORKER_ACTION_SLUG=actual,
+                       WORKER_APP_SLUG=configured, WORKER_APP_ID="5836223")
+            result = subprocess.run(["bash", "-c", guard], cwd=ROOT, env=env,
+                                    text=True, capture_output=True)
+            with self.subTest(actual=actual, configured=configured):
+                self.assertEqual(result.returncode == 0, expected_pass,
+                                 result.stderr)
 
     def test_repository_snapshot_fail_closed(self):
         for name, value in [
