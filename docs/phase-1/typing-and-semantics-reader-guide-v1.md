@@ -546,3 +546,8 @@ The bounded [FSEM-02 dual projected-head plus independent resource fault ladder]
 The bounded [FSEM-02 dual projected-head and dual-resource four-fault ladder](formal-semantics-source-ping-adaptive-dual-head-dual-resource-ladder-fsem02-v1.md) checks 576 independently injected four-fault native Haskell states after an authorized partial Close. It demands ordered Client head, Server head, Client resource, Server resource diagnostics before exact original-suffix replay following four separate repairs. Five conditional finite-carrier Rocq lemmas retain all external authority and implementation-refinement premises; no normative completion is asserted.
 
 The bounded [FSEM-02 typed sender-resource versus occupied receiver priority](formal-semantics-typed-sender-resource-priority-fsem02-v1.md) tests the production checked restricted source against a forged U8 sender payload and occupied Bytes[8] receiver slot, exact type-error-before-duplicate-binding precedence, source-error priority, and accepted owner/endpoint/affine replay after separately restoring resources. Six conditional Rocq finite-gate theorems are not native Map/Ty refinement or new activation authority. FSEM-02 remains non-normative.
+
+
+### FSEM-02 dual stale-source repair control (non-normative)
+
+[Independent sender/receiver stale Close repair diamond](formal-semantics-dual-source-close-repair-fsem02-v1.md) combines complete accepted and minimally rejected Grammar-v1 source witnesses with exact source-error priority and conditional finite Rocq repair/no-successor theorems. This is not general Haskell-to-Rocq refinement or FSEM-02 closure.

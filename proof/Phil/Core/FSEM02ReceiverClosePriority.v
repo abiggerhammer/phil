@@ -93,3 +93,56 @@ Proof.
   destruct a, b, c, d, e; simpl in H; try discriminate.
   inversion H; subst; repeat split; reflexivity.
 Qed.
+
+(* Two independently malformed source Close operands are rejected in
+   source-check order. Repairs commute at the finite model boundary; this
+   does not assert that the Haskell checker implements this model generally. *)
+Definition rcpRepairSenderSource (s : RCPState) : RCPState :=
+  {| rcpSenderValid := true;
+     rcpReceiverValid := rcpReceiverValid s;
+     rcpExternalValid := rcpExternalValid s;
+     rcpSenderFault := rcpSenderFault s;
+     rcpReceiverBusy := rcpReceiverBusy s;
+     rcpSpectator := rcpSpectator s |}.
+Definition rcpRepairReceiverSource (s : RCPState) : RCPState :=
+  {| rcpSenderValid := rcpSenderValid s;
+     rcpReceiverValid := true;
+     rcpExternalValid := rcpExternalValid s;
+     rcpSenderFault := rcpSenderFault s;
+     rcpReceiverBusy := rcpReceiverBusy s;
+     rcpSpectator := rcpSpectator s |}.
+
+Theorem rcpDualStaleSourceRepairDiamond : forall fault busy frame,
+  let s := {| rcpSenderValid := false; rcpReceiverValid := false;
+    rcpExternalValid := true; rcpSenderFault := fault;
+    rcpReceiverBusy := busy; rcpSpectator := frame |} in
+  rcpDecision s = RCPBadSender /\
+  rcpNext s = None /\
+  rcpDecision (rcpRepairSenderSource s) = RCPBadReceiver /\
+  rcpNext (rcpRepairSenderSource s) = None /\
+  rcpDecision (rcpRepairReceiverSource s) = RCPBadSender /\
+  rcpNext (rcpRepairReceiverSource s) = None /\
+  rcpRepairReceiverSource (rcpRepairSenderSource s) =
+    rcpRepairSenderSource (rcpRepairReceiverSource s).
+Proof. intros; repeat split; reflexivity. Qed.
+
+Theorem rcpDualSourceRepairPreservesNativeFaults : forall fault busy frame,
+  let s := {| rcpSenderValid := false; rcpReceiverValid := false;
+    rcpExternalValid := true; rcpSenderFault := fault;
+    rcpReceiverBusy := busy; rcpSpectator := frame |} in
+  rcpDecision (rcpRepairReceiverSource (rcpRepairSenderSource s)) =
+    match fault with
+    | RCPBorrowed => RCPBorrowedSender
+    | RCPMissing => RCPMissingSender
+    | RCPWrongMode => RCPWrongModeSender
+    | RCPHealthy => if busy then RCPDuplicateReceiver else RCPAdmitted
+    end.
+Proof. intros fault busy frame; destruct fault, busy; reflexivity. Qed.
+
+Theorem rcpDualSourceAndNativeRepairFramedTransfer : forall frame,
+  let s := {| rcpSenderValid := false; rcpReceiverValid := false;
+    rcpExternalValid := true; rcpSenderFault := RCPHealthy;
+    rcpReceiverBusy := false; rcpSpectator := frame |} in
+  rcpNext (rcpRepairReceiverSource (rcpRepairSenderSource s)) =
+    Some (false, true, frame).
+Proof. intros; reflexivity. Qed.
