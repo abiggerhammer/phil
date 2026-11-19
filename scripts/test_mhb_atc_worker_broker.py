@@ -15,7 +15,7 @@ import unittest
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "scripts"))
-from mhb_atc_worker_broker import (check_paths, check_raw_modes, load_json, resolve,
+from mhb_atc_worker_broker import (MAX_HISTORY_JSON_BYTES, check_paths, check_raw_modes, load_json, resolve,
                                    validate_plan, check_worker_policy,
                                    check_created_ref_porcelain)
 from mhb_atc_stage import parse_intent
@@ -482,6 +482,134 @@ class WorkerBrokerTests(unittest.TestCase):
             f.write_text('{"enabled": false, "enabled": true}')
             with self.assertRaisesRegex(ValueError, "duplicate JSON key"):
                 load_json(str(f))
+
+
+    def _capture_paginated_history(self, directory, pages, *,
+                                   fail_after_page=0, malformed_tail=False):
+        # Execute the actual acquisition command from BOTH workflow snapshots,
+        # substituting only gh with a deterministic, uncredentialed mock.
+        workflow = (ROOT / ".github/workflows/mhb-atc-worker-broker.yml").read_text()
+        command = (
+            'gh api --paginate "repos/$GH_REPO/issues?state=all&per_page=100" \\\n'
+            "            | jq -sc 'add // []'"
+        )
+        self.assertEqual(workflow.count(command), 2)
+        pages_path = directory / "pages.jsonl"
+        pages_path.write_text(
+            "\n".join(json.dumps(page, separators=(",", ":")) for page in pages)
+            + ("\n{malformed page\n" if malformed_tail else "\n"))
+        issues_path = directory / "all-issues.json"
+        marker = directory / "capture-succeeded"
+        marker.unlink(missing_ok=True)
+        env = dict(os.environ, GH_REPO=REPO, PAGES_FILE=str(pages_path),
+                   ISSUES_FILE=str(issues_path), SUCCESS_MARKER=str(marker),
+                   FAIL_AFTER_PAGE=str(fail_after_page))
+        script = textwrap.dedent("""\
+            set -euo pipefail
+            gh() {
+              [[ "$#" -eq 3 && "$1" == api && "$2" == --paginate &&
+                 "$3" == "repos/$GH_REPO/issues?state=all&per_page=100" ]] || return 64
+              if [[ "$FAIL_AFTER_PAGE" -gt 0 ]]; then
+                head -n "$FAIL_AFTER_PAGE" "$PAGES_FILE"
+                return 42
+              fi
+              cat "$PAGES_FILE"
+            }
+            """) + command + ' > "$ISSUES_FILE"\n' + 'touch "$SUCCESS_MARKER"\n'
+        ran = subprocess.run(["bash", "-c", script], cwd=ROOT, env=env,
+                             capture_output=True, text=True)
+        return ran, issues_path, marker
+
+    def _plan_cli_with_history(self, directory, history):
+        # Exercise the actual plan CLI, including its history-specific loader.
+        worker, registry, source, ref, staged_refs, _ = self.f
+        names_and_values = {
+            "worker-policy.json": worker,
+            "lane-policy.json": registry,
+            "source-repo.json": source,
+            "source-ref.json": ref,
+            "staged-refs.json": staged_refs,
+        }
+        for name, value in names_and_values.items():
+            (directory / name).write_text(json.dumps(value))
+        cmd = [
+            sys.executable, str(ROOT / "scripts/mhb_atc_worker_broker.py"), "plan",
+            "--worker-policy", str(directory / "worker-policy.json"),
+            "--lane-policy", str(directory / "lane-policy.json"),
+            "--repo", REPO, "--actor", "abiggerhammer",
+            "--lane", LANE, "--candidate", CANDIDATE,
+            "--base-sha", BASE, "--head-sha", HEAD, "--main-sha", MAIN,
+            "--source-repository-json", str(directory / "source-repo.json"),
+            "--source-ref-json", str(directory / "source-ref.json"),
+            "--staged-refs-json", str(directory / "staged-refs.json"),
+            "--issues-json", str(history),
+        ]
+        return subprocess.run(cmd, cwd=ROOT, capture_output=True, text=True)
+
+    def test_full_history_realistic_size_and_late_page_reuse(self):
+        # Roughly today's 1,935-record/20-page GitHub corpus (~14 MB compact),
+        # with all closed history retained. The old 8 MB loader fails here.
+        history = [
+            {"state": "closed", "title": f"Unrelated issue {n}",
+             "body": "x" * 7100, "labels": [],
+             "user": {"login": "contributor"}}
+            for n in range(1935)
+        ]
+        pages = [history[i:i + 100] for i in range(0, len(history), 100)]
+        self.assertEqual([len(p) for p in pages], [100] * 19 + [35])
+        with tempfile.TemporaryDirectory() as d:
+            directory = Path(d)
+            ran, issues_path, marker = self._capture_paginated_history(directory, pages)
+            self.assertEqual(ran.returncode, 0, ran.stderr)
+            self.assertTrue(marker.exists())
+            self.assertGreater(issues_path.stat().st_size, 8_000_000)
+            self.assertLess(issues_path.stat().st_size, MAX_HISTORY_JSON_BYTES)
+            with self.assertRaisesRegex(ValueError, "oversized JSON input"):
+                load_json(str(issues_path))  # Other metadata keep the 8 MB limit.
+            self.assertEqual(len(load_json(
+                str(issues_path), max_bytes=MAX_HISTORY_JSON_BYTES)), 1935)
+            allowed = self._plan_cli_with_history(directory, issues_path)
+            self.assertEqual(allowed.returncode, 0, allowed.stderr)
+            self.assertEqual(json.loads(allowed.stdout)["decision"],
+                             "validated-read-only-plan")
+
+            # A closed, reused name at the end of page 20 must still deny,
+            # even though it was not in any earlier page or an open issue.
+            pages[-1][-1] = candidate_issue(n=1, candidate=CANDIDATE,
+                                           state="closed")
+            ran, issues_path, marker = self._capture_paginated_history(directory, pages)
+            self.assertEqual(ran.returncode, 0, ran.stderr)
+            self.assertTrue(marker.exists())
+            denied = self._plan_cli_with_history(directory, issues_path)
+            self.assertEqual(denied.returncode, 2, denied.stderr)
+            self.assertIn("candidate name already used in issue history",
+                          denied.stderr)
+
+    def test_later_page_api_failure_or_malformed_json_aborts_acquisition(self):
+        pages = [[{"state": "closed", "title": f"old issue {n}"}]
+                 for n in range(5)]
+        with tempfile.TemporaryDirectory() as d:
+            directory = Path(d)
+            for fail_after, malformed in ((3, False), (0, True)):
+                with self.subTest(fail_after=fail_after, malformed=malformed):
+                    ran, _, marker = self._capture_paginated_history(
+                        directory, pages, fail_after_page=fail_after,
+                        malformed_tail=malformed)
+                    self.assertNotEqual(ran.returncode, 0)
+                    self.assertFalse(marker.exists(),
+                                     "a partial snapshot reached the plan step")
+
+    def test_history_bound_and_duplicate_keys_still_fail_closed(self):
+        with tempfile.TemporaryDirectory() as d:
+            large = Path(d) / "too-large.json"
+            with large.open("wb") as output:
+                output.truncate(MAX_HISTORY_JSON_BYTES + 1)
+            with self.assertRaisesRegex(ValueError, "oversized JSON input"):
+                load_json(str(large), max_bytes=MAX_HISTORY_JSON_BYTES)
+            repeated = Path(d) / "duplicate.json"
+            repeated.write_text('[{"state":"open","state":"closed"}]')
+            with self.assertRaisesRegex(ValueError, "duplicate JSON key"):
+                load_json(str(repeated), max_bytes=MAX_HISTORY_JSON_BYTES)
 
     def test_cli_resolve_without_network_needs_explicit_lane_source(self):
         cmd = [
