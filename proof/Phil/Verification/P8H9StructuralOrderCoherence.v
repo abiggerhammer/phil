@@ -1,5 +1,6 @@
 From Stdlib Require Import List Bool Arith.PeanoNat Lia.
-From Phil.Verification Require Import P8D2StructuralOrderModel P8H8UnicodeScalarOrder.
+From Phil.Verification Require Import
+  P8UnicodeUtf8Model P8D2StructuralOrderModel P8H8UnicodeScalarOrder.
 Import ListNotations.
 
 (*
