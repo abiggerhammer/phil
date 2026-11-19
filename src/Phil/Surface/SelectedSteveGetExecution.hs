@@ -29,6 +29,8 @@ module Phil.Surface.SelectedSteveGetExecution
   , SourceEvent (..)
   , StepResult (..)
   , stepSelectedSteveGet
+  , DriveResult (..)
+  , runSelectedFuel
   ) where
 
 import Data.IORef (IORef, atomicModifyIORef', newIORef, readIORef)
@@ -271,6 +273,31 @@ data StepResult
   | SourceReturnedUnit UnitBranch
   | SourceRejected Text
   deriving (Eq, Show)
+
+-- | Finite driver partiality is separate from the actual selected step:
+-- an exhausted scheduler prefix, a missing provider reply, a rejection and
+-- fuel depletion are four different outcomes.
+data DriveResult
+  = DriveCompleted UnitBranch
+  | DriveWaitingForResponse
+  | DriveRejected Text
+  | DriveFuelExhausted
+  | DriveInputPrefixEnded
+  deriving (Eq, Show)
+
+runSelectedFuel :: Int -> SelectedRun -> [Maybe SuppliedResponse] -> IO DriveResult
+runSelectedFuel fuel selected inputs
+  | fuel <= 0 = pure DriveFuelExhausted
+  | otherwise = case inputs of
+      [] -> pure DriveInputPrefixEnded
+      supplied : rest -> do
+        result <- stepSelectedSteveGet selected supplied
+        case result of
+          SourceReturnedUnit branch -> pure (DriveCompleted branch)
+          NeedsReadResponse -> pure DriveWaitingForResponse
+          NeedsDigestResponse -> pure DriveWaitingForResponse
+          SourceRejected problem -> pure (DriveRejected problem)
+          SourceAdvanced _ -> runSelectedFuel (fuel - 1) selected rest
 
 data Phase = NeedRead | NeedBorrow | NeedDigest | NeedClose | NeedRelease
   deriving (Eq, Show)
