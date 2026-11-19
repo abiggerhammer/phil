@@ -167,7 +167,6 @@ Proof.
   - apply Nat.compare_eq_iff in CmpAB. subst b.
     destruct (Nat.compare a c) eqn:CmpAC.
     + apply Nat.compare_eq_iff in CmpAC. subst c.
-      rewrite Nat.compare_refl.
       eapply IH; eassumption.
     + reflexivity.
     + rewrite CmpAC in Hyz. discriminate.
