@@ -49,7 +49,11 @@ import Phil.Compiler.SourceArchitecture
 import Phil.Compiler.SourceBundle
   ( CheckedSourceUnit (..), CheckedSourceBundle (..)
   , checkPortableSourceBundle )
-import Phil.Core.Static\n  ( DeclarationKey (..), InstanceKey (..)\n  , InterfaceRevision, DefinitionRevision, emptyStaticContext )\nimport Phil.Core.ProviderQualification\n  ( ProviderContract (..), ProviderImplementation (..) )
+import Phil.Core.Static
+  ( DeclarationKey (..), InstanceKey (..)
+  , InterfaceRevision, DefinitionRevision, emptyStaticContext )
+import Phil.Core.ProviderQualification
+  ( ProviderContract (..), ProviderImplementation (..) )
 import Phil.Core.Syntax (Mode (..), Ty (..))
 import Phil.Examples.Steve.ApplicationShell (steveGetShellEnvironment)
 import Phil.Examples.Steve.ProviderQualifications
