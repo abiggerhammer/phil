@@ -126,8 +126,8 @@ Proof.
       try discriminate.
     inversion H; subst; clear H.
     simpl.
-    rewrite app_length.
-    rewrite (IHleft leftTrace Hleft), (IHright rightTrace Hright).
+    rewrite length_app.
+    rewrite (IHleft leftTrace eq_refl), (IHright rightTrace eq_refl).
     lia.
 Qed.
 
