@@ -311,7 +311,7 @@ Lemma p8_h9_key_less_all_transitive :
 Proof.
   intros x y rest Hxy.
   induction rest as [| key value tail IH]; simpl.
-  - intro _. reflexivity.
+  - intro Htrivial. reflexivity.
   - intro Hall.
     apply andb_true_iff in Hall as [Hyk Htail].
     apply andb_true_iff. split.
@@ -325,9 +325,9 @@ Theorem p8_h9_adjacent_implies_pairwise_keys :
     p8_d2_strict_keys fields = true.
 Proof.
   induction fields as [| key value tail IH]; simpl.
-  - intro _. reflexivity.
+  - intro Htrivial. reflexivity.
   - destruct tail as [| next nextvalue more]; simpl.
-    + intro _. reflexivity.
+    + intro Htrivial. reflexivity.
     + intro Adj.
       apply andb_true_iff in Adj as [KeyLess AdjTail].
       specialize (IH AdjTail).
@@ -486,7 +486,7 @@ Lemma p8_h9_member_less_all_transitive :
 Proof.
   intros x y rest Hxy.
   induction rest as [| member tail IH]; simpl.
-  - intro _. reflexivity.
+  - intro Htrivial. reflexivity.
   - intro Hall.
     apply andb_true_iff in Hall as [Hym Htail].
     apply andb_true_iff. split.
@@ -500,9 +500,9 @@ Theorem p8_h9_adjacent_implies_pairwise_members :
     p8_d2_strict_members members = true.
 Proof.
   induction members as [| member tail IH]; simpl.
-  - intro _. reflexivity.
+  - intro Htrivial. reflexivity.
   - destruct tail as [| next more]; simpl.
-    + intro _. reflexivity.
+    + intro Htrivial. reflexivity.
     + intro Adj.
       apply andb_true_iff in Adj as [MemberLess AdjTail].
       specialize (IH AdjTail).
