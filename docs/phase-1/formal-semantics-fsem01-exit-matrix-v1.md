@@ -1,5 +1,26 @@
 # FSEM-01 resource and local typing: exit-evidence matrix (v1)
 
+## Current closeout overlay (2026-11-19)
+
+**FSEM-01 remains OPEN and non-normative.** The current review is
+[the 2026-11-19 closeout reconciliation](formal-semantics-fsem01-closeout-2026-11-19.md),
+anchored to `main=b6154389d2ddb627ef92c7e32094ba785dd635ba`. CORR-1–8 (through #1853), J-5 #1829,
+J-6A #1847 and DATA-05A/B/C #1857/#1861/#1864 are protected-merged.
+DATA-05C proves/test-drives one *bounded* opt-in two-level nested-product
+source/Surface fragment, not general nested types/patterns. J-6A is
+source/Core and model groundwork; production Surface Affine join-state
+J-6B remains blocked on the P9 `Engine.hs` ownership gate.
+
+**Historical section follows.** The core matrix audit below has a
+2026-11-10 (#1712) evidence cutoff; its later dated “proposed”
+annotations describe the state *when written*, not the present PR
+state. The 46-row COVERAGE-1 baseline (18 bounded/20 gap/8 handoff)
+is not a completion percentage or a present-day recomputation.
+No universal Haskell↔Rocq refinement, source evaluator, or normative
+graduation is established by these bounded merges.
+
+---
+
 > **J-5 protected integration / J-6A next foundation (2026-11-16):** [J-5 Linear source join](formal-semantics-linear-join-j5-fsem01-v1.md) protected-merged [#1829](https://github.com/abiggerhammer/phil/pull/1829), with real bounded Surface Linear Bytes[N] consume/join/fresh slot/return and conditional Rocq proofs. [J-6A](formal-semantics-two-affine-join-j6a-fsem01-v1.md) now proposes distinct-owner Affine *source lexical/nominal/Core proof groundwork only*, deliberately without editing the P9-owned Engine.hs. Production Surface Affine join-state validation remains an explicit J-6B gap; the general JOIN-05/Phase 1 FSEM-01 exit remains open.
 
 > **CORR-7 status note (2026-11-16):** CORR-6 [#1820](https://github.com/abiggerhammer/phil/pull/1820) is protected-merged with checked original-source replay. [CORR-7](formal-semantics-terminal-predecessors-corr7-fsem01-v1.md) now proposes a total finite terminal/continuing/source-failure classifier and globally ordered arbitrary-finite mixed-resource joins, with six original-source controls. These new witnesses are NOT audited or merged at this note's creation; R10/R11/R15 and the general FSEM-01 exit remain open.
