@@ -2,6 +2,9 @@ name: Phase 1 INT-002 Manifest Closure
 
 on:
   push:
+    # Phase 2 staged refs carry unreviewed worker code; never execute push CI.
+    branches-ignore:
+      - 'hamster/staged/**'
     paths:
       - 'examples/upload/client.phil'
       - 'examples/upload/server.phil'
