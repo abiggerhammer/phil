@@ -155,6 +155,7 @@ def validate_plan(binding: dict, *, base_sha: str, head_sha: str,
     deny(isinstance(issues, list), "missing open-issue census")
     target_title_prefix = "ATC candidate: " + PREFIX + binding["lane"] + "/"
     lane_label = "lane: " + binding["lane"]
+    active = 0
     for issue in issues:
         deny(isinstance(issue, dict) and isinstance(issue.get("title"), str) and
              isinstance(issue.get("labels"), list),
@@ -164,9 +165,16 @@ def validate_plan(binding: dict, *, base_sha: str, head_sha: str,
         deny(all(isinstance(lab, dict) and isinstance(lab.get("name"), str)
                  for lab in labels), "malformed issue labels")
         names = {lab["name"] for lab in labels}
-        if title.startswith(target_title_prefix) or (
-                "atc: staged" in names and lane_label in names):
+        if "atc: staged" in names and lane_label in names:
             raise ValueError("lane has an existing staged candidate issue")
+        if title.startswith(target_title_prefix):
+            states = names & {"atc: staged", "atc: admitting", "atc: admitted"}
+            deny(lane_label in names and len(states) == 1,
+                 "unowned/ambiguous same-lane candidate issue")
+            if "atc: staged" in states:
+                raise ValueError("lane has an existing staged candidate issue")
+            active += 1
+            deny(active <= 1, "lane has multiple active admitted candidates")
 
     return {**binding, "decision": "validated-read-only-plan",
             "base_sha": base, "head_sha": head, "main_sha": main,
