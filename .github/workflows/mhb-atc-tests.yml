@@ -104,7 +104,9 @@ jobs:
       - name: Worker App W2 fork-to-staged broker authorization and safety replays
         run: python3 scripts/test_mhb_atc_worker_broker.py
       - name: Install pinned YAML parser for G1 audit (test-only)
-        run: python3 -m pip install --disable-pip-version-check --no-deps --only-binary=:all: 'PyYAML==6.0.3'
+        run: |
+          python3 -m pip install --disable-pip-version-check --no-deps \
+            --only-binary=:all: 'PyYAML==6.0.3'
       - name: G1 staged-push CI namespace and historical workflow-tree isolation
         run: python3 scripts/test_mhb_atc_staged_push_ci.py
       - name: Immutable publisher, ruleset and receipt negative replay tests
