@@ -126,8 +126,10 @@ jobs:
             > /tmp/atc-w2-source-ref.json
           gh api "repos/$GH_REPO/git/matching-refs/heads/hamster/staged/$LANE/" \
             > /tmp/atc-w2-staged-refs.json
-          gh api --paginate "repos/$GH_REPO/issues?state=open&per_page=100" \
-            | jq -s 'add // []' > /tmp/atc-w2-open-issues.json
+          # A candidate name cannot be reused even after closing its issue.
+          # Complete all-state pagination also supplies open-issue state below.
+          gh api --paginate "repos/$GH_REPO/issues?state=all&per_page=100" \
+            | jq -s 'add // []' > /tmp/atc-w2-all-issues.json
 
           python3 scripts/mhb_atc_worker_broker.py plan \
             --worker-policy .github/atc-worker-policy.json \
@@ -138,7 +140,7 @@ jobs:
             --source-repository-json /tmp/atc-w2-source-repository.json \
             --source-ref-json /tmp/atc-w2-source-ref.json \
             --staged-refs-json /tmp/atc-w2-staged-refs.json \
-            --issues-json /tmp/atc-w2-open-issues.json \
+            --issues-json /tmp/atc-w2-all-issues.json \
             > /tmp/atc-w2-plan.json
 
           # Bare Git only; no checkout, submodules, package manager, hooks,
@@ -225,8 +227,10 @@ jobs:
           export GIT_CONFIG_NOSYSTEM=1
           export GIT_CONFIG_GLOBAL=/dev/null
           test -n "$WORKER_TOKEN"
-          test "$WORKER_ACTION_SLUG" = "$WORKER_APP_SLUG" || {
-            echo "Authenticated worker App slug mismatch" >&2; exit 1;
+          PINNED_SLUG="$(jq -r '.worker_app_slug' .github/atc-worker-policy.json)"
+          test "$WORKER_ACTION_SLUG" = "$PINNED_SLUG" && test "$WORKER_APP_SLUG" = "$PINNED_SLUG" || {
+            echo "Authenticated worker App slug differs from source-reviewed identity" >&2
+            exit 1
           }
           test "$WORKER_APP_ID" = "$(jq -r '.worker_app_id' .github/atc-worker-policy.json)" || {
             echo "Configured worker App ID differs from reviewed source policy" >&2; exit 1;
@@ -266,8 +270,8 @@ jobs:
           # Re-run authorization against a fresh complete stage/issue census.
           gh api "repos/$GH_REPO/git/matching-refs/heads/hamster/staged/$LANE/" \
             > /tmp/atc-w2-staged-refs-now.json
-          gh api --paginate "repos/$GH_REPO/issues?state=open&per_page=100" \
-            | jq -s 'add // []' > /tmp/atc-w2-open-issues-now.json
+          gh api --paginate "repos/$GH_REPO/issues?state=all&per_page=100" \
+            | jq -s 'add // []' > /tmp/atc-w2-all-issues-now.json
           python3 scripts/mhb_atc_worker_broker.py plan \
             --worker-policy .github/atc-worker-policy.json \
             --lane-policy .github/atc-worker-lanes.json \
@@ -277,7 +281,7 @@ jobs:
             --source-repository-json /tmp/atc-w2-source-repository.json \
             --source-ref-json /tmp/atc-w2-source-ref.json \
             --staged-refs-json /tmp/atc-w2-staged-refs-now.json \
-            --issues-json /tmp/atc-w2-open-issues-now.json \
+            --issues-json /tmp/atc-w2-all-issues-now.json \
             >/dev/null
 
           # Git push transports prevalidated objects; no worker code executes.
@@ -299,8 +303,15 @@ jobs:
           git --git-dir=/tmp/atc-w2-proposed.git -c core.hooksPath=/dev/null \
             push --porcelain "--force-with-lease=refs/heads/$STAGED:" \
             "https://github.com/$GH_REPO.git" \
-            "$HEAD_SHA:refs/heads/$STAGED"
+            "$HEAD_SHA:refs/heads/$STAGED" > /tmp/atc-w2-push-porcelain.txt
           unset GIT_ASKPASS
+
+          # An existing ref at the same SHA exits 0 with an "up to date"
+          # status even under an empty --force-with-lease. Only a positive
+          # * [new branch] record proves this transaction created the ref.
+          python3 scripts/mhb_atc_worker_broker.py created-ref \
+            --push-output /tmp/atc-w2-push-porcelain.txt \
+            --repo "$GH_REPO" --branch "$STAGED" --sha "$HEAD_SHA"
 
           live="$(gh api "repos/$GH_REPO/git/ref/heads/$STAGED" --jq '.object.sha')"
           test "$live" = "$HEAD_SHA" || {
