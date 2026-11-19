@@ -168,8 +168,11 @@ jobs:
           }
           git --git-dir="$GIT_DIR" diff --no-renames --name-only -z "$BASE_SHA" "$HEAD_SHA" \
             > /tmp/atc-w2-changed-paths.bin
+          git --git-dir="$GIT_DIR" diff --raw --no-renames --abbrev=40 -z \
+            "$BASE_SHA" "$HEAD_SHA" > /tmp/atc-w2-raw-diff.bin
           python3 scripts/mhb_atc_worker_broker.py paths \
             --paths-file /tmp/atc-w2-changed-paths.bin \
+            --raw-file /tmp/atc-w2-raw-diff.bin \
             > /tmp/atc-w2-paths-receipt.json
 
           if [ "$MODE" = "plan" ]; then
