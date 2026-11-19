@@ -203,13 +203,13 @@ def check_paths(data: bytes) -> dict:
 
 def check_raw_modes(data: bytes, paths_data: bytes) -> dict:
     """Pair --no-renames --raw -z records with the exact name-only file set."""
-    deny(0 < len(data) <= 2_000_000 and data.endswith(b"\\0"),
+    deny(0 < len(data) <= 2_000_000 and data.endswith(b"\0"),
          "invalid Git raw-diff mode evidence")
-    deny(paths_data.endswith(b"\\0"), "invalid name-only diff evidence")
-    entries = data[:-1].split(b"\\0")
+    deny(paths_data.endswith(b"\0"), "invalid name-only diff evidence")
+    entries = data[:-1].split(b"\0")
     deny(len(entries) % 2 == 0 and len(entries) >= 2,
          "malformed Git raw-diff entries")
-    names = paths_data[:-1].split(b"\\0")
+    names = paths_data[:-1].split(b"\0")
     seen = []
     for i in range(0, len(entries), 2):
         header, path = entries[i:i + 2]
