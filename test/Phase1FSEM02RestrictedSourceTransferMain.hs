@@ -39,6 +39,8 @@ main = do
     "test/fixtures/fsem02-restricted-source-transfer-v1/accepted.phil"
   rejected <- TextIO.readFile
     "test/fixtures/fsem02-restricted-source-transfer-v1/rejected-stale-close.phil"
+  rejectedReceiver <- TextIO.readFile
+    "test/fixtures/fsem02-restricted-source-transfer-v1/rejected-receiver-stale-close.phil"
   let result = do
         fx <- fixture accepted
         sequence_
@@ -63,6 +65,7 @@ main = do
           , borrowedOccupiedReceiverCollision accepted
           , crossModeSenderPayloadRefusal accepted
           , missingSenderResourceBeforeReceiverCollision accepted
+          , receiverClosePreemptsNativeFaults accepted rejectedReceiver
           , wrongSessionHeadRejects fx
           , sourceCloseReplay fx
           , sourceCloseRejectsForgedRequest fx
@@ -1351,6 +1354,88 @@ missingSenderResourceBeforeReceiverCollision source = do
         (GrammarV1ComponentSendCloseCloseMismatch _ _)) -> Right ()
       other -> Left ("missing sender masked bad source: " <> show (mode, other))
     | mode <- [Linear, Affine, Unrestricted]]
+  acceptedReplay fx
+
+
+-- NON-NORMATIVE FSEM-02: one stale *receiver* Close operand is rejected at
+-- the source layer even when both native payload resource sites are corrupt.
+receiverClosePreemptsNativeFaults :: Text -> Text -> Either String ()
+receiverClosePreemptsNativeFaults source badSource = do
+  fx <- fixture source
+  let valid = "let (done, received) = receive Bytes[8] on endpoint;\n  close done;"
+      invalid = "let (done, received) = receive Bytes[8] on endpoint;\n  close endpoint;"
+      original = fxBefore fx
+      senderKey = fxClientProcess fx
+      receiverKey = fxServerProcess fx
+      senderName = fxPayloadOwner fx
+      receiverName = fxPayloadReceiver fx
+      contexts = communicationProtocolContexts original
+      replay receiver state = checked fx (fxSender fx) receiver state
+  assert (Text.isInfixOf valid source && badSource /= source
+       && Text.replace valid invalid source == badSource)
+    "receiver negative is not the exact one-Close-operand source edit"
+  (_, badSender, badReceiver) <- parseParts badSource
+  assert (badSender == fxSender fx)
+    "receiver-only negative changed the parsed sender"
+  sender <- requireProtocol senderKey original
+  receiver <- requireProtocol receiverKey original
+  let sr = protocolResources sender
+      rr = protocolResources receiver
+      missing = sr { linearBindings = Map.delete senderName (linearBindings sr) }
+      state senderResources receiverResources =
+        original { communicationProtocolContexts =
+          Map.insert senderKey (sender { protocolResources = senderResources }) $
+            Map.insert receiverKey (receiver { protocolResources = receiverResources })
+              contexts }
+      expectBadReceiver st = case replay badReceiver st of
+        Left (RestrictedSourceReceiveError
+          (GrammarV1ComponentReceiveCloseCloseMismatch wanted got)) ->
+            assert (grammarV1ResolvedBinderCoreName wanted == fxServerNext fx
+                 && grammarV1ResolvedBinderCoreName got == fxServerOld fx)
+              "receiver source refusal lost exact successor/predecessor"
+        other -> Left ("stale receiver Close escaped source guard: " <> show other)
+      expectSenderFault err st = case replay (fxReceiver fx) st of
+        Left (RestrictedSourceCoreError
+          (RestrictedMessageSenderResourceError process observed)) ->
+            assert (process == senderKey && observed == err)
+              "sender resource refusal lost exact owner/process diagnostic"
+        other -> Left ("expected sender resource refusal: " <> show other)
+      expectReceiverBusy st = case replay (fxReceiver fx) st of
+        Left (RestrictedSourceCoreError
+          (RestrictedMessageReceiverResourceError process (DuplicateBinding name))) ->
+            assert (process == receiverKey && name == receiverName)
+              "receiver resource refusal lost exact occupied binder"
+        other -> Left ("expected occupied receiver refusal: " <> show other)
+  borrowed <- mapLeft show $ startSharedLoan senderName sr
+  wrongMode <- mapLeft show $ insertBinding Affine senderName payloadTy missing
+  assert (Map.lookup senderName (linearBindings sr) == Just payloadTy
+       && Map.lookup senderName (affineBindings wrongMode) == Just payloadTy
+       && Map.lookup payloadOccurrence (communicationRestrictedOwners original)
+            == Just (senderKey, senderName))
+    "source owner ledger and native resource faults were not isolated"
+  let faults = [("borrowed", borrowed, OwnerBorrowed senderName)
+              ,("missing", missing, UnknownBinding senderName)
+              ,("wrong-mode", wrongMode, WrongStructuralMode senderName Linear Affine)]
+  expectBadReceiver original
+  sequence_ [do
+    occupied <- mapLeft show $ insertBinding mode receiverName TyBool rr
+    expectBadReceiver (state sr occupied)
+    expectReceiverBusy (state sr occupied)
+    sequence_ [do
+      let both = state corrupted occupied
+          senderOnly = state corrupted rr
+      expectBadReceiver both
+      expectBadReceiver senderOnly
+      expectSenderFault fault both
+      expectSenderFault fault senderOnly
+      assert (replay badReceiver both == replay badReceiver both
+           && replay (fxReceiver fx) both == replay (fxReceiver fx) both)
+        ("receiver source/native refusal replay nondeterministic: " <> label)
+      | (label, corrupted, fault) <- faults]
+    | mode <- [Linear, Affine, Unrestricted]]
+  assert (state sr rr == original
+       && replay (fxReceiver fx) original == replay (fxReceiver fx) (state sr rr))
+    "repairing both native contexts failed to reconstruct the accepted state"
   acceptedReplay fx
 
 wrongSessionHeadRejects :: Fixture -> Either String ()
