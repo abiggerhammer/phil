@@ -192,9 +192,14 @@ def validate_plan(binding: dict, *, base_sha: str, head_sha: str,
             continue
         if "pull_request" in issue:
             # GitHub also returns PR objects in the Issues endpoint.
-            # Existing admitted PRs are not candidate issues.
-            deny(not ({STAGED_LABEL, ADMITTING_LABEL} & labels),
-                 "PR cannot masquerade as staged/admitting candidate issue")
+            # Ordinary admitted PRs are not candidate issues; a PR carrying
+            # a candidate machine record, title or staged/admitting state is
+            # malformed controller state, not an eligible predecessor.
+            deny(not ({STAGED_LABEL, ADMITTING_LABEL} & labels) and
+                 not issue["title"].startswith("ATC candidate: ") and
+                 not (isinstance(issue.get("body"), str) and
+                      issue["body"].startswith(MARKER + "\n")),
+                 "PR cannot masquerade as canonical candidate issue")
             continue
 
         # Checks creator, issue kind, exactly one lifecycle label, canonical
