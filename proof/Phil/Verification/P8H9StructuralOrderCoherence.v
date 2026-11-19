@@ -107,6 +107,89 @@ Example p8_h9_adjacent_reversed_keys :
       (P8D2FieldCons [97] (P8D2Atom [0]) P8D2FieldNil)) = false.
 Proof. reflexivity. Qed.
 
+(* Primitive algebra of the ORIGINAL D2 byte comparator: exact equality
+   reflection, reversal and strict transitivity over arbitrary finite lists. *)
+Lemma p8_h9_compare_bytes_reflexive :
+  forall xs, p8_d2_compare_bytes xs xs = Eq.
+Proof.
+  induction xs as [| a tail IH]; simpl.
+  - reflexivity.
+  - rewrite Nat.compare_refl. exact IH.
+Qed.
+
+Lemma p8_h9_compare_bytes_eq_iff :
+  forall xs ys,
+    p8_d2_compare_bytes xs ys = Eq <-> xs = ys.
+Proof.
+  intros xs ys. split.
+  - revert ys.
+    induction xs as [| a tail IH]; intros [| b rest] H;
+      simpl in H; try discriminate; try reflexivity.
+    destruct (Nat.compare a b) eqn:Cmp; try discriminate.
+    apply Nat.compare_eq_iff in Cmp. subst b.
+    f_equal. apply IH. exact H.
+  - intro E. subst ys. apply p8_h9_compare_bytes_reflexive.
+Qed.
+
+Definition p8_h9_reverse_compare (c : comparison) : comparison :=
+  match c with Eq => Eq | Lt => Gt | Gt => Lt end.
+
+Lemma p8_h9_compare_bytes_reversal :
+  forall xs ys,
+    p8_d2_compare_bytes xs ys =
+    p8_h9_reverse_compare (p8_d2_compare_bytes ys xs).
+Proof.
+  induction xs as [| a tail IH]; intros [| b rest]; simpl;
+    try reflexivity.
+  destruct (Nat.compare a b) eqn:Cmp.
+  - apply Nat.compare_eq_iff in Cmp. subst b.
+    rewrite Nat.compare_refl. simpl. exact IH.
+  - assert (Reverse : Nat.compare b a = Gt).
+    { apply Nat.compare_gt_iff.
+      apply Nat.compare_lt_iff in Cmp. lia. }
+    rewrite Reverse. reflexivity.
+  - assert (Reverse : Nat.compare b a = Lt).
+    { apply Nat.compare_lt_iff.
+      apply Nat.compare_gt_iff in Cmp. lia. }
+    rewrite Reverse. reflexivity.
+Qed.
+
+Lemma p8_h9_compare_bytes_lt_transitive :
+  forall xs ys zs,
+    p8_d2_compare_bytes xs ys = Lt ->
+    p8_d2_compare_bytes ys zs = Lt ->
+    p8_d2_compare_bytes xs zs = Lt.
+Proof.
+  induction xs as [| a tail IH]; intros [| b rest] [| c final]
+    Hxy Hyz; simpl in *; try discriminate; try reflexivity.
+  destruct (Nat.compare a b) eqn:CmpAB; simpl in Hxy;
+    try discriminate.
+  - apply Nat.compare_eq_iff in CmpAB. subst b.
+    destruct (Nat.compare a c) eqn:CmpAC.
+    + apply Nat.compare_eq_iff in CmpAC. subst c.
+      rewrite Nat.compare_refl.
+      eapply IH; eassumption.
+    + reflexivity.
+    + rewrite CmpAC in Hyz. discriminate.
+  - apply Nat.compare_lt_iff in CmpAB.
+    destruct (Nat.compare b c) eqn:CmpBC; simpl in Hyz;
+      try discriminate.
+    + apply Nat.compare_eq_iff in CmpBC. subst c.
+      assert (CmpAC : Nat.compare a b = Lt).
+      { apply Nat.compare_lt_iff. lia. }
+      rewrite CmpAC. reflexivity.
+    + apply Nat.compare_lt_iff in CmpBC.
+      assert (CmpAC : Nat.compare a c = Lt).
+      { apply Nat.compare_lt_iff. lia. }
+      rewrite CmpAC. reflexivity.
+  - discriminate.
+Qed.
+
+Print Assumptions p8_h9_compare_bytes_reflexive.
+Print Assumptions p8_h9_compare_bytes_eq_iff.
+Print Assumptions p8_h9_compare_bytes_reversal.
+Print Assumptions p8_h9_compare_bytes_lt_transitive.
+
 Print Assumptions p8_h9_compare_bytes_common_prefix.
 Print Assumptions p8_h9_compare_bytes_proper_prefix.
 Print Assumptions p8_h9_pairwise_implies_adjacent_members.
