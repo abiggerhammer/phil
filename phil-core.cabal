@@ -177,6 +177,7 @@ library
       Phil.Verification.ManifestClosure
       DataModeKernel
       DataProductKernel
+      DataEliminationKernel
       GenericIdentityEqualityKernel
       GenericInstantiationDomainKernel
       GenericInstantiationValidityKernel
@@ -189,6 +190,8 @@ library
       Phil.Core.NominalDataMode
       Phil.Core.DataModeKernelBridge
       Phil.Core.DataProductKernelBridge
+      Phil.Core.DataEliminationKernelBridge
+      Phil.Core.DataDestruction
       Phil.Core.FloatArithmetic
       Phil.Core.Generic
       Phil.Core.Generic.RequirementCategory
@@ -233,11 +236,13 @@ library
       Phil.Surface.GrammarV1.BorrowViewScope
       Phil.Surface.GrammarV1.BorrowResourceSurface
       Phil.Surface.GrammarV1.DataVariants
+      Phil.Surface.GrammarV1.RecordFields
       Phil.Surface.GrammarV1.SourceAffineResource
       Phil.Surface.GrammarV1.SourceAffineProduct
       Phil.Surface.GrammarV1.SourceProductElimination
       Phil.Surface.GrammarV1.SourceNestedProductElimination
       Phil.Surface.GrammarV1.SourceRecursiveProductElimination
+      Phil.Surface.GrammarV1.SourceRecordFieldDisposition
       Phil.Surface.GrammarV1.SourceIfJoinResource
       Phil.Surface.GrammarV1.SourceAffineIfJoinResource
       Phil.Surface.GrammarV1.SourceScopedBorrowJoin
