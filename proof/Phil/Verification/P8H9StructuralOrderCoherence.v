@@ -1,5 +1,5 @@
 From Coq Require Import List Bool Arith.PeanoNat Lia.
-From Phil.Verification Require Import P8D2StructuralOrderModel.
+From Phil.Verification Require Import P8D2StructuralOrderModel P8H8UnicodeScalarOrder.
 Import ListNotations.
 
 (*
@@ -635,6 +635,24 @@ Qed.
 Print Assumptions p8_h9_compare_form_trichotomy.
 Print Assumptions p8_h9_compare_forms_trichotomy.
 Print Assumptions p8_h9_compare_fields_trichotomy.
+
+(* Actual accepted H8 Unicode order math transports directly into
+   D2 Atom ordering; this is NOT a statement about native Haskell Text. *)
+Theorem p8_h9_unicode_atom_order_iff :
+  forall left right,
+    p8_utf8_scalar_wellformed left = true ->
+    p8_utf8_scalar_wellformed right = true ->
+    (p8_d2_compare_form
+       (P8D2Atom (p8_utf8_scalar_bytes left))
+       (P8D2Atom (p8_utf8_scalar_bytes right)) = Lt
+     <-> p8_utf8_scalar_value left < p8_utf8_scalar_value right).
+Proof.
+  intros left right VL VR.
+  simpl.
+  now apply p8_h8_scalar_byte_less_iff.
+Qed.
+
+Print Assumptions p8_h9_unicode_atom_order_iff.
 
 Print Assumptions p8_h9_member_less_transitive.
 Print Assumptions p8_h9_member_less_all_transitive.
