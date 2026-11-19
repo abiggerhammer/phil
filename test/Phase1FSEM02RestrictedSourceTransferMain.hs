@@ -126,6 +126,10 @@ main = do
           case restrictedObservationWire accepted rejected rejectedReceiver rejectedBoth of
             Right wire -> TextIO.putStr wire
             Left err -> putStrLn ("FAIL: " <> err) >> exitFailure
+        ["emit-rocq-close-order-observation"] ->
+          case restrictedCloseOrderObservationWire accepted rejected rejectedReceiver rejectedBoth of
+            Right wire -> TextIO.putStr wire
+            Left err -> putStrLn ("FAIL: " <> err) >> exitFailure
         ["emit-rocq-terminal-observation"] ->
           case restrictedTerminalObservationWire accepted rejected rejectedReceiver rejectedBoth of
             Right wire -> TextIO.putStr wire
@@ -1627,6 +1631,74 @@ restrictedTerminalObservationWire accepted senderStale receiverStale bothStale =
     , "Definition fsem02TerminalObservedEvents : list FSEM02TerminalObservationTag :="
     , "  [" <> Text.intercalate "; " tags <> "]."
     ]
+
+-- NON-NORMATIVE FSEM-02: source/Core Close-order observation. The existing
+-- complete source and its three minimally rejected variants are rechecked
+-- before observing both real native closing orders. Process, network,
+-- protocol, outcome and owner occurrence authority are separate premises.
+restrictedCloseOrderObservationWire :: Text -> Text -> Text -> Text -> Either String Text
+restrictedCloseOrderObservationWire accepted senderStale receiverStale bothStale = do
+  _ <- restrictedTerminalObservationWire accepted senderStale receiverStale bothStale
+  fx <- fixture accepted
+  sourceCloseDiamondReplay fx
+  diamond <- mapLeft show $
+    sourceCloseDiamondFrom fx (fxSender fx) (fxReceiver fx)
+      (fxBefore fx) doneOutcome doneOutcome
+  let senderFirst = restrictedSourceCloseNext (restrictedSourceDiamondForward diamond)
+      receiverFirst = restrictedSourceDiamondReverse diamond
+      receiverHalf = restrictedSourceDiamondReceiverFirst diamond
+      afterTransfer = restrictedSourceNext (restrictedSourceDiamondRendezvous diamond)
+      ownersTransfer = communicationRestrictedOwners afterTransfer
+      ownersHalf = communicationRestrictedOwners receiverHalf
+      ownersAfter = communicationRestrictedOwners senderFirst
+      revision = binaryProtocolInstanceRevision (fxInstance fx)
+      checkRetired st process endpoint role =
+        case closeProcessEndpointState (fxNetwork fx) st
+            process endpoint revision role doneOutcome of
+          Left (EndpointClosureOccurrenceUnknown actualProcess actualEndpoint) -> do
+            assert (actualProcess == process && actualEndpoint == endpoint)
+              "Close-order OBS lost exact retired endpoint/process identity"
+            Right "FSEM02StaleEndpointRefused"
+          other -> Left ("Close-order OBS unexpectedly admitted retired endpoint: " <> show other)
+  assert (senderFirst == receiverFirst
+       && Map.lookup serverEndpointOccurrence ownersHalf == Nothing
+       && Map.lookup clientEndpointOccurrence ownersHalf
+            == Map.lookup clientEndpointOccurrence ownersTransfer
+       && Map.lookup payloadOccurrence ownersHalf
+            == Map.lookup payloadOccurrence ownersTransfer
+       && Map.lookup spectatorOccurrence ownersHalf
+            == Map.lookup spectatorOccurrence ownersTransfer
+       && ownersAfter == Map.delete clientEndpointOccurrence
+            (Map.delete serverEndpointOccurrence ownersTransfer)
+       && Map.lookup payloadOccurrence ownersAfter
+            == Just (fxServerProcess fx, fxPayloadReceiver fx)
+       && Map.lookup spectatorOccurrence ownersAfter
+            == Map.lookup spectatorOccurrence ownersTransfer)
+    "Close-order OBS diverged, resurrected a predecessor or lost framed owners"
+  senderAfterForward <- checkRetired senderFirst
+    (fxClientProcess fx) (fxClientNext fx) clientRole
+  receiverAfterForward <- checkRetired senderFirst
+    (fxServerProcess fx) (fxServerNext fx) serverRole
+  senderAfterReverse <- checkRetired receiverFirst
+    (fxClientProcess fx) (fxClientNext fx) clientRole
+  receiverAfterReverse <- checkRetired receiverFirst
+    (fxServerProcess fx) (fxServerNext fx) serverRole
+  let tags = ["FSEM02SenderFirstConverged", "FSEM02ReceiverFirstConverged",
+              senderAfterForward, receiverAfterForward,
+              senderAfterReverse, receiverAfterReverse]
+  assert (tags == ["FSEM02SenderFirstConverged", "FSEM02ReceiverFirstConverged",
+                   "FSEM02StaleEndpointRefused", "FSEM02StaleEndpointRefused",
+                   "FSEM02StaleEndpointRefused", "FSEM02StaleEndpointRefused"])
+    "Close-order OBS tags changed without a reviewed revision"
+  Right $ Text.unlines
+    [ "From Stdlib Require Import Lists.List."
+    , "From Phil.Core Require Import FSEM02CloseOrderObservationModel."
+    , "Import ListNotations."
+    , "(* Close-order OBS-V1; checked finite Haskell source/Core observation. *)"
+    , "Definition fsem02CloseOrderObservedEvents : list FSEM02CloseOrderTag :="
+    , "  [" <> Text.intercalate "; " tags <> "]."
+    ]
+
 
 wrongSessionHeadRejects :: Fixture -> Either String ()
 wrongSessionHeadRejects fx = do
