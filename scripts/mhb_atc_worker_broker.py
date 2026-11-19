@@ -201,6 +201,38 @@ def check_paths(data: bytes) -> dict:
     return {"decision": "candidate-paths-reviewed", "changed_files": len(paths)}
 
 
+def check_raw_modes(data: bytes, paths_data: bytes) -> dict:
+    """Pair --no-renames --raw -z records with the exact name-only file set."""
+    deny(0 < len(data) <= 2_000_000 and data.endswith(b"\\0"),
+         "invalid Git raw-diff mode evidence")
+    deny(paths_data.endswith(b"\\0"), "invalid name-only diff evidence")
+    entries = data[:-1].split(b"\\0")
+    deny(len(entries) % 2 == 0 and len(entries) >= 2,
+         "malformed Git raw-diff entries")
+    names = paths_data[:-1].split(b"\\0")
+    seen = []
+    for i in range(0, len(entries), 2):
+        header, path = entries[i:i + 2]
+        parsed = re.fullmatch(
+            rb":(000000|100644|100755) (000000|100644|100755) "
+            rb"[0-9a-f]{40} [0-9a-f]{40} ([AMD])", header)
+        deny(parsed is not None, "untrusted symlink, gitlink, rename or Git mode")
+        old_mode, new_mode, status = parsed.groups()
+        if status == b"A":
+            deny(old_mode == b"000000" and new_mode != b"000000",
+                 "invalid added-file mode")
+        elif status == b"D":
+            deny(new_mode == b"000000" and old_mode != b"000000",
+                 "invalid deleted-file mode")
+        else:
+            deny(old_mode != b"000000" and new_mode != b"000000",
+                 "invalid modified-file mode")
+        seen.append(path)
+    deny(len(set(seen)) == len(seen) and set(seen) == set(names),
+         "raw Git diff and path listing disagree")
+    return {"decision": "candidate-file-modes-reviewed", "changed_files": len(seen)}
+
+
 def cli() -> int:
     p = argparse.ArgumentParser(description=__doc__)
     sub = p.add_subparsers(dest="command", required=True)
@@ -214,9 +246,12 @@ def cli() -> int:
                 x.add_argument("--" + arg, required=True)
     x = sub.add_parser("paths")
     x.add_argument("--paths-file", required=True)
+    x.add_argument("--raw-file", required=True)
     args = p.parse_args()
     if args.command == "paths":
-        result = check_paths(Path(args.paths_file).read_bytes())
+        paths = Path(args.paths_file).read_bytes()
+        result = check_paths(paths)
+        result["mode_evidence"] = check_raw_modes(Path(args.raw_file).read_bytes(), paths)
     else:
         worker = load_json(args.worker_policy)
         registry = load_json(args.lane_policy)
