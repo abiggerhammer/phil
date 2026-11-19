@@ -166,7 +166,7 @@ jobs:
           test "$count" -ge 1 && test "$count" -le 100 || {
             echo "Candidate commit count out of bounds" >&2; exit 1;
           }
-          git --git-dir="$GIT_DIR" diff --name-only -z "$BASE_SHA" "$HEAD_SHA" \
+          git --git-dir="$GIT_DIR" diff --no-renames --name-only -z "$BASE_SHA" "$HEAD_SHA" \
             > /tmp/atc-w2-changed-paths.bin
           python3 scripts/mhb_atc_worker_broker.py paths \
             --paths-file /tmp/atc-w2-changed-paths.bin \
