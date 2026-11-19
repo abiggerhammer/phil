@@ -90,7 +90,7 @@ def branch_pattern_disjoint_from_staged(pattern: str) -> bool:
     """
     if pattern.startswith("!"):
         return False  # Glob negation needs a separate ordered-pattern proof.
-    marker = re.search(r"[*?\\[\\]{}!+@()\\\\]", pattern)
+    marker = re.search(r"[*?\[\]{}!+@()\\]", pattern)
     literal_prefix = pattern[:marker.start()] if marker else pattern
     staged_prefix = "hamster/staged/"
     return not (staged_prefix.startswith(literal_prefix) or
