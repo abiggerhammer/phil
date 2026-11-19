@@ -1,0 +1,340 @@
+name: MHB ATC W2 Worker Broker (Operator Mediated, Disabled by Default)
+
+# W2: public fork source is fetched as Git data WITHOUT credentials or checkout.
+# No worker ever sees the broker-held Contents-write installation token.
+# The publish path needs both reviewed source activation and a separate repo
+# variable, and all lanes currently have enabled=false in source policy.
+on:
+  workflow_dispatch:
+    inputs:
+      mode:
+        description: "plan reads/checks only; publish is independently gated and create-only"
+        type: choice
+        required: true
+        default: plan
+        options:
+          - plan
+          - publish
+      lane:
+        description: "Registered Phase 2 lane"
+        type: string
+        required: true
+      candidate:
+        description: "Fresh candidate slug (never a reused staged branch)"
+        type: string
+        required: true
+      base_sha:
+        description: "Exact Phil main-ancestor SHA from which the source fork diverged"
+        type: string
+        required: true
+      head_sha:
+        description: "Exact live proposed commit SHA on the registered fork"
+        type: string
+        required: true
+
+permissions:
+  contents: read
+  issues: read
+
+concurrency:
+  # Serialize with admission / stage issue registration and repair operations.
+  group: mhb-atc-admission-global
+  queue: max
+  cancel-in-progress: false
+
+jobs:
+  broker:
+    if: >-
+      github.event_name == 'workflow_dispatch' &&
+      github.ref == 'refs/heads/main' &&
+      github.repository == 'abiggerhammer/phil' &&
+      github.actor == 'abiggerhammer'
+    runs-on: ubuntu-24.04
+    environment: atc-worker-broker
+    steps:
+      - name: Checkout exact trusted workflow source (never proposed fork)
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+
+      - name: Resolve registered lane and validate source in an unprivileged bare repository
+        id: prepare
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          DISPATCH_ACTOR: ${{ github.actor }}
+          MAIN_DISPATCH_SHA: ${{ github.sha }}
+          MODE: ${{ inputs.mode }}
+          LANE: ${{ inputs.lane }}
+          CANDIDATE: ${{ inputs.candidate }}
+          BASE_SHA: ${{ inputs.base_sha }}
+          HEAD_SHA: ${{ inputs.head_sha }}
+          BROKER_ENABLED: ${{ vars.MHB_ATC_WORKER_BROKER_ENABLED }}
+          AUTO_ADMIT_ENABLED: ${{ vars.MHB_ATC_AUTO_ADMIT_ENABLED }}
+          IMMUTABLE_ENABLED: ${{ vars.MHB_ATC_IMMUTABLE_HEADS_ENABLED }}
+          STAGE_BRIDGE_ENABLED: ${{ vars.MHB_ATC_PHASE2_STAGE_BRIDGE_ENABLED }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          export GIT_CONFIG_NOSYSTEM=1
+          export GIT_CONFIG_GLOBAL=/dev/null
+          test "$MODE" = "plan" || test "$MODE" = "publish" || exit 2
+
+          # Commission with the existing ATC activation switches all OFF.
+          # W2 requires a separate reviewed change before combined activation.
+          for enabled in "$AUTO_ADMIT_ENABLED" "$IMMUTABLE_ENABLED" "$STAGE_BRIDGE_ENABLED"; do
+            test "${enabled,,}" != "true" || {
+              echo "Stop: other ATC automation must remain OFF during W2 pilot" >&2
+              exit 1
+            }
+          done
+
+          if [ "$MODE" = "publish" ]; then
+            test "${BROKER_ENABLED,,}" = "true" || {
+              echo "Worker broker runtime activation is OFF" >&2
+              exit 1
+            }
+            test "$(jq -r '.broker_activation' .github/atc-worker-policy.json)" == "enabled" || {
+              echo "Worker broker source-policy activation is OFF" >&2
+              exit 1
+            }
+          fi
+
+          python3 scripts/mhb_atc_worker_broker.py resolve \
+            --worker-policy .github/atc-worker-policy.json \
+            --lane-policy .github/atc-worker-lanes.json \
+            --repo "$GH_REPO" --actor "$DISPATCH_ACTOR" \
+            --lane "$LANE" --candidate "$CANDIDATE" > /tmp/atc-w2-binding.json
+          SOURCE_REPO="$(jq -r '.source_repository' /tmp/atc-w2-binding.json)"
+          SOURCE_REF="$(jq -r '.source_ref' /tmp/atc-w2-binding.json)"
+          STAGED="$(jq -r '.staged_branch' /tmp/atc-w2-binding.json)"
+
+          MAIN_SHA="$(git rev-parse HEAD)"
+          test "$MAIN_SHA" = "$MAIN_DISPATCH_SHA" || {
+            echo "Checked-out source differs from dispatch revision" >&2; exit 1;
+          }
+          CURRENT_MAIN="$(gh api "repos/$GH_REPO/git/ref/heads/main" --jq '.object.sha')"
+          test "$CURRENT_MAIN" = "$MAIN_SHA" || {
+            echo "Main advanced after broker dispatch; repeat from new main" >&2; exit 1;
+          }
+
+          # No worker key/token is even referenced by this step. Fork metadata
+          # and ref snapshots come from GitHub through ordinary READ token.
+          gh api "repos/$SOURCE_REPO" > /tmp/atc-w2-source-repository.json
+          gh api "repos/$SOURCE_REPO/git/ref/heads/$SOURCE_REF" \
+            > /tmp/atc-w2-source-ref.json
+          gh api "repos/$GH_REPO/git/matching-refs/heads/hamster/staged/$LANE/" \
+            > /tmp/atc-w2-staged-refs.json
+          # A candidate name cannot be reused even after closing its issue.
+          # Complete all-state pagination also supplies open-issue state below.
+          # Compact JSON preserves every record under the separate 32 MiB history cap.
+          gh api --paginate "repos/$GH_REPO/issues?state=all&per_page=100" \
+            | jq -sc 'add // []' > /tmp/atc-w2-all-issues.json
+
+          python3 scripts/mhb_atc_worker_broker.py plan \
+            --worker-policy .github/atc-worker-policy.json \
+            --lane-policy .github/atc-worker-lanes.json \
+            --repo "$GH_REPO" --actor "$DISPATCH_ACTOR" \
+            --lane "$LANE" --candidate "$CANDIDATE" \
+            --base-sha "$BASE_SHA" --head-sha "$HEAD_SHA" --main-sha "$MAIN_SHA" \
+            --source-repository-json /tmp/atc-w2-source-repository.json \
+            --source-ref-json /tmp/atc-w2-source-ref.json \
+            --staged-refs-json /tmp/atc-w2-staged-refs.json \
+            --issues-json /tmp/atc-w2-all-issues.json \
+            > /tmp/atc-w2-plan.json
+
+          # Bare Git only; no checkout, submodules, package manager, hooks,
+          # or execution of even one byte of the untrusted proposed source.
+          GIT_DIR=/tmp/atc-w2-proposed.git
+          git -c init.templateDir=/dev/null init --bare "$GIT_DIR" >/dev/null
+          git --git-dir="$GIT_DIR" -c core.hooksPath=/dev/null \
+            fetch --no-tags --no-recurse-submodules \
+            "https://github.com/$GH_REPO.git" \
+            "+refs/heads/main:refs/atc/main" >/dev/null
+          git --git-dir="$GIT_DIR" -c core.hooksPath=/dev/null \
+            fetch --no-tags --no-recurse-submodules \
+            "https://github.com/$SOURCE_REPO.git" \
+            "+refs/heads/$SOURCE_REF:refs/atc/source" >/dev/null
+
+          test "$(git --git-dir="$GIT_DIR" rev-parse refs/atc/main^{commit})" = "$MAIN_SHA"
+          test "$(git --git-dir="$GIT_DIR" rev-parse refs/atc/source^{commit})" = "$HEAD_SHA"
+          git --git-dir="$GIT_DIR" cat-file -e "$BASE_SHA^{commit}"
+          git --git-dir="$GIT_DIR" merge-base --is-ancestor "$BASE_SHA" "$MAIN_SHA"
+          git --git-dir="$GIT_DIR" merge-base --is-ancestor "$BASE_SHA" "$HEAD_SHA"
+          test -z "$(git --git-dir="$GIT_DIR" rev-list --merges "$BASE_SHA..$HEAD_SHA")" || {
+            echo "Merge commits in proposed candidate need a separate review" >&2; exit 1;
+          }
+          count="$(git --git-dir="$GIT_DIR" rev-list --count "$BASE_SHA..$HEAD_SHA")"
+          test "$count" -ge 1 && test "$count" -le 100 || {
+            echo "Candidate commit count out of bounds" >&2; exit 1;
+          }
+          git --git-dir="$GIT_DIR" diff --no-renames --name-only -z "$BASE_SHA" "$HEAD_SHA" \
+            > /tmp/atc-w2-changed-paths.bin
+          git --git-dir="$GIT_DIR" diff --raw --no-renames --abbrev=40 -z \
+            "$BASE_SHA" "$HEAD_SHA" > /tmp/atc-w2-raw-diff.bin
+          python3 scripts/mhb_atc_worker_broker.py paths \
+            --paths-file /tmp/atc-w2-changed-paths.bin \
+            --raw-file /tmp/atc-w2-raw-diff.bin \
+            > /tmp/atc-w2-paths-receipt.json
+
+          if [ "$MODE" = "plan" ]; then
+            {
+              echo "### MHB-ATC W2 broker — READ ONLY plan"
+              echo "- trusted workflow/checkout SHA: $MAIN_SHA"
+              echo "- registered lane: $LANE"
+              echo "- public fork: $SOURCE_REPO"
+              echo "- proposal ref: $SOURCE_REF"
+              echo "- exact proposed head: $HEAD_SHA"
+              echo "- main ancestor: $BASE_SHA"
+              echo "- staged target: $STAGED (create-only, NOT written)"
+              echo "- authentication: maintainer-dispatched, no hamster key"
+              echo "- worker App private key/token: NOT ACCESSED"
+              echo "- admitted refs/PRs/issues modified: NONE"
+            } >> "$GITHUB_STEP_SUMMARY"
+          fi
+
+      - name: Mint dedicated broker-held worker App token (only if separately activated)
+        if: >-
+          inputs.mode == 'publish' &&
+          vars.MHB_ATC_WORKER_BROKER_ENABLED == 'true'
+        id: broker_token
+        uses: actions/create-github-app-token@64ab729a6294000f5aa4a4bc0b73d1f32bc45510 # v3
+        with:
+          client-id: ${{ vars.MHB_ATC_WORKER_APP_CLIENT_ID }}
+          private-key: ${{ secrets.MHB_ATC_WORKER_APP_PRIVATE_KEY }}
+          permission-contents: write
+
+      - name: Create-only staged push and register candidate (NO PR)
+        if: >-
+          inputs.mode == 'publish' &&
+          vars.MHB_ATC_WORKER_BROKER_ENABLED == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          DISPATCH_ACTOR: ${{ github.actor }}
+          LANE: ${{ inputs.lane }}
+          CANDIDATE: ${{ inputs.candidate }}
+          BASE_SHA: ${{ inputs.base_sha }}
+          HEAD_SHA: ${{ inputs.head_sha }}
+          WORKER_TOKEN: ${{ steps.broker_token.outputs.token }}
+          WORKER_ACTION_SLUG: ${{ steps.broker_token.outputs.app-slug }}
+          INSTALLATION_ID: ${{ steps.broker_token.outputs.installation-id }}
+          WORKER_APP_ID: ${{ vars.MHB_ATC_WORKER_APP_ID }}
+          WORKER_APP_SLUG: ${{ vars.MHB_ATC_WORKER_APP_SLUG }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          export GIT_CONFIG_NOSYSTEM=1
+          export GIT_CONFIG_GLOBAL=/dev/null
+          test -n "$WORKER_TOKEN"
+          PINNED_SLUG="$(jq -r '.worker_app_slug' .github/atc-worker-policy.json)"
+          test "$WORKER_ACTION_SLUG" = "$PINNED_SLUG" && test "$WORKER_APP_SLUG" = "$PINNED_SLUG" || {
+            echo "Authenticated worker App slug differs from source-reviewed identity" >&2
+            exit 1
+          }
+          test "$WORKER_APP_ID" = "$(jq -r '.worker_app_id' .github/atc-worker-policy.json)" || {
+            echo "Configured worker App ID differs from reviewed source policy" >&2; exit 1;
+          }
+          [[ "$INSTALLATION_ID" =~ ^[1-9][0-9]*$ ]] || {
+            echo "Minted token lacks authenticated installation ID" >&2; exit 1;
+          }
+          # This checks the actual minted token's repository audience. It is
+          # distinct from, and does not prove, full App installation scope.
+          GH_TOKEN="$WORKER_TOKEN" gh api "installation/repositories" \
+            > /tmp/atc-w2-token-repositories.json
+          jq -e --arg repo "$GH_REPO" '
+            (.total_count == 1) and
+            (.repositories | type == "array" and length == 1) and
+            (.repositories[0].full_name == $repo)
+          ' /tmp/atc-w2-token-repositories.json > /dev/null || {
+            echo "Minted worker token is not restricted to Phil only" >&2; exit 1;
+          }
+          # This is the output of the trusted pre-credential validation step.
+          test "$(jq -r '.decision' /tmp/atc-w2-plan.json)" = "validated-read-only-plan"
+          test "$(jq -r '.head_sha' /tmp/atc-w2-plan.json)" = "$HEAD_SHA"
+          test "$(jq -r '.lane' /tmp/atc-w2-plan.json)" = "$LANE"
+          test "$(jq -r '.candidate' /tmp/atc-w2-plan.json)" = "$CANDIDATE"
+          test "$(jq -r '.repo' /tmp/atc-w2-plan.json)" = "$GH_REPO"
+
+          SOURCE_REPO="$(jq -r '.source_repository' /tmp/atc-w2-plan.json)"
+          SOURCE_REF="$(jq -r '.source_ref' /tmp/atc-w2-plan.json)"
+          STAGED="$(jq -r '.staged_branch' /tmp/atc-w2-plan.json)"
+          MAIN_SHA="$(jq -r '.main_sha' /tmp/atc-w2-plan.json)"
+          test "$MAIN_SHA" = "$(gh api "repos/$GH_REPO/git/ref/heads/main" --jq '.object.sha')" || {
+            echo "Main moved before create-only staging" >&2; exit 1;
+          }
+          test "$HEAD_SHA" = "$(gh api "repos/$SOURCE_REPO/git/ref/heads/$SOURCE_REF" --jq '.object.sha')" || {
+            echo "Public source ref advanced before staging" >&2; exit 1;
+          }
+
+          # Re-run authorization against a fresh complete stage/issue census.
+          # A failed later page stops the step (set -euo pipefail); never use a partial file.
+          gh api "repos/$GH_REPO/git/matching-refs/heads/hamster/staged/$LANE/" \
+            > /tmp/atc-w2-staged-refs-now.json
+          gh api --paginate "repos/$GH_REPO/issues?state=all&per_page=100" \
+            | jq -sc 'add // []' > /tmp/atc-w2-all-issues-now.json
+          python3 scripts/mhb_atc_worker_broker.py plan \
+            --worker-policy .github/atc-worker-policy.json \
+            --lane-policy .github/atc-worker-lanes.json \
+            --repo "$GH_REPO" --actor "$DISPATCH_ACTOR" \
+            --lane "$LANE" --candidate "$CANDIDATE" \
+            --base-sha "$BASE_SHA" --head-sha "$HEAD_SHA" --main-sha "$MAIN_SHA" \
+            --source-repository-json /tmp/atc-w2-source-repository.json \
+            --source-ref-json /tmp/atc-w2-source-ref.json \
+            --staged-refs-json /tmp/atc-w2-staged-refs-now.json \
+            --issues-json /tmp/atc-w2-all-issues-now.json \
+            >/dev/null
+
+          # Git push transports prevalidated objects; no worker code executes.
+          # The explicit empty expected ref in force-with-lease protects the
+          # create-only transaction even if another actor races this process.
+          # The token is supplied ONLY through Git's askpass environment, not
+          # through command line arguments, remote URLs or git config files.
+          cat > /tmp/atc-w2-git-askpass.sh <<'SH'
+          #!/usr/bin/env bash
+          case "$1" in
+            *Username*) printf '%s\n' "x-access-token" ;;
+            *Password*) printf '%s\n' "$WORKER_TOKEN" ;;
+            *) exit 1 ;;
+          esac
+          SH
+          chmod 700 /tmp/atc-w2-git-askpass.sh
+          export GIT_ASKPASS=/tmp/atc-w2-git-askpass.sh
+          export GIT_TERMINAL_PROMPT=0
+          git --git-dir=/tmp/atc-w2-proposed.git -c core.hooksPath=/dev/null \
+            push --porcelain "--force-with-lease=refs/heads/$STAGED:" \
+            "https://github.com/$GH_REPO.git" \
+            "$HEAD_SHA:refs/heads/$STAGED" > /tmp/atc-w2-push-porcelain.txt
+          unset GIT_ASKPASS
+
+          # An existing ref at the same SHA exits 0 with an "up to date"
+          # status even under an empty --force-with-lease. Only a positive
+          # * [new branch] record proves this transaction created the ref.
+          python3 scripts/mhb_atc_worker_broker.py created-ref \
+            --push-output /tmp/atc-w2-push-porcelain.txt \
+            --repo "$GH_REPO" --branch "$STAGED" --sha "$HEAD_SHA"
+
+          live="$(gh api "repos/$GH_REPO/git/ref/heads/$STAGED" --jq '.object.sha')"
+          test "$live" = "$HEAD_SHA" || {
+            echo "New staged ref does not match the exact inspected head" >&2; exit 1;
+          }
+
+          # A successful push followed by a dispatch failure is a durable
+          # orphan requiring investigation: NEVER delete/force-update the ref.
+          GH_TOKEN="$WORKER_TOKEN" gh api --method POST "repos/$GH_REPO/dispatches" \
+            -f event_type=mhb-atc-stage \
+            -f "client_payload[branch]=$STAGED" \
+            -f "client_payload[head_sha]=$HEAD_SHA"
+
+          {
+            echo "### MHB-ATC W2 create-only staging"
+            echo "- actor: $DISPATCH_ACTOR"
+            echo "- lane: $LANE"
+            echo "- fork: $SOURCE_REPO"
+            echo "- exact staged head: $HEAD_SHA"
+            echo "- staged branch: $STAGED"
+            echo "- staging registry dispatch: submitted, verify candidate issue separately"
+            echo "- admitted refs/PRs created: NONE"
+            echo "- token: App-held, not delegated, automatic revocation enabled (inspect post-action)"
+          } >> "$GITHUB_STEP_SUMMARY"
