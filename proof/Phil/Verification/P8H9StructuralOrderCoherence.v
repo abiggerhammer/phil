@@ -649,13 +649,13 @@ Proof.
   destruct (p8_d2_compare_form f g) eqn:Cmp.
   - right. left. apply p8_h9_compare_form_eq_reflect. exact Cmp.
   - left. split.
-    + exact Cmp.
+    + reflexivity.
     + pose proof (p8_h9_compare_form_reversal f g) as Reverse.
       rewrite Cmp in Reverse.
       destruct (p8_d2_compare_form g f); simpl in Reverse;
         try discriminate; reflexivity.
   - right. right. split.
-    + exact Cmp.
+    + reflexivity.
     + pose proof (p8_h9_compare_form_reversal f g) as Reverse.
       rewrite Cmp in Reverse.
       destruct (p8_d2_compare_form g f); simpl in Reverse;
@@ -674,13 +674,13 @@ Proof.
   destruct (p8_d2_compare_forms fs gs) eqn:Cmp.
   - right. left. apply p8_h9_compare_forms_eq_reflect. exact Cmp.
   - left. split.
-    + exact Cmp.
+    + reflexivity.
     + pose proof (p8_h9_compare_forms_reversal fs gs) as Reverse.
       rewrite Cmp in Reverse.
       destruct (p8_d2_compare_forms gs fs); simpl in Reverse;
         try discriminate; reflexivity.
   - right. right. split.
-    + exact Cmp.
+    + reflexivity.
     + pose proof (p8_h9_compare_forms_reversal fs gs) as Reverse.
       rewrite Cmp in Reverse.
       destruct (p8_d2_compare_forms gs fs); simpl in Reverse;
@@ -699,13 +699,13 @@ Proof.
   destruct (p8_d2_compare_fields fs gs) eqn:Cmp.
   - right. left. apply p8_h9_compare_fields_eq_reflect. exact Cmp.
   - left. split.
-    + exact Cmp.
+    + reflexivity.
     + pose proof (p8_h9_compare_fields_reversal fs gs) as Reverse.
       rewrite Cmp in Reverse.
       destruct (p8_d2_compare_fields gs fs); simpl in Reverse;
         try discriminate; reflexivity.
   - right. right. split.
-    + exact Cmp.
+    + reflexivity.
     + pose proof (p8_h9_compare_fields_reversal fs gs) as Reverse.
       rewrite Cmp in Reverse.
       destruct (p8_d2_compare_fields gs fs); simpl in Reverse;
