@@ -4,6 +4,7 @@ From Phil.Surface Require Import
   GrammarDerivation
   GrammarAstTopLevelSpine
   GrammarAstRecordDataRecursiveGroupingImplementationRepresentation
+  GrammarAstRecordDataRecursiveGroupingImplementationAdmissionExamples
   GrammarAstRecordDataRecursiveGroupingTaggedAdmissionInjectivity
   GrammarAstRecordDataRecursiveGroupingCertifiedAdmissionFibers
   GrammarAstRecordDataRecursiveGroupingCertifiedFiberEquality.
