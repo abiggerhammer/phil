@@ -103,6 +103,11 @@ class StagedPushIsolationTests(unittest.TestCase):
                 self.assertTrue(excludes_staged_push(path.read_text()),
                                 "push is not restricted to main or excludes staged refs")
 
+    def test_global_audit_is_registered_for_every_future_workflow_change(self):
+        ci = (WORKFLOWS / "mhb-atc-tests.yml").read_text()
+        self.assertEqual(ci.count("      - '.github/workflows/**'"), 2)
+        self.assertIn("python3 scripts/test_mhb_atc_staged_push_ci.py", ci)
+
     def test_four_legacy_push_workflows_keep_normal_branches(self):
         for name in sorted(UNBOUNDED_LEGACY):
             path = WORKFLOWS / name
