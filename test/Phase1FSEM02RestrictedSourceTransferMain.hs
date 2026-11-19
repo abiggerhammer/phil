@@ -70,6 +70,7 @@ main = do
           , missingSenderResourceBeforeReceiverCollision accepted
           , receiverClosePreemptsNativeFaults accepted rejectedReceiver
           , dualStaleCloseRepairDiamond accepted rejected rejectedReceiver rejectedBoth
+          , restrictedHalfCloseObservationWire accepted rejected rejectedReceiver rejectedBoth >> Right ()
           , wrongSessionHeadRejects fx
           , sourceCloseReplay fx
           , sourceCloseRejectsForgedRequest fx
@@ -132,6 +133,10 @@ main = do
             Left err -> putStrLn ("FAIL: " <> err) >> exitFailure
         ["emit-rocq-terminal-observation"] ->
           case restrictedTerminalObservationWire accepted rejected rejectedReceiver rejectedBoth of
+            Right wire -> TextIO.putStr wire
+            Left err -> putStrLn ("FAIL: " <> err) >> exitFailure
+        ["emit-rocq-half-close-observation"] ->
+          case restrictedHalfCloseObservationWire accepted rejected rejectedReceiver rejectedBoth of
             Right wire -> TextIO.putStr wire
             Left err -> putStrLn ("FAIL: " <> err) >> exitFailure
         _ -> putStrLn "FAIL: unsupported FSEM-02 observation argument" >> exitFailure
@@ -1699,6 +1704,76 @@ restrictedCloseOrderObservationWire accepted senderStale receiverStale bothStale
     , "  [" <> Text.intercalate "; " tags <> "]."
     ]
 
+
+-- NON-NORMATIVE FSEM-02 half-Close OBS-V1. Unlike the final-state stale
+-- probes, these retries happen between the two externally authorized Closes.
+-- Rejecting one used successor must not retire its still-live peer. The
+-- immutable rejected input can still execute its authorized peer suffix.
+restrictedHalfCloseObservationWire :: Text -> Text -> Text -> Text -> Either String Text
+restrictedHalfCloseObservationWire accepted senderStale receiverStale bothStale = do
+  _ <- restrictedCloseOrderObservationWire accepted senderStale receiverStale bothStale
+  fx <- fixture accepted
+  diamond <- mapLeft show $
+    sourceCloseDiamondFrom fx (fxSender fx) (fxReceiver fx)
+      (fxBefore fx) doneOutcome doneOutcome
+  let afterTransfer = restrictedSourceNext (restrictedSourceDiamondRendezvous diamond)
+      senderFinal = restrictedSourceCloseNext (restrictedSourceDiamondForward diamond)
+      receiverFinal = restrictedSourceDiamondReverse diamond
+      receiverHalf = restrictedSourceDiamondReceiverFirst diamond
+      revision = binaryProtocolInstanceRevision (fxInstance fx)
+      ownersBefore = communicationRestrictedOwners afterTransfer
+      ownersReceiverHalf = communicationRestrictedOwners receiverHalf
+      tryClose st process endpoint role =
+        closeProcessEndpointState (fxNetwork fx) st
+          process endpoint revision role doneOutcome
+      refuseRetired st process endpoint role =
+        case tryClose st process endpoint role of
+          Left (EndpointClosureOccurrenceUnknown actualProcess actualEndpoint) -> do
+            assert (actualProcess == process && actualEndpoint == endpoint)
+              "half-Close OBS stale retry lost exact process/endpoint identity"
+            Right ()
+          other -> Left ("half-Close OBS admitted stale retry: " <> show other)
+  senderHalf <- mapLeft show $
+    tryClose afterTransfer (fxClientProcess fx) (fxClientNext fx) clientRole
+  let ownersSenderHalf = communicationRestrictedOwners senderHalf
+  assert (Map.lookup clientEndpointOccurrence ownersSenderHalf == Nothing
+       && Map.lookup serverEndpointOccurrence ownersSenderHalf
+            == Map.lookup serverEndpointOccurrence ownersBefore
+       && Map.lookup serverEndpointOccurrence ownersReceiverHalf == Nothing
+       && Map.lookup clientEndpointOccurrence ownersReceiverHalf
+            == Map.lookup clientEndpointOccurrence ownersBefore
+       && Map.lookup payloadOccurrence ownersSenderHalf
+            == Map.lookup payloadOccurrence ownersBefore
+       && Map.lookup payloadOccurrence ownersReceiverHalf
+            == Map.lookup payloadOccurrence ownersBefore
+       && Map.lookup spectatorOccurrence ownersSenderHalf
+            == Map.lookup spectatorOccurrence ownersBefore
+       && Map.lookup spectatorOccurrence ownersReceiverHalf
+            == Map.lookup spectatorOccurrence ownersBefore)
+    "half-Close OBS lost the still-live peer or changed payload/spectator ownership"
+  refuseRetired senderHalf (fxClientProcess fx) (fxClientNext fx) clientRole
+  completedSenderFirst <- mapLeft show $
+    tryClose senderHalf (fxServerProcess fx) (fxServerNext fx) serverRole
+  refuseRetired receiverHalf (fxServerProcess fx) (fxServerNext fx) serverRole
+  completedReceiverFirst <- mapLeft show $
+    tryClose receiverHalf (fxClientProcess fx) (fxClientNext fx) clientRole
+  assert (completedSenderFirst == senderFinal
+       && completedReceiverFirst == receiverFinal
+       && completedSenderFirst == completedReceiverFirst
+       && communicationRestrictedOwners completedSenderFirst
+            == Map.delete clientEndpointOccurrence
+                 (Map.delete serverEndpointOccurrence ownersBefore))
+    "half-Close OBS retry changed the authorized suffix or final Core state"
+  let tags = ["FSEM02SenderHalfReplayRefused", "FSEM02SenderPeerClosed",
+              "FSEM02ReceiverHalfReplayRefused", "FSEM02ReceiverPeerClosed"]
+  Right $ Text.unlines
+    [ "From Stdlib Require Import Lists.List."
+    , "From Phil.Core Require Import FSEM02HalfCloseObservationModel."
+    , "Import ListNotations."
+    , "(* Half-close OBS-V1; checked finite Haskell source/Core observation. *)"
+    , "Definition fsem02HalfCloseObservedEvents : list FSEM02HalfCloseTag :="
+    , "  [" <> Text.intercalate "; " tags <> "]."
+    ]
 
 wrongSessionHeadRejects :: Fixture -> Either String ()
 wrongSessionHeadRejects fx = do

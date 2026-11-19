@@ -564,3 +564,8 @@ The [Close-order OBS-V1 witness](formal-semantics-close-order-observation-wire-f
 ### FSEM-02 terminal source/Core observation (non-normative)
 
 The [Terminal OBS-V1 witness](formal-semantics-terminal-observation-wire-fsem02-v1.md) extends the exact source/Core OBS-V1 fixtures through independently supplied terminal outcomes, successively retired endpoint occurrence keys and an exact post-close stale retry refusal. It proves only three finite Rocq observations, not general implementation refinement, terminal authority or FSEM-02 completion.
+
+
+### FSEM-02 half-Close source/Core observation (non-normative)
+
+The [Half-Close OBS-V1 witness](formal-semantics-half-close-observation-wire-fsem02-v1.md) tests exact retired-successor refusal **at the intermediate half-closed state** in both Close orders, then verifies that the still-live peer can close without rollback, with unchanged payload/spectator owners and identical source-checked final Core states. A four-event native Haskell artifact is byte-compared with separately compiled finite Rocq data and conditional owner-bit theorems; terminal authority and general refinement remain unproved.
