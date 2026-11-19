@@ -406,14 +406,14 @@ Proof.
       * apply p8_h9_compare_form_eq_reflect in Cxz. subst z.
         simpl. try rewrite (p8_h9_compare_form_reflexive x).
         eapply p8_h9_compare_forms_lt_transitive; eassumption.
-      * simpl. rewrite Cxz. reflexivity.
+      * simpl. try rewrite Cxz. reflexivity.
     + destruct (p8_d2_compare_form y z) eqn:Cyz;
         simpl in Hgh; try discriminate.
       * apply p8_h9_compare_form_eq_reflect in Cyz. subst z.
-        simpl. rewrite Cxy. reflexivity.
+        simpl. try rewrite Cxy. reflexivity.
       * assert (Cxz : p8_d2_compare_form x z = Lt).
         { eapply p8_h9_compare_form_lt_transitive; eassumption. }
-        simpl. rewrite Cxz. reflexivity.
+        simpl. try rewrite Cxz. reflexivity.
   - destruct fs as [| key value rest]; intros gs hs Hfg Hgh;
       destruct gs as [| key' value' mid];
       destruct hs as [| key'' value'' tail];
@@ -450,15 +450,15 @@ Proof.
               simpl.
               try rewrite (p8_h9_compare_bytes_reflexive key).
               try rewrite Vxz. reflexivity.
-      * simpl. rewrite Kxz. reflexivity.
-      * rewrite Kxz in Hgh. discriminate.
+      * simpl. try rewrite Kxz. reflexivity.
+      * try rewrite Kxz in Hgh. discriminate.
     + destruct (p8_d2_compare_bytes key' key'') eqn:Kyz;
         simpl in Hgh; try discriminate.
       * apply p8_h9_compare_bytes_eq_iff in Kyz. subst key''.
-        simpl. rewrite Kxy. reflexivity.
+        simpl. try rewrite Kxy. reflexivity.
       * assert (Kxz : p8_d2_compare_bytes key key'' = Lt).
         { eapply p8_h9_compare_bytes_lt_transitive; eassumption. }
-        simpl. rewrite Kxz. reflexivity.
+        simpl. try rewrite Kxz. reflexivity.
 Defined.
 
 (* The member-list converse now follows from TRUE strict transitivity
