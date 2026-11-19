@@ -143,7 +143,7 @@ Proof.
     try reflexivity.
   destruct (Nat.compare a b) eqn:Cmp.
   - apply Nat.compare_eq_iff in Cmp. subst b.
-    rewrite Nat.compare_refl. simpl. exact IH.
+    rewrite Nat.compare_refl. simpl. apply IH.
   - assert (Reverse : Nat.compare b a = Gt).
     { apply Nat.compare_gt_iff.
       apply Nat.compare_lt_iff in Cmp. lia. }
