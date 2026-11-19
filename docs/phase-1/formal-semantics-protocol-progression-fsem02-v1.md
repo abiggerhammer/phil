@@ -115,3 +115,8 @@ claim-guard, branch protections and all applicable CI.
 ### One-sided source Select/Offer End prefix owner cuts (FSEM-02)
 
 [Both source-checked one-sided End closure owner ledgers](formal-semantics-choice-close-prefix-ledgers-fsem02-v1.md) independently observe the real Client-first and Server-first Core intermediate owner maps, preserve the opposite live endpoint and every unrelated affine spectator, and reject exact wrong-source, wrong-Client-End and stale duplicate-close cases. Rocq 9.2 proves only conditional pointwise owner-ledger prefix facts given separately authorized End steps—not source Server disposal, general native-to-Rocq refinement, root/assurance discharge, or FSEM-02 completion.
+
+
+### Two-sided local / synchronous joint Ping seam (FSEM-02)
+
+[Paired local-to-joint source correspondence and conditional Rocq composition](formal-semantics-paired-local-joint-bridge-fsem02-v1.md) adds exact native equality of the complete source-checked Client/Server local progression pair and the production synchronous joint Ping successor, including a live affine-loan frame. Either missing predecessor refuses without any paired successor, and an independently checked minimally changed source Close still rejects with its exact binder class. The Rocq theorem composes **both** local `SessionStep` transitions with restricted ownership movement from `ConcurrencySemantics`, only given a separate `RendezvousValid` premise. This is a bounded source witness / conditional model bridge, not universal native-to-Rocq refinement or new root/disposal authority.
