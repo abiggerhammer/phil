@@ -104,7 +104,7 @@ Definition phase1_surface_observe_recursive_grouping_tuple_arity
   (types : option Phase1SurfaceTupleTypeListSpine) : nat :=
   match types with
   | None => 0
-  | Some values => S (length (phase1_tuple_type_list_spine_rest values))
+  | Some values => S (List.length (phase1_tuple_type_list_spine_rest values))
   end.
 
 Definition phase1_surface_observe_recursive_grouping_variant
