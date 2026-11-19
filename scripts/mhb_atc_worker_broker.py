@@ -90,6 +90,11 @@ def resolve(worker: dict, registry: dict, *, repo: str, actor: str,
          "lane not enabled in reviewed source registry")
     src = entry.get("source_repository")
     owner = entry.get("source_owner")
+    source_repository_id = entry.get("source_repository_id")
+    source_owner_id = entry.get("source_owner_id")
+    deny(type(source_repository_id) is int and source_repository_id > 0 and
+         type(source_owner_id) is int and source_owner_id > 0,
+         "numeric fork/owner identity missing from reviewed lane registry")
     deny(isinstance(src, str) and isinstance(owner, str) and
          bool(LOGIN.fullmatch(owner)) and
          src.count("/") == 1 and src.split("/")[0] == owner and
@@ -102,6 +107,8 @@ def resolve(worker: dict, registry: dict, *, repo: str, actor: str,
     return {"decision": "authorized-source-lookup", "repo": REPO,
             "actor": actor, "lane": lane, "candidate": candidate,
             "source_repository": src, "source_owner": owner,
+            "source_repository_id": source_repository_id,
+            "source_owner_id": source_owner_id,
             "source_ref": source_ref, "staged_branch": staged,
             "broker_source_activation": activation}
 
@@ -119,6 +126,8 @@ def validate_plan(binding: dict, *, base_sha: str, head_sha: str,
     owner = binding["source_owner"]
     deny(isinstance(source_repository, dict) and
          source_repository.get("full_name") == src and
+         type(source_repository.get("id")) is int and
+         source_repository["id"] == binding["source_repository_id"] and
          source_repository.get("fork") is True and
          source_repository.get("private") is False and
          isinstance(source_repository.get("parent"), dict) and
@@ -126,9 +135,7 @@ def validate_plan(binding: dict, *, base_sha: str, head_sha: str,
          isinstance(source_repository.get("owner"), dict) and
          source_repository["owner"].get("login") == owner and
          type(source_repository["owner"].get("id")) is int and
-         source_repository["owner"]["id"] > 0 and
-         type(source_repository.get("id")) is int and
-         source_repository["id"] > 0,
+         source_repository["owner"]["id"] == binding["source_owner_id"],
          "source must be the exact public Phil fork owned by registered lane owner")
     deny(isinstance(source_ref, dict) and
          source_ref.get("ref") == "refs/heads/" + binding["source_ref"] and
