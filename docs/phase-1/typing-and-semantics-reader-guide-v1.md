@@ -551,3 +551,7 @@ The bounded [FSEM-02 typed sender-resource versus occupied receiver priority](fo
 ### FSEM-02 dual stale-source repair control (non-normative)
 
 [Independent sender/receiver stale Close repair diamond](formal-semantics-dual-source-close-repair-fsem02-v1.md) combines complete accepted and minimally rejected Grammar-v1 source witnesses with exact source-error priority and conditional finite Rocq repair/no-successor theorems. This is not general Haskell-to-Rocq refinement or FSEM-02 closure.
+
+### FSEM-02 checked restricted source observation wire (non-normative)
+
+The [OBS-V1 restricted source/Core witness](formal-semantics-restricted-observation-wire-fsem02-v1.md) byte-compares five actual production checker verdicts with a finite Rocq 9.2 observation artifact. It binds concrete accepted/rejected source checks to proof-side data without claiming general producer fidelity, semantic authority or universal refinement.
