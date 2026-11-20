@@ -445,9 +445,13 @@ class Trial:
         answer = self._write_and_record(
             "publisher-create-canary", "canary",
             lambda: self.create("canary", self.parent), target_sha=self.parent)
-        require(answer.status == 201, "publisher canary CREATE did not succeed")
-        require(self.ref("canary") == self.parent,
-                "publisher canary SHA not confirmed")
+        canary_after = self.ref("canary")
+        self.audit("publisher-create-canary", "READ",
+                   ref="refs/heads/" + self.refs["canary"],
+                   target_sha=self.parent, post_sha=canary_after,
+                   http_status=answer.status)
+        require(answer.status == 201 and canary_after == self.parent,
+                "publisher canary CREATE / SHA not confirmed")
         self.audit("publisher-create-canary", "VERIFIED",
                    ref="refs/heads/" + self.refs["canary"],
                    target_sha=self.parent, post_sha=self.parent,
@@ -455,7 +459,12 @@ class Trial:
         answer = self._write_and_record(
             "publisher-delete-canary", "canary",
             lambda: self.delete("canary"), pre_sha=self.parent)
-        require(answer.status == 204 and self.ref("canary") is None,
+        canary_after = self.ref("canary")
+        self.audit("publisher-delete-canary", "READ",
+                   ref="refs/heads/" + self.refs["canary"],
+                   pre_sha=self.parent, post_sha=canary_after,
+                   http_status=answer.status)
+        require(answer.status == 204 and canary_after is None,
                 "publisher canary DELETE / cleanup not proven")
         self.audit("publisher-delete-canary", "VERIFIED",
                    ref="refs/heads/" + self.refs["canary"],
@@ -465,7 +474,12 @@ class Trial:
         answer = self._write_and_record(
             "publisher-create-seed", "seed",
             lambda: self.create("seed", self.parent), target_sha=self.parent)
-        require(answer.status == 201 and self.ref("seed") == self.parent,
+        seed_after = self.ref("seed")
+        self.audit("publisher-create-seed", "READ",
+                   ref="refs/heads/" + self.refs["seed"],
+                   target_sha=self.parent, post_sha=seed_after,
+                   http_status=answer.status)
+        require(answer.status == 201 and seed_after == self.parent,
                 "publisher seed creation not confirmed")
         self.audit("publisher-create-seed", "VERIFIED",
                    ref="refs/heads/" + self.refs["seed"],
@@ -501,8 +515,15 @@ class Trial:
             before = self.ref(kind)
             answer = self._write_and_record(
                 operation, kind, run, target_sha=target_sha, pre_sha=before)
-            classification = self.forbidden(answer, kind, op)
+            # Read the resulting state BEFORE interpreting the denial body.
+            # In particular, a false-denial 201 must record the newly created
+            # ref SHA in a durable partial receipt before we STOP.
             after = self.ref(kind)
+            self.audit(operation, "READ",
+                       ref="refs/heads/" + self.refs[kind],
+                       pre_sha=before, target_sha=target_sha,
+                       post_sha=after, http_status=answer.status)
+            classification = self.forbidden(answer, kind, op)
             require(after == before and
                     self.ref("seed") == self.parent and
                     self.ref("create") is None,
@@ -553,7 +574,10 @@ class Trial:
                 raise StopTrial("UNKNOWN SHA at disposable ref: manual publisher recovery required")
             answer = self._write_and_record(
                 operation, kind, lambda: self.delete(kind), pre_sha=found)
-            require(answer.status == 204 and self.ref(kind) is None,
+            after = self.ref(kind)
+            self.audit(operation, "READ", ref=ref, pre_sha=found,
+                       post_sha=after, http_status=answer.status)
+            require(answer.status == 204 and after is None,
                     "publisher cleanup incomplete; stop and escalate")
             self.audit(operation, "VERIFIED", ref=ref, pre_sha=found,
                        http_status=204, reason="SUCCESS")
