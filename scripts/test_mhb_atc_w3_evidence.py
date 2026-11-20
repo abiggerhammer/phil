@@ -59,6 +59,12 @@ class EvidenceTests(unittest.TestCase):
             self.assertEqual(doc["dispatch_sha"],"f"*40)
             self.assertEqual(doc["source_sha"],MAIN)
             self.assertEqual(doc["schema"],SCHEMA)
+            self.assertEqual(len(doc["default_quarantine_checks"]),1)
+            self.assertEqual(doc["default_quarantine_checks"][0]["operation"],
+                             "publisher-delete-canary")
+            self.assertEqual(doc["default_quarantine_checks"][0]["default_sha"],MAIN)
+            self.assertEqual(doc["default_quarantine_checks"][0][
+                "default_workflow_tree_sha"],"d"*40)
             self.assertEqual(doc["app_id"],5782193)
             self.assertEqual(doc["installation_id"],"123456789")
             self.assertEqual(path.stat().st_mode&0o777,0o600)
@@ -251,6 +257,25 @@ class EvidenceTests(unittest.TestCase):
                     self.assertNotIn(marker,content)
                 self.assertIn("W3 STOP: sanitized failure",stderr.getvalue())
                 self.assertNotIn("Traceback",stderr.getvalue())
+
+    def test_evidence_default_quarantine_rejects_invalid_sha_and_operation(self):
+        with tempfile.TemporaryDirectory() as td,\
+             patch.dict(os.environ,{"RUNNER_TEMP":td}):
+            with redirect_stdout(io.StringIO()):
+                audit=ledger(Path(td),"publisher-seed")
+                for item in (("bad","a"*40,"b"*40),
+                             ("publisher-delete-canary","invalid","b"*40),
+                             ("publisher-delete-canary","a"*40,"invalid")):
+                    with self.assertRaises(EvidenceError):
+                        audit.default_quarantine_check(
+                            operation=item[0],default_sha=item[1],
+                            default_workflow_tree_sha=item[2])
+                audit.default_quarantine_check(
+                    operation="publisher-delete-canary",default_sha=MAIN,
+                    default_workflow_tree_sha="d"*40)
+            doc=json.loads((Path(td)/"w3-evidence.json").read_text())
+            self.assertEqual(len(doc["default_quarantine_checks"]),1)
+            self.assertEqual(doc["workflow_tree_sha"],TREE)
 
     def test_unknown_sha_cleanup_does_not_emit_delete_or_mutate_ref(self):
         with tempfile.TemporaryDirectory() as td,\

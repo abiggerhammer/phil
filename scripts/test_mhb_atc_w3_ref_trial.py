@@ -52,6 +52,19 @@ def ruleset(policy):
     }
 
 
+class FakeDefaultWorkflowQuarantine:
+    """Test-only injectable semantic proof for fake GitHub ref traffic."""
+    def __init__(self, api):
+        self.api = api
+        self.checked = []
+
+    def validate(self, current_default_sha):
+        self.checked.append(current_default_sha)
+        if self.api.default_workflows_unsafe:
+            raise StopTrial("current default workflow quarantine rejected")
+        return "d"*40
+
+
 class FakeAPI:
     def __init__(self, role, nonce=NONCE, *, rule_denial=True):
         self.role = role
@@ -64,6 +77,7 @@ class FakeAPI:
         self.main = MAIN
         self.failures = {}
         self.extra_ref = None
+        self.default_workflows_unsafe = False
 
     def write_result(self, endpoint, status=422):
         if not self.rule_denial:
@@ -76,6 +90,8 @@ class FakeAPI:
 
     def request(self, method, endpoint, data=None):
         self.requests.append((method, endpoint, copy.deepcopy(data)))
+        if method == "GET" and endpoint == "/repository":
+            return Reply(200, {"full_name":REPO, "default_branch":"main"})
         if (method, endpoint) in self.failures:
             return self.failures[(method, endpoint)]
         if method == "GET" and endpoint == "/rulesets/27365284":
@@ -134,7 +150,8 @@ class FakeAPI:
 
 def make(role="publisher", nonce=NONCE, *, api=None):
     api = FakeAPI(role, nonce) if api is None else api
-    trial = Trial(api, nonce, MAIN, PARENT, GRANDPARENT, api.policy)
+    trial = Trial(api, nonce, MAIN, PARENT, GRANDPARENT, api.policy,
+                  default_validator=FakeDefaultWorkflowQuarantine(api))
     return api, trial
 
 
@@ -375,6 +392,47 @@ class W3RefTrialTests(unittest.TestCase):
         api.main="e"*40
         with self.assertRaisesRegex(StopTrial,"main moved"):
             trial.gate([])
+
+    def test_delete_is_impossible_without_a_fresh_default_guard(self):
+        api, trial = make()
+        with self.assertRaisesRegex(StopTrial,"DELETE without fresh"):
+            trial.delete("canary")
+        self.assertTrue(all(m=="GET" for m,_,_ in api.requests))
+
+    def test_publisher_canary_unsafe_default_stops_before_delete(self):
+        api, trial = make()
+        api.default_workflows_unsafe = True
+        with self.assertRaisesRegex(StopTrial,"current default workflow"):
+            trial.publisher_seed()
+        self.assertEqual([m for m,_,_ in api.requests if m!="GET"],["POST"])
+        self.assertEqual(api.refs[names(NONCE)["canary"]],PARENT)
+        self.assertFalse(trial.default_checks)
+
+    def test_worker_delete_negative_cannot_skip_current_default_validation(self):
+        api, trial = make()
+        trial.publisher_seed()
+        api.role = "worker"
+        api.default_workflows_unsafe = True
+        with self.assertRaisesRegex(StopTrial,"current default workflow"):
+            trial.worker_probe()
+        self.assertEqual([m for m,_,_ in api.requests if m!="GET"][-3:],
+                         ["POST","PATCH","PATCH"])
+        self.assertEqual(api.refs[names(NONCE)["seed"]],PARENT)
+
+    def test_recovery_revalidates_changed_default_before_any_delete(self):
+        api, trial = make()
+        api.refs[names(NONCE)["seed"]] = PARENT
+        api.main = "f"*40
+        receipt = trial.publisher_recovery_plan()
+        self.assertEqual(receipt["default_quarantine_checks"][-1]["default_sha"],
+                         "f"*40)
+        api.main = "e"*40
+        api.default_workflows_unsafe = True
+        api.requests.clear()
+        with self.assertRaisesRegex(StopTrial,"current default workflow"):
+            trial.publisher_cleanup()
+        self.assertEqual(api.refs[names(NONCE)["seed"]],PARENT)
+        self.assertEqual([m for m,_,_ in api.requests if m!="GET"],[])
 
     def test_publisher_canary_proves_cleanup_before_seed(self):
         api, trial = make()

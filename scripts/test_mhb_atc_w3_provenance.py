@@ -237,9 +237,10 @@ class ProvenanceTests(unittest.TestCase):
         fake.refs[seed]=P
         policy=fake.policy
         verified=verify_origin(GitHub(),origin())
+        from test_mhb_atc_w3_ref_trial import FakeDefaultWorkflowQuarantine
         recovered=Trial(fake,NONCE,verified["source_sha"],
                         verified["parent_sha"],verified["grandparent_sha"],
-                        policy)
+                        policy, default_validator=FakeDefaultWorkflowQuarantine(fake))
         preflight=recovered.publisher_recovery_plan()
         self.assertEqual(preflight["refs"]["seed"],"KNOWN_DISPOSABLE")
         result=recovered.publisher_cleanup()
