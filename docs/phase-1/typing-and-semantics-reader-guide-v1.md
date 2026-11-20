@@ -28,6 +28,8 @@ There are several layers of authority; they must not be conflated.
 
 The [non-normative FSEM-02 paired Ping two-sided loan frame](formal-semantics-paired-ping-dual-loan-frame-fsem02-v1.md) extends checked local-versus-joint Send/Receive equality to independent active Client and Server affine spectators. A conditional Rocq theorem frames both abstract loan sets and arbitrary unrelated linear bindings without proving universal native Map/Set refinement or supplying rendezvous authority.
 
+The [non-normative FSEM-02 two-step stale Choice suffix](formal-semantics-two-step-stale-choice-fsem02-v1.md) proves that a later Select/Offer cannot reuse either predecessor consumed by an independently admitted Ping or Choice model step, and that its refusal retains the actual committed first-step contexts; strict native accepted/rejected source witnesses are independently replayed, without claiming a combined source program or general implementation refinement.
+
 **Suggested reading route:** [Phase 1 Tour](../tutorials/tour-phase1.md)
 → this guide → the canonical grammar → the judgment/proof links below
 → the specific proof and implementation correspondence for any claim you want
