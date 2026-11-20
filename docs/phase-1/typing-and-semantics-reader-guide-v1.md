@@ -575,3 +575,8 @@ The [Half-Close OBS-V1 witness](formal-semantics-half-close-observation-wire-fse
 ### FSEM-02 paired source-family envelope (non-normative)
 
 The [paired Ping/Choice source-family envelope](formal-semantics-paired-source-family-envelope-fsem02-v1.md) combines two already source-checked and individually proven bounded paired-local replay branches behind an explicit family and independent admission inputs. Rocq proves uniform rejection on absent admission and dual-loan/unrelated-linear framing under branch-specific continuing-head premises; strict native checks rerun complete accepted/rejected Ping and Go/Cancel source witnesses. This is not native Map/Set-to-Rocq refinement, source-derived activation, a single mixed-family execution, general diagnostic fidelity or FSEM-02 completion.
+
+
+### FSEM-02 paired two-step outcome replay (non-normative)
+
+The [paired two-step source-family outcome observation](formal-semantics-paired-two-step-outcomes-fsem02-v1.md) sequentially composes two separately admitted Ping/Choice model steps. Rocq distinguishes first refusal, second refusal with exact committed prefix retained, and two-step success; it proves four separate admission requirements and conditional dual-peer loan/unrelated-linear preservation across both steps. Strict Haskell rechecks accepted and minimally rejected complete **separate** Ping and Choice sources, not a combined source program or universal native Map/Set-to-Rocq refinement. Activation, protocol authority, selected roots, ownership and disposal remain external premises; FSEM-02 stays open and non-normative.
