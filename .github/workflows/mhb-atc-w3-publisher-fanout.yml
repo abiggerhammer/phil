@@ -199,7 +199,6 @@ jobs:
       always() &&
       needs.prepare.result == 'success' &&
       ((inputs.mode == 'run' &&
-        vars.MHB_ATC_W3_FANOUT_ENABLED == 'true' &&
         (needs.publisher_create.result == 'success' ||
          needs.publisher_create.result == 'failure' ||
          needs.publisher_create.result == 'cancelled')) ||

@@ -75,6 +75,15 @@ class PublisherCanaryTests(unittest.TestCase):
                          "mhb-atc-admission-global")
         self.assertIn("vars.MHB_ATC_W3_FANOUT_ENABLED == 'true'",
                       workflow["jobs"]["publisher_create"]["if"])
+        cleanup_if=workflow["jobs"]["publisher_cleanup"]["if"]
+        self.assertIn("always()",cleanup_if)
+        self.assertIn("needs.prepare.result == 'success'",cleanup_if)
+        self.assertIn("needs.publisher_create.result == 'failure'",cleanup_if)
+        self.assertIn("needs.publisher_create.result == 'cancelled'",cleanup_if)
+        self.assertIn("inputs.mode == 'cleanup'",cleanup_if)
+        # Turning the runtime switch OFF after original CREATE must never
+        # suppress the separately authorized original-run cleanup job.
+        self.assertNotIn("vars.MHB_ATC_W3_FANOUT_ENABLED",cleanup_if)
         for job in workflow["jobs"].values():
             checkouts=[step for step in job["steps"]
                        if step.get("uses","").startswith("actions/checkout@")]
