@@ -42,6 +42,10 @@ on:
       - 'scripts/test_mhb_atc_worker_app_identity.py'
       - 'scripts/mhb_atc_w3_readiness.py'
       - 'scripts/test_mhb_atc_w3_readiness.py'
+      - 'scripts/mhb_atc_w3_ref_trial.py'
+      - 'scripts/test_mhb_atc_w3_ref_trial.py'
+      - '.github/atc-w3-ref-trial.json'
+      - 'docs/phase-2/mhb-atc-w3-executable-ref-trials.md'
       - 'docs/phase-2/mhb-atc-w3-negative-commissioning.md'
       - 'docs/phase-2/mhb-atc-worker-app.md'
       - '.github/workflows/mhb-atc-stage.yml'
@@ -89,6 +93,10 @@ on:
       - 'scripts/test_mhb_atc_worker_app_identity.py'
       - 'scripts/mhb_atc_w3_readiness.py'
       - 'scripts/test_mhb_atc_w3_readiness.py'
+      - 'scripts/mhb_atc_w3_ref_trial.py'
+      - 'scripts/test_mhb_atc_w3_ref_trial.py'
+      - '.github/atc-w3-ref-trial.json'
+      - 'docs/phase-2/mhb-atc-w3-executable-ref-trials.md'
       - 'docs/phase-2/mhb-atc-w3-negative-commissioning.md'
       - 'docs/phase-2/mhb-atc-worker-app.md'
       - '.github/workflows/mhb-atc-stage.yml'
@@ -110,7 +118,7 @@ jobs:
         with:
           persist-credentials: false
       - name: Syntax
-        run: python3 -m py_compile scripts/mhb_atc.py scripts/test_mhb_atc.py scripts/mhb_atc_stage.py scripts/test_mhb_atc_stage.py scripts/mhb_atc_admit.py scripts/test_mhb_atc_admit.py scripts/mhb_atc_immutable.py scripts/test_mhb_atc_immutable.py scripts/mhb_atc_inventory.py scripts/test_mhb_atc_inventory.py scripts/test_mhb_atc_auto_config.py scripts/test_mhb_atc_worker_preflight.py scripts/mhb_atc_worker_app_identity.py scripts/test_mhb_atc_worker_app_identity.py scripts/mhb_atc_w3_readiness.py scripts/test_mhb_atc_w3_readiness.py scripts/mhb_atc_worker_broker.py scripts/test_mhb_atc_worker_broker.py scripts/test_mhb_atc_staged_push_ci.py scripts/test_mhb_atc_privileged_pr_ci.py scripts/mhb_atc_live_authority.py scripts/test_mhb_atc_live_authority.py scripts/mhb_atc_reconcile.py scripts/test_mhb_atc_reconcile.py
+        run: python3 -m py_compile scripts/mhb_atc.py scripts/test_mhb_atc.py scripts/mhb_atc_stage.py scripts/test_mhb_atc_stage.py scripts/mhb_atc_admit.py scripts/test_mhb_atc_admit.py scripts/mhb_atc_immutable.py scripts/test_mhb_atc_immutable.py scripts/mhb_atc_inventory.py scripts/test_mhb_atc_inventory.py scripts/test_mhb_atc_auto_config.py scripts/test_mhb_atc_worker_preflight.py scripts/mhb_atc_worker_app_identity.py scripts/test_mhb_atc_worker_app_identity.py scripts/mhb_atc_w3_readiness.py scripts/test_mhb_atc_w3_readiness.py scripts/mhb_atc_w3_ref_trial.py scripts/test_mhb_atc_w3_ref_trial.py scripts/mhb_atc_worker_broker.py scripts/test_mhb_atc_worker_broker.py scripts/test_mhb_atc_staged_push_ci.py scripts/test_mhb_atc_privileged_pr_ci.py scripts/mhb_atc_live_authority.py scripts/test_mhb_atc_live_authority.py scripts/mhb_atc_reconcile.py scripts/test_mhb_atc_reconcile.py
       - name: Offline radar and admission-policy tests
         run: python3 scripts/test_mhb_atc.py
       - name: Offline durable staging-intent tests
@@ -125,6 +133,8 @@ jobs:
         run: python3 scripts/test_mhb_atc_worker_app_identity.py
       - name: W3 read-only ruleset/namespace readiness and negative-plan replays
         run: python3 scripts/test_mhb_atc_w3_readiness.py
+      - name: W3 dormant protected-ref executable and publisher cleanup fake transport tests
+        run: python3 scripts/test_mhb_atc_w3_ref_trial.py
       - name: Worker App W2 fork-to-staged broker authorization and safety replays
         run: python3 scripts/test_mhb_atc_worker_broker.py
       - name: Install pinned YAML parser for G1 audit (test-only)
