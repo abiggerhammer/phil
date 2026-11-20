@@ -7,5 +7,7 @@
   "live_authorized": false,
   "scope": "Four disposable protected-ref negative cases only; no PR tests",
   "authorization": "A future exact-head, independently reviewed policy PR plus a separately enabled repository variable and manual owner dispatch are required before any execution",
-  "revision": 1
+  "revision": 1,
+  "approved_nonce": null,
+  "reuse_policy": "One reviewed nonce per separately reviewed source activation; do not rerun or reuse after first attempted live dispatch"
 }
