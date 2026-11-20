@@ -83,7 +83,7 @@ Proof.
   - intro H.
     unfold fsem02PairedTwoStepReplay in H.
     destruct (fsem02ReplayRequest first initial) as [middle|]
-      eqn:Hfirst; [|exact Hfirst].
+      eqn:Hfirst; [|reflexivity].
     destruct (fsem02ReplayRequest second middle); discriminate.
   - intro Hfirst.
     unfold fsem02PairedTwoStepReplay.
