@@ -83,22 +83,25 @@ The **`MHB-ATC-W3-PARTIAL-EVIDENCE-V2`** ledger carries both the
 trusted `dispatch_sha` and frozen `source_sha` so no receipt can
 silently equate those two trust roles.
 
-## Separate current-default workflow quarantine for DELETE
+## Separate current-default workflow quarantine for protected ref mutations
 
 **Two distinct workflow sources require two distinct checks.** The frozen
-S/P/G Git tree pin covers CREATE, UPDATE and FORCE-UPDATE targets. GitHub
-uses the **current repository default-branch SHA and its workflows** for
-a branch `delete` event, and branch-deletion push events can report that
-default-branch SHA. Freezing S/P/G therefore does **not** quarantine DELETE.
+S/P/G Git tree pin covers the commit-targeted push side of CREATE, UPDATE
+and FORCE-UPDATE. GitHub uses the **current repository default-branch SHA
+and its workflows** for a branch `delete` event, and branch-deletion push
+events can report that default-branch SHA. Branch `create` events also need
+consideration independently of the push target. Freezing S/P/G therefore
+does **not** quarantine every event caused by protected-ref mutations.
 
-Before the publisher's canary DELETE, the worker's negative DELETE (which
-could unexpectedly succeed), and **each** publisher cleanup DELETE, the
-trusted controller performs a fresh, authenticated read of the repository
+Before **each** protected-ref mutation (publisher canary/seed CREATE,
+publisher canary DELETE, all four worker negative operations, and each
+publisher cleanup DELETE), the trusted controller performs a fresh,
+authenticated read of the repository
 identity and `default_branch: main`, reads the live `main` SHA, and checks
 the **entire workflow inventory at that exact current-default commit**.
 It runs the same strict G1 YAML event parser and W3 branch-disjointness
 predicates used by the hosted full-inventory tests, rejecting unsupported
-events, any `on: delete` event, any push selector that can reach the W3
+events, any `on: create` or `on: delete` event, any push selector that can reach the W3
 disposable namespace, and malformed/unknown selectors. Current main may
 have *different* workflows from frozen S/P/G if the complete current-default
 inventory passes semantic quarantine.
@@ -112,7 +115,8 @@ then requires the fetched head to match the authenticated SHA. An unsafe,
 missing, ambiguous or changed default context stops without DELETE.
 
 The controller reads default main again after validation and immediately
-before the request. Source-defined `W3_DEFAULT_QUARANTINE` evidence and
+before **every protected ref request**. Source-defined
+`W3_DEFAULT_QUARANTINE` evidence and
 the fsynced JSON `default_quarantine_checks` array retain the **operation,
 current-default SHA and current-default workflow-tree SHA**, independently
 of the frozen test tree pin. A changed default is **never** accepted merely
@@ -121,7 +125,7 @@ recovery explicitly revalidates its own current default before any cleanup.
 
 The checks do not make GitHub's ordinary branch DELETE atomic with a
 concurrent `main` update. A main move *after* the last pre-request GET
-but before GitHub processes DELETE is an inherent residual race; without
+but before GitHub processes a write is an inherent residual race; without
 a server-side transaction or an independently enforced freeze of default
 changes, no proof of perfect concurrency exclusion is claimed. Treat any
 ambiguous mutation or unexpected fanout as STOP with independent ref
@@ -132,7 +136,8 @@ push-fanout commissioning gate or its disabled source flag.
 ## Explicit STOP conditions / separate live dependencies
 
 - An unsafe/missing current-default semantic workflow inventory, a changed
-  default-branch identity, or default SHA drift between validation and DELETE.
+  default-branch identity, or default SHA drift between validation and any
+  protected-ref request.
 - Any malformed, foreign, noncanonical or mismatched source policy tuple;
   a frozen source not reachable from trusted main; wrong Git first-parent
   edge; mismatched workflow tree; incorrect original Actions run metadata;
@@ -165,9 +170,10 @@ push-fanout commissioning gate or its disabled source flag.
    tree hashes or token-protocol results fail closed, preserving exact
    authorized cleanup and no false denial/cleanup completion?
 5. Are current-default workflow semantics independently checked at the exact
-   live default SHA/tree before the publisher canary DELETE, worker DELETE,
-   and each cleanup/recovery DELETE? Can safe new main workflows pass while
-   unsafe branch-trigger or delete events fail before the API write?
+   live default SHA/tree before **every** protected-ref write, including
+   publisher canary DELETE, worker DELETE, and each cleanup/recovery DELETE?
+   Can safe new main workflows pass while unsafe create/delete/branch-trigger
+   events fail before the API write?
 6. Does every default check produce a separate SHA/tree-bound durable receipt
    and revalidate after default changes, without confusing current-default
    evidence with frozen historical target identity?
