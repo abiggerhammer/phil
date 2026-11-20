@@ -125,7 +125,7 @@ jobs:
         run: |
           set -euo pipefail
           export PATH="/home/rocq/.opam/${COMPILER}/bin:$PATH"
-          for module in GrammarAstGenericRequirementRecursiveGroupingSpine GrammarAstGenericRequirementRecursiveGroupingSpineTotality GrammarAstGenericRequirementRecursiveGroupingExamples GrammarAstGenericRequirementsRecursiveGroupingSpine GrammarAstGenericRequirementsRecursiveGroupingSpineTotality GrammarAstGenericRequirementsRecursiveGroupingExamples GrammarAstRecordDataGenericRequirementRecursiveGroupingSpine GrammarAstRecordDataGenericRequirementRecursiveGroupingTotality GrammarAstRecordDataGenericRequirementRecursiveGroupingExamples GrammarAstRecordDataRecursiveGroupingImplementationRepresentation GrammarAstRecordDataRecursiveGroupingImplementationRepresentationExtraction GrammarAstRecordDataRecursiveGroupingImplementationAdmissionExamples GrammarAstRecordDataRecursiveGroupingTaggedAdmission GrammarAstRecordDataRecursiveGroupingTaggedAdmissionInjectivity GrammarAstRecordDataRecursiveGroupingTaggedAdmissionStability GrammarAstRecordDataRecursiveGroupingTaggedAdmissionSeparation GrammarAstRecordDataRecursiveGroupingTaggedAdmissionCanonicalExclusion GrammarAstRecordDataRecursiveGroupingCertifiedTagExactness GrammarAstRecordDataRecursiveGroupingCertifiedAdmissionFibers GrammarAstRecordDataRecursiveGroupingCertifiedFiberEquality GrammarAstRecordDataRecursiveGroupingCertifiedRootKeyEquality GrammarAstRecordDataRecursiveGroupingAcceptedKeyExtensionality GrammarAstRecordDataRecursiveGroupingAdmissionImageFibers GrammarAstRecordDataRecursiveGroupingProductionObservables GrammarAstRecordDataRecursiveGroupingDerivedObservables GrammarAstRecordDataRecursiveGroupingObservationSeparation; do
+          for module in GrammarAstGenericRequirementRecursiveGroupingSpine GrammarAstGenericRequirementRecursiveGroupingSpineTotality GrammarAstGenericRequirementRecursiveGroupingExamples GrammarAstGenericRequirementsRecursiveGroupingSpine GrammarAstGenericRequirementsRecursiveGroupingSpineTotality GrammarAstGenericRequirementsRecursiveGroupingExamples GrammarAstRecordDataGenericRequirementRecursiveGroupingSpine GrammarAstRecordDataGenericRequirementRecursiveGroupingTotality GrammarAstRecordDataGenericRequirementRecursiveGroupingExamples GrammarAstRecordDataRecursiveGroupingImplementationRepresentation GrammarAstRecordDataRecursiveGroupingImplementationRepresentationExtraction GrammarAstRecordDataRecursiveGroupingImplementationAdmissionExamples GrammarAstRecordDataRecursiveGroupingTaggedAdmission GrammarAstRecordDataRecursiveGroupingTaggedAdmissionInjectivity GrammarAstRecordDataRecursiveGroupingTaggedAdmissionStability GrammarAstRecordDataRecursiveGroupingTaggedAdmissionSeparation GrammarAstRecordDataRecursiveGroupingTaggedAdmissionCanonicalExclusion GrammarAstRecordDataRecursiveGroupingCertifiedTagExactness GrammarAstRecordDataRecursiveGroupingCertifiedAdmissionFibers GrammarAstRecordDataRecursiveGroupingCertifiedFiberEquality GrammarAstRecordDataRecursiveGroupingCertifiedRootKeyEquality GrammarAstRecordDataRecursiveGroupingAcceptedKeyExtensionality GrammarAstRecordDataRecursiveGroupingAdmissionImageFibers GrammarAstRecordDataRecursiveGroupingProductionObservables GrammarAstRecordDataRecursiveGroupingDerivedObservables GrammarAstRecordDataRecursiveGroupingObservationSeparation GrammarAstRecordDataRecursiveGroupingDerivedObservationDisjointness; do
             rocq c -w +all -Q proof/Phil Phil "proof/Phil/Surface/${module}.v"
           done
 
@@ -184,7 +184,8 @@ jobs:
             GrammarAstRecordDataRecursiveGroupingAdmissionImageFibers
             GrammarAstRecordDataRecursiveGroupingProductionObservables
             GrammarAstRecordDataRecursiveGroupingDerivedObservables
-            GrammarAstRecordDataRecursiveGroupingObservationSeparation.
+            GrammarAstRecordDataRecursiveGroupingObservationSeparation
+            GrammarAstRecordDataRecursiveGroupingDerivedObservationDisjointness.
           Print Assumptions phase1_surface_normalize_recursive_grouping_fuel_round_trip.
           Print Assumptions phase1_surface_grouping_well_formed_from_derivation_mutual.
           Print Assumptions phase1_surface_recursive_grouping_sufficient_fuel.
@@ -300,7 +301,7 @@ jobs:
           python3 - <<'PY'
           from pathlib import Path
           output = Path("recursive-grouping-assumptions.txt").read_text()
-          assert output.count("Closed under the global context") == 108, output
+          assert output.count("Closed under the global context") == 109, output
           assert "Axioms:" not in output, output
           PY
           rocq check -silent -Q proof/Phil Phil \
