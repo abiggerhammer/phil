@@ -232,6 +232,16 @@ class EvidenceTests(unittest.TestCase):
                     stack.enter_context(patch.object(module.Trial,"token_audience"))
                     stack.enter_context(patch.object(
                         module.Trial,"publisher_seed",single_mutation))
+                    # This test isolates POST transport stderr redaction. The
+                    # current-default semantic verifier has separate real
+                    # Git/CLI tests, so supply its already-verified result.
+                    stack.enter_context(patch.object(
+                        module.Trial,"default_quarantine",
+                        return_value={"operation":"publisher-create-seed",
+                                      "default_sha":MAIN,
+                                      "default_workflow_tree_sha":TREE}))
+                    stack.enter_context(patch.object(
+                        module.Trial,"main",return_value=MAIN))
                     stack.enter_context(patch.object(
                         module.request,"build_opener",
                         return_value=OfflineOpener()))
