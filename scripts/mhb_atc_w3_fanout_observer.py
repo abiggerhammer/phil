@@ -68,8 +68,10 @@ def reviewed_policy():
     check(isinstance(p, dict) and
           p.get("schema") == "MHB-ATC-W3-PUBLISHER-FANOUT-V1" and
           p.get("repository") == REPO and
-          p.get("source_authorized") is False and
-          p.get("approved_nonce") is None and
+          type(p.get("source_authorized")) is bool and
+          (p.get("approved_nonce") is None or
+           (isinstance(p["approved_nonce"], str) and
+            NONCE.fullmatch(p["approved_nonce"]))) and
           p.get("publisher_app_id") == 5782193 and
           p.get("ruleset_id") == 27365284 and
           p.get("ref_template") ==
