@@ -154,8 +154,8 @@ class ProvenanceTests(unittest.TestCase):
             ".github/workflows/mhb-atc-w3-ref-commissioning.yml").read_text()
         self.assertIn("actions: read",wf)
         self.assertLess(wf.index("prepare-origin"),
-                        wf.index("name: mhb-atc-w3-origin"))
-        self.assertLess(wf.index("name: mhb-atc-w3-origin"),
+                        wf.index("Upload verified nonsecret original lineage"))
+        self.assertLess(wf.index("Upload verified nonsecret original lineage"),
                         wf.index("  publisher_seed:"))
         self.assertEqual(wf.count("actions/download-artifact@v4"),2)
         self.assertIn("run-id: "+"$"+"{{ inputs.original_run_id }}",wf)
