@@ -18,7 +18,7 @@ import mhb_atc_w3_ref_trial as module
 
 from mhb_atc_w3_ref_trial import (
     REPO, PUBLISHER_ID, WORKER_ID, RULESET_ID,
-    Reply, StopTrial, Trial, names, policy_check, sha,
+    Client, _NoRedirect, Reply, StopTrial, Trial, names, policy_check, sha,
 )
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -202,6 +202,39 @@ class W3RefTrialTests(unittest.TestCase):
             changed["live_authorized"] = False
             with self.assertRaisesRegex(StopTrial, "DISABLED"):
                 policy_check(live=True, nonce=NONCE)
+
+    def test_real_transport_uses_only_exact_https_github_urls_and_denies_redirect(self):
+        class Response:
+            status = 200
+            def __enter__(self): return self
+            def __exit__(self, *args): pass
+            def read(self, amount): return b'{"total_count":1,"repositories":[{"full_name":"abiggerhammer/phil"}]}'
+        observed = []
+        class Opener:
+            def open(self, req, timeout):
+                observed.append((req.full_url, req.get_method(), req.data))
+                return Response()
+        with patch.object(module.request, "build_opener",
+                          side_effect=lambda handler: Opener()):
+            r = Client("nonsecret-fixture-token").request(
+                "GET", "/installation/repositories")
+            self.assertEqual(r.status, 200)
+            Client("nonsecret-fixture-token").request(
+                "POST", "/git/refs",
+                {"ref": "refs/heads/hamster/admitted/w3-" + NONCE + "-seed",
+                 "sha": PARENT})
+        self.assertEqual(observed[0][:2],
+                         ("https://api.github.com/installation/repositories", "GET"))
+        self.assertEqual(observed[1][:2],
+                         ("https://api.github.com/repos/abiggerhammer/phil/git/refs",
+                          "POST"))
+        self.assertTrue(isinstance(observed[1][2], bytes))
+        self.assertIsNone(_NoRedirect().redirect_request(
+            None, None, 302, "test", {}, "https://example.invalid/"))
+        with self.assertRaises(StopTrial):
+            Client(None).request("PATCH", "/git/refs/heads/main", {"sha": MAIN})
+        with self.assertRaises(StopTrial):
+            Client(None).request("GET", "/../foreign")
 
     def test_names_are_distinct_single_leaf_protected_refs(self):
         n = names(NONCE)
