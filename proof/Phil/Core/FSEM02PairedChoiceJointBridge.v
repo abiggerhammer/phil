@@ -119,3 +119,62 @@ Proof.
     Hvalid Hsubject) as [Hbefore Hafter].
   repeat split; assumption.
 Qed.
+
+
+(*
+  FSEM-02 NON-NORMATIVE dual-context spectator frame.
+  Successful separately accepted Choice replay preserves BOTH local loan sets
+  and every unrelated linear observer. "Other" is arbitrary, not a selected
+  finite example. No equality to native Haskell Map/Set or TyEndpoint is proved.
+  The separate native Go/Cancel test now puts an active affine loan on EACH
+  endpoint-owning process and compares full Core successor contexts.
+*)
+Theorem fsem02PairedChoiceFramesBothLocalLoanSetsAndLinearSpectators :
+  forall accepted admitted labels branches chosen peer co cn oo on cc oc
+         clientAfter offerAfter continuation,
+    offeredContinuation chosen branches = Some continuation ->
+    fsem02PairedChoiceReplay accepted admitted labels branches chosen peer
+      co cn oo on cc oc = Some (clientAfter, offerAfter) ->
+    sharedLoans clientAfter = sharedLoans cc /\
+    sharedLoans offerAfter = sharedLoans oc /\
+    (forall other,
+      String.eqb other co = false ->
+      String.eqb other cn = false ->
+      linearBindings clientAfter other = linearBindings cc other) /\
+    (forall other,
+      String.eqb other oo = false ->
+      String.eqb other on = false ->
+      linearBindings offerAfter other = linearBindings oc other).
+Proof.
+  intros accepted admitted labels branches chosen peer co cn oo on cc oc
+    clientAfter offerAfter continuation Hcontinuation Hpair.
+  unfold fsem02PairedChoiceReplay in Hpair.
+  destruct (andb accepted admitted) eqn:Hgate; [|discriminate].
+  unfold fsem02JointSourceChoice in Hpair.
+  destruct (String.eqb chosen peer) eqn:Hpeer; [|discriminate].
+  destruct (fsem02SourceContainsLabel chosen labels) eqn:Hlisted; [|discriminate].
+  destruct (fsem02Progression (FSEM02Select chosen) (Select branches)
+    co cn cc) as [|c] eqn:Hclient; [discriminate|].
+  destruct (fsem02SourceOfferReplay labels branches chosen oo on oc)
+    as [|o] eqn:Hoffer; [discriminate|].
+  inversion Hpair; subst; clear Hpair.
+  assert (Hselected :
+    selectedContinuation (FSEM02Select chosen) (Select branches) =
+      Some (Some continuation)).
+  { simpl. now rewrite Hcontinuation. }
+  pose proof (continuing_head_exact_predecessor_and_successor
+    (FSEM02Select chosen) (Select branches)
+    co cn cc clientAfter continuation Hselected Hclient) as HclientFrame.
+  unfold fsem02SourceOfferReplay in Hoffer.
+  rewrite Hlisted in Hoffer.
+  assert (Hoffered :
+    selectedContinuation (FSEM02Offer chosen) (Offer branches) =
+      Some (Some continuation)).
+  { simpl. now rewrite Hcontinuation. }
+  pose proof (continuing_head_exact_predecessor_and_successor
+    (FSEM02Offer chosen) (Offer branches)
+    oo on oc offerAfter continuation Hoffered Hoffer) as HofferFrame.
+  destruct HclientFrame as [_ [_ [_ [_ [HclientOther HclientLoans]]]]].
+  destruct HofferFrame as [_ [_ [_ [_ [HofferOther HofferLoans]]]]].
+  repeat split; assumption.
+Qed.
