@@ -127,8 +127,10 @@ class LiveAuthorityAuditTests(unittest.TestCase):
         mutations = [
             lambda s: s["macos_environment"].update(
                 {"deployment_branch_policy": None}),
-            lambda s: s["broker_branch_policies"]["branch_policies"].append(
-                {"name": "hamster/*"}),
+            lambda s: s["broker_branch_policies"].update({
+                "branch_policies": [{"name": "main"}, {"name": "hamster/*"}],
+                "total_count": 2,
+            }),
             lambda s: s["macos_environment"]["protection_rules"].clear(),
             lambda s: s["publisher_branch_policies"]["branch_policies"][0].update(
                 {"name": "*"}),
@@ -143,8 +145,11 @@ class LiveAuthorityAuditTests(unittest.TestCase):
 
     def test_negative_secret_custody_and_permission_conditions(self):
         mutations = [
-            lambda s: s["repository_secrets"]["secrets"].append(
-                {"name": "MHB_ATC_WORKER_APP_PRIVATE_KEY"}),
+            lambda s: s["repository_secrets"].update({
+                "secrets": [{"name": "HAMSTER_PR_TOKEN"},
+                            {"name": "MHB_ATC_WORKER_APP_PRIVATE_KEY"}],
+                "total_count": 2,
+            }),
             lambda s: s["macos_secrets"]["secrets"].clear(),
             lambda s: s["broker_secrets"]["secrets"].clear(),
             lambda s: s["publisher_secrets"]["secrets"].clear(),
