@@ -165,6 +165,13 @@ def local_commits():
     return current, parent, grandparent
 
 
+class _NoRedirect(request.HTTPRedirectHandler):
+    """Never forward an App bearer token to a redirect destination."""
+
+    def redirect_request(self, req, fp, code, msg, headers, newurl):
+        return None
+
+
 class Client:
     """Only fixed-repository routes, bounded JSON, no redirects or retry."""
 
@@ -196,7 +203,7 @@ class Client:
             headers["Content-Type"] = "application/json"
         req = request.Request(full, data=payload, headers=headers, method=method)
         try:
-            with request.urlopen(req, timeout=20) as response:
+            with request.build_opener(_NoRedirect).open(req, timeout=20) as response:
                 status = response.status
                 raw = response.read(MAX_RESPONSE + 1)
         except error.HTTPError as exc:
