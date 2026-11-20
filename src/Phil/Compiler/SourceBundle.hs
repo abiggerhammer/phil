@@ -1,3 +1,4 @@
+-- G1 #1935 live push-isolation probe: comment-only, no source behavior change.
 module Phil.Compiler.SourceBundle
   ( SourceEnvironmentMap
   , SourceRootMap
