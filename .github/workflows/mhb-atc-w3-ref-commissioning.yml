@@ -152,8 +152,7 @@ jobs:
       needs.prepare.result == 'success' &&
       (needs.publisher_seed.result == 'success' ||
        needs.publisher_seed.result == 'failure') &&
-      inputs.mode == 'run' &&
-      vars.MHB_ATC_W3_REF_TRIAL_ENABLED == 'true'
+      inputs.mode == 'run'
     environment: atc-publisher
     runs-on: ubuntu-24.04
     steps:
