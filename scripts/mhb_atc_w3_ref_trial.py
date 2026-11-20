@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import argparse
 from dataclasses import dataclass
+import http.client
 import json
 import os
 from pathlib import Path
@@ -19,6 +20,10 @@ from urllib import error, request
 
 from mhb_atc_immutable import check_ruleset
 from mhb_atc_w3_readiness import refs_from_api
+from mhb_atc_w3_provenance import (
+    commit_sha, make_binding, read_binding, snapshot_tree, verify_origin,
+)
+from mhb_atc_w3_evidence import EvidenceLedger
 
 ROOT = Path(__file__).resolve().parents[1]
 REPO = "abiggerhammer/phil"
@@ -33,6 +38,10 @@ MAX_RESPONSE = 65536
 
 class StopTrial(ValueError):
     """A failure/ambiguity demands STOP, never automatic retry."""
+
+
+class LiveTrialsDisabled(StopTrial):
+    """A distinct, fixed-output diagnostic for the source authorization gate."""
 
 
 @dataclass(frozen=True)
@@ -79,6 +88,9 @@ def policy_check(*, live: bool, nonce=None, recovery=False):
             trial.get("publisher_app_id") == PUBLISHER_ID and
             trial.get("ruleset_id") == RULESET_ID and
             type(trial.get("live_authorized")) is bool and
+            (trial.get("reviewed_quarantine_tree_sha") is None or
+             (isinstance(trial["reviewed_quarantine_tree_sha"], str) and
+              SHA.fullmatch(trial["reviewed_quarantine_tree_sha"]))) and
             trial.get("scope") ==
             "Four disposable protected-ref negative cases only; no PR tests" and
             (trial.get("approved_nonce") is None or
@@ -96,10 +108,14 @@ def policy_check(*, live: bool, nonce=None, recovery=False):
                          "MHB_ATC_PHASE2_STAGE_BRIDGE_ENABLED"):
                 require(os.getenv(name, "").lower() != "true",
                         "other ATC activation switches must remain OFF")
-        require(trial["live_authorized"] is True,
+        if trial["live_authorized"] is not True:
+            raise LiveTrialsDisabled(
                 "W3 live trials explicitly DISABLED in reviewed source")
         require(trial.get("push_ci_quarantine_verified") is True,
                 "W3 publisher-created ref push CI quarantine NOT reviewed")
+        require(isinstance(trial.get("reviewed_quarantine_tree_sha"), str) and
+                SHA.fullmatch(trial["reviewed_quarantine_tree_sha"]),
+                "no source-reviewed quarantine workflow tree SHA")
         require(isinstance(nonce, str) and
                 trial.get("approved_nonce") == nonce and
                 NONCE.fullmatch(nonce),
@@ -224,12 +240,18 @@ class Client:
             headers["Content-Type"] = "application/json"
         req = request.Request(full, data=payload, headers=headers, method=method)
         try:
-            with request.build_opener(_NoRedirect).open(req, timeout=20) as response:
-                status = response.status
-                raw = response.read(MAX_RESPONSE + 1)
-        except error.HTTPError as exc:
-            status = exc.code
-            raw = exc.read(MAX_RESPONSE + 1)
+            try:
+                with request.build_opener(_NoRedirect).open(req, timeout=20) as response:
+                    status = response.status
+                    raw = response.read(MAX_RESPONSE + 1)
+            except error.HTTPError as exc:
+                status = exc.code
+                raw = exc.read(MAX_RESPONSE + 1)
+        except (OSError, http.client.HTTPException, ValueError):
+            # Includes URLError, malformed status lines and response-read
+            # failures. Their exception text may contain remote-controlled
+            # bytes or secrets; do not propagate it to any output boundary.
+            raise StopTrial("GitHub transport or protocol failure") from None
         # No exception text or raw remote response is ever logged: it may
         # carry unexpectedly sensitive data or an injected instruction.
         require(len(raw) <= MAX_RESPONSE, "oversized GitHub response")
@@ -243,13 +265,21 @@ class Client:
 
 
 class Trial:
-    def __init__(self, client, nonce, current, parent, grandparent, publisher):
+    def __init__(self, client, nonce, current, parent, grandparent,
+                 publisher, evidence=None):
         self.client = client
         self.refs = names(nonce)
         self.current, self.parent, self.grandparent = (
             sha(current), sha(parent), sha(grandparent))
         self.publisher = publisher
         self.receipts = []
+        self.evidence = evidence
+        self.last_denial_diagnostic = None
+
+    def audit(self, operation, stage, **fields):
+        if self.evidence is not None:
+            return self.evidence.event(operation, stage, **fields)
+        return None
 
     def get(self, endpoint):
         answer = self.client.request("GET", endpoint)
@@ -333,6 +363,26 @@ class Trial:
         return self.client.request(
             "DELETE", "/git/refs/heads/" + self.refs[kind])
 
+    def _write_and_record(self, operation, kind, method, *, target_sha=None,
+                          pre_sha=None):
+        """Durably persist intent BEFORE any potential ref mutation.
+
+        If the request fails ambiguously, the log and artifact say ATTEMPTED;
+        no fabricated denial/success is recorded. No automatic retry exists.
+        """
+        ref = "refs/heads/" + self.refs[kind]
+        self.audit(operation, "INTENT", ref=ref, pre_sha=pre_sha,
+                   target_sha=target_sha)
+        try:
+            reply = method()
+        except Exception:
+            self.audit(operation, "STOP", ref=ref, pre_sha=pre_sha,
+                       target_sha=target_sha, reason="UNKNOWN_AFTER_REQUEST")
+            raise
+        self.audit(operation, "RESPONSE", ref=ref, pre_sha=pre_sha,
+                   target_sha=target_sha, http_status=reply.status)
+        return reply
+
     def public_receipt(self, phase, decision):
         return {
             "schema": "MHB-ATC-W3-REF-TRIAL-RECEIPT-V1",
@@ -379,6 +429,7 @@ class Trial:
             "Repository rule violations found for ",
         )
         accepted = False
+        self.last_denial_diagnostic = None
         for diagnostic in diagnostics:
             if diagnostic == "Validation Failed":
                 # GitHub can wrap an exact per-error ruleset diagnostic in a
@@ -394,6 +445,7 @@ class Trial:
             if named_ref != expected:
                 raise StopTrial("ruleset diagnostic names wrong or ambiguous ref")
             accepted = True
+            self.last_denial_diagnostic = diagnostic
         if not accepted:
             raise StopTrial("HTTP error was not exact-ref ruleset denial")
         return "RULESET_DENIED"
@@ -402,18 +454,49 @@ class Trial:
         self.gate([])
         for kind in ("canary", "create", "seed"):
             require(self.ref(kind) is None, "disposable ref already exists")
-        answer = self.create("canary", self.parent)
-        require(answer.status == 201, "publisher canary CREATE did not succeed")
-        require(self.ref("canary") == self.parent,
-                "publisher canary SHA not confirmed")
-        answer = self.delete("canary")
-        require(answer.status == 204 and self.ref("canary") is None,
+        answer = self._write_and_record(
+            "publisher-create-canary", "canary",
+            lambda: self.create("canary", self.parent), target_sha=self.parent)
+        canary_after = self.ref("canary")
+        self.audit("publisher-create-canary", "READ",
+                   ref="refs/heads/" + self.refs["canary"],
+                   target_sha=self.parent, post_sha=canary_after,
+                   http_status=answer.status)
+        require(answer.status == 201 and canary_after == self.parent,
+                "publisher canary CREATE / SHA not confirmed")
+        self.audit("publisher-create-canary", "VERIFIED",
+                   ref="refs/heads/" + self.refs["canary"],
+                   target_sha=self.parent, post_sha=self.parent,
+                   http_status=201, reason="SUCCESS")
+        answer = self._write_and_record(
+            "publisher-delete-canary", "canary",
+            lambda: self.delete("canary"), pre_sha=self.parent)
+        canary_after = self.ref("canary")
+        self.audit("publisher-delete-canary", "READ",
+                   ref="refs/heads/" + self.refs["canary"],
+                   pre_sha=self.parent, post_sha=canary_after,
+                   http_status=answer.status)
+        require(answer.status == 204 and canary_after is None,
                 "publisher canary DELETE / cleanup not proven")
+        self.audit("publisher-delete-canary", "VERIFIED",
+                   ref="refs/heads/" + self.refs["canary"],
+                   pre_sha=self.parent, http_status=204, reason="SUCCESS")
         self.record("publisher_create_delete_canary", "PASS")
         self.gate([])
-        answer = self.create("seed", self.parent)
-        require(answer.status == 201 and self.ref("seed") == self.parent,
+        answer = self._write_and_record(
+            "publisher-create-seed", "seed",
+            lambda: self.create("seed", self.parent), target_sha=self.parent)
+        seed_after = self.ref("seed")
+        self.audit("publisher-create-seed", "READ",
+                   ref="refs/heads/" + self.refs["seed"],
+                   target_sha=self.parent, post_sha=seed_after,
+                   http_status=answer.status)
+        require(answer.status == 201 and seed_after == self.parent,
                 "publisher seed creation not confirmed")
+        self.audit("publisher-create-seed", "VERIFIED",
+                   ref="refs/heads/" + self.refs["seed"],
+                   target_sha=self.parent, post_sha=self.parent,
+                   http_status=201, reason="SUCCESS")
         self.gate(["seed"])
         self.record("publisher_seed_at_first_parent", "PASS")
         return self.public_receipt("publisher-seed", "PUBLISHER_CLEANUP_CANARY_PASSED")
@@ -433,12 +516,36 @@ class Trial:
             self.gate(["seed"])
             require(self.ref("seed") == self.parent and self.ref("create") is None,
                     "immutable seed changed before worker negative request")
-            # Exactly ONE request; never retry after even an ambiguous response.
-            answer = run()
+            # Exactly ONE request; never retry after an ambiguous response.
+            work = {
+                "deny-create": ("worker-create", self.current),
+                "deny-update": ("worker-update", self.current),
+                "deny-force-update": ("worker-force-update", self.grandparent),
+                "deny-delete": ("worker-delete", None),
+            }
+            operation, target_sha = work[op]
+            before = self.ref(kind)
+            answer = self._write_and_record(
+                operation, kind, run, target_sha=target_sha, pre_sha=before)
+            # Read the resulting state BEFORE interpreting the denial body.
+            # In particular, a false-denial 201 must record the newly created
+            # ref SHA in a durable partial receipt before we STOP.
+            after = self.ref(kind)
+            self.audit(operation, "READ",
+                       ref="refs/heads/" + self.refs[kind],
+                       pre_sha=before, target_sha=target_sha,
+                       post_sha=after, http_status=answer.status)
             classification = self.forbidden(answer, kind, op)
-            require(self.ref("seed") == self.parent and
+            require(after == before and
+                    self.ref("seed") == self.parent and
                     self.ref("create") is None,
                     "worker negative attempt altered a protected ref")
+            self.audit(operation, "VERIFIED",
+                       ref="refs/heads/" + self.refs[kind],
+                       pre_sha=before, target_sha=target_sha,
+                       post_sha=after, http_status=answer.status,
+                       denial=classification,
+                       matched_diagnostic=self.last_denial_diagnostic)
             self.record(op, classification)
         return self.public_receipt("worker-negative", "FOUR_REF_RULE_DENIALS_OBSERVED")
 
@@ -467,50 +574,124 @@ class Trial:
         self.main(allow_drift=True)
         for kind in ("canary", "create", "seed"):
             found = self.ref(kind)
+            operation = "publisher-cleanup-" + kind
+            ref = "refs/heads/" + self.refs[kind]
             if found is None:
+                self.audit(operation, "READ", ref=ref, reason="SUCCESS")
                 self.record("publisher_cleanup_" + kind, "ALREADY_ABSENT")
                 continue
-            require(found in {self.current, self.parent, self.grandparent},
-                    "UNKNOWN SHA at disposable ref: manual publisher recovery required")
-            answer = self.delete(kind)
-            require(answer.status == 204 and self.ref(kind) is None,
+            if found not in {self.current, self.parent, self.grandparent}:
+                self.audit(operation, "STOP", ref=ref, pre_sha=found,
+                           reason="PRECONDITION_FAILED")
+                raise StopTrial("UNKNOWN SHA at disposable ref: manual publisher recovery required")
+            answer = self._write_and_record(
+                operation, kind, lambda: self.delete(kind), pre_sha=found)
+            after = self.ref(kind)
+            self.audit(operation, "READ", ref=ref, pre_sha=found,
+                       post_sha=after, http_status=answer.status)
+            require(answer.status == 204 and after is None,
                     "publisher cleanup incomplete; stop and escalate")
+            self.audit(operation, "VERIFIED", ref=ref, pre_sha=found,
+                       http_status=204, reason="SUCCESS")
             self.record("publisher_cleanup_" + kind, "DELETED_EXACT_DISPOSABLE")
         return self.public_receipt("publisher-cleanup", "OWNED_DISPOSABLE_REFS_ABSENT")
 
 
+def _write_origin_artifact(binding):
+    """Prepare nonsecret lineage before protected credentials can exist."""
+    base = Path(os.environ.get("RUNNER_TEMP", "/nonexistent"))
+    require(base.is_dir(), "trusted Actions temporary directory unavailable")
+    path = base / "w3-origin.json"
+    require(not path.exists() and not path.is_symlink(),
+            "origin artifact path occupied")
+    data = (json.dumps(binding, sort_keys=True, separators=(",", ":")) +
+            "\n").encode("utf-8")
+    require(len(data) < 4096, "origin artifact too large")
+    flags = os.O_WRONLY | os.O_CREAT | os.O_EXCL
+    if hasattr(os, "O_NOFOLLOW"):
+        flags |= os.O_NOFOLLOW
+    fd = os.open(path, flags, 0o600)
+    with os.fdopen(fd, "wb") as fp:
+        fp.write(data)
+        fp.flush()
+        os.fsync(fp.fileno())
+    return path
+
+
+def _verified_recovery_origin(nonce, reviewed_tree):
+    """Owner default token, actions:read + contents:read; no App credentials."""
+    source_id = os.environ.get("W3_ORIGIN_RUN_ID", "")
+    require(isinstance(source_id, str) and
+            re.fullmatch(r"[1-9][0-9]{0,15}", source_id),
+            "independent recovery requires original Actions run ID")
+    origin_run_id = int(source_id)
+    require(str(origin_run_id) != os.environ.get("GITHUB_RUN_ID"),
+            "cannot recover from the same run as its origin")
+    path = Path(os.environ.get("W3_ORIGIN_BINDING_FILE", "/nonexistent"))
+    require(path.name == "w3-origin.json" and path.is_file(),
+            "downloaded original W3 binding is absent")
+    original = read_binding(
+        path, nonce=nonce, original_run_id=origin_run_id,
+        reviewed_tree=reviewed_tree)
+    reader = os.environ.get("GITHUB_TOKEN")
+    require(isinstance(reader, str) and len(reader) > 8,
+            "authenticated read-only GitHub Actions token required")
+    return verify_origin(Client(reader), original)
+
+
 def cli():
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("phase", choices=("plan", "recovery-plan",
-                                          "publisher-seed", "worker-negative",
-                                          "publisher-cleanup"))
+    parser.add_argument("phase", choices=(
+        "plan", "prepare-origin", "recovery-plan",
+        "publisher-seed", "worker-negative", "publisher-cleanup"))
     parser.add_argument("--nonce", required=True)
     parser.add_argument("--authorize-live", action="store_true",
-                        help="read-only prepare still checks live execution gates")
+                        help="legacy read-only plan gate (never performs writes)")
     args = parser.parse_args()
     names(args.nonce)
     require(not args.authorize_live or args.phase == "plan",
-            "authorize-live only applies to read-only prepare")
-    live = args.phase != "plan" or args.authorize_live
-    publisher = policy_check(
-        live=live, nonce=args.nonce,
-        recovery=(args.phase in ("publisher-cleanup", "recovery-plan")))
-    current, parent, grandparent = local_commits()
+            "authorize-live only applies to read-only plan")
+
+    live = args.phase not in ("plan",) or args.authorize_live
+    recovery = args.phase in ("publisher-cleanup", "recovery-plan")
+    publisher = policy_check(live=live, nonce=args.nonce, recovery=recovery)
+    local_current, local_parent, local_grandparent = local_commits()
+    trial_cfg = read(".github/atc-w3-ref-trial.json")
+    reviewed_tree = trial_cfg.get("reviewed_quarantine_tree_sha")
+
+    independent_recovery = bool(os.environ.get("W3_ORIGIN_RUN_ID"))
+    if args.phase == "recovery-plan":
+        require(independent_recovery,
+                "recovery-plan must use authenticated original run artifact")
+    if independent_recovery:
+        require(args.phase in ("recovery-plan", "publisher-cleanup"),
+                "original-run input only permitted for publisher recovery")
+        binding = _verified_recovery_origin(args.nonce, reviewed_tree)
+        current, parent, grandparent = (
+            binding["source_sha"], binding["parent_sha"],
+            binding["grandparent_sha"])
+    else:
+        current, parent, grandparent = (
+            local_current, local_parent, local_grandparent)
+        if live:
+            snapshot_tree(ROOT, current, parent, grandparent, reviewed_tree)
+
     protected_token = args.phase in (
         "publisher-seed", "worker-negative", "publisher-cleanup")
-    token = (os.getenv("W3_APP_TOKEN") if protected_token else
-             os.getenv("GITHUB_TOKEN"))
+    token = (os.environ.get("W3_APP_TOKEN") if protected_token else
+             os.environ.get("GITHUB_TOKEN"))
     if protected_token:
         require(isinstance(token, str) and len(token) > 8,
                 "protected installation token missing")
         expected_slug = ("phil-atc-worker" if args.phase == "worker-negative"
                          else "phil-atc-publisher")
-        require(os.getenv("W3_ACTION_APP_SLUG") == expected_slug and
-                (os.getenv("W3_ACTION_INSTALLATION_ID") or "").isdigit() and
-                int(os.getenv("W3_ACTION_INSTALLATION_ID")) > 0,
+        installation_id = os.environ.get("W3_ACTION_INSTALLATION_ID")
+        require(os.environ.get("W3_ACTION_APP_SLUG") == expected_slug and
+                isinstance(installation_id, str) and
+                re.fullmatch(r"[1-9][0-9]*", installation_id),
                 "actual token principal/installation not authenticated")
         if args.phase == "worker-negative":
-            receipt_path = Path(os.getenv("RUNNER_TEMP", "")) / "atc-w1id-receipt.json"
+            receipt_path = Path(os.environ.get("RUNNER_TEMP", "")) / "atc-w1id-receipt.json"
             require(receipt_path.is_file() and
                     receipt_path.stat().st_size <= 65536,
                     "worker JWT verification receipt missing")
@@ -518,33 +699,83 @@ def cli():
                 jwt_receipt = json.loads(receipt_path.read_text(encoding="utf-8"))
             except (UnicodeError, ValueError, OSError):
                 raise StopTrial("unreadable worker JWT identity receipt")
-            attest_live_worker_identity(
-                jwt_receipt, os.getenv("W3_ACTION_INSTALLATION_ID"))
+            attest_live_worker_identity(jwt_receipt, installation_id)
+
     client = Client(token)
-    run = Trial(client, args.nonce, current, parent, grandparent, publisher)
+    evidence = None
     if protected_token:
-        run.token_audience()
-    if args.phase == "plan":
-        run.gate([])
-        result = run.public_receipt("plan", "SOURCE_ONLY_PLAN_NO_WRITES")
-        result["execution_authorized"] = False
-        result["execution_gates_satisfied"] = bool(args.authorize_live)
-    elif args.phase == "recovery-plan":
-        result = run.publisher_recovery_plan()
-    elif args.phase == "publisher-seed":
-        result = run.publisher_seed()
-    elif args.phase == "worker-negative":
-        result = run.worker_probe()
-    else:
-        result = run.publisher_cleanup()
-    print(json.dumps(result, sort_keys=True))
-    return 0
+        run_id = os.environ.get("GITHUB_RUN_ID", "")
+        require(isinstance(run_id, str) and
+                re.fullmatch(r"[1-9][0-9]{0,15}", run_id),
+                "W3 protected job run ID missing")
+        evidence = EvidenceLedger(
+            Path(os.environ.get("RUNNER_TEMP", "/nonexistent")) / "w3-evidence.json",
+            phase=args.phase, nonce=args.nonce, run_id=int(run_id),
+            source_sha=current, parent_sha=parent,
+            grandparent_sha=grandparent,
+            workflow_tree_sha=reviewed_tree,
+            app_id=WORKER_ID if args.phase == "worker-negative" else PUBLISHER_ID,
+            installation_id=installation_id)
+
+    run = Trial(client, args.nonce, current, parent, grandparent,
+                publisher, evidence=evidence)
+    try:
+        if protected_token:
+            run.token_audience()
+        if args.phase == "plan":
+            run.gate([])
+            result = run.public_receipt("plan", "SOURCE_ONLY_PLAN_NO_WRITES")
+            result["execution_authorized"] = False
+            result["execution_gates_satisfied"] = bool(args.authorize_live)
+        elif args.phase == "prepare-origin":
+            # The entire source/nonce quarantine plan and API read check MUST
+            # complete before uploading the immutable nonsecret run binding.
+            run.gate([])
+            binding = make_binding(
+                args.nonce, current, parent, grandparent,
+                reviewed_tree, int(os.environ.get("GITHUB_RUN_ID", "0")))
+            verify_origin(client, binding)
+            _write_origin_artifact(binding)
+            result = run.public_receipt(
+                "prepare-origin", "ORIGINAL_LINEAGE_READY_NO_WRITES")
+            result["execution_authorized"] = False
+        elif args.phase == "recovery-plan":
+            result = run.publisher_recovery_plan()
+        elif args.phase == "publisher-seed":
+            result = run.publisher_seed()
+        elif args.phase == "worker-negative":
+            result = run.worker_probe()
+        else:
+            result = run.publisher_cleanup()
+        if evidence is not None:
+            success = {
+                "publisher-seed": "PUBLISHER_SEED_CONFIRMED",
+                "worker-negative": "DENIALS_CONFIRMED",
+                "publisher-cleanup": "CLEANUP_ABSENCE_CONFIRMED",
+            }
+            evidence.decision(success[args.phase])
+        print(json.dumps(result, sort_keys=True), flush=True)
+        return 0
+    except Exception:
+        if evidence is not None:
+            evidence.decision("STOP_INCOMPLETE")
+        raise
+
+def main():
+    """Exit via a fixed-text boundary, including unexpected exception types.
+
+    Remote exception strings, parser traceback text, and chained exceptions
+    must never reach the credential-bearing Actions job log.
+    """
+    try:
+        return cli()
+    except LiveTrialsDisabled:
+        print("W3 STOP: live trials DISABLED in reviewed source", file=sys.stderr)
+        return 2
+    except Exception:
+        print("W3 STOP: sanitized failure; inspect W3_EVIDENCE", file=sys.stderr)
+        return 2
 
 
 if __name__ == "__main__":
-    try:
-        sys.exit(cli())
-    except (ValueError, OSError, KeyError, TypeError, subprocess.TimeoutExpired) as exc:
-        # Never include the exception text of a remote HTTP body or token.
-        print("W3 STOP: " + str(exc), file=sys.stderr)
-        sys.exit(2)
+    sys.exit(main())
