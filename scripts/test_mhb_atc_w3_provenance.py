@@ -352,8 +352,16 @@ class DefaultBranchQuarantineTests(unittest.TestCase):
             with self.assertRaisesRegex(DefaultQuarantineError,
                                         "current default workflow quarantine"):
                 validator.validate(self.git(root,"rev-parse","HEAD"))
+            (workflows/"unsafe.yml").write_text(
+                "name: forbidden creation\non: create\n"
+                "jobs:\n  dangerous:\n    runs-on: ubuntu-latest\n")
+            self.git(root,"add","-A")
+            self.git(root,"commit","-m","unsafe default create event")
+            with self.assertRaisesRegex(DefaultQuarantineError,
+                                        "current default workflow quarantine"):
+                validator.validate(self.git(root,"rev-parse","HEAD"))
 
-    def test_complete_publisher_cli_stops_unsafe_default_before_delete(self):
+    def test_complete_publisher_cli_stops_unsafe_default_before_any_write(self):
         from test_mhb_atc_w3_ref_trial import FakeAPI, MAIN, PARENT, GRANDPARENT
         with tempfile.TemporaryDirectory() as td:
             root=Path(td)
@@ -393,7 +401,8 @@ class DefaultBranchQuarantineTests(unittest.TestCase):
                 stack.enter_context(redirect_stderr(errors))
                 exit_code=trial_source.main()
             self.assertEqual(exit_code,2)
-            self.assertEqual([m for m,_,_ in api.requests if m!="GET"],["POST"])
+            self.assertEqual([m for m,_,_ in api.requests if m!="GET"],[])
+            self.assertEqual(api.refs,{})
             doc=json.loads((root/"w3-evidence.json").read_text())
             self.assertEqual(doc["decision"],"STOP_INCOMPLETE")
             self.assertEqual(doc["default_quarantine_checks"],[])
@@ -444,10 +453,10 @@ class DefaultBranchQuarantineTests(unittest.TestCase):
                 return original(method,endpoint,data)
             api.request=drift
             with self.assertRaisesRegex(StopTrial,
-                                        "default main moved immediately before DELETE"):
+                                        "default main moved immediately before protected ref write"):
                 trial.publisher_seed()
-            self.assertEqual([m for m,_,_ in api.requests if m!="GET"],["POST"])
-            self.assertEqual(api.refs[names(NONCE)["canary"]],PARENT)
+            self.assertEqual([m for m,_,_ in api.requests if m!="GET"],[])
+            self.assertEqual(api.refs,{})
             self.assertEqual(len(trial.default_checks),1)
 
 

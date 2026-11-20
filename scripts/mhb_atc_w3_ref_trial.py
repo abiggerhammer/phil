@@ -435,19 +435,20 @@ class Trial:
         no fabricated denial/success is recorded. No automatic retry exists.
         """
         ref = "refs/heads/" + self.refs[kind]
-        checked_default = None
-        if operation in DELETE_OPERATIONS:
-            checked_default = self.default_quarantine(
-                operation, allow_drift=operation.startswith("publisher-cleanup-"))
+        # Protect CREATE and UPDATE as well as DELETE: default-branch
+        # 'create'/'delete' handlers are distinct from frozen-target pushes.
+        # This is the only wrapper through which protected writes occur.
+        checked_default = self.default_quarantine(
+            operation, allow_drift=operation.startswith("publisher-cleanup-"))
         self.audit(operation, "INTENT", ref=ref, pre_sha=pre_sha,
                    target_sha=target_sha)
         try:
-            if checked_default is not None:
-                # Last pre-request GET binds the default to the semantic
-                # inventory just recorded. A changed SHA stops before DELETE.
-                require(self.main(allow_drift=True) ==
-                        checked_default["default_sha"],
-                        "default main moved immediately before DELETE")
+            # Last pre-request GET binds default SHA to its semantic
+            # inventory. A changed SHA stops before ANY protected write.
+            require(self.main(allow_drift=True) ==
+                    checked_default["default_sha"],
+                    "default main moved immediately before protected ref write")
+            if operation in DELETE_OPERATIONS:
                 self._delete_authorized_kind = kind
             reply = method()
         except Exception:

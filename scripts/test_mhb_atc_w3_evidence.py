@@ -59,9 +59,11 @@ class EvidenceTests(unittest.TestCase):
             self.assertEqual(doc["dispatch_sha"],"f"*40)
             self.assertEqual(doc["source_sha"],MAIN)
             self.assertEqual(doc["schema"],SCHEMA)
-            self.assertEqual(len(doc["default_quarantine_checks"]),1)
-            self.assertEqual(doc["default_quarantine_checks"][0]["operation"],
-                             "publisher-delete-canary")
+            self.assertEqual(len(doc["default_quarantine_checks"]),3)
+            self.assertEqual([x["operation"] for x in
+                doc["default_quarantine_checks"]],[
+                "publisher-create-canary","publisher-delete-canary",
+                "publisher-create-seed"])
             self.assertEqual(doc["default_quarantine_checks"][0]["default_sha"],MAIN)
             self.assertEqual(doc["default_quarantine_checks"][0][
                 "default_workflow_tree_sha"],"d"*40)

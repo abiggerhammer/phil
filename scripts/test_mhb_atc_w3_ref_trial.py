@@ -399,22 +399,32 @@ class W3RefTrialTests(unittest.TestCase):
             trial.delete("canary")
         self.assertTrue(all(m=="GET" for m,_,_ in api.requests))
 
-    def test_publisher_canary_unsafe_default_stops_before_delete(self):
+    def test_publisher_canary_unsafe_default_stops_before_any_write(self):
         api, trial = make()
         api.default_workflows_unsafe = True
         with self.assertRaisesRegex(StopTrial,"current default workflow"):
             trial.publisher_seed()
-        self.assertEqual([m for m,_,_ in api.requests if m!="GET"],["POST"])
-        self.assertEqual(api.refs[names(NONCE)["canary"]],PARENT)
+        self.assertEqual([m for m,_,_ in api.requests if m!="GET"],[])
+        self.assertEqual(api.refs,{})
         self.assertFalse(trial.default_checks)
 
     def test_worker_delete_negative_cannot_skip_current_default_validation(self):
         api, trial = make()
         trial.publisher_seed()
         api.role = "worker"
-        api.default_workflows_unsafe = True
+        original=api.request
+        worker_writes=[0]
+        def newly_unsafe(method,endpoint,data=None):
+            answer=original(method,endpoint,data)
+            if method in ("POST","PATCH") and api.role=="worker":
+                worker_writes[0]+=1
+                if worker_writes[0]==3:
+                    api.default_workflows_unsafe=True
+            return answer
+        api.request=newly_unsafe
         with self.assertRaisesRegex(StopTrial,"current default workflow"):
             trial.worker_probe()
+        self.assertEqual(worker_writes[0],3)
         self.assertEqual([m for m,_,_ in api.requests if m!="GET"][-3:],
                          ["POST","PATCH","PATCH"])
         self.assertEqual(api.refs[names(NONCE)["seed"]],PARENT)
