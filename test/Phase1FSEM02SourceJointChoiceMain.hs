@@ -374,10 +374,19 @@ pairedLocalChoiceJointEquality client server label outcome = do
     (Map.lookup serverKey (fxContexts fx))
   loaned <- mapLeft show $ startSharedLoan spectatorName
     (protocolResources clientRaw)
+  -- This independently supplied Server spectator is not source-derived authority.
+  -- Both locally checked transitions and the joint Core transition must frame
+  -- BOTH active loans, including the loan on the receiving side.
+  let serverSpectator = Name "fsem02.server.borrowed-spectator"
+  serverWithSpectator <- mapLeft show $ insertBinding Affine serverSpectator
+    (TyOpaque "ServerSpectator") (protocolResources serverRaw)
+  serverLoaned <- mapLeft show $ startSharedLoan serverSpectator serverWithSpectator
   let clientBefore = clientRaw { protocolResources = loaned }
-      before = Map.insert clientKey clientBefore (fxContexts fx)
+      serverBefore = serverRaw { protocolResources = serverLoaned }
+      before = Map.insert clientKey clientBefore $
+        Map.insert serverKey serverBefore (fxContexts fx)
   selected <- mapLeft show (checkProtocolAction selectedReq clientBefore)
-  offered <- mapLeft show (checkProtocolAction offeredReq serverRaw)
+  offered <- mapLeft show (checkProtocolAction offeredReq serverBefore)
   let expected = Map.insert clientKey (checkedProtocolContext selected) $
         Map.insert serverKey (checkedProtocolContext offered) before
   jointResult <- mapLeft show (joint fx label before)
@@ -395,7 +404,12 @@ pairedLocalChoiceJointEquality client server label outcome = do
     (Map.lookup clientKey actual)
   assert (affineBindings (protocolResources clientAfter) == affineBindings loaned
        && sharedLoans (protocolResources clientAfter) == sharedLoans loaned)
-    "paired Choice/joint equality dropped an independently borrowed affine spectator"
+    "paired Choice/joint equality dropped the Client borrowed spectator"
+  serverAfter <- maybe (Left "paired Choice/joint lost the Server spectator context") Right
+    (Map.lookup serverKey actual)
+  assert (affineBindings (protocolResources serverAfter) == affineBindings serverLoaned
+       && sharedLoans (protocolResources serverAfter) == sharedLoans serverLoaned)
+    "paired Choice/joint equality dropped the independent Server borrowed spectator"
   case checkProtocolAction selectedReq (checkedProtocolContext selected) of
     Left (ProtocolEndpointUnknown name) ->
       assert (name == oldClient)

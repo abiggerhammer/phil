@@ -124,3 +124,5 @@ claim-guard, branch protections and all applicable CI.
 ### Paired local Choice and joint source correspondence (FSEM-02)
 
 [Independently checked Select/Offer local state versus exact joint rendezvous context](formal-semantics-paired-choice-joint-bridge-fsem02-v1.md) — bounded Go/Cancel native equality, stale and wrong-peer negatives, conditional Rocq paired choice and separately required rendezvous ownership premises. Non-normative; no universal Haskell/Rocq refinement.
+
+The [non-normative paired Choice dual borrowed-spectator frame](formal-semantics-choice-dual-spectator-frame-fsem02-v1.md) strengthens the #1938 finite local/joint Go/Cancel correspondence: actual Core contexts carry independent active affine loans on **both** processes, while a separate conditional Rocq theorem preserves both full abstract loan sets and unrelated linear observers. No native Map/Set-to-Rocq refinement or source-derived authority is claimed.
