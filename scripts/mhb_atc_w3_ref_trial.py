@@ -161,7 +161,9 @@ class Client:
         if method != "GET":
             require(isinstance(self.token, str) and len(self.token) > 8,
                     "write token missing")
-        full = API_ROOT + endpoint
+        full = ("https://api.github.com" + endpoint
+                if endpoint == "/installation/repositories"
+                else API_ROOT + endpoint)
         payload = None if data is None else json.dumps(
             data, separators=(",", ":"), sort_keys=True).encode("utf-8")
         headers = {"Accept": "application/vnd.github+json",
@@ -259,8 +261,6 @@ class Trial:
         # Installation token, not the runner default token.
         response = self.client.request(
             "GET", "/installation/repositories")
-        # /installation/repositories has a different API root; see separate
-        # route method in the transport below.
         require(response.status == 200 and
                 isinstance(response.data, dict) and
                 response.data.get("total_count") == 1 and
@@ -300,8 +300,7 @@ class Trial:
     def record(self, op, result):
         self.receipts.append({"operation": op, "result": result})
 
-    @staticmethod
-    def forbidden(reply, kind, op):
+    def forbidden(self, reply, kind, op):
         """Permit no ambiguous 4xx as permission-denial evidence."""
         if reply.status not in (403, 422) or not isinstance(reply.data, dict):
             raise StopTrial("unexpected or ambiguous negative write response")
@@ -312,12 +311,10 @@ class Trial:
             parts.extend(e.get("message") for e in errors if
                          isinstance(e, dict) and isinstance(e.get("message"), str))
         lower = " ".join(parts).lower()
-        needle = "w3-" + kind + "-"  # impossible: kind is create/seed, not nonce
-        del needle
-        # A 422 validation error is NOT a permission denial. Require an
-        # explicit GitHub repository-rules explanation, not just an HTTP code.
+        # A 422 validation error is NOT a permission denial. Require a
+        # ruleset-specific explanation naming THIS exact disposable ref.
         if not (("repository rule" in lower or "gh013" in lower) and
-                ("hamster/admitted/" in lower or "refs/heads/" in lower)):
+                self.refs[kind].lower() in lower):
             raise StopTrial("HTTP error was not explicit ruleset denial")
         return "RULESET_DENIED"
 
@@ -407,6 +404,8 @@ def cli():
                 "actual token principal/installation not authenticated")
     client = Client(token)
     run = Trial(client, args.nonce, current, parent, grandparent, publisher)
+    if live:
+        run.token_audience()
     if args.phase == "plan":
         run.gate([])
         result = run.public_receipt("plan", "SOURCE_ONLY_PLAN_NO_WRITES")
