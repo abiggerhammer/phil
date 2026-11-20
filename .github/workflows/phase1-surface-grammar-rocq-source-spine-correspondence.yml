@@ -124,7 +124,7 @@ jobs:
             proof/Phil/Surface/GrammarAstRecordDataRecursiveGroupingObservationPERDomain.vo \
             proof/Phil/Surface/GrammarAstRecordDataRecursiveGroupingObservationAdmittedQuotient.vo \
             proof/Phil/Surface/GrammarAstRecordDataRecursiveGroupingObservationAdmittedDerivations.vo \
-            GrammarAstRecordDataRecursiveGroupingObservationClassCoherence.vo
+            proof/Phil/Surface/GrammarAstRecordDataRecursiveGroupingObservationClassCoherence.vo
 
       - name: Compile new generic-requirement modules with all warnings enabled
         shell: bash
