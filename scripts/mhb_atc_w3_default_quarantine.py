@@ -16,7 +16,7 @@ import re
 import subprocess
 
 from test_mhb_atc_staged_push_ci import (
-    excludes_staged_push, excludes_w3_disposable_push,
+    parse_workflow_events, excludes_staged_push, excludes_w3_disposable_push,
 )
 
 SHA = re.compile(r"[0-9a-f]{40}\Z")
@@ -116,7 +116,12 @@ class DefaultWorkflowQuarantine:
                    "default workflow inventory too large")
             try:
                 source = raw.decode("utf-8")
-                safe = (excludes_staged_push(source) and
+                events = parse_workflow_events(source)
+                # A default-branch 'delete' event cannot be restricted by
+                # branch selectors. Reject it even if the shared G1 parser
+                # eventually admits 'delete' as a recognized event kind.
+                safe = ("delete" not in events and
+                        excludes_staged_push(source) and
                         excludes_w3_disposable_push(source))
             except (UnicodeError, ValueError):
                 safe = False

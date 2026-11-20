@@ -72,7 +72,8 @@ jobs:
           test -z "$(git status --porcelain --untracked-files=all)"
 
       - name: Install reviewed YAML parser for W3 current-default quarantine (before token)
-        run: python3 -m pip install --disable-pip-version-check --no-deps --only-binary=:all: 'PyYAML==6.0.3'
+        run: |
+          python3 -m pip install --disable-pip-version-check --no-deps --only-binary=:all: 'PyYAML==6.0.3'
       - name: Download authenticated original-run binding for recovery only
         if: inputs.mode == 'cleanup'
         uses: actions/download-artifact@v4
@@ -136,7 +137,8 @@ jobs:
       - name: Prepare exact local main
         run: git switch -C main "$GITHUB_SHA"
       - name: Install reviewed YAML parser for W3 current-default quarantine (before token)
-        run: python3 -m pip install --disable-pip-version-check --no-deps --only-binary=:all: 'PyYAML==6.0.3'
+        run: |
+          python3 -m pip install --disable-pip-version-check --no-deps --only-binary=:all: 'PyYAML==6.0.3'
       - name: Mint publisher-only token for canary/seed
         id: publisher_token
         uses: actions/create-github-app-token@64ab729a6294000f5aa4a4bc0b73d1f32bc45510 # v3
@@ -178,7 +180,8 @@ jobs:
       - name: Prepare exact local main
         run: git switch -C main "$GITHUB_SHA"
       - name: Install reviewed YAML parser for W3 current-default quarantine (before token)
-        run: python3 -m pip install --disable-pip-version-check --no-deps --only-binary=:all: 'PyYAML==6.0.3'
+        run: |
+          python3 -m pip install --disable-pip-version-check --no-deps --only-binary=:all: 'PyYAML==6.0.3'
       - name: Authenticate worker App numeric ID and full installed grants (JWT GET only)
         env:
           APP_PRIVATE_KEY: ${{ secrets.MHB_ATC_WORKER_APP_PRIVATE_KEY }}
@@ -297,7 +300,8 @@ jobs:
       - name: Prepare exact local main
         run: git switch -C main "$GITHUB_SHA"
       - name: Install reviewed YAML parser for W3 current-default quarantine (before token)
-        run: python3 -m pip install --disable-pip-version-check --no-deps --only-binary=:all: 'PyYAML==6.0.3'
+        run: |
+          python3 -m pip install --disable-pip-version-check --no-deps --only-binary=:all: 'PyYAML==6.0.3'
       - name: Recover original owner-authenticated lineage before publisher token
         if: inputs.mode == 'cleanup'
         uses: actions/download-artifact@v4
