@@ -580,3 +580,8 @@ The [paired Ping/Choice source-family envelope](formal-semantics-paired-source-f
 ### FSEM-02 paired two-step outcome replay (non-normative)
 
 The [paired two-step source-family outcome observation](formal-semantics-paired-two-step-outcomes-fsem02-v1.md) sequentially composes two separately admitted Ping/Choice model steps. Rocq distinguishes first refusal, second refusal with exact committed prefix retained, and two-step success; it proves four separate admission requirements and conditional dual-peer loan/unrelated-linear preservation across both steps. Strict Haskell rechecks accepted and minimally rejected complete **separate** Ping and Choice sources, not a combined source program or universal native Map/Set-to-Rocq refinement. Activation, protocol authority, selected roots, ownership and disposal remain external premises; FSEM-02 stays open and non-normative.
+
+
+### FSEM-02 two-step stale predecessor and committed prefix (non-normative)
+
+The [two-step cross-family stale-prefix proof](formal-semantics-two-step-stale-prefix-fsem02-v1.md) lifts per-family exact predecessor consumption to a tagged Ping/Choice request, then proves a following Ping that reuses either consumed peer predecessor refuses **without rolling back** the first model transition. Dedicated GHC 9.6.7 source witnesses and Rocq 9.2 checks run independently; no combined-source execution, native resource-state refinement or source-derived nominal authority is claimed. FSEM-02 remains open.
