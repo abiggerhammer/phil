@@ -9,5 +9,7 @@
   "authorization": "A future exact-head, independently reviewed policy PR plus a separately enabled repository variable and manual owner dispatch are required before any execution",
   "revision": 1,
   "approved_nonce": null,
-  "reuse_policy": "One reviewed nonce per separately reviewed source activation; do not rerun or reuse after first attempted live dispatch"
+  "reuse_policy": "One reviewed nonce per separately reviewed source activation; do not rerun or reuse after first attempted live dispatch",
+  "push_ci_quarantine_verified": false,
+  "push_ci_reason": "Publisher-created W3 canary/seed admitted refs can trigger ordinary push CI; require separately reviewed complete trigger isolation before live ref tests"
 }
