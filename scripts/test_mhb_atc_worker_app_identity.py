@@ -161,7 +161,7 @@ class WorkerAppIdTests(unittest.TestCase):
             (d / "installs.json").write_text(json.dumps(installs))
             mock = textwrap.dedent(r'''
                 curl() {
-                  grep -Eq '^Authorization: Bearer [A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+
+                  grep -Eq '^Authorization: Bearer [A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+$' "$RUNNER_TEMP/atc-w1id-auth-header.txt" || return 65
                   last=""
                   for arg in "$@"; do last="$arg"; done
                   case "$last" in
@@ -183,35 +183,6 @@ class WorkerAppIdTests(unittest.TestCase):
             self.assertEqual(receipt["installation_id"], 4567)
             for name in ("atc-w1id-key.pem", "atc-w1id-app.json",
                          "atc-w1id-installations.json", "atc-w1id-auth-header.txt"):
-                self.assertFalse((d / name).exists())
-            self.assertNotIn("PRIVATE KEY", result.stdout + result.stderr)
-            self.assertNotIn(CLIENT_ID, result.stdout + result.stderr)
-
-
-if __name__ == "__main__":
-    unittest.main()
- "$RUNNER_TEMP/atc-w1id-auth-header.txt" || return 65
-                  last=""
-                  for arg in "$@"; do last="$arg"; done
-                  case "$last" in
-                    https://api.github.com/app) cat "$MOCK_APP" ;;
-                    https://api.github.com/app/installations*) cat "$MOCK_INSTALLATIONS" ;;
-                    *) return 66 ;;
-                  esac
-                }
-            ''')
-            env = dict(os.environ, APP_PRIVATE_KEY=rsa.read_text(),
-                       APP_CLIENT_ID=CLIENT_ID, RUNNER_TEMP=str(d),
-                       GITHUB_STEP_SUMMARY=str(d / "summary"),
-                       MOCK_APP=str(d / "app.json"),
-                       MOCK_INSTALLATIONS=str(d / "installs.json"))
-            result = subprocess.run(["bash", "-c", mock + "\n" + script],
-                                    cwd=ROOT, env=env, capture_output=True, text=True)
-            self.assertEqual(result.returncode, 0, result.stderr)
-            receipt = json.loads((d / "atc-w1id-receipt.json").read_text())
-            self.assertEqual(receipt["installation_id"], 4567)
-            for name in ("atc-w1id-key.pem", "atc-w1id-app.json",
-                         "atc-w1id-installations.json"):
                 self.assertFalse((d / name).exists())
             self.assertNotIn("PRIVATE KEY", result.stdout + result.stderr)
             self.assertNotIn(CLIENT_ID, result.stdout + result.stderr)
