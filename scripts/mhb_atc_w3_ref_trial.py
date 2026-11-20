@@ -107,8 +107,14 @@ def policy_check(*, live: bool, nonce=None, recovery=False):
         if not recovery:
             require(os.getenv("MHB_ATC_W3_REF_TRIAL_ENABLED") == "true",
                     "W3 live trials require separately enabled exact repo switch")
-        require(os.getenv("W3_CONFIRM") == "AUTHORIZE_W3_PROTECTED_REFS_ONLY",
-                "explicit bounded owner confirmation missing")
+        if recovery:
+            require(os.getenv("W3_CONFIRM") in (
+                        "AUTHORIZE_W3_PROTECTED_REFS_ONLY",
+                        "RECOVER_W3_EXACT_REFS_ONLY"),
+                    "publisher recovery owner confirmation missing")
+        else:
+            require(os.getenv("W3_CONFIRM") == "AUTHORIZE_W3_PROTECTED_REFS_ONLY",
+                    "explicit bounded owner confirmation missing")
         require(os.getenv("GITHUB_ACTIONS") == "true" and
                 os.getenv("GITHUB_EVENT_NAME") == "workflow_dispatch" and
                 os.getenv("GITHUB_ACTOR") == "abiggerhammer" and
@@ -391,6 +397,23 @@ class Trial:
             self.record(op, classification)
         return self.public_receipt("worker-negative", "FOUR_REF_RULE_DENIALS_OBSERVED")
 
+    def publisher_recovery_plan(self):
+        """GET-only owned-ref inventory before any separately dispatched recovery."""
+        self.rules()
+        self.main(allow_drift=True)
+        statuses = {}
+        for kind in ("canary", "create", "seed"):
+            found = self.ref(kind)
+            require(found is None or
+                    found in {self.current, self.parent, self.grandparent},
+                    "UNKNOWN SHA: do not mint cleanup token for this ref")
+            statuses[kind] = "ABSENT" if found is None else "KNOWN_DISPOSABLE"
+        receipt = self.public_receipt(
+            "recovery-plan", "EXACT_KNOWN_REF_CLEANUP_ELIGIBLE")
+        receipt["refs"] = statuses
+        receipt["execution_authorized"] = False
+        return receipt
+
     def publisher_cleanup(self):
         """Idempotence is safe only for exact known SHA and exact nonce refs."""
         # The cleanup job runs after failed seed/probe as well. Main may move;
@@ -413,7 +436,8 @@ class Trial:
 
 def cli():
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("phase", choices=("plan", "publisher-seed", "worker-negative",
+    parser.add_argument("phase", choices=("plan", "recovery-plan",
+                                          "publisher-seed", "worker-negative",
                                           "publisher-cleanup"))
     parser.add_argument("--nonce", required=True)
     parser.add_argument("--authorize-live", action="store_true",
@@ -425,10 +449,13 @@ def cli():
     live = args.phase != "plan" or args.authorize_live
     publisher = policy_check(
         live=live, nonce=args.nonce,
-        recovery=(args.phase == "publisher-cleanup"))
+        recovery=(args.phase in ("publisher-cleanup", "recovery-plan")))
     current, parent, grandparent = local_commits()
-    token = os.getenv("W3_APP_TOKEN") if live else os.getenv("GITHUB_TOKEN")
-    if live:
+    protected_token = args.phase in (
+        "publisher-seed", "worker-negative", "publisher-cleanup")
+    token = (os.getenv("W3_APP_TOKEN") if protected_token else
+             os.getenv("GITHUB_TOKEN"))
+    if protected_token:
         require(isinstance(token, str) and len(token) > 8,
                 "protected installation token missing")
         expected_slug = ("phil-atc-worker" if args.phase == "worker-negative"
@@ -439,13 +466,15 @@ def cli():
                 "actual token principal/installation not authenticated")
     client = Client(token)
     run = Trial(client, args.nonce, current, parent, grandparent, publisher)
-    if args.phase != "plan":
+    if protected_token:
         run.token_audience()
     if args.phase == "plan":
         run.gate([])
         result = run.public_receipt("plan", "SOURCE_ONLY_PLAN_NO_WRITES")
         result["execution_authorized"] = False
         result["execution_gates_satisfied"] = bool(args.authorize_live)
+    elif args.phase == "recovery-plan":
+        result = run.publisher_recovery_plan()
     elif args.phase == "publisher-seed":
         result = run.publisher_seed()
     elif args.phase == "worker-negative":
