@@ -30,6 +30,7 @@ MODULES = (
     "GrammarAstRecordDataRecursiveGroupingObservationAdmittedDerivations",
     "GrammarAstRecordDataRecursiveGroupingObservationClassCoherence",
     "GrammarAstRecordDataRecursiveGroupingObservationClassSaturation",
+    "GrammarAstRecordDataRecursiveGroupingObservationClassifier",
 )
 
 
