@@ -33,6 +33,7 @@ on:
       # Recheck EVERY workflow change; a future unbounded push must fail.
       - '.github/workflows/**'
       - 'docs/phase-2/mhb-atc-worker-broker.md'
+      - 'docs/phase-2/mhb-atc-privileged-pr-ci.md'
       - 'scripts/test_mhb_atc_worker_preflight.py'
       - 'docs/phase-2/mhb-atc-worker-app.md'
       - '.github/workflows/mhb-atc-stage.yml'
@@ -71,6 +72,7 @@ on:
       # Recheck EVERY workflow change; a future unbounded push must fail.
       - '.github/workflows/**'
       - 'docs/phase-2/mhb-atc-worker-broker.md'
+      - 'docs/phase-2/mhb-atc-privileged-pr-ci.md'
       - 'scripts/test_mhb_atc_worker_preflight.py'
       - 'docs/phase-2/mhb-atc-worker-app.md'
       - '.github/workflows/mhb-atc-stage.yml'
