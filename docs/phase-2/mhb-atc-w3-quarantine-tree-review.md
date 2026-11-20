@@ -12,18 +12,23 @@ See also [the dormant W3 trial contract](mhb-atc-w3-executable-ref-trials.md).
 
 ## Exact candidate
 
-- Candidate **Git `.github/workflows` subtree**: `4b8b338a7a0ebed852407c9288d4a293bc26066f`.
+- Candidate **Git `.github/workflows` subtree**: `6fa265b2b55cef252ffb1e5cf4734df84bbda9fd`.
   This is **not** the repository root tree SHA or a hash of one YAML file.
 - Observed in first-parent source commit
-  [`4b7594ed83648372171a9bb1c34647522c064b22`](https://github.com/abiggerhammer/phil/commit/4b7594ed83648372171a9bb1c34647522c064b22),
-  the accepted merge of #1948; 621 direct workflow blob entries, no
-  truncated Git-tree listing. GitHub object identity can be checked by
-  `git rev-parse 4b7594ed83648372171a9bb1c34647522c064b22:.github/workflows`
+  [`69b3c419835f12085dbd41bf6f7d669e24a9828d`](https://github.com/abiggerhammer/phil/commit/69b3c419835f12085dbd41bf6f7d669e24a9828d),
+  the #1949 FSEM-02 source-family envelope commit; **622** direct workflow
+  blob entries, no truncated Git-tree listing. GitHub object identity can
+  be checked by
+  `git rev-parse 69b3c419835f12085dbd41bf6f7d669e24a9828d:.github/workflows`
   in an authenticated, clean local checkout.
-- The #1948 [MHB ATC Radar Replay run](https://github.com/abiggerhammer/phil/actions/runs/44701661186)
-  passed the read-only G1 staged and W3 push-filter full-inventory audit,
-  plus W3 provenance and durable evidence suites (229 tests / 17 suites).
-  This is **static hosted evidence**, not a witnessed publisher-origin push.
+- The previously reviewed #1948 [Radar Replay run](https://github.com/abiggerhammer/phil/actions/runs/44701661186)
+  passed 229 tests across 17 suites for the earlier 621-file tree.
+  That evidence is **not a review of the new workflow**. A new exact-head
+  hosted G1/W3 full-inventory audit and independent delta review are required.
+  Static hosted tests do not establish live publisher-origin push isolation.
+- Astra's first-run acceptance of previous #1951 head
+  `e38814a2e916252a8a7f3dd438943e8f4a21664a` applies to the earlier
+  tree `4b8b338a7a0ebed852407c9288d4a293bc26066f` only. This candidate needs **fresh review** before merge.
 
 ### Critical current first-parent mismatch
 
@@ -31,20 +36,19 @@ At the source snapshot above, the three commits W3 would select are:
 
 | Position | Commit SHA | `.github/workflows` SHA | Count |
 |---|---|---|---:|
-| Source / `main` | `4b7594ed83648372171a9bb1c34647522c064b22` | `4b8b338a7a0ebed852407c9288d4a293bc26066f` | 621 |
-| First parent | `e1da5dc4bd6b01cffe8f21d9dedf119dfe209059` | `6a66400495eb06e310abc8ff1aab3c7087c68c28` | 621 |
-| Second first-parent ancestor | `0913156d568d4a36abc5a5bd501f18a5939dd381` | `d2ecf367e7589d6f1009dd7430a106c1220a53ac` | 620 |
+| Source / `main` | `69b3c419835f12085dbd41bf6f7d669e24a9828d` | `6fa265b2b55cef252ffb1e5cf4734df84bbda9fd` | 622 |
+| First parent | `4b7594ed83648372171a9bb1c34647522c064b22` | `4b8b338a7a0ebed852407c9288d4a293bc26066f` | 621 |
+| Second first-parent ancestor | `e1da5dc4bd6b01cffe8f21d9dedf119dfe209059` | `6a66400495eb06e310abc8ff1aab3c7087c68c28` | 621 |
 
 All three Git tree responses were complete (`truncated: false`).
-The most recent change touched only `mhb-atc-tests.yml` and
-`mhb-atc-w3-ref-commissioning.yml`. The preceding change added the
-commissioning workflow, updated `mhb-atc-tests.yml`, and updated the four
-legacy push workflows
-(`phase1-int-001-source-architecture.yml`,
-`phase1-int-001-source-systems.yml`,
-`phase1-int-001-witness-e2e.yml`, and
-`phase1-int-002-manifest-closure.yml`) to exclude
-`hamster/admitted/w3-*`.
+The most recent change (#1949) **added just one workflow**,
+`fsem02-paired-source-family-envelope-preflight.yml`; its `push`
+selector allowlists only `formal-semantics/fsem02-paired-source-family-envelope`
+with file-path filters, its `pull_request` trigger has file-path filters,
+and its default token permission is `contents: read`. This appears
+disjoint from `hamster/admitted/w3-*`, but must be checked independently
+using the exact new 622-workflow tree. All pre-existing workflow blob IDs
+are identical to the previously reviewed `4b8b338a7a0ebed852407c9288d4a293bc26066f` tree.
 
 **Do not enable a protected-ref trial against this snapshot.** The existing
 `snapshot_tree()` gate in `scripts/mhb_atc_w3_provenance.py` correctly
@@ -52,7 +56,7 @@ rejects the unequal ancestry, even with a matching source pin.
 
 ## Independently review this exact tree
 
-The reviewer must examine the actual 621-file Git tree (not just this
+The reviewer must examine the actual 622-file Git tree (not just this
 description), with particular attention to:
 
 1. **All push-trigger selectors**, including scalar/list `on`, quoted keys,
@@ -107,7 +111,7 @@ resets the window. On a clean local `main` checkout, after fetching origin:
 set -euo pipefail
 test -z "$(git status --porcelain --untracked-files=all)"
 pinned="$(python3 -c 'import json; print(json.load(open(".github/atc-w3-ref-trial.json"))["reviewed_quarantine_tree_sha"])')"
-test "$pinned" = "4b8b338a7a0ebed852407c9288d4a293bc26066f"
+test "$pinned" = "6fa265b2b55cef252ffb1e5cf4734df84bbda9fd"
 for rev in HEAD HEAD^1 HEAD^1^1; do
   actual="$(git rev-parse --verify "$rev:.github/workflows")"
   printf '%s %s\n' "$rev" "$actual"

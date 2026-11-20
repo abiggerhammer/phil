@@ -12,6 +12,6 @@
   "reuse_policy": "One reviewed nonce per separately reviewed source activation; do not rerun or reuse after first attempted live dispatch",
   "push_ci_quarantine_verified": false,
   "push_ci_reason": "Publisher-created W3 canary/seed admitted refs can trigger ordinary push CI; require separately reviewed complete trigger isolation before live ref tests",
-  "reviewed_quarantine_tree_sha": "4b8b338a7a0ebed852407c9288d4a293bc26066f",
+  "reviewed_quarantine_tree_sha": "6fa265b2b55cef252ffb1e5cf4734df84bbda9fd",
   "quarantine_requirement": "Candidate workflow-subtree pin requires independent exact-head acceptance; every live original source/parent/grandparent workflow subtree must equal the accepted pin, with distinct nonce, push-fanout and runtime activation gates still required"
 }
