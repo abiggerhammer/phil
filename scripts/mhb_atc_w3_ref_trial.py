@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import argparse
 from dataclasses import dataclass
+import http.client
 import json
 import os
 from pathlib import Path
@@ -234,12 +235,18 @@ class Client:
             headers["Content-Type"] = "application/json"
         req = request.Request(full, data=payload, headers=headers, method=method)
         try:
-            with request.build_opener(_NoRedirect).open(req, timeout=20) as response:
-                status = response.status
-                raw = response.read(MAX_RESPONSE + 1)
-        except error.HTTPError as exc:
-            status = exc.code
-            raw = exc.read(MAX_RESPONSE + 1)
+            try:
+                with request.build_opener(_NoRedirect).open(req, timeout=20) as response:
+                    status = response.status
+                    raw = response.read(MAX_RESPONSE + 1)
+            except error.HTTPError as exc:
+                status = exc.code
+                raw = exc.read(MAX_RESPONSE + 1)
+        except (OSError, http.client.HTTPException, ValueError):
+            # Includes URLError, malformed status lines and response-read
+            # failures. Their exception text may contain remote-controlled
+            # bytes or secrets; do not propagate it to any output boundary.
+            raise StopTrial("GitHub transport or protocol failure") from None
         # No exception text or raw remote response is ever logged: it may
         # carry unexpectedly sensitive data or an injected instruction.
         require(len(raw) <= MAX_RESPONSE, "oversized GitHub response")
@@ -749,10 +756,18 @@ def cli():
             evidence.decision("STOP_INCOMPLETE")
         raise
 
-if __name__ == "__main__":
+def main():
+    """Exit via a fixed-text boundary, including unexpected exception types.
+
+    Remote exception strings, parser traceback text, and chained exceptions
+    must never reach the credential-bearing Actions job log.
+    """
     try:
-        sys.exit(cli())
-    except (ValueError, OSError, KeyError, TypeError, subprocess.TimeoutExpired) as exc:
-        # Never include the exception text of a remote HTTP body or token.
-        print("W3 STOP: " + str(exc), file=sys.stderr)
-        sys.exit(2)
+        return cli()
+    except Exception:
+        print("W3 STOP: sanitized failure; inspect W3_EVIDENCE", file=sys.stderr)
+        return 2
+
+
+if __name__ == "__main__":
+    sys.exit(main())

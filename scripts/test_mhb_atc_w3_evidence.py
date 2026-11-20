@@ -1,15 +1,19 @@
 #!/usr/bin/env python3
 """Fake-transport W3 durable sanitized intent/denial/cleanup receipts."""
 from __future__ import annotations
-from contextlib import redirect_stdout
+from contextlib import ExitStack, redirect_stderr, redirect_stdout
+import http.client
 import io
 import json
 import os
+import sys
+from urllib import error
 from pathlib import Path
 import tempfile
 import unittest
 from unittest.mock import patch
 
+import mhb_atc_w3_ref_trial as module
 from mhb_atc_w3_evidence import EvidenceLedger, EvidenceError, SCHEMA
 from mhb_atc_w3_ref_trial import Reply, StopTrial
 from test_mhb_atc_w3_ref_trial import (
@@ -153,6 +157,93 @@ class EvidenceTests(unittest.TestCase):
             self.assertEqual([x["stage"] for x in events],["INTENT","STOP"])
             self.assertEqual(events[-1]["reason"],"UNKNOWN_AFTER_REQUEST")
             self.assertIsNone(events[-1]["http_status"])
+
+    def test_transport_failures_are_redacted_at_cli_and_main_boundary(self):
+        """Real CLI, error boundary and HTTP parser; no live network or writes."""
+        entrypoint=(Path(__file__).resolve().parent/
+                    "mhb_atc_w3_ref_trial.py").read_text()
+        self.assertEqual(entrypoint.splitlines()[-2:],[
+            'if __name__ == "__main__":', '    sys.exit(main())'])
+        for failure in ("urlerror", "bad-status-line"):
+            with self.subTest(failure=failure), tempfile.TemporaryDirectory() as td:
+                marker=("REMOTE_INJECTED_ERROR_SENTINEL" if failure=="urlerror"
+                        else "REMOTE_INJECTED_STATUS_SENTINEL")
+                requests=[]; protocol_errors=[]
+
+                class OfflineSocket:
+                    def makefile(self, mode):
+                        return io.BytesIO(marker.encode("ascii")+bytes((13,10,13,10)))
+
+                class OfflineOpener:
+                    def open(self, req, timeout=20):
+                        requests.append(req.get_method())
+                        if failure=="urlerror":
+                            raise error.URLError(marker)
+                        # Exercise the actual HTTPResponse status-line parser,
+                        # not just a fabricated BadStatusLine exception.
+                        response=http.client.HTTPResponse(OfflineSocket())
+                        try:
+                            response.begin()
+                        except http.client.BadStatusLine:
+                            protocol_errors.append(True)
+                            raise
+                        raise AssertionError("malformed status line accepted")
+
+                def single_mutation(trial):
+                    trial._write_and_record(
+                        "publisher-create-seed", "seed",
+                        lambda: trial.create("seed", MAIN),
+                        target_sha=MAIN)
+                    raise AssertionError("a failed mutation must stop the phase")
+
+                stdout=io.StringIO();stderr=io.StringIO()
+                with ExitStack() as stack:
+                    stack.enter_context(patch.dict(os.environ,{
+                        "RUNNER_TEMP":td,
+                        "GITHUB_RUN_ID":str(RUN),
+                        "W3_APP_TOKEN":"OFFLINE_NOT_A_REAL_APP_TOKEN",
+                        "W3_ACTION_APP_SLUG":"phil-atc-publisher",
+                        "W3_ACTION_INSTALLATION_ID":"123456789",
+                        "W3_ORIGIN_RUN_ID":""}))
+                    stack.enter_context(patch.object(
+                        module,"policy_check",return_value={}))
+                    stack.enter_context(patch.object(
+                        module,"local_commits",
+                        return_value=(MAIN,PARENT,GRANDPARENT)))
+                    stack.enter_context(patch.object(
+                        module,"read",
+                        return_value={"reviewed_quarantine_tree_sha":TREE}))
+                    stack.enter_context(patch.object(module,"snapshot_tree"))
+                    stack.enter_context(patch.object(module.Trial,"token_audience"))
+                    stack.enter_context(patch.object(
+                        module.Trial,"publisher_seed",single_mutation))
+                    stack.enter_context(patch.object(
+                        module.request,"build_opener",
+                        return_value=OfflineOpener()))
+                    stack.enter_context(patch.object(sys,"argv",[
+                        "mhb_atc_w3_ref_trial.py","publisher-seed",
+                        "--nonce",NONCE]))
+                    stack.enter_context(redirect_stdout(stdout))
+                    stack.enter_context(redirect_stderr(stderr))
+                    exit_code=module.main()
+
+                self.assertEqual(exit_code,2)
+                self.assertEqual(requests,["POST"])
+                self.assertEqual(protocol_errors,
+                                 [True] if failure=="bad-status-line" else [])
+                receipt=json.loads((Path(td)/"w3-evidence.json").read_text())
+                self.assertEqual(receipt["decision"],"STOP_INCOMPLETE")
+                self.assertEqual([e["stage"] for e in receipt["events"]],
+                                 ["INTENT","STOP"])
+                self.assertEqual(receipt["events"][-1]["reason"],
+                                 "UNKNOWN_AFTER_REQUEST")
+                self.assertEqual(receipt["events"][0]["operation"],
+                                 "publisher-create-seed")
+                for content in (json.dumps(receipt),
+                                stdout.getvalue(),stderr.getvalue()):
+                    self.assertNotIn(marker,content)
+                self.assertIn("W3 STOP: sanitized failure",stderr.getvalue())
+                self.assertNotIn("Traceback",stderr.getvalue())
 
     def test_unknown_sha_cleanup_does_not_emit_delete_or_mutate_ref(self):
         with tempfile.TemporaryDirectory() as td,\
