@@ -49,14 +49,26 @@ def attach(trial, path, phase):
 
 
 class PublisherCanaryTests(unittest.TestCase):
-    def test_source_policy_dormant_and_no_unreviewed_live_nonce(self):
+    def test_source_policy_activation_requires_exact_nonce(self):
         policy = current_policy(ROOT)
-        self.assertIs(policy["source_authorized"],False)
-        self.assertIsNone(policy["approved_nonce"])
+        # Main is dormant; a separately reviewed activation PR may be active.
+        # Test both authorization states without requiring a particular
+        # candidate nonce to appear in every checkout.
+        self.assertIs(policy["source_authorized"],
+                      policy["approved_nonce"] is not None)
         self.assertEqual(policy["frozen_target_sha"],TARGET)
         self.assertEqual(policy["reviewed_target_workflows_sha"],TREE)
+        if policy["source_authorized"]:
+            self.assertEqual(policy_check(policy,nonce=policy["approved_nonce"],
+                                          require_active=True),policy)
+        inactive=dict(policy,source_authorized=False,approved_nonce=None)
         with self.assertRaisesRegex(FanoutStop,"activation/nonce"):
-            policy_check(policy,nonce=NONCE,require_active=True)
+            policy_check(inactive,nonce=NONCE,require_active=True)
+        active=dict(policy,source_authorized=True,approved_nonce=NONCE)
+        self.assertEqual(policy_check(active,nonce=NONCE,require_active=True),
+                         active)
+        with self.assertRaisesRegex(FanoutStop,"activation/nonce"):
+            policy_check(active,nonce="000000000000",require_active=True)
         for bad in ("../main","A"*12,"f"*11,"g"*12):
             with self.assertRaises(FanoutStop):
                 nonce_ref(bad)
