@@ -1,8 +1,10 @@
 # W3 publisher-App fanout: independently reviewed experiment protocol
 
-STATUS: DORMANT SOURCE-ONLY PLAN AND READ-ONLY EVENT OBSERVER.
-No App token, protected-ref mutation or workflow activation is authorized
-by this document or by the observer.
+STATUS: DORMANT, INDEPENDENT LIVE REVIEW REQUIRED.
+The read-only observer is merged. A separately disabled, owner-only
+publisher canary and authenticated recovery implementation are now
+proposed in a new dormant source PR. No App token, protected-ref mutation
+or workflow activation is authorized by the source additions.
 
 Tracking: W3 worker confinement #1863, immutable-admission gate #1839,
 and accepted W3 frozen/default-tree quarantine in #1953.
@@ -52,9 +54,11 @@ distinct from the main W3 one-time ref-test nonce namespace.
 
 ## Mandatory gate before any live publisher write
 
-The source-only experiment does not yet include the privileged probe
-workflow or independently authenticated recovery logic. Those are
-required in a separate dormant implementation PR before any write.
+The proposed dormant implementation includes an owner-only manual
+workflow, exact-intent controller, sanitized durable evidence, and an
+authenticated original-run recovery path. Their presence is not
+permission to run. See the separate implementation review record:
+mhb-atc-w3-fanout-probe-review.md.
 
 For that future implementation, Astra must review a finite owner/manual
 main-only workflow with a separate runtime enable variable, strict
@@ -83,11 +87,14 @@ CREATE must never be retried
 without exact read-only reconciliation; an unexpected existing/foreign
 SHA is a STOP. A failed DELETE requires publisher-only recovery, not a
 maintainer PAT. A cancellation may prevent cleanup or artifact upload.
-The future implementation must provide and test a distinct, always()
-cleanup job as well as an independently dispatchable recovery path
-bound to the authenticated ORIGINAL run, nonce, exact ref and known
-historical SHA before token mint. Do not treat "cleanup scheduled" as
-"ref absent". Retain the final ref census and token-revoked evidence.
+The dormant implementation provides an always()-guarded separate cleanup
+job and independent manual recovery of an ORIGINAL authenticated run,
+nonce, exact ref, and known SHA before token mint. The manual cleanup
+does not rely on the runtime enable variable. It still requires the
+original source to have been approved, the current-default quarantine,
+and the protected publisher environment. Do not treat "cleanup
+scheduled" as "ref absent". Retain final ref census and token-revocation
+evidence; cancellation may prevent even the cleanup job from executing.
 
 No publisher write should take place merely because this event observer
 passes its offline tests.
@@ -164,13 +171,13 @@ revocation. Store sanitized receipts under #1839.
 
 ## Review boundary and next action
 
-This PR adds only a read-only observer, its disabled source contract,
-offline hostile tests and CI registration. No privileged workflow or
-GitHub mutation path is present in this PR.
+The read-only observer was accepted and merged as #1961. The later
+dormant implementation adds publisher CREATE/DELETE code and recovery,
+but it remains source-disabled and cannot commission W3.
 
-After this observer passes CI and independent review, implement the
-separate publisher-only probe/cleanup workflow with source OFF, get
-Astra's exact-head approval, then separately authorize a one-time
-nonce and supervised live run. Only independently justified evidence
-from that run may support a later reviewed change to W3's
-push_ci_quarantine_verified flag. This observer cannot set it.
+After Astra accepts the distinct dormant implementation and all CI is
+green, a separate nonce-specific activation review and owner authorization
+are still necessary before any live publisher-App canary.
+Independent event-census, cleanup and token-revocation evidence must be
+reviewed before W3 push_ci_quarantine_verified can be set. The observer
+and the canary controller never set it themselves.
