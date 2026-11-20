@@ -4,14 +4,14 @@
 
 ## Proposed typed source-family observation
 
-The partial judgment has independently supplied family `F ∈ {Ping, Choice}`, checked source/continuation evidence, paired old/successor endpoint identities, two complete resource contexts, and external source-admission and rendezvous-admission flags:
+The partial judgment has independently supplied family `F ∈ {Ping, Choice}`, checked source/continuation evidence, paired old/successor endpoint identities, two complete resource contexts, and external source-admission and rendezvous-admission flags. A computable family-shape guard now refuses incorrectly tagged transitions: Ping requires Send/Receive, and Choice requires Select/Offer with the supplied chosen/peer labels matching the two action labels. This is **shape**, never nominal protocol, activation, or ownership authority:
 
 ```text
 (F, sourceAccepted, rendezvousAdmitted; heads, choice labels, peer;
  old1, next1, old2, next2; C1, C2) ==> Some(C1', C2') | None
 ```
 
-`FSEM02PairedSourceFamilyEnvelope.v` dispatches to the existing `fsem02PairedLocalReplay` for Ping or `fsem02PairedChoiceReplay` for Choice. It proves (a) either missing admission forbids every successor, (b) success implies **both** admissions, (c) under separately supplied typed continuing-head/branch-continuation premises every successful family preserves both entire abstract loan functions and every unrelated linear lookup, (d) Ping missing either predecessor refuses, and (e) Choice wrong peer label refuses. The model does not downgrade failure into a successful fallback.
+`FSEM02PairedSourceFamilyEnvelope.v` dispatches to the existing `fsem02PairedLocalReplay` for Ping or `fsem02PairedChoiceReplay` for Choice. It proves (a) both family-shape guards accept only the correct action pair and explicitly matching Choice labels, (b) either missing admission forbids every successor, (c) success implies **both** admissions, (d) under separately supplied typed continuing-head/branch-continuation premises every successful family preserves both entire abstract loan functions and every unrelated linear lookup, (e) Ping missing either predecessor refuses, and (f) Choice wrong peer label refuses. The model does not downgrade failure into a successful fallback.
 
 ## Real runnable source evidence
 

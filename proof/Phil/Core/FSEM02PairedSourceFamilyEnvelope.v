@@ -24,6 +24,53 @@ Inductive FSEM02PairedSourceFamily :=
 | FSEM02PairedPing
 | FSEM02PairedChoice.
 
+(* A source-family shape check, NOT nominal or protocol-instance authority. *)
+Definition fsem02PairedFamilyGuard
+  (family : FSEM02PairedSourceFamily)
+  (senderAction receiverAction : FSEM02Action)
+  (chosen peer : string) : bool :=
+  match family with
+  | FSEM02PairedPing =>
+      match senderAction, receiverAction with
+      | FSEM02Send, FSEM02Receive => true
+      | _, _ => false
+      end
+  | FSEM02PairedChoice =>
+      match senderAction, receiverAction with
+      | FSEM02Select selected, FSEM02Offer offered =>
+          andb (String.eqb selected chosen) (String.eqb offered peer)
+      | _, _ => false
+      end
+  end.
+
+Theorem fsem02PingGuardRequiresExactActionPair :
+  forall sa ra chosen peer,
+    fsem02PairedFamilyGuard FSEM02PairedPing sa ra chosen peer = true ->
+    sa = FSEM02Send /\ ra = FSEM02Receive.
+Proof.
+  intros sa ra chosen peer H.
+  destruct sa; destruct ra; simpl in H; try discriminate;
+    split; reflexivity.
+Qed.
+
+Theorem fsem02ChoiceGuardRequiresExactChoiceLabels :
+  forall sa ra chosen peer,
+    fsem02PairedFamilyGuard FSEM02PairedChoice sa ra chosen peer = true ->
+    exists selected offered,
+      sa = FSEM02Select selected /\
+      ra = FSEM02Offer offered /\
+      String.eqb selected chosen = true /\
+      String.eqb offered peer = true.
+Proof.
+  intros sa ra chosen peer H.
+  destruct sa as [| | selected | otherLabel | otherOutcome];
+  destruct ra as [| | otherSelected | offered | otherTerminal];
+    simpl in H; try discriminate.
+  apply andb_true_iff in H as [Hselected Hoffered].
+  exists selected, offered.
+  repeat split; try reflexivity; assumption.
+Qed.
+
 Definition fsem02PairedSourceFamilyReplay
   (family : FSEM02PairedSourceFamily)
   (sourceAccepted rendezvousAdmitted : bool)
@@ -34,16 +81,19 @@ Definition fsem02PairedSourceFamilyReplay
   (firstOld firstNext secondOld secondNext : Name)
   (firstBefore secondBefore : ResourceContext)
   : option (ResourceContext * ResourceContext) :=
-  match family with
-  | FSEM02PairedPing =>
-      fsem02PairedLocalReplay sourceAccepted rendezvousAdmitted
-        senderAction receiverAction senderHead receiverHead
-        firstOld firstNext secondOld secondNext firstBefore secondBefore
-  | FSEM02PairedChoice =>
-      fsem02PairedChoiceReplay sourceAccepted rendezvousAdmitted
-        sourceLabels branches chosen peer
-        firstOld firstNext secondOld secondNext firstBefore secondBefore
-  end.
+  if fsem02PairedFamilyGuard family senderAction receiverAction chosen peer
+  then
+    match family with
+    | FSEM02PairedPing =>
+        fsem02PairedLocalReplay sourceAccepted rendezvousAdmitted
+          senderAction receiverAction senderHead receiverHead
+          firstOld firstNext secondOld secondNext firstBefore secondBefore
+    | FSEM02PairedChoice =>
+        fsem02PairedChoiceReplay sourceAccepted rendezvousAdmitted
+          sourceLabels branches chosen peer
+          firstOld firstNext secondOld secondNext firstBefore secondBefore
+    end
+  else None.
 
 Theorem fsem02FamilyRejectsUnacceptedSource :
   forall family admitted sa ra sh rh labels branches chosen peer
@@ -51,7 +101,12 @@ Theorem fsem02FamilyRejectsUnacceptedSource :
     fsem02PairedSourceFamilyReplay family false admitted
       sa ra sh rh labels branches chosen peer
       old1 next1 old2 next2 before1 before2 = None.
-Proof. intros; destruct family; reflexivity. Qed.
+Proof.
+  intros.
+  unfold fsem02PairedSourceFamilyReplay.
+  destruct (fsem02PairedFamilyGuard family sa ra chosen peer);
+    destruct family; reflexivity.
+Qed.
 
 Theorem fsem02FamilyRejectsMissingRendezvousAdmission :
   forall family source sa ra sh rh labels branches chosen peer
@@ -59,7 +114,12 @@ Theorem fsem02FamilyRejectsMissingRendezvousAdmission :
     fsem02PairedSourceFamilyReplay family source false
       sa ra sh rh labels branches chosen peer
       old1 next1 old2 next2 before1 before2 = None.
-Proof. intros; destruct family, source; reflexivity. Qed.
+Proof.
+  intros.
+  unfold fsem02PairedSourceFamilyReplay.
+  destruct (fsem02PairedFamilyGuard family sa ra chosen peer);
+    destruct family, source; reflexivity.
+Qed.
 
 Theorem fsem02FamilySuccessfulReplayRequiresBothAdmissions :
   forall family source admitted sa ra sh rh labels branches chosen peer
@@ -72,6 +132,8 @@ Proof.
   intros family source admitted sa ra sh rh labels branches chosen peer
     old1 next1 old2 next2 before1 before2 after1 after2 Hstep.
   unfold fsem02PairedSourceFamilyReplay in Hstep.
+  destruct (fsem02PairedFamilyGuard family sa ra chosen peer) eqn:Hfamily;
+    [|discriminate].
   destruct family.
   - unfold fsem02PairedLocalReplay in Hstep.
     destruct (andb source admitted) eqn:Hgate; [|discriminate].
@@ -115,6 +177,8 @@ Proof.
     senderContinuation receiverContinuation choiceContinuation
     Hping Hchoice Hstep.
   unfold fsem02PairedSourceFamilyReplay in Hstep.
+  destruct (fsem02PairedFamilyGuard family sa ra chosen peer) eqn:Hfamily;
+    [|discriminate].
   destruct family.
   - destruct (Hping eq_refl) as [Hsender Hreceiver].
     exact (fsem02PairedReplayFramesBothLoansAndIndependentLinearSpectators
@@ -138,6 +202,8 @@ Theorem fsem02FamilyPingMissingFirstPredecessorRejects :
 Proof.
   intros.
   unfold fsem02PairedSourceFamilyReplay.
+  destruct (fsem02PairedFamilyGuard FSEM02PairedPing sa ra chosen peer);
+    [|reflexivity].
   eapply fsem02PairedReplayRejectsMissingSender; eauto.
 Qed.
 
@@ -151,6 +217,8 @@ Theorem fsem02FamilyPingMissingSecondPredecessorRejects :
 Proof.
   intros.
   unfold fsem02PairedSourceFamilyReplay.
+  destruct (fsem02PairedFamilyGuard FSEM02PairedPing sa ra chosen peer);
+    [|reflexivity].
   eapply fsem02PairedReplayRejectsMissingReceiver; eauto.
 Qed.
 
@@ -164,5 +232,7 @@ Theorem fsem02FamilyChoicePeerMismatchRejects :
 Proof.
   intros.
   unfold fsem02PairedSourceFamilyReplay.
+  destruct (fsem02PairedFamilyGuard FSEM02PairedChoice sa ra chosen peer);
+    [|reflexivity].
   eapply fsem02PairedChoiceRejectsPeerMismatch; eauto.
 Qed.
