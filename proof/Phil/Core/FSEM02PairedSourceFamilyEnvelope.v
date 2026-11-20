@@ -117,11 +117,15 @@ Proof.
   unfold fsem02PairedSourceFamilyReplay in Hstep.
   destruct family.
   - destruct (Hping eq_refl) as [Hsender Hreceiver].
-    eapply fsem02PairedReplayFramesBothLoansAndIndependentLinearSpectators;
-      eauto.
-  - specialize (Hchoice eq_refl).
-    eapply fsem02PairedChoiceFramesBothLocalLoanSetsAndLinearSpectators;
-      eauto.
+    exact (fsem02PairedReplayFramesBothLoansAndIndependentLinearSpectators
+      source admitted sa ra sh rh old1 next1 old2 next2
+      before1 before2 after1 after2
+      senderContinuation receiverContinuation Hsender Hreceiver Hstep).
+  - pose proof (Hchoice eq_refl) as Hselected.
+    exact (fsem02PairedChoiceFramesBothLocalLoanSetsAndLinearSpectators
+      source admitted labels branches chosen peer
+      old1 next1 old2 next2 before1 before2 after1 after2
+      choiceContinuation Hselected Hstep).
 Qed.
 
 Theorem fsem02FamilyPingMissingFirstPredecessorRejects :
