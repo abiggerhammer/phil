@@ -351,6 +351,26 @@ class Trial:
         return self.client.request(
             "DELETE", "/git/refs/heads/" + self.refs[kind])
 
+    def _write_and_record(self, operation, kind, method, *, target_sha=None,
+                          pre_sha=None):
+        """Durably persist intent BEFORE any potential ref mutation.
+
+        If the request fails ambiguously, the log and artifact say ATTEMPTED;
+        no fabricated denial/success is recorded. No automatic retry exists.
+        """
+        ref = "refs/heads/" + self.refs[kind]
+        self.audit(operation, "INTENT", ref=ref, pre_sha=pre_sha,
+                   target_sha=target_sha)
+        try:
+            reply = method()
+        except Exception:
+            self.audit(operation, "STOP", ref=ref, pre_sha=pre_sha,
+                       target_sha=target_sha, reason="UNKNOWN_AFTER_REQUEST")
+            raise
+        self.audit(operation, "RESPONSE", ref=ref, pre_sha=pre_sha,
+                   target_sha=target_sha, http_status=reply.status)
+        return reply
+
     def public_receipt(self, phase, decision):
         return {
             "schema": "MHB-ATC-W3-REF-TRIAL-RECEIPT-V1",
@@ -422,18 +442,35 @@ class Trial:
         self.gate([])
         for kind in ("canary", "create", "seed"):
             require(self.ref(kind) is None, "disposable ref already exists")
-        answer = self.create("canary", self.parent)
+        answer = self._write_and_record(
+            "publisher-create-canary", "canary",
+            lambda: self.create("canary", self.parent), target_sha=self.parent)
         require(answer.status == 201, "publisher canary CREATE did not succeed")
         require(self.ref("canary") == self.parent,
                 "publisher canary SHA not confirmed")
-        answer = self.delete("canary")
+        self.audit("publisher-create-canary", "VERIFIED",
+                   ref="refs/heads/" + self.refs["canary"],
+                   target_sha=self.parent, post_sha=self.parent,
+                   http_status=201, reason="SUCCESS")
+        answer = self._write_and_record(
+            "publisher-delete-canary", "canary",
+            lambda: self.delete("canary"), pre_sha=self.parent)
         require(answer.status == 204 and self.ref("canary") is None,
                 "publisher canary DELETE / cleanup not proven")
+        self.audit("publisher-delete-canary", "VERIFIED",
+                   ref="refs/heads/" + self.refs["canary"],
+                   pre_sha=self.parent, http_status=204, reason="SUCCESS")
         self.record("publisher_create_delete_canary", "PASS")
         self.gate([])
-        answer = self.create("seed", self.parent)
+        answer = self._write_and_record(
+            "publisher-create-seed", "seed",
+            lambda: self.create("seed", self.parent), target_sha=self.parent)
         require(answer.status == 201 and self.ref("seed") == self.parent,
                 "publisher seed creation not confirmed")
+        self.audit("publisher-create-seed", "VERIFIED",
+                   ref="refs/heads/" + self.refs["seed"],
+                   target_sha=self.parent, post_sha=self.parent,
+                   http_status=201, reason="SUCCESS")
         self.gate(["seed"])
         self.record("publisher_seed_at_first_parent", "PASS")
         return self.public_receipt("publisher-seed", "PUBLISHER_CLEANUP_CANARY_PASSED")
@@ -453,12 +490,29 @@ class Trial:
             self.gate(["seed"])
             require(self.ref("seed") == self.parent and self.ref("create") is None,
                     "immutable seed changed before worker negative request")
-            # Exactly ONE request; never retry after even an ambiguous response.
-            answer = run()
+            # Exactly ONE request; never retry after an ambiguous response.
+            work = {
+                "deny-create": ("worker-create", self.current),
+                "deny-update": ("worker-update", self.current),
+                "deny-force-update": ("worker-force-update", self.grandparent),
+                "deny-delete": ("worker-delete", None),
+            }
+            operation, target_sha = work[op]
+            before = self.ref(kind)
+            answer = self._write_and_record(
+                operation, kind, run, target_sha=target_sha, pre_sha=before)
             classification = self.forbidden(answer, kind, op)
-            require(self.ref("seed") == self.parent and
+            after = self.ref(kind)
+            require(after == before and
+                    self.ref("seed") == self.parent and
                     self.ref("create") is None,
                     "worker negative attempt altered a protected ref")
+            self.audit(operation, "VERIFIED",
+                       ref="refs/heads/" + self.refs[kind],
+                       pre_sha=before, target_sha=target_sha,
+                       post_sha=after, http_status=answer.status,
+                       denial=classification,
+                       matched_diagnostic=self.last_denial_diagnostic)
             self.record(op, classification)
         return self.public_receipt("worker-negative", "FOUR_REF_RULE_DENIALS_OBSERVED")
 
@@ -487,14 +541,22 @@ class Trial:
         self.main(allow_drift=True)
         for kind in ("canary", "create", "seed"):
             found = self.ref(kind)
+            operation = "publisher-cleanup-" + kind
+            ref = "refs/heads/" + self.refs[kind]
             if found is None:
+                self.audit(operation, "READ", ref=ref, reason="SUCCESS")
                 self.record("publisher_cleanup_" + kind, "ALREADY_ABSENT")
                 continue
-            require(found in {self.current, self.parent, self.grandparent},
-                    "UNKNOWN SHA at disposable ref: manual publisher recovery required")
-            answer = self.delete(kind)
+            if found not in {self.current, self.parent, self.grandparent}:
+                self.audit(operation, "STOP", ref=ref, pre_sha=found,
+                           reason="PRECONDITION_FAILED")
+                raise StopTrial("UNKNOWN SHA at disposable ref: manual publisher recovery required")
+            answer = self._write_and_record(
+                operation, kind, lambda: self.delete(kind), pre_sha=found)
             require(answer.status == 204 and self.ref(kind) is None,
                     "publisher cleanup incomplete; stop and escalate")
+            self.audit(operation, "VERIFIED", ref=ref, pre_sha=found,
+                       http_status=204, reason="SUCCESS")
             self.record("publisher_cleanup_" + kind, "DELETED_EXACT_DISPOSABLE")
         return self.public_receipt("publisher-cleanup", "OWNED_DISPOSABLE_REFS_ABSENT")
 
