@@ -149,10 +149,12 @@ jobs:
         run: python3 scripts/test_mhb_atc_w3_evidence.py
       - name: Worker App W2 fork-to-staged broker authorization and safety replays
         run: python3 scripts/test_mhb_atc_worker_broker.py
-      - name: Install pinned YAML parser for G1 audit (test-only)
+      - name: Install SHA256-pinned YAML parser for G1/W3 CI
         run: |
+          python3 -c 'import sys,platform; assert sys.version_info[:2] == (3,12) and platform.machine() == "x86_64"'
           python3 -m pip install --disable-pip-version-check --no-deps \
-            --only-binary=:all: 'PyYAML==6.0.3'
+            --only-binary=:all: --require-hashes --ignore-installed \
+            -r scripts/ci/mhb-atc-w3-pyyaml-6.0.3-hashes.txt
       - name: G1 staged-push CI namespace and historical workflow-tree isolation
         run: python3 scripts/test_mhb_atc_staged_push_ci.py
       - name: G2 privileged PR environment, token and controller isolation

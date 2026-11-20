@@ -434,6 +434,18 @@ class W3RefTrialTests(unittest.TestCase):
         self.assertEqual(api.refs[names(NONCE)["seed"]],PARENT)
         self.assertEqual([m for m,_,_ in api.requests if m!="GET"],[])
 
+    def test_runtime_yaml_parser_is_checksum_pinned_before_app_mint(self):
+        requirements=(ROOT/"scripts/ci/mhb-atc-w3-pyyaml-6.0.3-hashes.txt").read_text()
+        self.assertIn("PyYAML==6.0.3 --hash=sha256:",requirements)
+        workflow=(ROOT/".github/workflows/mhb-atc-w3-ref-commissioning.yml").read_text()
+        self.assertEqual(workflow.count("--require-hashes --ignore-installed"),4)
+        self.assertEqual(workflow.count("scripts/ci/mhb-atc-w3-pyyaml-6.0.3-hashes.txt"),4)
+        self.assertLess(workflow.index("Install SHA256-pinned G1 YAML parser"),
+                        workflow.index("Mint publisher-only token"))
+        self.assertLess(workflow.index("Install SHA256-pinned G1 YAML parser"),
+                        workflow.index("Read-only W3 preflight"))
+        self.assertNotIn("pip install -U",workflow)
+
     def test_publisher_canary_proves_cleanup_before_seed(self):
         api, trial = make()
         receipt = trial.publisher_seed()
