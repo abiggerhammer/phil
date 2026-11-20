@@ -81,6 +81,7 @@ class EvidenceLedger:
             "parent_sha": bounded_sha(parent_sha),
             "grandparent_sha": bounded_sha(grandparent_sha),
             "workflow_tree_sha": bounded_sha(workflow_tree_sha),
+            "default_quarantine_checks": [],
             "app_id": app_id,
             "installation_id": installation_id,
             "events": [],
@@ -110,6 +111,26 @@ class EvidenceLedger:
         finally:
             if os.path.exists(tmp):
                 os.unlink(tmp)
+
+    def default_quarantine_check(self, *, operation, default_sha,
+                                 default_workflow_tree_sha):
+        """A separate SHA/tree-bound durable receipt before any DELETE intent."""
+        check(operation in (OPERATIONS | {
+            "publisher-recovery-plan", "publisher-cleanup-preflight",
+            "prepare-origin"}),
+            "unrecognized default quarantine operation")
+        record = {
+            "operation": operation,
+            "default_sha": bounded_sha(default_sha),
+            "default_workflow_tree_sha": bounded_sha(default_workflow_tree_sha),
+        }
+        check(len(self.doc["default_quarantine_checks"]) < 16,
+              "too many W3 default quarantine validations")
+        self.doc["default_quarantine_checks"].append(record)
+        self._flush()
+        print("W3_DEFAULT_QUARANTINE " + json.dumps(
+            record, sort_keys=True), flush=True)
+        return record
 
     def event(self, operation, stage, *, ref=None, pre_sha=None,
               target_sha=None, post_sha=None, http_status=None,

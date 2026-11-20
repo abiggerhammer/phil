@@ -24,6 +24,7 @@ from mhb_atc_w3_provenance import (
     commit_sha, make_binding, read_binding, snapshot_tree, verify_origin,
 )
 from mhb_atc_w3_evidence import EvidenceLedger
+from mhb_atc_w3_default_quarantine import DefaultWorkflowQuarantine
 
 ROOT = Path(__file__).resolve().parents[1]
 REPO = "abiggerhammer/phil"
@@ -34,6 +35,11 @@ RULESET_ID = 27365284
 NONCE = re.compile(r"[0-9a-f]{12}\Z")
 SHA = re.compile(r"[0-9a-f]{40}\Z")
 MAX_RESPONSE = 65536
+DELETE_OPERATIONS = frozenset({
+    'publisher-delete-canary', 'worker-delete',
+    'publisher-cleanup-canary', 'publisher-cleanup-create',
+    'publisher-cleanup-seed',
+})
 
 
 class StopTrial(ValueError):
@@ -247,9 +253,10 @@ class Client:
         if method != "GET":
             require(isinstance(self.token, str) and len(self.token) > 8,
                     "write token missing")
-        full = ("https://api.github.com" + endpoint
-                if endpoint == "/installation/repositories"
-                else API_ROOT + endpoint)
+        full = (API_ROOT if endpoint == "/repository" else
+                "https://api.github.com" + endpoint
+                if endpoint == "/installation/repositories" else
+                API_ROOT + endpoint)
         payload = None if data is None else json.dumps(
             data, separators=(",", ":"), sort_keys=True).encode("utf-8")
         headers = {"Accept": "application/vnd.github+json",
@@ -286,7 +293,8 @@ class Client:
 
 class Trial:
     def __init__(self, client, nonce, current, parent, grandparent,
-                 publisher, evidence=None, *, dispatch_sha=None):
+                 publisher, evidence=None, *, dispatch_sha=None,
+                 default_validator=None):
         self.client = client
         self.refs = names(nonce)
         self.current, self.parent, self.grandparent = (
@@ -298,6 +306,10 @@ class Trial:
         self.receipts = []
         self.evidence = evidence
         self.last_denial_diagnostic = None
+        self.default_validator = (default_validator if default_validator is not None
+                                  else DefaultWorkflowQuarantine(ROOT))
+        self.default_checks = []
+        self._delete_authorized_kind = None
 
     def audit(self, operation, stage, **fields):
         if self.evidence is not None:
@@ -333,6 +345,30 @@ class Trial:
             require(live == self.dispatch_sha,
                     "main moved since trusted workflow dispatch")
         return live
+
+    def default_quarantine(self, operation, *, allow_drift=False):
+        """Validate the LIVE default workflows, separate from frozen targets.
+
+        A successful check is SHA/tree-bound and retained in durable evidence.
+        For recovery, a changed main must be checked again, never inherit a
+        prior run's default-tree certification.
+        """
+        repo = self.get("/repository")
+        require(isinstance(repo, dict) and repo.get("full_name") == REPO and
+                repo.get("default_branch") == "main",
+                "default branch identity changed")
+        checked_sha = self.main(allow_drift=allow_drift)
+        checked_tree = self.default_validator.validate(checked_sha)
+        require(isinstance(checked_tree, str) and SHA.fullmatch(checked_tree),
+                "invalid default workflow quarantine tree receipt")
+        require(self.main(allow_drift=allow_drift) == checked_sha,
+                "default main moved during workflow quarantine validation")
+        record = {"operation": operation, "default_sha": checked_sha,
+                  "default_workflow_tree_sha": checked_tree}
+        if self.evidence is not None:
+            self.evidence.default_quarantine_check(**record)
+        self.default_checks.append(record)
+        return record
 
     def census(self, wanted):
         """Read entire admitted prefix, never use a partial list as absence."""
@@ -383,6 +419,9 @@ class Trial:
             {"sha": sha(commit), "force": force})
 
     def delete(self, kind):
+        require(self._delete_authorized_kind == kind,
+                "DELETE without fresh current-default quarantine")
+        self._delete_authorized_kind = None
         return self.client.request(
             "DELETE", "/git/refs/heads/" + self.refs[kind])
 
@@ -394,14 +433,27 @@ class Trial:
         no fabricated denial/success is recorded. No automatic retry exists.
         """
         ref = "refs/heads/" + self.refs[kind]
+        checked_default = None
+        if operation in DELETE_OPERATIONS:
+            checked_default = self.default_quarantine(
+                operation, allow_drift=operation.startswith("publisher-cleanup-"))
         self.audit(operation, "INTENT", ref=ref, pre_sha=pre_sha,
                    target_sha=target_sha)
         try:
+            if checked_default is not None:
+                # Last pre-request GET binds the default to the semantic
+                # inventory just recorded. A changed SHA stops before DELETE.
+                require(self.main(allow_drift=True) ==
+                        checked_default["default_sha"],
+                        "default main moved immediately before DELETE")
+                self._delete_authorized_kind = kind
             reply = method()
         except Exception:
             self.audit(operation, "STOP", ref=ref, pre_sha=pre_sha,
                        target_sha=target_sha, reason="UNKNOWN_AFTER_REQUEST")
             raise
+        finally:
+            self._delete_authorized_kind = None
         self.audit(operation, "RESPONSE", ref=ref, pre_sha=pre_sha,
                    target_sha=target_sha, http_status=reply.status)
         return reply
@@ -417,6 +469,7 @@ class Trial:
             "source_live_activation_required": True,
             "worker_app_id": WORKER_ID, "publisher_app_id": PUBLISHER_ID,
             "ruleset_id": RULESET_ID,
+            "default_quarantine_checks": list(self.default_checks),
             "events": list(self.receipts),
             "no_pr_operations": True,
         }
@@ -577,6 +630,7 @@ class Trial:
         """GET-only owned-ref inventory before any separately dispatched recovery."""
         self.rules()
         self.main(allow_drift=True)
+        self.default_quarantine("publisher-recovery-plan", allow_drift=True)
         statuses = {}
         for kind in ("canary", "create", "seed"):
             found = self.ref(kind)
@@ -596,6 +650,7 @@ class Trial:
         # publisher may still clean only known disposable SHA values.
         self.rules()
         self.main(allow_drift=True)
+        self.default_quarantine("publisher-cleanup-preflight", allow_drift=True)
         for kind in ("canary", "create", "seed"):
             found = self.ref(kind)
             operation = "publisher-cleanup-" + kind
@@ -749,7 +804,8 @@ def cli():
             installation_id=installation_id)
 
     run = Trial(client, args.nonce, current, parent, grandparent,
-                publisher, evidence=evidence, dispatch_sha=dispatch_sha)
+                publisher, evidence=evidence, dispatch_sha=dispatch_sha,
+                default_validator=DefaultWorkflowQuarantine(ROOT))
     try:
         if protected_token:
             run.token_audience()
@@ -759,9 +815,10 @@ def cli():
             result["execution_authorized"] = False
             result["execution_gates_satisfied"] = bool(args.authorize_live)
         elif args.phase == "prepare-origin":
-            # The entire source/nonce quarantine plan and API read check MUST
-            # complete before uploading the immutable nonsecret run binding.
+            # Both target history and current default deletion semantics
+            # must be valid before any protected publisher token can exist.
             run.gate([])
+            run.default_quarantine("prepare-origin")
             binding = make_binding(
                 args.nonce, dispatch_sha, current, parent, grandparent,
                 reviewed_tree, int(os.environ.get("GITHUB_RUN_ID", "0")))
