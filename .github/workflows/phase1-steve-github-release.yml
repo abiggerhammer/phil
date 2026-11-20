@@ -82,6 +82,11 @@ jobs:
           if-no-files-found: error
 
   darwin-build-submit:
+    # Never run signing/notarization on PR merge code; only trusted main.
+    if: >-
+      github.ref == 'refs/heads/main' &&
+      (github.event_name == 'push' ||
+       (github.event_name == 'workflow_dispatch' && github.actor == 'abiggerhammer'))
     runs-on: macos-26
     environment: macos-release
     env:
@@ -184,6 +189,11 @@ jobs:
           retention-days: 7
 
   darwin-poll-assess:
+    # Never run signing/notarization on PR merge code; only trusted main.
+    if: >-
+      github.ref == 'refs/heads/main' &&
+      (github.event_name == 'push' ||
+       (github.event_name == 'workflow_dispatch' && github.actor == 'abiggerhammer'))
     needs:
       - darwin-build-submit
     runs-on: macos-26
