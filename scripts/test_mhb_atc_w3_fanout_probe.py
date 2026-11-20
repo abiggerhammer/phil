@@ -70,7 +70,7 @@ class PublisherCanaryTests(unittest.TestCase):
             "prepare","publisher_create","publisher_cleanup"})
         self.assertEqual(workflow["permissions"],
                          {"contents":"read","actions":"read"})
-        self.assertFalse(workflow["concurrency"]["cancel-in-progress"])
+        self.assertEqual(workflow["concurrency"]["cancel-in-progress"],"false")
         self.assertEqual(workflow["concurrency"]["group"],
                          "mhb-atc-admission-global")
         self.assertIn("vars.MHB_ATC_W3_FANOUT_ENABLED == 'true'",
@@ -94,7 +94,7 @@ class PublisherCanaryTests(unittest.TestCase):
                                 for s in steps[:key_step]))
             token=steps[key_step]
             self.assertEqual(token["with"]["permission-contents"],"write")
-            self.assertFalse(token["with"]["skip-token-revoke"])
+            self.assertEqual(token["with"]["skip-token-revoke"],"false")
             self.assertNotIn("permission-pull-requests",token["with"])
         self.assertEqual(source.count("actions/download-artifact@v4"),3)
         self.assertEqual(source.count("actions/create-github-app-token@"),2)
