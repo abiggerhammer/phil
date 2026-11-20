@@ -392,7 +392,7 @@ class W3RefTrialTests(unittest.TestCase):
         trial.publisher_seed()
         api.role = "worker"
         api.failures[("POST", "/git/refs")] = Reply(
-            422, {"message": "GH013 Repository rule violations found for refs/heads/hamster/admitted/w3-incorrect-create"})
+            422, {"message": "GH013: Repository rule violations found for refs/heads/hamster/admitted/w3-incorrect-create"})
         with self.assertRaisesRegex(StopTrial, "wrong or ambiguous ref"):
             trial.worker_probe()
 
