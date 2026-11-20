@@ -587,3 +587,8 @@ The [paired two-step source-family outcome observation](formal-semantics-paired-
 ### FSEM-02 two-step stale predecessor and committed prefix (non-normative)
 
 The [two-step cross-family stale-prefix proof](formal-semantics-two-step-stale-prefix-fsem02-v1.md) lifts per-family exact predecessor consumption to a tagged Ping/Choice request, then proves a following Ping that reuses either consumed peer predecessor refuses **without rolling back** the first model transition. Dedicated GHC 9.6.7 source witnesses and Rocq 9.2 checks run independently; no combined-source execution, native resource-state refinement or source-derived nominal authority is claimed. FSEM-02 remains open.
+
+
+### FSEM-02 two-step successor chaining and missing admission (non-normative)
+
+The [two-step successor-chain proof](formal-semantics-two-step-successor-chain-fsem02-v1.md) shows conditional two-generation predecessor consumption when both peers' exact second-step predecessor keys equal first-step successor keys. It also distinguishes missing first-step source admission from missing second-step source/rendezvous admission, preserving the initial or committed context pair respectively. GHC 9.6.7 runs independent accepted/rejected Ping and Choice source witnesses; Rocq 9.2 checks the model laws. No combined two-step source trace, general native resource-state refinement or external protocol authority is asserted. FSEM-02 remains non-normative and open.
