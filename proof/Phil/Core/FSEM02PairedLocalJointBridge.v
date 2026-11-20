@@ -191,10 +191,10 @@ Proof.
     eqn:HreceiverStep; [discriminate|].
   inversion Hpair; subst; clear Hpair.
   pose proof (continuing_head_exact_predecessor_and_successor
-    sa sh so sn sc sNext senderContinuation HsenderHead HsenderStep)
+    sa sh so sn sc senderAfter senderContinuation HsenderHead HsenderStep)
     as HsenderFrame.
   pose proof (continuing_head_exact_predecessor_and_successor
-    ra rh ro rn rc rNext receiverContinuation HreceiverHead HreceiverStep)
+    ra rh ro rn rc receiverAfter receiverContinuation HreceiverHead HreceiverStep)
     as HreceiverFrame.
   destruct HsenderFrame as [_ [_ [_ [_ [HsenderOther HsenderLoans]]]]].
   destruct HreceiverFrame as [_ [_ [_ [_ [HreceiverOther HreceiverLoans]]]]].
