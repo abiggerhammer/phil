@@ -1,6 +1,9 @@
 #!/usr/bin/env python3
 """Offline hostile tests for read-only W3 fanout event observation."""
 import copy
+import json
+from unittest.mock import patch
+from urllib import error
 from pathlib import Path
 import tempfile
 import unittest
@@ -152,6 +155,65 @@ class FanoutObserverTests(unittest.TestCase):
         after["window_end"]="2026-11-20T15:22:00Z"
         with self.assertRaises(mod.CensusStop):
             mod.compare(before,after,target_sha=TARGET,publisher_actor=BOT)
+
+
+    def test_real_get_transport_is_fixed_route_and_redacts_errors(self):
+        class Response:
+            status=200
+            def __enter__(self):return self
+            def __exit__(self,*args):pass
+            def read(self,amount):
+                return json.dumps({"total_count":0,"workflow_runs":[]}).encode()
+        class Opener:
+            def __init__(self):self.requests=[]
+            def open(self,req,timeout=20):
+                self.requests.append(req)
+                return Response()
+        client=mod.ReadOnlyActionsClient("FAKE_READ_ONLY_TOKEN")
+        route="/actions/runs?event=push&created="+START.replace(":","%3A")+".."+END.replace(":","%3A")+"&per_page=4&page=1"
+        fake=Opener()
+        with patch.object(mod.request,"build_opener",return_value=fake):
+            answer=client.request("GET",route)
+        self.assertEqual(answer.status,200)
+        self.assertEqual(answer.data["workflow_runs"],[])
+        self.assertEqual(len(fake.requests),1)
+        self.assertEqual(fake.requests[0].get_method(),"GET")
+        self.assertEqual(fake.requests[0].full_url,
+                         "https://api.github.com/repos/abiggerhammer/phil"+route)
+        for method,path in (
+            ("POST",route),("DELETE",route),
+            ("GET","https://evil.invalid"+route),
+            ("GET","//evil.invalid/actions/runs"),
+            ("GET","/git/refs"),
+            ("GET",route.replace("event=push","event=workflow_dispatch")),
+            ("GET",route.replace("page=1","page=9999"))):
+            with self.subTest(method=method,path=path),self.assertRaises(
+                    mod.CensusStop):
+                client.request(method,path)
+
+        class FailedOpener:
+            def open(self,*args,**kwargs):
+                raise error.URLError("REMOTE_SENSITIVE_ERROR_TEXT")
+        with patch.object(mod.request,"build_opener",
+                          return_value=FailedOpener()):
+            with self.assertRaises(mod.CensusStop) as caught:
+                client.request("GET",route)
+        self.assertNotIn("REMOTE_SENSITIVE",str(caught.exception))
+
+    def test_real_get_transport_rejects_oversized_response(self):
+        class BigResponse:
+            status=200
+            def __enter__(self):return self
+            def __exit__(self,*args):pass
+            def read(self,amount):return b"X" * amount
+        class BigOpener:
+            def open(self,*args,**kwargs):return BigResponse()
+        client=mod.ReadOnlyActionsClient("FAKE_READ_ONLY_TOKEN")
+        route="/actions/runs?event=push&created="+START.replace(":","%3A")+".."+END.replace(":","%3A")+"&per_page=4&page=1"
+        with patch.object(mod.request,"build_opener",
+                          return_value=BigOpener()),self.assertRaisesRegex(
+                              mod.CensusStop,"response exceeds fixed bound"):
+            client.request("GET",route)
 
     def test_atomic_snapshot_no_overwrite_or_duplicate_keys(self):
         with tempfile.TemporaryDirectory() as td:
