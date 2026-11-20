@@ -13,6 +13,8 @@ import subprocess
 import sys
 import tempfile
 import unittest
+from unittest.mock import patch
+import mhb_atc_w3_ref_trial as module
 
 from mhb_atc_w3_ref_trial import (
     REPO, PUBLISHER_ID, WORKER_ID, RULESET_ID,
@@ -141,6 +143,51 @@ class W3RefTrialTests(unittest.TestCase):
         )["live_authorized"])
         with self.assertRaisesRegex(StopTrial, "DISABLED"):
             policy_check(live=True)
+
+    def test_live_authority_requires_reviewed_nonce_quarantine_var_and_owner(self):
+        real_read = module.read
+        changed = json.loads((ROOT / ".github/atc-w3-ref-trial.json").read_text())
+        changed.update(live_authorized=True, approved_nonce=NONCE,
+                       push_ci_quarantine_verified=True)
+        def read_for_test(path):
+            return changed if path == ".github/atc-w3-ref-trial.json" else real_read(path)
+
+        authorized = dict(os.environ,
+                          GITHUB_ACTIONS="true",
+                          GITHUB_EVENT_NAME="workflow_dispatch",
+                          GITHUB_ACTOR="abiggerhammer",
+                          GITHUB_REPOSITORY=REPO,
+                          GITHUB_REF="refs/heads/main",
+                          W3_CONFIRM="AUTHORIZE_W3_PROTECTED_REFS_ONLY",
+                          MHB_ATC_W3_REF_TRIAL_ENABLED="true",
+                          MHB_ATC_AUTO_ADMIT_ENABLED="false",
+                          MHB_ATC_IMMUTABLE_HEADS_ENABLED="false",
+                          MHB_ATC_PHASE2_STAGE_BRIDGE_ENABLED="false",
+                          MHB_ATC_WORKER_BROKER_ENABLED="false")
+        with patch.object(module, "read", side_effect=read_for_test), \
+             patch.dict(os.environ, authorized, clear=True):
+            self.assertEqual(policy_check(live=True, nonce=NONCE)["publisher_app_id"],
+                             PUBLISHER_ID)
+            for key, value in [
+                ("GITHUB_REF", "refs/heads/hamster/staged/attacker"),
+                ("GITHUB_ACTOR", "unexpected-user"),
+                ("MHB_ATC_W3_REF_TRIAL_ENABLED", "false"),
+                ("W3_CONFIRM", "PLAN_ONLY"),
+                ("MHB_ATC_AUTO_ADMIT_ENABLED", "true"),
+            ]:
+                with self.subTest(key=key), \
+                     patch.dict(os.environ, {key: value}), \
+                     self.assertRaises(StopTrial):
+                    policy_check(live=True, nonce=NONCE)
+            with self.assertRaisesRegex(StopTrial, "source-pinned"):
+                policy_check(live=True, nonce="e"*12)
+            changed["push_ci_quarantine_verified"] = False
+            with self.assertRaisesRegex(StopTrial, "quarantine NOT reviewed"):
+                policy_check(live=True, nonce=NONCE)
+            changed["push_ci_quarantine_verified"] = True
+            changed["live_authorized"] = False
+            with self.assertRaisesRegex(StopTrial, "DISABLED"):
+                policy_check(live=True, nonce=NONCE)
 
     def test_names_are_distinct_single_leaf_protected_refs(self):
         n = names(NONCE)
