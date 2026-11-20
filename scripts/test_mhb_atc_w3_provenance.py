@@ -140,6 +140,42 @@ class ProvenanceTests(unittest.TestCase):
                 self.assertNotIn(P,("f"*40,"e"*40,H))
                 self.assertTrue(all(m=="GET" for m,_ in gh.calls))
 
+    def test_recovered_original_seed_is_cleaned_after_two_new_main_commits(self):
+        """A completely new cleanup Trial must retain original P, not K/J/H."""
+        from test_mhb_atc_w3_ref_trial import FakeAPI
+        from mhb_atc_w3_ref_trial import Trial
+        fake=FakeAPI("publisher",nonce=NONCE)
+        fake.main="f"*40  # Simulate newer main K. Its parents J/H exclude P.
+        seed="hamster/admitted/w3-"+NONCE+"-seed"
+        fake.refs[seed]=P
+        policy=fake.policy
+        verified=verify_origin(GitHub(),origin())
+        recovered=Trial(fake,NONCE,verified["source_sha"],
+                        verified["parent_sha"],verified["grandparent_sha"],
+                        policy)
+        preflight=recovered.publisher_recovery_plan()
+        self.assertEqual(preflight["refs"]["seed"],"KNOWN_DISPOSABLE")
+        result=recovered.publisher_cleanup()
+        self.assertEqual(result["decision"],"OWNED_DISPOSABLE_REFS_ABSENT")
+        self.assertEqual(fake.refs,{})
+        writes=[method for method,_,_ in fake.requests if method!="GET"]
+        self.assertEqual(writes,["DELETE"])
+        self.assertNotIn(P,("f"*40,"e"*40,H))
+
+    def test_wrong_new_run_ancestry_would_refuse_original_seed(self):
+        from test_mhb_atc_w3_ref_trial import FakeAPI
+        from mhb_atc_w3_ref_trial import Trial
+        fake=FakeAPI("publisher",nonce=NONCE)
+        seed="hamster/admitted/w3-"+NONCE+"-seed"
+        fake.refs[seed]=P
+        fake.main="f"*40
+        # The NEW run sees K, J and H: P was lost from its three-sha set.
+        wrong=Trial(fake,NONCE,"f"*40,"e"*40,H,fake.policy)
+        with self.assertRaisesRegex(StopTrial,"UNKNOWN SHA"):
+            wrong.publisher_recovery_plan()
+        self.assertEqual(fake.refs[seed],P)
+        self.assertEqual([m for m,_,_ in fake.requests if m!="GET"],[])
+
     def test_origin_file_created_only_once_in_runner_temp(self):
         with tempfile.TemporaryDirectory() as d,\
              patch.dict(os.environ,{"RUNNER_TEMP":d}):
