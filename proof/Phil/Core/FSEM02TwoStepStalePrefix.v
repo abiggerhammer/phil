@@ -33,12 +33,12 @@ Proof.
     (fsem02ReqChosen request)
     (fsem02ReqPeer request)) eqn:Hshape; [|discriminate].
   destruct (fsem02ReqFamily request) eqn:Hfamily.
-  - destruct (Hping Hfamily) as [Hsend Hreceive].
+  - destruct (Hping eq_refl) as [Hsend Hreceive].
     eapply fsem02PairedReplaySuccessExact in Hsuccess;
       [|exact Hsend|exact Hreceive].
     destruct Hsuccess as [_ [_ [HsenderGone [_ [HreceiverGone _]]]]].
     split; assumption.
-  - pose proof (Hchoice Hfamily) as Hoffered.
+  - pose proof (Hchoice eq_refl) as Hoffered.
     eapply fsem02PairedChoiceSuccessExact in Hsuccess;
       [|exact Hoffered].
     destruct Hsuccess as [_ [_ [_ [HsenderGone [_ [HreceiverGone _]]]]]].
