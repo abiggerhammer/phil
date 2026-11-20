@@ -40,6 +40,10 @@ class StopTrial(ValueError):
     """A failure/ambiguity demands STOP, never automatic retry."""
 
 
+class LiveTrialsDisabled(StopTrial):
+    """A distinct, fixed-output diagnostic for the source authorization gate."""
+
+
 @dataclass(frozen=True)
 class Reply:
     status: int
@@ -104,7 +108,8 @@ def policy_check(*, live: bool, nonce=None, recovery=False):
                          "MHB_ATC_PHASE2_STAGE_BRIDGE_ENABLED"):
                 require(os.getenv(name, "").lower() != "true",
                         "other ATC activation switches must remain OFF")
-        require(trial["live_authorized"] is True,
+        if trial["live_authorized"] is not True:
+            raise LiveTrialsDisabled(
                 "W3 live trials explicitly DISABLED in reviewed source")
         require(trial.get("push_ci_quarantine_verified") is True,
                 "W3 publisher-created ref push CI quarantine NOT reviewed")
@@ -764,6 +769,9 @@ def main():
     """
     try:
         return cli()
+    except LiveTrialsDisabled:
+        print("W3 STOP: live trials DISABLED in reviewed source", file=sys.stderr)
+        return 2
     except Exception:
         print("W3 STOP: sanitized failure; inspect W3_EVIDENCE", file=sys.stderr)
         return 2
