@@ -220,6 +220,19 @@ class StagedPushIsolationTests(unittest.TestCase):
         ci = (WORKFLOWS / "mhb-atc-tests.yml").read_text()
         self.assertEqual(ci.count("      - '.github/workflows/**'"), 2)
         self.assertIn("python3 scripts/test_mhb_atc_staged_push_ci.py", ci)
+        # The trusted runtime YAML validator and its wheel hash list must
+        # trigger Radar on both PRs and main pushes, not just workflow edits.
+        for watched in (
+                "scripts/mhb_atc_w3_default_quarantine.py",
+                "scripts/ci/mhb-atc-w3-pyyaml-6.0.3-hashes.txt"):
+            self.assertEqual(ci.count("      - '" + watched + "'"), 2)
+        # W3 tests import the strict YAML parser through the default-branch
+        # validator. Their wheel must be pinned BEFORE those imports run.
+        install = ci.index("      - name: Install SHA256-pinned YAML parser for G1/W3 CI")
+        first_w3 = ci.index("      - name: W3 read-only ruleset/namespace")
+        self.assertLess(install, first_w3)
+        self.assertEqual(ci.count("--require-hashes --ignore-installed"), 1)
+        self.assertIn("scripts/mhb_atc_w3_default_quarantine.py", ci)
 
     def test_four_legacy_push_workflows_keep_normal_branches(self):
         for name in sorted(UNBOUNDED_LEGACY):
