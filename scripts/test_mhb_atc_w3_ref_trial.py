@@ -189,7 +189,8 @@ class W3RefTrialTests(unittest.TestCase):
             # the runtime switch immediately after a seed attempt.
             with patch.dict(os.environ, {
                     "MHB_ATC_W3_REF_TRIAL_ENABLED": "false",
-                    "MHB_ATC_AUTO_ADMIT_ENABLED": "true"}):
+                    "MHB_ATC_AUTO_ADMIT_ENABLED": "true",
+                    "W3_CONFIRM": "RECOVER_W3_EXACT_REFS_ONLY"}):
                 self.assertEqual(
                     policy_check(live=True, nonce=NONCE, recovery=True)[
                         "publisher_app_id"], PUBLISHER_ID)
@@ -316,6 +317,20 @@ class W3RefTrialTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             trial.publisher_seed()
 
+    def test_separate_get_only_recovery_plan_for_abandoned_seed(self):
+        api, trial = make()
+        api.refs[names(NONCE)["seed"]] = PARENT
+        api.main = "f" * 40
+        receipt = trial.publisher_recovery_plan()
+        self.assertEqual(receipt["decision"], "EXACT_KNOWN_REF_CLEANUP_ELIGIBLE")
+        self.assertFalse(receipt["execution_authorized"])
+        self.assertEqual(receipt["refs"]["seed"], "KNOWN_DISPOSABLE")
+        self.assertTrue(all(method == "GET" for method, _, _ in api.requests))
+        self.assertEqual(api.refs[names(NONCE)["seed"]], PARENT)
+        api.refs[names(NONCE)["seed"]] = "e" * 40
+        with self.assertRaisesRegex(StopTrial, "UNKNOWN SHA"):
+            trial.publisher_recovery_plan()
+
     def test_cleanup_removes_owned_exact_shas_after_success_or_ambiguous_failure(self):
         for role in ("publisher", "worker"):
             api, trial = make(role="publisher")
@@ -366,6 +381,9 @@ class W3RefTrialTests(unittest.TestCase):
         self.assertIn("environment: atc-publisher", source)
         self.assertIn("environment: atc-worker-broker", source)
         self.assertIn("always()", source)
+        self.assertIn("options: [plan, run, cleanup]", source)
+        self.assertIn("recovery-plan --nonce", source)
+        self.assertIn("RECOVER_W3_EXACT_REFS_ONLY", source)
         self.assertIn("persist-credentials: false", source)
         self.assertIn("MHB_ATC_W3_REF_TRIAL_ENABLED", source)
         self.assertIn("AUTH", source)
