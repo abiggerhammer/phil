@@ -55,7 +55,7 @@ Proof.
     unfold phase1_surface_normalized_observation in Hsome.
     destruct (phase1_surface_normalize_recursive_grouping_record_data_declaration_spine key)
       as [refined |] eqn:Hnormal.
-    + exists refined. exact Hnormal.
+    + exists refined. reflexivity.
     + discriminate Hsome.
   - intros [refined Hnormal].
     exists (phase1_surface_observe_recursive_grouping_record_data refined).
