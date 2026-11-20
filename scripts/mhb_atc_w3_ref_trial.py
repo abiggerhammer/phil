@@ -151,6 +151,21 @@ def policy_check(*, live: bool, nonce=None, recovery=False):
     return publisher
 
 
+def attest_live_worker_identity(receipt, installation_id):
+    """Bind W1 JWT-authenticated App/installation metadata to this token."""
+    require(isinstance(receipt, dict) and
+            receipt.get("decision") == "authenticated-worker-app-and-installation"
+            and receipt.get("app_id") == WORKER_ID
+            and receipt.get("app_slug") == "phil-atc-worker"
+            and receipt.get("permissions") ==
+                {"contents": "write", "metadata": "read"}
+            and receipt.get("repository_selection") == "selected"
+            and type(receipt.get("installation_id")) is int
+            and receipt["installation_id"] > 0
+            and str(receipt["installation_id"]) == installation_id,
+            "worker token installation not bound to protected JWT App metadata")
+
+
 def local_commits():
     def run(*args):
         p = subprocess.run(["git", *args], cwd=ROOT, capture_output=True,
@@ -464,6 +479,17 @@ def cli():
                 (os.getenv("W3_ACTION_INSTALLATION_ID") or "").isdigit() and
                 int(os.getenv("W3_ACTION_INSTALLATION_ID")) > 0,
                 "actual token principal/installation not authenticated")
+        if args.phase == "worker-negative":
+            receipt_path = Path(os.getenv("RUNNER_TEMP", "")) / "atc-w1id-receipt.json"
+            require(receipt_path.is_file() and
+                    receipt_path.stat().st_size <= 65536,
+                    "worker JWT verification receipt missing")
+            try:
+                jwt_receipt = json.loads(receipt_path.read_text(encoding="utf-8"))
+            except (UnicodeError, ValueError, OSError):
+                raise StopTrial("unreadable worker JWT identity receipt")
+            attest_live_worker_identity(
+                jwt_receipt, os.getenv("W3_ACTION_INSTALLATION_ID"))
     client = Client(token)
     run = Trial(client, args.nonce, current, parent, grandparent, publisher)
     if protected_token:
