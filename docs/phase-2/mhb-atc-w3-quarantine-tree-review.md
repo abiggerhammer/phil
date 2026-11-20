@@ -1,8 +1,9 @@
-# W3 workflow-tree quarantine candidate — independent review packet
+# W3 workflow-tree quarantine pin — accepted review record
 
-**Status:** candidate only; independent exact-head review PENDING. This document
-does not establish approval, live push-fanout evidence, permission to dispatch
-W3 `run` or `cleanup`, or authority to mint either GitHub App token.
+**Status:** source/tree accepted by Astra at #1951 exact head
+`ec1941020deb9fff6259dc5bfa275d01f998c15f`; [merged](https://github.com/abiggerhammer/phil/commit/1a14600d0a455435e420ab8e0629172a4b8e351d).
+This is **not** live push-fanout evidence, permission to dispatch W3 `run`
+or `cleanup`, or authority to mint either GitHub App token.
 
 Tracking: [W3 hardening #1948](https://github.com/abiggerhammer/phil/pull/1948),
 [G1/G2 #1935](https://github.com/abiggerhammer/phil/issues/1935),
@@ -10,9 +11,9 @@ Tracking: [W3 hardening #1948](https://github.com/abiggerhammer/phil/pull/1948),
 [commissioning #1839](https://github.com/abiggerhammer/phil/issues/1839).
 See also [the dormant W3 trial contract](mhb-atc-w3-executable-ref-trials.md).
 
-## Exact candidate
+## Exact reviewed pin
 
-- Candidate **Git `.github/workflows` subtree**: `6fa265b2b55cef252ffb1e5cf4734df84bbda9fd`.
+- Accepted **Git `.github/workflows` subtree**: `6fa265b2b55cef252ffb1e5cf4734df84bbda9fd`.
   This is **not** the repository root tree SHA or a hash of one YAML file.
 - Observed in first-parent source commit
   [`69b3c419835f12085dbd41bf6f7d669e24a9828d`](https://github.com/abiggerhammer/phil/commit/69b3c419835f12085dbd41bf6f7d669e24a9828d),
@@ -21,18 +22,19 @@ See also [the dormant W3 trial contract](mhb-atc-w3-executable-ref-trials.md).
   be checked by
   `git rev-parse 69b3c419835f12085dbd41bf6f7d669e24a9828d:.github/workflows`
   in an authenticated, clean local checkout.
-- The previously reviewed #1948 [Radar Replay run](https://github.com/abiggerhammer/phil/actions/runs/44701661186)
-  passed 229 tests across 17 suites for the earlier 621-file tree.
-  That evidence is **not a review of the new workflow**. A new exact-head
-  hosted G1/W3 full-inventory audit and independent delta review are required.
-  Static hosted tests do not establish live publisher-origin push isolation.
-- Astra's first-run acceptance of previous #1951 head
-  `e38814a2e916252a8a7f3dd438943e8f4a21664a` applies to the earlier
-  tree `4b8b338a7a0ebed852407c9288d4a293bc26066f` only. This candidate needs **fresh review** before merge.
+- The earlier #1948 [Radar Replay run](https://github.com/abiggerhammer/phil/actions/runs/44701661186)
+  passed 229 tests across 17 suites for the former 621-file tree.
+  This alone was **not** evidence for the later workflow addition.
+- Astra accepted the original 621-file #1951 candidate at `e38814a2`,
+  then accepted the corrected, exact **622-file** tree and PR head
+  `ec1941020deb9fff6259dc5bfa275d01f998c15f`.
+  The [corrected-head Radar Replay](https://github.com/abiggerhammer/phil/actions/runs/44710316580)
+  and post-ready checks passed before merge. This is static source-level
+  acceptance, **not** live publisher-origin push-fanout evidence.
 
-### Critical current first-parent mismatch
+### Historical pre-merge first-parent mismatch
 
-At the source snapshot above, the three commits W3 would select are:
+Before #1951 merged, the following three commits W3 would have selected were:
 
 | Position | Commit SHA | `.github/workflows` SHA | Count |
 |---|---|---|---:|
@@ -46,18 +48,22 @@ The most recent change (#1949) **added just one workflow**,
 selector allowlists only `formal-semantics/fsem02-paired-source-family-envelope`
 with file-path filters, its `pull_request` trigger has file-path filters,
 and its default token permission is `contents: read`. This appears
-disjoint from `hamster/admitted/w3-*`, but must be checked independently
-using the exact new 622-workflow tree. All pre-existing workflow blob IDs
-are identical to the previously reviewed `4b8b338a7a0ebed852407c9288d4a293bc26066f` tree.
+disjoint from `hamster/admitted/w3-*`; Astra accepted the updated exact
+622-file tree after a focused delta re-review. All pre-existing workflow
+blob IDs were identical to the earlier reviewed
+`4b8b338a7a0ebed852407c9288d4a293bc26066f` tree.
 
-**Do not enable a protected-ref trial against this snapshot.** The existing
-`snapshot_tree()` gate in `scripts/mhb_atc_w3_provenance.py` correctly
-rejects the unequal ancestry, even with a matching source pin.
+**Do not enable a protected-ref trial against that historical snapshot.**
+At the #1951 merge, source `1a14600d` and first parent `69b3c419` shared
+the reviewed tree, but second first-parent ancestor `4b7594ed` did not.
+One further first-parent transition with unchanged workflow content was
+required as of that merge. Recheck live ancestry at the actual dispatch:
+later workflow changes or concurrent merges can invalidate it.
 
-## Independently review this exact tree
+## Independent review criteria and future-change contract
 
-The reviewer must examine the actual 622-file Git tree (not just this
-description), with particular attention to:
+The independent review assessed the actual 622-file Git tree, not just this
+description. Any later replacement tree requires a fresh review of:
 
 1. **All push-trigger selectors**, including scalar/list `on`, quoted keys,
    YAML aliases/duplicates, branches, branches-ignore, path filters and any
@@ -81,12 +87,12 @@ description), with particular attention to:
    static source quarantine only; neither independently validates live GitHub
    event delivery under publisher App 5782193 nor proves a token was revoked.
 
-Review acceptance must be explicit and bind the **exact pin value, workflow
-tree content and this candidate PR head**. On any workflow-tree modification
-after review, **STOP and repeat review** for a new exact tree; do not
-interpret an old acceptance as portable to a changed tree.
+Acceptance of #1951 bound the **exact pin value, workflow-tree content
+and the reviewed head** `ec1941020deb9fff6259dc5bfa275d01f998c15f`.
+On any later workflow-tree modification, **STOP and repeat independent
+review** for a new exact tree; do not treat the old acceptance as portable.
 
-## Current read-only owner-state snapshot (2026-11-20)
+## Read-only owner-state snapshot (2026-11-20)
 
 GitHub API GETs showed ruleset **27365284** active for
 `refs/heads/hamster/admitted/*`, with creation, update, deletion and
@@ -100,12 +106,13 @@ commissioning authorization.
 
 ## Stabilization and operator STOP checks
 
-No padding commits or modification of live policy is required for review.
-Before *any* later activation, advance `main` through **two consecutive
-first-parent transitions without changing `.github/workflows`** from
-the candidate tree (or use a newly reviewed tree and repeat this requirement).
-Natural source-only merges are acceptable; any intervening workflow edit
-resets the window. On a clean local `main` checkout, after fetching origin:
+Before *any* later activation, the current `main` and its two successive
+first-parent ancestors must have the exact same reviewed `.github/workflows`
+subtree. At the #1951 merge, only the newest two matched. A documentation-only
+follow-up or other natural source-only merge can complete the first-parent
+window; never manufacture unreviewed workflow changes or skip this equality
+check. Any intervening workflow edit resets the window and demands a fresh
+pin review. On a clean local `main` checkout, after fetching origin:
 
 ```bash
 set -euo pipefail
@@ -145,6 +152,6 @@ original run binding from #1948, not a new `main` ancestry.
   independently verified cleanup and real App-token revocation evidence.
   No worker broker activation or PR CREATE/REOPEN tests in this slice.
 
-**This candidate PR changes neither workflow files nor W3 execution gates.**
-The pin, if independently accepted and merged, is necessary but insufficient
-for a trial. Its existence does not grant live-run or cleanup authorization.
+**The merged #1951 PR changed neither workflow files nor W3 execution gates.**
+Its accepted pin is necessary but insufficient for a trial. The pin alone
+grants no live-run, ref-mutation, token-mint, or cleanup authorization.
