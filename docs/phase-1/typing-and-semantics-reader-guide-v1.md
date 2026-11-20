@@ -571,3 +571,7 @@ The [Terminal OBS-V1 witness](formal-semantics-terminal-observation-wire-fsem02-
 ### FSEM-02 half-Close source/Core observation (non-normative)
 
 The [Half-Close OBS-V1 witness](formal-semantics-half-close-observation-wire-fsem02-v1.md) tests exact retired-successor refusal **at the intermediate half-closed state** in both Close orders, then verifies that the still-live peer can close without rollback, with unchanged payload/spectator owners and identical source-checked final Core states. A four-event native Haskell artifact is byte-compared with separately compiled finite Rocq data and conditional owner-bit theorems; terminal authority and general refinement remain unproved.
+
+### FSEM-02 paired source-family envelope (non-normative)
+
+The [paired Ping/Choice source-family envelope](formal-semantics-paired-source-family-envelope-fsem02-v1.md) combines two already source-checked and individually proven bounded paired-local replay branches behind an explicit family and independent admission inputs. Rocq proves uniform rejection on absent admission and dual-loan/unrelated-linear framing under branch-specific continuing-head premises; strict native checks rerun complete accepted/rejected Ping and Go/Cancel source witnesses. This is not native Map/Set-to-Rocq refinement, source-derived activation, a single mixed-family execution, general diagnostic fidelity or FSEM-02 completion.
