@@ -351,21 +351,41 @@ class Trial:
         self.receipts.append({"operation": op, "result": result})
 
     def forbidden(self, reply, kind, op):
-        """Permit no ambiguous 4xx as permission-denial evidence."""
+        """Prove the SAME diagnostic names one COMPLETE, case-exact ref.
+
+        No substring matching, case folding of Git refs or concatenation of
+        independent GitHub error fields. A malformed/ambiguous response STOPs.
+        """
         if reply.status not in (403, 422) or not isinstance(reply.data, dict):
             raise StopTrial("unexpected or ambiguous negative write response")
-        m = reply.data.get("message")
-        errors = reply.data.get("errors")
-        parts = [m] if isinstance(m, str) else []
-        if isinstance(errors, list):
-            parts.extend(e.get("message") for e in errors if
-                         isinstance(e, dict) and isinstance(e.get("message"), str))
-        lower = " ".join(parts).lower()
-        # A 422 validation error is NOT a permission denial. Require a
-        # ruleset-specific explanation naming THIS exact disposable ref.
-        if not (("repository rule" in lower or "gh013" in lower) and
-                self.refs[kind].lower() in lower):
-            raise StopTrial("HTTP error was not explicit ruleset denial")
+        expected = "refs/heads/" + self.refs[kind]
+        message = reply.data.get("message")
+        errors = reply.data.get("errors", [])
+        if message is not None and not isinstance(message, str):
+            raise StopTrial("malformed GitHub denial message")
+        if not isinstance(errors, list) or any(
+                not isinstance(item, dict) or
+                not isinstance(item.get("message"), str) for item in errors):
+            raise StopTrial("malformed GitHub denial errors")
+        diagnostics = ([message] if isinstance(message, str) else [])
+        diagnostics.extend(item["message"] for item in errors)
+        # Extract the WHOLE ref token rather than accepting the prefix of
+        # -create-other, a case-mismatched ref, or a reference in another
+        # field that merely says "invalid SHA".
+        token_pattern = r"(?<![A-Za-z0-9._/-])refs/heads/[^\s'\"\x60,;()<>\[\]{}]+"
+        accepted = False
+        for diagnostic in diagnostics:
+            rule_error = ("repository rule" in diagnostic.lower() or
+                          "gh013" in diagnostic.lower())
+            if not rule_error:
+                continue
+            references = re.findall(token_pattern, diagnostic)
+            if references and (len(references) != 1 or references[0] != expected):
+                raise StopTrial("ruleset diagnostic names wrong or ambiguous ref")
+            if references == [expected]:
+                accepted = True
+        if not accepted:
+            raise StopTrial("HTTP error was not exact-ref ruleset denial")
         return "RULESET_DENIED"
 
     def publisher_seed(self):
