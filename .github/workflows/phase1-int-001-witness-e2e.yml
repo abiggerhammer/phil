@@ -2,6 +2,9 @@ name: Phase 1 INT-001 Witness End-to-End
 
 on:
   push:
+    # Phase 2 staged refs carry unreviewed worker code; never execute push CI.
+    branches-ignore:
+      - 'hamster/staged/**'
     paths:
       - 'examples/upload/*.phil'
       - 'examples/steve/*.phil'

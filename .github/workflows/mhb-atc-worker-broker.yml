@@ -162,6 +162,20 @@ jobs:
           git --git-dir="$GIT_DIR" cat-file -e "$BASE_SHA^{commit}"
           git --git-dir="$GIT_DIR" merge-base --is-ancestor "$BASE_SHA" "$MAIN_SHA"
           git --git-dir="$GIT_DIR" merge-base --is-ancestor "$BASE_SHA" "$HEAD_SHA"
+          # GitHub evaluates push workflows from the newly created staged ref.
+          # An older but valid base might contain unsafe historical triggers.
+          # Source and proposal must carry precisely the trusted main workflow
+          # tree reviewed by the CI-isolation suite, even if other files lag.
+          # MHB_ATC_G1_WORKFLOW_TREE_START
+          MAIN_WORKFLOW_TREE="$(git --git-dir="$GIT_DIR" rev-parse --verify "$MAIN_SHA:.github/workflows")"
+          BASE_WORKFLOW_TREE="$(git --git-dir="$GIT_DIR" rev-parse --verify "$BASE_SHA:.github/workflows")"
+          HEAD_WORKFLOW_TREE="$(git --git-dir="$GIT_DIR" rev-parse --verify "$HEAD_SHA:.github/workflows")"
+          test "$BASE_WORKFLOW_TREE" = "$MAIN_WORKFLOW_TREE" &&
+            test "$HEAD_WORKFLOW_TREE" = "$MAIN_WORKFLOW_TREE" || {
+              echo "Staged proposal workflow tree differs from trusted main; refresh onto reviewed CI policy" >&2
+              exit 1
+          }
+          # MHB_ATC_G1_WORKFLOW_TREE_END
           test -z "$(git --git-dir="$GIT_DIR" rev-list --merges "$BASE_SHA..$HEAD_SHA")" || {
             echo "Merge commits in proposed candidate need a separate review" >&2; exit 1;
           }
