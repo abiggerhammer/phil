@@ -185,6 +185,16 @@ class W3RefTrialTests(unittest.TestCase):
                     policy_check(live=True, nonce=NONCE)
             with self.assertRaisesRegex(StopTrial, "source-pinned"):
                 policy_check(live=True, nonce="e"*12)
+            # Recovery MUST still be available if the operator turns OFF
+            # the runtime switch immediately after a seed attempt.
+            with patch.dict(os.environ, {
+                    "MHB_ATC_W3_REF_TRIAL_ENABLED": "false",
+                    "MHB_ATC_AUTO_ADMIT_ENABLED": "true"}):
+                self.assertEqual(
+                    policy_check(live=True, nonce=NONCE, recovery=True)[
+                        "publisher_app_id"], PUBLISHER_ID)
+                with self.assertRaises(StopTrial):
+                    policy_check(live=True, nonce=NONCE, recovery=False)
             changed["push_ci_quarantine_verified"] = False
             with self.assertRaisesRegex(StopTrial, "quarantine NOT reviewed"):
                 policy_check(live=True, nonce=NONCE)
