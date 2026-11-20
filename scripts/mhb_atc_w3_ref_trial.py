@@ -108,6 +108,8 @@ def policy_check(*, live: bool, nonce=None):
         require(os.getenv("GITHUB_ACTIONS") == "true" and
                 os.getenv("GITHUB_EVENT_NAME") == "workflow_dispatch" and
                 os.getenv("GITHUB_ACTOR") == "abiggerhammer" and
+                os.getenv("GITHUB_TRIGGERING_ACTOR") == "abiggerhammer" and
+                os.getenv("GITHUB_RUN_ATTEMPT") == "1" and
                 os.getenv("GITHUB_REPOSITORY") == REPO and
                 os.getenv("GITHUB_REF") == "refs/heads/main",
                 "not the trusted owner/main manual Actions context")
