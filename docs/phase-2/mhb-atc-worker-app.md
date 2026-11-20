@@ -39,6 +39,47 @@ Record exact run/job IDs, checked-out `main` SHA, App slug, installation ID, per
 
 **Important limitations:** This is a token mint and revocation, not a GitHub repository write. A green result proves this *token* can read metadata for just Phil and came from the expected App slug; it does **not** independently prove the underlying App's full installation selection, absent Pull requests permission, inability to write protected refs, per-lane isolation, or the broker's future correctness. Those require settings verification and controlled negative tests against the real principal.
 
+## W1-ID numeric App identity: independently authenticated by manual JWT reads
+
+This revised source adds a **JWT-authenticated identity step** to the existing
+**manual**, protected-main W1 preflight, *before* it mints any installation
+token. The job requires `github.actor == 'abiggerhammer'`, the main ref, and
+the separate `atc-worker-broker` environment. No scheduled, push, PR or
+repository-dispatch event can access this step.
+
+The trusted main script signs one short-lived RS256 GitHub App JWT using the
+protected worker App key, with `iss` equal to the configured App Client ID.
+It calls only GitHub **GET /app** and **GET /app/installations**, requesting
+no write operations. The new pure
+`scripts/mhb_atc_worker_app_identity.py` requires exact App numeric ID
+`5836223`, slug, Client ID, owner, Contents-write and Metadata-read
+permissions, with **no other effective permissions**. It also requires
+exactly one nonsuspended App installation, selected-repository mode, the
+expected user-account owner/IDs and the same minimal permissions. If any
+observation is absent or ambiguous, it denies.
+
+Only after the JWT metadata is accepted can the existing action mint its
+explicit Phil-scoped worker token for the **GET /installation/repositories**
+check. That step now additionally binds the returned installation ID to
+the JWT-authenticated installation ID before accessing the token API.
+The job's existing automatic token revocation remains enabled, and its
+post-action cleanup must be inspected for actual success.
+
+**Credential custody:** the private key is held in a temporary 0700-mode
+file for OpenSSL signing; JWT contents and the key never enter output
+artifacts, summaries, public source or logs. A shell EXIT trap removes the
+temporary key and raw metadata. The nonsecret JSON identity receipt remains
+inside the ephemeral runner for binding to the token action. The offline
+test executes the **literal shell step** with a generated disposable RSA key
+and a mocked (non-networking) curl, verifying that no key remains on exit.
+
+**Scope limit:** this upgrade is **source-only until independently reviewed,
+merged and manually dispatched**. Even a successful JWT-authenticated
+preflight does not enumerate every repository selected within that
+installation, prove the actual GitHub settings of the protected environment,
+or establish worker App denial of protected-ref writes or direct PR creation.
+Those remain separate operator-settings and W3 commissioning checks.
+
 ## Subsequent W2/W3 gates — not part of this PR
 
 1. Implement and independently review the trusted stage-only broker, explicit lane-owner registry and exact-head request validation. Do not pass the token to hamsters.
