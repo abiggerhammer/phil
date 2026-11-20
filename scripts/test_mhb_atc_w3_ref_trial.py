@@ -19,6 +19,7 @@ import mhb_atc_w3_ref_trial as module
 from mhb_atc_w3_ref_trial import (
     REPO, PUBLISHER_ID, WORKER_ID, RULESET_ID,
     Client, _NoRedirect, Reply, StopTrial, Trial, names, policy_check, sha,
+    attest_live_worker_identity,
 )
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -203,6 +204,40 @@ class W3RefTrialTests(unittest.TestCase):
             changed["live_authorized"] = False
             with self.assertRaisesRegex(StopTrial, "DISABLED"):
                 policy_check(live=True, nonce=NONCE)
+
+    def test_worker_token_id_must_match_authenticated_JWT_receipt(self):
+        receipt = {
+            "decision": "authenticated-worker-app-and-installation",
+            "app_id": WORKER_ID, "app_slug": "phil-atc-worker",
+            "permissions": {"contents": "write", "metadata": "read"},
+            "repository_selection": "selected",
+            "installation_id": 987654,
+        }
+        attest_live_worker_identity(receipt, "987654")
+        for key, wrong in [
+            ("app_id", PUBLISHER_ID),
+            ("app_slug", "phil-atc-publisher"),
+            ("permissions", {"contents": "write", "pull_requests": "write"}),
+            ("repository_selection", "all"),
+            ("installation_id", 0),
+        ]:
+            bad = dict(receipt)
+            bad[key] = wrong
+            with self.subTest(key=key), self.assertRaises(StopTrial):
+                attest_live_worker_identity(bad, "987654")
+        with self.assertRaises(StopTrial):
+            attest_live_worker_identity(receipt, "987655")
+
+    def test_real_worker_job_reuses_accepted_W1_JWT_step_byte_for_byte(self):
+        original = (ROOT / ".github/workflows/mhb-atc-worker-token-preflight.yml").read_text()
+        trial = (ROOT / ".github/workflows/mhb-atc-w3-ref-commissioning.yml").read_text()
+        start = "      - name: Authenticate worker App numeric ID and full installed grants (JWT GET only)\n"
+        after = "      - name: Mint repository-scoped worker App token for read-only verification\n"
+        first = original.split(start, 1)[1].split(after, 1)[0]
+        copied = trial.split(start, 1)[1].split(
+            "      - name: Mint worker App token only inside protected broker environment\n", 1)[0]
+        self.assertEqual(copied, first)
+        self.assertIn("attest_live_worker_identity(", (ROOT / "scripts/mhb_atc_w3_ref_trial.py").read_text())
 
     def test_real_transport_uses_only_exact_https_github_urls_and_denies_redirect(self):
         class Response:
