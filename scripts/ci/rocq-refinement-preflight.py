@@ -24,6 +24,7 @@ MODULES = (
     "GrammarAstRecordDataRecursiveGroupingDerivedObservables",
     "GrammarAstRecordDataRecursiveGroupingObservationSeparation",
     "GrammarAstRecordDataRecursiveGroupingDerivedObservationDisjointness",
+    "GrammarAstRecordDataRecursiveGroupingObservationPER",
 )
 
 
