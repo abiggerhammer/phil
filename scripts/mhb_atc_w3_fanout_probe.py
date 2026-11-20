@@ -189,15 +189,15 @@ class FanoutTrial:
         self.repository()
         self.main(allow_drift=allow_drift)
         self.rules()
-        self.census(canary_expected=cleanup)
         existing = self.ref_sha()
         if cleanup:
             check(existing in (None, TARGET),
                   "fanout cleanup ref has foreign SHA")
-            # If absent, require the entire prefix to be empty.
-            if existing is None:
-                self.census(canary_expected=False)
+            # Recovery is idempotent only for the exact known canary SHA
+            # or a completely absent admitted namespace.
+            self.census(canary_expected=existing is not None)
         else:
+            self.census(canary_expected=False)
             check(existing is None,
                   "fanout proposed canary ref already exists")
         return existing
@@ -358,7 +358,7 @@ def cli():
                         args.phase in ("create-preflight", "publisher-create")))
     run.origin = origin
     if args.phase in ("create-preflight", "recovery-plan"):
-        current = run.gate(allow_drift=independent,
+        current = run.gate(allow_drift=args.phase == "recovery-plan",
                            cleanup=args.phase == "recovery-plan")
         if args.phase == "create-preflight":
             run.default_quarantine("publisher-create-canary",
