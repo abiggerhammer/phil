@@ -128,13 +128,9 @@ class PublisherCanaryTests(unittest.TestCase):
             self.assertEqual(ledger.path.stat().st_mode & 0o777,0o600)
             self.assertFalse(ledger.doc["quarantine_certified"])
             self.assertFalse(ledger.doc["w3_execution_authorized"])
-            # The CREATE and cleanup jobs use different runners/ledgers.
-            second=FanoutLedger(Path(td)/"other"/"w3-fanout-evidence.json",
-                phase="publisher-cleanup",nonce=NONCE,
-                run_id=12345678,original_run_id=12345678,
-                dispatch_sha=MAIN,original_dispatch_sha=MAIN,
-                target_sha=TARGET,workflow_tree_sha=TREE,
-                installation_id="987654321")
+            # Simulate a fresh runner's separate cleanup ledger.
+            trial.evidence=None
+            second=ledger_for_cleanup(Path(td),NONCE)
             trial.evidence=second
             deleted=trial.cleanup_once()
             second.decision("ABSENCE_VERIFIED")
