@@ -237,7 +237,9 @@ class StagedPushIsolationTests(unittest.TestCase):
                 self.assertFalse(fnmatch.fnmatchcase("main", props["branches-ignore"][0]))
                 self.assertFalse(fnmatch.fnmatchcase("feature/my-work", props["branches-ignore"][0]))
                 unprotected = source.replace(
-                    "    branches-ignore:\n      - 'hamster/staged/**'\n", "")
+                    "    branches-ignore:\n      - 'hamster/staged/**'\n"
+                    "      # Disposable W3 publisher canary/seed refs are not admission.\n"
+                    "      - 'hamster/admitted/w3-*'\n", "")
                 self.assertFalse(excludes_staged_push(unprotected))
                 too_narrow = source.replace(
                     "'hamster/staged/**'", "'hamster/proposed/**'")
