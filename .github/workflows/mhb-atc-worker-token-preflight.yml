@@ -105,9 +105,10 @@ jobs:
           key="$RUNNER_TEMP/atc-w1id-key.pem"
           app="$RUNNER_TEMP/atc-w1id-app.json"
           installed="$RUNNER_TEMP/atc-w1id-installations.json"
+          auth_header="$RUNNER_TEMP/atc-w1id-auth-header.txt"
           receipt="$RUNNER_TEMP/atc-w1id-receipt.json"
           cleanup() {
-            rm -f "$key" "$app" "$installed"
+            rm -f "$key" "$app" "$installed" "$auth_header"
             unset APP_JWT APP_PRIVATE_KEY
           }
           trap cleanup EXIT
@@ -129,20 +130,23 @@ jobs:
             openssl base64 -A | tr '+/' '-_' | tr -d '=')"
           APP_JWT="$header.$payload.$signature"
           unset signature
+          # Curl reads a 0600-only temporary header file; never put the
+          # bearer JWT into a process argument or public step output.
+          printf 'Authorization: Bearer %s\n' "$APP_JWT" > "$auth_header"
+          unset APP_JWT
 
           # JWT-authenticated GET /app binds actual numeric App ID and grants
           # to the protected key, not merely a configured numeric variable.
           curl --fail --silent --show-error --proto '=https' \
             -H "Accept: application/vnd.github+json" \
             -H "X-GitHub-Api-Version: 2022-11-28" \
-            -H "Authorization: Bearer $APP_JWT" \
+            -H "@$auth_header" \
             "https://api.github.com/app" > "$app"
           curl --fail --silent --show-error --proto '=https' \
             -H "Accept: application/vnd.github+json" \
             -H "X-GitHub-Api-Version: 2022-11-28" \
-            -H "Authorization: Bearer $APP_JWT" \
+            -H "@$auth_header" \
             "https://api.github.com/app/installations?per_page=100&page=1" > "$installed"
-          unset APP_JWT
           python3 scripts/mhb_atc_worker_app_identity.py \
             --app-json "$app" --installations-json "$installed" \
             --worker-policy .github/atc-worker-policy.json \
