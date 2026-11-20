@@ -4,6 +4,9 @@ from __future__ import annotations
 import copy
 import json
 import os
+from contextlib import ExitStack, redirect_stdout, redirect_stderr
+import io
+import sys
 from pathlib import Path
 import subprocess
 import tempfile
@@ -14,6 +17,8 @@ from mhb_atc_w3_ref_trial import Reply, StopTrial
 from mhb_atc_w3_provenance import (
     REPO, WORKFLOW_PATH, ProvenanceError, make_binding, validate_binding,
     read_binding, verify_origin, snapshot_tree)
+from mhb_atc_w3_default_quarantine import (
+    DefaultWorkflowQuarantine, DefaultQuarantineError)
 
 NONCE="f1e2d3c4b5a6"; H="a"*40; P="b"*40; G="c"*40; TREE="d"*40; RUN=987654321
 DISPATCH="f"*40
@@ -283,6 +288,166 @@ class ProvenanceTests(unittest.TestCase):
                         wf.index("  publisher_seed:"))
         self.assertEqual(wf.count("actions/download-artifact@v4"),2)
         self.assertIn("run-id: "+"$"+"{{ inputs.original_run_id }}",wf)
+
+class DefaultBranchQuarantineTests(unittest.TestCase):
+    """Real Git workflow trees plus fake remote; no credentials or network."""
+
+    def git(self, root, *args):
+        p=subprocess.run(["git",*args],cwd=root,capture_output=True,
+                         text=True,timeout=25,check=False)
+        self.assertEqual(p.returncode,0,p.stderr)
+        return p.stdout.strip()
+
+    def make_default_history(self, root):
+        self.git(root,"init","-b","main")
+        self.git(root,"config","user.name","default-quarantine-fixture")
+        self.git(root,"config","user.email","w3@example.invalid")
+        workflows=root/".github"/"workflows"
+        workflows.mkdir(parents=True)
+        for i in range(501):
+            (workflows/f"f{i:03d}.yml").write_text(
+                "name: harmless\non:\n  push:\n    branches: [main]\n"
+                "jobs:\n  test:\n    runs-on: ubuntu-latest\n")
+        self.git(root,"add","-A")
+        self.git(root,"commit","-m","safe default workflow inventory")
+        safe=self.git(root,"rev-parse","HEAD")
+        # This is a harmless main evolution, not the frozen target pin.
+        (workflows/"safe-new.yml").write_text(
+            "name: harmless extra\non:\n  pull_request:\n"
+            "    branches: [main]\njobs:\n  test:\n    runs-on: ubuntu-latest\n")
+        self.git(root,"add","-A")
+        self.git(root,"commit","-m","harmless workflow addition")
+        harmless=self.git(root,"rev-parse","HEAD")
+        (workflows/"unsafe.yml").write_text(
+            "name: forbidden W3 fanout\non:\n  push:\n"
+            "    branches: [hamster/admitted/w3-*]\n"
+            "jobs:\n  dangerous:\n    runs-on: ubuntu-latest\n")
+        self.git(root,"add","-A")
+        self.git(root,"commit","-m","unsafe default W3 push")
+        unsafe=self.git(root,"rev-parse","HEAD")
+        return safe,harmless,unsafe,workflows
+
+    def test_current_default_semantics_allow_harmless_but_reject_unsafe(self):
+        with tempfile.TemporaryDirectory() as td:
+            root=Path(td)
+            safe,harmless,unsafe,workflows=self.make_default_history(root)
+            validator=DefaultWorkflowQuarantine(root)
+            self.assertEqual(validator.validate(safe),
+                             self.git(root,"rev-parse",safe+":.github/workflows"))
+            self.assertEqual(validator.validate(harmless),
+                             self.git(root,"rev-parse",harmless+":.github/workflows"))
+            self.assertNotEqual(validator.validate(safe),
+                                validator.validate(harmless))
+            with self.assertRaisesRegex(DefaultQuarantineError,
+                                        "current default workflow quarantine"):
+                validator.validate(unsafe)
+            # GitHub runs on: delete from default branch, not frozen refs.
+            (workflows/"unsafe.yml").write_text(
+                "name: forbidden deletion\non: delete\n"
+                "jobs:\n  dangerous:\n    runs-on: ubuntu-latest\n")
+            self.git(root,"add","-A")
+            self.git(root,"commit","-m","unsafe default delete event")
+            with self.assertRaisesRegex(DefaultQuarantineError,
+                                        "current default workflow quarantine"):
+                validator.validate(self.git(root,"rev-parse","HEAD"))
+
+    def test_complete_publisher_cli_stops_unsafe_default_before_delete(self):
+        from test_mhb_atc_w3_ref_trial import FakeAPI, MAIN, PARENT, GRANDPARENT
+        with tempfile.TemporaryDirectory() as td:
+            root=Path(td)
+            _safe,_harmless,unsafe,_=self.make_default_history(root)
+            api=FakeAPI("publisher",nonce=NONCE)
+            api.main=unsafe
+            config={
+                "reviewed_quarantine_tree_sha":TREE,
+                "frozen_target_commits":{"source_sha":MAIN,
+                                         "parent_sha":PARENT,
+                                         "grandparent_sha":GRANDPARENT}}
+            output=io.StringIO(); errors=io.StringIO()
+            with ExitStack() as stack:
+                stack.enter_context(patch.dict(os.environ,{
+                    "RUNNER_TEMP":td,
+                    "GITHUB_RUN_ID":str(RUN),
+                    "W3_APP_TOKEN":"FAKE_OFFLINE_NO_REAL_CREDENTIAL",
+                    "W3_ACTION_APP_SLUG":"phil-atc-publisher",
+                    "W3_ACTION_INSTALLATION_ID":"123456789",
+                    "W3_ORIGIN_RUN_ID":""}))
+                stack.enter_context(patch.object(trial_source,"ROOT",root))
+                stack.enter_context(patch.object(
+                    trial_source,"policy_check",return_value=api.policy))
+                stack.enter_context(patch.object(
+                    trial_source,"local_commits",
+                    return_value=(unsafe,"e"*40,"f"*40)))
+                stack.enter_context(patch.object(
+                    trial_source,"read",return_value=config))
+                stack.enter_context(patch.object(trial_source,"snapshot_tree"))
+                stack.enter_context(patch.object(
+                    trial_source,"Client",return_value=api))
+                stack.enter_context(patch.object(
+                    trial_source.Trial,"token_audience"))
+                stack.enter_context(patch.object(sys,"argv",[
+                    "mhb_atc_w3_ref_trial.py","publisher-seed","--nonce",NONCE]))
+                stack.enter_context(redirect_stdout(output))
+                stack.enter_context(redirect_stderr(errors))
+                exit_code=trial_source.main()
+            self.assertEqual(exit_code,2)
+            self.assertEqual([m for m,_,_ in api.requests if m!="GET"],["POST"])
+            doc=json.loads((root/"w3-evidence.json").read_text())
+            self.assertEqual(doc["decision"],"STOP_INCOMPLETE")
+            self.assertEqual(doc["default_quarantine_checks"],[])
+            self.assertIn("sanitized failure",errors.getvalue())
+            self.assertNotIn("Traceback",errors.getvalue())
+
+    def test_recovery_after_default_main_moves_never_reuses_old_receipt(self):
+        from test_mhb_atc_w3_ref_trial import (
+            FakeAPI, Trial, MAIN, PARENT, GRANDPARENT, names)
+        with tempfile.TemporaryDirectory() as td:
+            root=Path(td)
+            safe,harmless,unsafe,_=self.make_default_history(root)
+            validator=DefaultWorkflowQuarantine(root)
+            api=FakeAPI("publisher",nonce=NONCE)
+            api.main=harmless
+            api.refs[names(NONCE)["seed"]]=PARENT
+            trial=Trial(api,NONCE,MAIN,PARENT,GRANDPARENT,api.policy,
+                        dispatch_sha=safe,default_validator=validator)
+            plan=trial.publisher_recovery_plan()
+            self.assertEqual(plan["default_quarantine_checks"][-1]["default_sha"],
+                             harmless)
+            api.main=unsafe
+            api.requests.clear()
+            with self.assertRaisesRegex(DefaultQuarantineError,
+                                        "current default workflow quarantine"):
+                trial.publisher_cleanup()
+            self.assertEqual([m for m,_,_ in api.requests if m!="GET"],[])
+            self.assertEqual(api.refs[names(NONCE)["seed"]],PARENT)
+
+    def test_main_move_after_validation_stops_between_intent_and_delete(self):
+        from test_mhb_atc_w3_ref_trial import (
+            FakeAPI, Trial, MAIN, PARENT, GRANDPARENT, names)
+        with tempfile.TemporaryDirectory() as td:
+            root=Path(td)
+            safe,_harmless,unsafe,_=self.make_default_history(root)
+            api=FakeAPI("publisher",nonce=NONCE)
+            api.main=safe
+            trial=Trial(api,NONCE,MAIN,PARENT,GRANDPARENT,api.policy,
+                        dispatch_sha=safe,
+                        default_validator=DefaultWorkflowQuarantine(root))
+            original=api.request
+            gets=[0]
+            def drift(method,endpoint,data=None):
+                if method=="GET" and endpoint=="/git/ref/heads/main":
+                    gets[0]+=1
+                    if gets[0]==4:
+                        api.main=unsafe
+                return original(method,endpoint,data)
+            api.request=drift
+            with self.assertRaisesRegex(StopTrial,
+                                        "default main moved immediately before DELETE"):
+                trial.publisher_seed()
+            self.assertEqual([m for m,_,_ in api.requests if m!="GET"],["POST"])
+            self.assertEqual(api.refs[names(NONCE)["canary"]],PARENT)
+            self.assertEqual(len(trial.default_checks),1)
+
 
 if __name__=="__main__":
     unittest.main()
