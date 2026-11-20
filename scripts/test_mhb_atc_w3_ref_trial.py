@@ -52,6 +52,19 @@ def ruleset(policy):
     }
 
 
+class FakeDefaultWorkflowQuarantine:
+    """Test-only injectable semantic proof for fake GitHub ref traffic."""
+    def __init__(self, api):
+        self.api = api
+        self.checked = []
+
+    def validate(self, current_default_sha):
+        self.checked.append(current_default_sha)
+        if self.api.default_workflows_unsafe:
+            raise StopTrial("current default workflow quarantine rejected")
+        return "d"*40
+
+
 class FakeAPI:
     def __init__(self, role, nonce=NONCE, *, rule_denial=True):
         self.role = role
@@ -64,6 +77,7 @@ class FakeAPI:
         self.main = MAIN
         self.failures = {}
         self.extra_ref = None
+        self.default_workflows_unsafe = False
 
     def write_result(self, endpoint, status=422):
         if not self.rule_denial:
@@ -76,6 +90,8 @@ class FakeAPI:
 
     def request(self, method, endpoint, data=None):
         self.requests.append((method, endpoint, copy.deepcopy(data)))
+        if method == "GET" and endpoint == "/repository":
+            return Reply(200, {"full_name":REPO, "default_branch":"main"})
         if (method, endpoint) in self.failures:
             return self.failures[(method, endpoint)]
         if method == "GET" and endpoint == "/rulesets/27365284":
@@ -134,7 +150,8 @@ class FakeAPI:
 
 def make(role="publisher", nonce=NONCE, *, api=None):
     api = FakeAPI(role, nonce) if api is None else api
-    trial = Trial(api, nonce, MAIN, PARENT, GRANDPARENT, api.policy)
+    trial = Trial(api, nonce, MAIN, PARENT, GRANDPARENT, api.policy,
+                  default_validator=FakeDefaultWorkflowQuarantine(api))
     return api, trial
 
 
@@ -286,7 +303,7 @@ class W3RefTrialTests(unittest.TestCase):
             with self.subTest(bad=bad), self.assertRaises(StopTrial):
                 names(bad)
 
-    def test_all_four_workflow_jobs_fetch_exact_three_commit_history(self):
+    def test_all_four_workflow_jobs_fetch_full_trusted_history(self):
         source = (ROOT / ".github/workflows/mhb-atc-w3-ref-commissioning.yml").read_text()
         wf = yaml.load(source, Loader=StrictWorkflowLoader)
         self.assertEqual(set(wf["jobs"]), {
@@ -298,7 +315,7 @@ class W3RefTrialTests(unittest.TestCase):
                 self.assertEqual(len(checkouts), 1)
                 self.assertEqual(checkouts[0]["with"], {
                     "ref": "${{ github.sha }}",
-                    "fetch-depth": "3",
+                    "fetch-depth": "0",
                     "persist-credentials": "false",
                 })
 
@@ -340,6 +357,104 @@ class W3RefTrialTests(unittest.TestCase):
                             self.assertEqual(
                                 module.local_commits(),
                                 (ancestry[-1], ancestry[-2], ancestry[-3]))
+
+    def test_frozen_targets_are_source_pinned_and_distinct_from_main(self):
+        policy=json.loads((ROOT/".github/atc-w3-ref-trial.json").read_text())
+        frozen=module.frozen_targets(policy)
+        self.assertEqual(frozen,(
+            "d82a60a3c9f448c2e59ebe7bdfc710109159f7a9",
+            "e38814a2e916252a8a7f3dd438943e8f4a21664a",
+            "4b7594ed83648372171a9bb1c34647522c064b22"))
+        self.assertFalse(policy["live_authorized"])
+        self.assertIsNone(policy["approved_nonce"])
+        self.assertFalse(policy["push_ci_quarantine_verified"])
+        self.assertEqual(policy["schema"],"MHB-ATC-W3-REF-TRIAL-V2")
+        for bad in (
+            {"source_sha":MAIN,"parent_sha":MAIN,"grandparent_sha":GRANDPARENT},
+            {"source_sha":MAIN,"parent_sha":PARENT},
+            {"source_sha":"not-a-sha","parent_sha":PARENT,"grandparent_sha":GRANDPARENT},
+        ):
+            with self.subTest(bad=bad),self.assertRaisesRegex(
+                    StopTrial,"frozen target"):
+                module.frozen_targets({"frozen_target_commits":bad})
+
+    def test_worker_moving_main_is_bound_to_dispatch_not_frozen_target(self):
+        api,trial=make()
+        new_dispatch="f"*40
+        api.main=new_dispatch
+        # The frozen source remains MAIN; only the run's current dispatch
+        # source is new. The gate must not compare main to the old target.
+        trial.dispatch_sha=new_dispatch
+        trial.gate([])
+        receipt=trial.public_receipt("plan","SOURCE_ONLY_PLAN_NO_WRITES")
+        self.assertEqual(receipt["trusted_sha"],new_dispatch)
+        self.assertEqual(receipt["frozen_target_source_sha"],MAIN)
+        api.main="e"*40
+        with self.assertRaisesRegex(StopTrial,"main moved"):
+            trial.gate([])
+
+    def test_delete_is_impossible_without_a_fresh_default_guard(self):
+        api, trial = make()
+        with self.assertRaisesRegex(StopTrial,"DELETE without fresh"):
+            trial.delete("canary")
+        self.assertTrue(all(m=="GET" for m,_,_ in api.requests))
+
+    def test_publisher_canary_unsafe_default_stops_before_any_write(self):
+        api, trial = make()
+        api.default_workflows_unsafe = True
+        with self.assertRaisesRegex(StopTrial,"current default workflow"):
+            trial.publisher_seed()
+        self.assertEqual([m for m,_,_ in api.requests if m!="GET"],[])
+        self.assertEqual(api.refs,{})
+        self.assertFalse(trial.default_checks)
+
+    def test_worker_delete_negative_cannot_skip_current_default_validation(self):
+        api, trial = make()
+        trial.publisher_seed()
+        api.role = "worker"
+        original=api.request
+        worker_writes=[0]
+        def newly_unsafe(method,endpoint,data=None):
+            answer=original(method,endpoint,data)
+            if method in ("POST","PATCH") and api.role=="worker":
+                worker_writes[0]+=1
+                if worker_writes[0]==3:
+                    api.default_workflows_unsafe=True
+            return answer
+        api.request=newly_unsafe
+        with self.assertRaisesRegex(StopTrial,"current default workflow"):
+            trial.worker_probe()
+        self.assertEqual(worker_writes[0],3)
+        self.assertEqual([m for m,_,_ in api.requests if m!="GET"][-3:],
+                         ["POST","PATCH","PATCH"])
+        self.assertEqual(api.refs[names(NONCE)["seed"]],PARENT)
+
+    def test_recovery_revalidates_changed_default_before_any_delete(self):
+        api, trial = make()
+        api.refs[names(NONCE)["seed"]] = PARENT
+        api.main = "f"*40
+        receipt = trial.publisher_recovery_plan()
+        self.assertEqual(receipt["default_quarantine_checks"][-1]["default_sha"],
+                         "f"*40)
+        api.main = "e"*40
+        api.default_workflows_unsafe = True
+        api.requests.clear()
+        with self.assertRaisesRegex(StopTrial,"current default workflow"):
+            trial.publisher_cleanup()
+        self.assertEqual(api.refs[names(NONCE)["seed"]],PARENT)
+        self.assertEqual([m for m,_,_ in api.requests if m!="GET"],[])
+
+    def test_runtime_yaml_parser_is_checksum_pinned_before_app_mint(self):
+        requirements=(ROOT/"scripts/ci/mhb-atc-w3-pyyaml-6.0.3-hashes.txt").read_text()
+        self.assertIn("PyYAML==6.0.3 --hash=sha256:",requirements)
+        workflow=(ROOT/".github/workflows/mhb-atc-w3-ref-commissioning.yml").read_text()
+        self.assertEqual(workflow.count("--require-hashes --ignore-installed"),4)
+        self.assertEqual(workflow.count("scripts/ci/mhb-atc-w3-pyyaml-6.0.3-hashes.txt"),4)
+        self.assertLess(workflow.index("Install SHA256-pinned G1 YAML parser"),
+                        workflow.index("Mint publisher-only token"))
+        self.assertLess(workflow.index("Install SHA256-pinned G1 YAML parser"),
+                        workflow.index("Read-only W3 preflight"))
+        self.assertNotIn("pip install -U",workflow)
 
     def test_publisher_canary_proves_cleanup_before_seed(self):
         api, trial = make()

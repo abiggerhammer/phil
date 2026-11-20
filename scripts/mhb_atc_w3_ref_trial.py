@@ -24,6 +24,7 @@ from mhb_atc_w3_provenance import (
     commit_sha, make_binding, read_binding, snapshot_tree, verify_origin,
 )
 from mhb_atc_w3_evidence import EvidenceLedger
+from mhb_atc_w3_default_quarantine import DefaultWorkflowQuarantine
 
 ROOT = Path(__file__).resolve().parents[1]
 REPO = "abiggerhammer/phil"
@@ -34,6 +35,11 @@ RULESET_ID = 27365284
 NONCE = re.compile(r"[0-9a-f]{12}\Z")
 SHA = re.compile(r"[0-9a-f]{40}\Z")
 MAX_RESPONSE = 65536
+DELETE_OPERATIONS = frozenset({
+    'publisher-delete-canary', 'worker-delete',
+    'publisher-cleanup-canary', 'publisher-cleanup-create',
+    'publisher-cleanup-seed',
+})
 
 
 class StopTrial(ValueError):
@@ -77,12 +83,32 @@ def read(path):
     return json.loads(data)
 
 
+def frozen_targets(trial):
+    """An exact, reviewed three-commit first-parent chain, never a moving window."""
+    selected = trial.get("frozen_target_commits")
+    if selected is None:
+        return None
+    require(type(selected) is dict and
+            set(selected) == {"source_sha", "parent_sha", "grandparent_sha"} and
+            all(isinstance(selected[name], str) and
+                SHA.fullmatch(selected[name])
+                for name in ("source_sha", "parent_sha", "grandparent_sha")) and
+            len(set(selected.values())) == 3,
+            "invalid or ambiguous source-pinned W3 frozen target commits")
+    return (selected["source_sha"], selected["parent_sha"],
+            selected["grandparent_sha"])
+
+
 def policy_check(*, live: bool, nonce=None, recovery=False):
     trial = read(".github/atc-w3-ref-trial.json")
     worker = read(".github/atc-worker-policy.json")
     lanes = read(".github/atc-worker-lanes.json")
     publisher = read(".github/atc-publisher-policy.json")
-    require(trial.get("schema") == "MHB-ATC-W3-REF-TRIAL-V1" and
+    selected = frozen_targets(trial)
+    require(trial.get("schema") == "MHB-ATC-W3-REF-TRIAL-V2" and
+            trial.get("revision") == 2 and
+            trial.get("default_workflow_quarantine_validator") ==
+                "MHB-ATC-G1-W3-CURRENT-DEFAULT-V1" and
             trial.get("repository") == REPO and
             trial.get("worker_app_id") == WORKER_ID and
             trial.get("publisher_app_id") == PUBLISHER_ID and
@@ -113,6 +139,8 @@ def policy_check(*, live: bool, nonce=None, recovery=False):
                 "W3 live trials explicitly DISABLED in reviewed source")
         require(trial.get("push_ci_quarantine_verified") is True,
                 "W3 publisher-created ref push CI quarantine NOT reviewed")
+        require(selected is not None,
+                "W3 frozen target commits are not source-pinned")
         require(isinstance(trial.get("reviewed_quarantine_tree_sha"), str) and
                 SHA.fullmatch(trial["reviewed_quarantine_tree_sha"]),
                 "no source-reviewed quarantine workflow tree SHA")
@@ -227,9 +255,10 @@ class Client:
         if method != "GET":
             require(isinstance(self.token, str) and len(self.token) > 8,
                     "write token missing")
-        full = ("https://api.github.com" + endpoint
-                if endpoint == "/installation/repositories"
-                else API_ROOT + endpoint)
+        full = (API_ROOT if endpoint == "/repository" else
+                "https://api.github.com" + endpoint
+                if endpoint == "/installation/repositories" else
+                API_ROOT + endpoint)
         payload = None if data is None else json.dumps(
             data, separators=(",", ":"), sort_keys=True).encode("utf-8")
         headers = {"Accept": "application/vnd.github+json",
@@ -266,15 +295,23 @@ class Client:
 
 class Trial:
     def __init__(self, client, nonce, current, parent, grandparent,
-                 publisher, evidence=None):
+                 publisher, evidence=None, *, dispatch_sha=None,
+                 default_validator=None):
         self.client = client
         self.refs = names(nonce)
         self.current, self.parent, self.grandparent = (
             sha(current), sha(parent), sha(grandparent))
+        # 'current' is the frozen CREATE/UPDATE target, not moving main.
+        self.dispatch_sha = sha(dispatch_sha if dispatch_sha is not None
+                                else current)
         self.publisher = publisher
         self.receipts = []
         self.evidence = evidence
         self.last_denial_diagnostic = None
+        self.default_validator = (default_validator if default_validator is not None
+                                  else DefaultWorkflowQuarantine(ROOT))
+        self.default_checks = []
+        self._delete_authorized_kind = None
 
     def audit(self, operation, stage, **fields):
         if self.evidence is not None:
@@ -307,9 +344,33 @@ class Trial:
         live = doc.get("object", {}).get("sha")
         sha(live)
         if not allow_drift:
-            require(live == self.current,
+            require(live == self.dispatch_sha,
                     "main moved since trusted workflow dispatch")
         return live
+
+    def default_quarantine(self, operation, *, allow_drift=False):
+        """Validate the LIVE default workflows, separate from frozen targets.
+
+        A successful check is SHA/tree-bound and retained in durable evidence.
+        For recovery, a changed main must be checked again, never inherit a
+        prior run's default-tree certification.
+        """
+        repo = self.get("/repository")
+        require(isinstance(repo, dict) and repo.get("full_name") == REPO and
+                repo.get("default_branch") == "main",
+                "default branch identity changed")
+        checked_sha = self.main(allow_drift=allow_drift)
+        checked_tree = self.default_validator.validate(checked_sha)
+        require(isinstance(checked_tree, str) and SHA.fullmatch(checked_tree),
+                "invalid default workflow quarantine tree receipt")
+        require(self.main(allow_drift=allow_drift) == checked_sha,
+                "default main moved during workflow quarantine validation")
+        record = {"operation": operation, "default_sha": checked_sha,
+                  "default_workflow_tree_sha": checked_tree}
+        if self.evidence is not None:
+            self.evidence.default_quarantine_check(**record)
+        self.default_checks.append(record)
+        return record
 
     def census(self, wanted):
         """Read entire admitted prefix, never use a partial list as absence."""
@@ -360,6 +421,9 @@ class Trial:
             {"sha": sha(commit), "force": force})
 
     def delete(self, kind):
+        require(self._delete_authorized_kind == kind,
+                "DELETE without fresh current-default quarantine")
+        self._delete_authorized_kind = None
         return self.client.request(
             "DELETE", "/git/refs/heads/" + self.refs[kind])
 
@@ -371,14 +435,28 @@ class Trial:
         no fabricated denial/success is recorded. No automatic retry exists.
         """
         ref = "refs/heads/" + self.refs[kind]
+        # Protect CREATE and UPDATE as well as DELETE: default-branch
+        # 'create'/'delete' handlers are distinct from frozen-target pushes.
+        # This is the only wrapper through which protected writes occur.
+        checked_default = self.default_quarantine(
+            operation, allow_drift=operation.startswith("publisher-cleanup-"))
         self.audit(operation, "INTENT", ref=ref, pre_sha=pre_sha,
                    target_sha=target_sha)
         try:
+            # Last pre-request GET binds default SHA to its semantic
+            # inventory. A changed SHA stops before ANY protected write.
+            require(self.main(allow_drift=True) ==
+                    checked_default["default_sha"],
+                    "default main moved immediately before protected ref write")
+            if operation in DELETE_OPERATIONS:
+                self._delete_authorized_kind = kind
             reply = method()
         except Exception:
             self.audit(operation, "STOP", ref=ref, pre_sha=pre_sha,
                        target_sha=target_sha, reason="UNKNOWN_AFTER_REQUEST")
             raise
+        finally:
+            self._delete_authorized_kind = None
         self.audit(operation, "RESPONSE", ref=ref, pre_sha=pre_sha,
                    target_sha=target_sha, http_status=reply.status)
         return reply
@@ -388,11 +466,13 @@ class Trial:
             "schema": "MHB-ATC-W3-REF-TRIAL-RECEIPT-V1",
             "phase": phase, "decision": decision,
             "run_id": os.getenv("GITHUB_RUN_ID", "offline-fixture"),
-            "trusted_sha": self.current,
+            "trusted_sha": self.dispatch_sha,
+            "frozen_target_source_sha": self.current,
             "nonce": self.refs["create"].split("-")[-2],
             "source_live_activation_required": True,
             "worker_app_id": WORKER_ID, "publisher_app_id": PUBLISHER_ID,
             "ruleset_id": RULESET_ID,
+            "default_quarantine_checks": list(self.default_checks),
             "events": list(self.receipts),
             "no_pr_operations": True,
         }
@@ -553,6 +633,7 @@ class Trial:
         """GET-only owned-ref inventory before any separately dispatched recovery."""
         self.rules()
         self.main(allow_drift=True)
+        self.default_quarantine("publisher-recovery-plan", allow_drift=True)
         statuses = {}
         for kind in ("canary", "create", "seed"):
             found = self.ref(kind)
@@ -572,6 +653,7 @@ class Trial:
         # publisher may still clean only known disposable SHA values.
         self.rules()
         self.main(allow_drift=True)
+        self.default_quarantine("publisher-cleanup-preflight", allow_drift=True)
         for kind in ("canary", "create", "seed"):
             found = self.ref(kind)
             operation = "publisher-cleanup-" + kind
@@ -618,7 +700,7 @@ def _write_origin_artifact(binding):
     return path
 
 
-def _verified_recovery_origin(nonce, reviewed_tree):
+def _verified_recovery_origin(nonce, reviewed_tree, frozen):
     """Owner default token, actions:read + contents:read; no App credentials."""
     source_id = os.environ.get("W3_ORIGIN_RUN_ID", "")
     require(isinstance(source_id, str) and
@@ -632,7 +714,9 @@ def _verified_recovery_origin(nonce, reviewed_tree):
             "downloaded original W3 binding is absent")
     original = read_binding(
         path, nonce=nonce, original_run_id=origin_run_id,
-        reviewed_tree=reviewed_tree)
+        reviewed_tree=reviewed_tree,
+        frozen_targets=dict(zip(("source_sha", "parent_sha",
+                                  "grandparent_sha"), frozen)))
     reader = os.environ.get("GITHUB_TOKEN")
     require(isinstance(reader, str) and len(reader) > 8,
             "authenticated read-only GitHub Actions token required")
@@ -655,26 +739,31 @@ def cli():
     live = args.phase not in ("plan",) or args.authorize_live
     recovery = args.phase in ("publisher-cleanup", "recovery-plan")
     publisher = policy_check(live=live, nonce=args.nonce, recovery=recovery)
-    local_current, local_parent, local_grandparent = local_commits()
+    dispatch_sha, local_parent, local_grandparent = local_commits()
     trial_cfg = read(".github/atc-w3-ref-trial.json")
     reviewed_tree = trial_cfg.get("reviewed_quarantine_tree_sha")
+    frozen = frozen_targets(trial_cfg)
 
     independent_recovery = bool(os.environ.get("W3_ORIGIN_RUN_ID"))
     if args.phase == "recovery-plan":
         require(independent_recovery,
                 "recovery-plan must use authenticated original run artifact")
     if independent_recovery:
-        require(args.phase in ("recovery-plan", "publisher-cleanup"),
-                "original-run input only permitted for publisher recovery")
-        binding = _verified_recovery_origin(args.nonce, reviewed_tree)
+        require(args.phase in ("recovery-plan", "publisher-cleanup") and
+                frozen is not None,
+                "original-run recovery requires reviewed frozen targets")
+        binding = _verified_recovery_origin(args.nonce, reviewed_tree, frozen)
         current, parent, grandparent = (
             binding["source_sha"], binding["parent_sha"],
             binding["grandparent_sha"])
     else:
         current, parent, grandparent = (
-            local_current, local_parent, local_grandparent)
-        if live:
+            frozen if frozen is not None else
+            (dispatch_sha, local_parent, local_grandparent))
+        if frozen is not None:
             snapshot_tree(ROOT, current, parent, grandparent, reviewed_tree)
+        elif live:
+            raise StopTrial("live W3 requires reviewed frozen target commits")
 
     protected_token = args.phase in (
         "publisher-seed", "worker-negative", "publisher-cleanup")
@@ -712,13 +801,14 @@ def cli():
             Path(os.environ.get("RUNNER_TEMP", "/nonexistent")) / "w3-evidence.json",
             phase=args.phase, nonce=args.nonce, run_id=int(run_id),
             source_sha=current, parent_sha=parent,
-            grandparent_sha=grandparent,
+            grandparent_sha=grandparent, dispatch_sha=dispatch_sha,
             workflow_tree_sha=reviewed_tree,
             app_id=WORKER_ID if args.phase == "worker-negative" else PUBLISHER_ID,
             installation_id=installation_id)
 
     run = Trial(client, args.nonce, current, parent, grandparent,
-                publisher, evidence=evidence)
+                publisher, evidence=evidence, dispatch_sha=dispatch_sha,
+                default_validator=DefaultWorkflowQuarantine(ROOT))
     try:
         if protected_token:
             run.token_audience()
@@ -728,11 +818,12 @@ def cli():
             result["execution_authorized"] = False
             result["execution_gates_satisfied"] = bool(args.authorize_live)
         elif args.phase == "prepare-origin":
-            # The entire source/nonce quarantine plan and API read check MUST
-            # complete before uploading the immutable nonsecret run binding.
+            # Both target history and current default deletion semantics
+            # must be valid before any protected publisher token can exist.
             run.gate([])
+            run.default_quarantine("prepare-origin")
             binding = make_binding(
-                args.nonce, current, parent, grandparent,
+                args.nonce, dispatch_sha, current, parent, grandparent,
                 reviewed_tree, int(os.environ.get("GITHUB_RUN_ID", "0")))
             verify_origin(client, binding)
             _write_origin_artifact(binding)

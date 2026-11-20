@@ -2,6 +2,7 @@ name: MHB ATC W3 Protected Ref Trial (Manual, Source Disabled)
 
 # No automated event ever has worker/publisher credentials.
 # Source policy live_authorized=false; repo runtime variable is OFF by default.
+# Full trusted history is needed to prove frozen targets reachable via merged PR ancestry.
 on:
   workflow_dispatch:
     inputs:
@@ -59,7 +60,7 @@ jobs:
         uses: actions/checkout@v4
         with:
           ref: ${{ github.sha }}
-          fetch-depth: 3
+          fetch-depth: 0
           persist-credentials: false
 
       - name: Prepare a clean exact local main
@@ -70,6 +71,12 @@ jobs:
           test "$(git rev-parse HEAD)" = "$GITHUB_SHA"
           test -z "$(git status --porcelain --untracked-files=all)"
 
+      - name: Install SHA256-pinned G1 YAML parser before any App token
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 -c 'import sys,platform; assert sys.version_info[:2] == (3,12) and platform.machine() == "x86_64"'
+          python3 -m pip install --disable-pip-version-check --no-deps --only-binary=:all: --require-hashes --ignore-installed -r scripts/ci/mhb-atc-w3-pyyaml-6.0.3-hashes.txt
       - name: Download authenticated original-run binding for recovery only
         if: inputs.mode == 'cleanup'
         uses: actions/download-artifact@v4
@@ -128,10 +135,16 @@ jobs:
       - uses: actions/checkout@v4
         with:
           ref: ${{ github.sha }}
-          fetch-depth: 3
+          fetch-depth: 0
           persist-credentials: false
       - name: Prepare exact local main
         run: git switch -C main "$GITHUB_SHA"
+      - name: Install SHA256-pinned G1 YAML parser before any App token
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 -c 'import sys,platform; assert sys.version_info[:2] == (3,12) and platform.machine() == "x86_64"'
+          python3 -m pip install --disable-pip-version-check --no-deps --only-binary=:all: --require-hashes --ignore-installed -r scripts/ci/mhb-atc-w3-pyyaml-6.0.3-hashes.txt
       - name: Mint publisher-only token for canary/seed
         id: publisher_token
         uses: actions/create-github-app-token@64ab729a6294000f5aa4a4bc0b73d1f32bc45510 # v3
@@ -168,10 +181,16 @@ jobs:
       - uses: actions/checkout@v4
         with:
           ref: ${{ github.sha }}
-          fetch-depth: 3
+          fetch-depth: 0
           persist-credentials: false
       - name: Prepare exact local main
         run: git switch -C main "$GITHUB_SHA"
+      - name: Install SHA256-pinned G1 YAML parser before any App token
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 -c 'import sys,platform; assert sys.version_info[:2] == (3,12) and platform.machine() == "x86_64"'
+          python3 -m pip install --disable-pip-version-check --no-deps --only-binary=:all: --require-hashes --ignore-installed -r scripts/ci/mhb-atc-w3-pyyaml-6.0.3-hashes.txt
       - name: Authenticate worker App numeric ID and full installed grants (JWT GET only)
         env:
           APP_PRIVATE_KEY: ${{ secrets.MHB_ATC_WORKER_APP_PRIVATE_KEY }}
@@ -285,10 +304,16 @@ jobs:
       - uses: actions/checkout@v4
         with:
           ref: ${{ github.sha }}
-          fetch-depth: 3
+          fetch-depth: 0
           persist-credentials: false
       - name: Prepare exact local main
         run: git switch -C main "$GITHUB_SHA"
+      - name: Install SHA256-pinned G1 YAML parser before any App token
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 -c 'import sys,platform; assert sys.version_info[:2] == (3,12) and platform.machine() == "x86_64"'
+          python3 -m pip install --disable-pip-version-check --no-deps --only-binary=:all: --require-hashes --ignore-installed -r scripts/ci/mhb-atc-w3-pyyaml-6.0.3-hashes.txt
       - name: Recover original owner-authenticated lineage before publisher token
         if: inputs.mode == 'cleanup'
         uses: actions/download-artifact@v4
