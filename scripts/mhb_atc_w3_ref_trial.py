@@ -499,38 +499,101 @@ class Trial:
         return self.public_receipt("publisher-cleanup", "OWNED_DISPOSABLE_REFS_ABSENT")
 
 
+def _write_origin_artifact(binding):
+    """Prepare nonsecret lineage before protected credentials can exist."""
+    base = Path(os.environ.get("RUNNER_TEMP", "/nonexistent"))
+    require(base.is_dir(), "trusted Actions temporary directory unavailable")
+    path = base / "w3-origin.json"
+    require(not path.exists() and not path.is_symlink(),
+            "origin artifact path occupied")
+    data = (json.dumps(binding, sort_keys=True, separators=(",", ":")) +
+            "\n").encode("utf-8")
+    require(len(data) < 4096, "origin artifact too large")
+    flags = os.O_WRONLY | os.O_CREAT | os.O_EXCL
+    if hasattr(os, "O_NOFOLLOW"):
+        flags |= os.O_NOFOLLOW
+    fd = os.open(path, flags, 0o600)
+    with os.fdopen(fd, "wb") as fp:
+        fp.write(data)
+        fp.flush()
+        os.fsync(fp.fileno())
+    return path
+
+
+def _verified_recovery_origin(nonce, reviewed_tree):
+    """Owner default token, actions:read + contents:read; no App credentials."""
+    source_id = os.environ.get("W3_ORIGIN_RUN_ID", "")
+    require(isinstance(source_id, str) and
+            re.fullmatch(r"[1-9][0-9]{0,15}", source_id),
+            "independent recovery requires original Actions run ID")
+    origin_run_id = int(source_id)
+    require(str(origin_run_id) != os.environ.get("GITHUB_RUN_ID"),
+            "cannot recover from the same run as its origin")
+    path = Path(os.environ.get("W3_ORIGIN_BINDING_FILE", "/nonexistent"))
+    require(path.name == "w3-origin.json" and path.is_file(),
+            "downloaded original W3 binding is absent")
+    original = read_binding(
+        path, nonce=nonce, original_run_id=origin_run_id,
+        reviewed_tree=reviewed_tree)
+    reader = os.environ.get("GITHUB_TOKEN")
+    require(isinstance(reader, str) and len(reader) > 8,
+            "authenticated read-only GitHub Actions token required")
+    return verify_origin(Client(reader), original)
+
+
 def cli():
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("phase", choices=("plan", "recovery-plan",
-                                          "publisher-seed", "worker-negative",
-                                          "publisher-cleanup"))
+    parser.add_argument("phase", choices=(
+        "plan", "prepare-origin", "recovery-plan",
+        "publisher-seed", "worker-negative", "publisher-cleanup"))
     parser.add_argument("--nonce", required=True)
     parser.add_argument("--authorize-live", action="store_true",
-                        help="read-only prepare still checks live execution gates")
+                        help="legacy read-only plan gate (never performs writes)")
     args = parser.parse_args()
     names(args.nonce)
     require(not args.authorize_live or args.phase == "plan",
-            "authorize-live only applies to read-only prepare")
-    live = args.phase != "plan" or args.authorize_live
-    publisher = policy_check(
-        live=live, nonce=args.nonce,
-        recovery=(args.phase in ("publisher-cleanup", "recovery-plan")))
-    current, parent, grandparent = local_commits()
+            "authorize-live only applies to read-only plan")
+
+    live = args.phase not in ("plan",) or args.authorize_live
+    recovery = args.phase in ("publisher-cleanup", "recovery-plan")
+    publisher = policy_check(live=live, nonce=args.nonce, recovery=recovery)
+    local_current, local_parent, local_grandparent = local_commits()
+    trial_cfg = read(".github/atc-w3-ref-trial.json")
+    reviewed_tree = trial_cfg.get("reviewed_quarantine_tree_sha")
+
+    independent_recovery = bool(os.environ.get("W3_ORIGIN_RUN_ID"))
+    if args.phase == "recovery-plan":
+        require(independent_recovery,
+                "recovery-plan must use authenticated original run artifact")
+    if independent_recovery:
+        require(args.phase in ("recovery-plan", "publisher-cleanup"),
+                "original-run input only permitted for publisher recovery")
+        binding = _verified_recovery_origin(args.nonce, reviewed_tree)
+        current, parent, grandparent = (
+            binding["source_sha"], binding["parent_sha"],
+            binding["grandparent_sha"])
+    else:
+        current, parent, grandparent = (
+            local_current, local_parent, local_grandparent)
+        if live:
+            snapshot_tree(ROOT, current, parent, grandparent, reviewed_tree)
+
     protected_token = args.phase in (
         "publisher-seed", "worker-negative", "publisher-cleanup")
-    token = (os.getenv("W3_APP_TOKEN") if protected_token else
-             os.getenv("GITHUB_TOKEN"))
+    token = (os.environ.get("W3_APP_TOKEN") if protected_token else
+             os.environ.get("GITHUB_TOKEN"))
     if protected_token:
         require(isinstance(token, str) and len(token) > 8,
                 "protected installation token missing")
         expected_slug = ("phil-atc-worker" if args.phase == "worker-negative"
                          else "phil-atc-publisher")
-        require(os.getenv("W3_ACTION_APP_SLUG") == expected_slug and
-                (os.getenv("W3_ACTION_INSTALLATION_ID") or "").isdigit() and
-                int(os.getenv("W3_ACTION_INSTALLATION_ID")) > 0,
+        installation_id = os.environ.get("W3_ACTION_INSTALLATION_ID")
+        require(os.environ.get("W3_ACTION_APP_SLUG") == expected_slug and
+                isinstance(installation_id, str) and
+                re.fullmatch(r"[1-9][0-9]*", installation_id),
                 "actual token principal/installation not authenticated")
         if args.phase == "worker-negative":
-            receipt_path = Path(os.getenv("RUNNER_TEMP", "")) / "atc-w1id-receipt.json"
+            receipt_path = Path(os.environ.get("RUNNER_TEMP", "")) / "atc-w1id-receipt.json"
             require(receipt_path.is_file() and
                     receipt_path.stat().st_size <= 65536,
                     "worker JWT verification receipt missing")
@@ -538,28 +601,67 @@ def cli():
                 jwt_receipt = json.loads(receipt_path.read_text(encoding="utf-8"))
             except (UnicodeError, ValueError, OSError):
                 raise StopTrial("unreadable worker JWT identity receipt")
-            attest_live_worker_identity(
-                jwt_receipt, os.getenv("W3_ACTION_INSTALLATION_ID"))
-    client = Client(token)
-    run = Trial(client, args.nonce, current, parent, grandparent, publisher)
-    if protected_token:
-        run.token_audience()
-    if args.phase == "plan":
-        run.gate([])
-        result = run.public_receipt("plan", "SOURCE_ONLY_PLAN_NO_WRITES")
-        result["execution_authorized"] = False
-        result["execution_gates_satisfied"] = bool(args.authorize_live)
-    elif args.phase == "recovery-plan":
-        result = run.publisher_recovery_plan()
-    elif args.phase == "publisher-seed":
-        result = run.publisher_seed()
-    elif args.phase == "worker-negative":
-        result = run.worker_probe()
-    else:
-        result = run.publisher_cleanup()
-    print(json.dumps(result, sort_keys=True))
-    return 0
+            attest_live_worker_identity(jwt_receipt, installation_id)
 
+    client = Client(token)
+    evidence = None
+    if protected_token:
+        run_id = os.environ.get("GITHUB_RUN_ID", "")
+        require(isinstance(run_id, str) and
+                re.fullmatch(r"[1-9][0-9]{0,15}", run_id),
+                "W3 protected job run ID missing")
+        evidence = EvidenceLedger(
+            Path(os.environ.get("RUNNER_TEMP", "/nonexistent")) / "w3-evidence.json",
+            phase=args.phase, nonce=args.nonce, run_id=int(run_id),
+            source_sha=current, parent_sha=parent,
+            grandparent_sha=grandparent,
+            workflow_tree_sha=reviewed_tree,
+            app_id=WORKER_ID if args.phase == "worker-negative" else PUBLISHER_ID,
+            installation_id=installation_id)
+
+    run = Trial(client, args.nonce, current, parent, grandparent,
+                publisher, evidence=evidence)
+    try:
+        if protected_token:
+            run.token_audience()
+        if args.phase == "plan":
+            run.gate([])
+            result = run.public_receipt("plan", "SOURCE_ONLY_PLAN_NO_WRITES")
+            result["execution_authorized"] = False
+            result["execution_gates_satisfied"] = bool(args.authorize_live)
+        elif args.phase == "prepare-origin":
+            # The entire source/nonce quarantine plan and API read check MUST
+            # complete before uploading the immutable nonsecret run binding.
+            run.gate([])
+            binding = make_binding(
+                args.nonce, current, parent, grandparent,
+                reviewed_tree, int(os.environ.get("GITHUB_RUN_ID", "0")))
+            verify_origin(client, binding)
+            _write_origin_artifact(binding)
+            result = run.public_receipt(
+                "prepare-origin", "ORIGINAL_LINEAGE_READY_NO_WRITES")
+            result["execution_authorized"] = False
+        elif args.phase == "recovery-plan":
+            result = run.publisher_recovery_plan()
+        elif args.phase == "publisher-seed":
+            result = run.publisher_seed()
+        elif args.phase == "worker-negative":
+            result = run.worker_probe()
+        else:
+            result = run.publisher_cleanup()
+        if evidence is not None:
+            success = {
+                "publisher-seed": "PUBLISHER_SEED_CONFIRMED",
+                "worker-negative": "DENIALS_CONFIRMED",
+                "publisher-cleanup": "CLEANUP_ABSENCE_CONFIRMED",
+            }
+            evidence.decision(success[args.phase])
+        print(json.dumps(result, sort_keys=True), flush=True)
+        return 0
+    except Exception:
+        if evidence is not None:
+            evidence.decision("STOP_INCOMPLETE")
+        raise
 
 if __name__ == "__main__":
     try:
