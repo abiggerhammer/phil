@@ -263,7 +263,9 @@ class ProvenanceTests(unittest.TestCase):
         fake.refs[seed]=P
         fake.main="f"*40
         # The NEW run sees K, J and H: P was lost from its three-sha set.
-        wrong=Trial(fake,NONCE,"f"*40,"e"*40,H,fake.policy)
+        from test_mhb_atc_w3_ref_trial import FakeDefaultWorkflowQuarantine
+        wrong=Trial(fake,NONCE,"f"*40,"e"*40,H,fake.policy,
+                    default_validator=FakeDefaultWorkflowQuarantine(fake))
         with self.assertRaisesRegex(StopTrial,"UNKNOWN SHA"):
             wrong.publisher_recovery_plan()
         self.assertEqual(fake.refs[seed],P)
