@@ -104,7 +104,7 @@ Proof.
       eqn:Hfirst; [|discriminate].
     destruct (fsem02ReplayRequest second middle) as [after|]
       eqn:Hsecond; [discriminate|].
-    inversion H; subst; split; reflexivity.
+    inversion H; subst; split; [reflexivity | exact Hsecond].
   - intros [Hfirst Hsecond].
     unfold fsem02PairedTwoStepReplay.
     now rewrite Hfirst, Hsecond.
@@ -124,7 +124,7 @@ Proof.
       eqn:Hfirst; [|discriminate].
     destruct (fsem02ReplayRequest second middle) as [after|]
       eqn:Hsecond; [|discriminate].
-    inversion H; subst; split; reflexivity.
+    inversion H; subst; split; [reflexivity | exact Hsecond].
   - intros [Hfirst Hsecond].
     unfold fsem02PairedTwoStepReplay.
     now rewrite Hfirst, Hsecond.
