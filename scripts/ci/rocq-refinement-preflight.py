@@ -28,6 +28,7 @@ MODULES = (
     "GrammarAstRecordDataRecursiveGroupingObservationPERDomain",
     "GrammarAstRecordDataRecursiveGroupingObservationAdmittedQuotient",
     "GrammarAstRecordDataRecursiveGroupingObservationAdmittedDerivations",
+    "GrammarAstRecordDataRecursiveGroupingObservationClassCoherence",
 )
 
 
