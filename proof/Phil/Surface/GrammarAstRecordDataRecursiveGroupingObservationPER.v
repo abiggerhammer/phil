@@ -41,7 +41,8 @@ Theorem phase1_surface_recursive_grouping_observation_related_reflexive_on_admis
 Proof.
   intros declaration refined Hadmit.
   exists refined, refined.
-  repeat split; [exact Hadmit | exact Hadmit | reflexivity].
+  split; [exact Hadmit |].
+  split; [exact Hadmit | reflexivity].
 Qed.
 
 Theorem phase1_surface_recursive_grouping_observation_related_symmetric :
@@ -52,7 +53,8 @@ Proof.
   intros left right
     [left_refined [right_refined [Hleft [Hright Hobserved]]]].
   exists right_refined, left_refined.
-  repeat split; [exact Hright | exact Hleft |].
+  split; [exact Hright |].
+  split; [exact Hleft |].
   symmetry.
   exact Hobserved.
 Qed.
@@ -69,7 +71,8 @@ Proof.
   rewrite Hmiddle in Hmiddle'.
   inversion Hmiddle'; subst middle_refined'.
   exists left_refined, right_refined.
-  repeat split; [exact Hleft | exact Hright |].
+  split; [exact Hleft |].
+  split; [exact Hright |].
   etransitivity; eassumption.
 Qed.
 
@@ -99,7 +102,9 @@ Proof.
       right_refined).
   split.
   - exists left_refined, right_refined.
-    repeat split; assumption.
+    split; [exact Hleft |].
+    split; [exact Hright |].
+    exact Hobserved.
   - exact Hkeys.
 Qed.
 
