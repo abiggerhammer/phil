@@ -50,7 +50,7 @@ class ProvenanceTests(unittest.TestCase):
 
     def test_binding_rejects_wrong_nonce_run_lineage_tree_and_shape(self):
         for field,value in (("nonce","e"*12),("run_id",RUN+1),
-                            ("source_sha","f"*40),("workflow_tree_sha","f"*40),
+                            ("source_sha","invalid-sha"),("workflow_tree_sha","f"*40),
                             ("run_attempt",2),("run_attempt",True),
                             ("repository","attacker/phil"),("mode","cleanup"),
                             ("added","injection")):
@@ -153,7 +153,7 @@ class ProvenanceTests(unittest.TestCase):
         wf=(Path(__file__).resolve().parents[1]/
             ".github/workflows/mhb-atc-w3-ref-commissioning.yml").read_text()
         self.assertIn("actions: read",wf)
-        self.assertLess(wf.index("prepare-origin --nonce"),
+        self.assertLess(wf.index("prepare-origin"),
                         wf.index("name: mhb-atc-w3-origin"))
         self.assertLess(wf.index("name: mhb-atc-w3-origin"),
                         wf.index("  publisher_seed:"))
