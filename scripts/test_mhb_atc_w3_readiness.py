@@ -65,7 +65,8 @@ class W3ReadinessTests(unittest.TestCase):
         self.assertTrue(r["disposable_create_ref"].endswith("-create"))
         self.assertTrue(r["publisher_seed_ref"].endswith("-seed"))
         self.assertEqual(len(r["planned_sequence"]), 6)
-        self.assertNotIn("token", json.dumps(r).lower().split("scope")[0] or "")
+        self.assertNotIn("PRIVATE_KEY", json.dumps(r))
+        self.assertNotIn("ghp_", json.dumps(r))
 
     def test_only_publisher_in_ruleset_bypass(self):
         cases = [
