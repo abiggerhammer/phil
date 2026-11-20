@@ -158,6 +158,33 @@ def reviewed_policy():
     return p
 
 
+
+def validate_curated_run(record, window_start, window_end):
+    """Apply the same bounded record contract to collected and imported data."""
+    check(isinstance(record, dict) and set(record) == set(RUN_FIELDS) and
+          type(record.get("id")) is int and
+          0 < record["id"] < 10**16 and
+          record.get("event") in EVENTS and
+          isinstance(record.get("head_sha"), str) and
+          SHA.fullmatch(record["head_sha"]) and
+          (record.get("head_branch") is None or
+           (isinstance(record["head_branch"], str) and
+            len(record["head_branch"]) < 256)) and
+          isinstance(record.get("actor"), str) and
+          0 < len(record["actor"]) < 128 and
+          isinstance(record.get("path"), str) and
+          0 < len(record["path"]) < 256 and
+          isinstance(record.get("status"), str) and
+          len(record["status"]) < 64 and
+          (record.get("conclusion") is None or
+           (isinstance(record["conclusion"], str) and
+            len(record["conclusion"]) < 64)),
+          "noncanonical curated Actions run metadata")
+    check(window_start <= iso(record.get("created_at")) <= window_end,
+          "curated Actions run outside census window")
+    return record
+
+
 def run_record(item, expected_event, window_start, window_end):
     check(isinstance(item, dict) and type(item.get("id")) is int
           and 0 < item["id"] < 10**16 and
@@ -185,14 +212,14 @@ def run_record(item, expected_event, window_start, window_end):
     check(isinstance(repository, dict) and
           repository.get("full_name") == REPO,
           "workflow-run census contains a foreign repository")
-    return {
+    return validate_curated_run({
         "id": item["id"], "event": item["event"],
         "head_sha": item["head_sha"],
         "head_branch": item["head_branch"], "created_at": item["created_at"],
         "actor": item["actor"]["login"],
         "path": item["path"], "status": item["status"],
         "conclusion": item["conclusion"],
-    }
+    }, window_start, window_end)
 
 
 def collect(client, *, role, nonce, window_start, window_end, observed_at=None):
@@ -273,32 +300,21 @@ def check_snapshot(doc):
     start, end = iso(doc["window_start"]), iso(doc["window_end"])
     check(start < end and end-start <= MAX_WINDOW,
           "invalid census time bounds")
-    iso(doc["observed_at"])
+    check(iso(doc["observed_at"]) >= start - timedelta(minutes=1),
+          "imported census observation precedes its window")
+    check(len(doc["runs"]) < MAX_PER_EVENT * len(EVENTS),
+          "imported census inventory is oversized")
     validated = {}
     for record in doc["runs"]:
-        check(isinstance(record, dict) and
-              set(record) == set(RUN_FIELDS) and
-              type(record.get("id")) is int and
-              0 < record["id"] < 10**16 and
-              record.get("event") in EVENTS and
-              isinstance(record.get("head_sha"), str) and
-              SHA.fullmatch(record["head_sha"]) and
-              (record.get("head_branch") is None or
-               isinstance(record.get("head_branch"), str)) and
-              isinstance(record.get("actor"), str) and
-              isinstance(record.get("path"), str) and
-              isinstance(record.get("status"), str) and
-              (record.get("conclusion") is None or
-               isinstance(record.get("conclusion"), str)) and
-              start <= iso(record["created_at"]) <= end and
-              record["id"] not in validated,
-              "malformed/duplicated curated census run")
+        validate_curated_run(record, start, end)
+        check(record["id"] not in validated,
+              "duplicate curated census run ID")
         validated[record["id"]] = record
     for event in EVENTS:
         expected = doc["event_totals"][event]
-        check(type(expected) is int and expected >= 0 and
+        check(type(expected) is int and 0 <= expected < MAX_PER_EVENT and
               expected == sum(r["event"] == event for r in validated.values()),
-              "fanout census does not match complete event counts")
+              "imported census missing or oversized event records")
     return validated
 
 
@@ -317,6 +333,11 @@ def compare(before, after, *, target_sha, publisher_actor):
           "census observation times were not ordered")
     check(set(pre) <= set(post),
           "a previously observed Actions run disappeared")
+    stable_fields = set(RUN_FIELDS) - {"status", "conclusion"}
+    for run_id in pre:
+        check(all(pre[run_id][field] == post[run_id][field]
+                  for field in stable_fields),
+              "Actions run identity metadata changed between censuses")
     new = [post[k] for k in sorted(set(post) - set(pre))]
     branch = before["ref"].removeprefix("refs/heads/")
     suspects = [x for x in new if (
@@ -332,8 +353,12 @@ def compare(before, after, *, target_sha, publisher_actor):
         "new_total": len(new), "potential_fanout_run_ids": [x["id"] for x in suspects],
         "other_new_run_count": len(new) - len(suspects),
         "observation_lag_seconds": int(elapsed.total_seconds()),
-        "decision": ("INCOMPLETE_OBSERVATION_RECHECK" if elapsed < timedelta(minutes=15)
-                     else "POTENTIAL_FANOUT_STOP_REVIEW" if suspects
+        # Positive evidence demands immediate STOP, even inside the
+        # observation lag or before the scheduled window has closed.
+        # The delay qualifies an ABSENCE only, never an observed candidate.
+        "decision": ("POTENTIAL_FANOUT_STOP_REVIEW" if suspects
+                     else "INCOMPLETE_OBSERVATION_RECHECK"
+                     if elapsed < timedelta(minutes=15)
                      else "NO_CANDIDATE_RUNS_REVIEW_REQUIRED"),
         "execution_authorized": False,
         "quarantine_certified": False,

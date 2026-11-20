@@ -1,7 +1,10 @@
 #!/usr/bin/env python3
 """Offline hostile tests for read-only W3 fanout event observation."""
 import copy
+import io
 import json
+import sys
+from contextlib import redirect_stdout
 from unittest.mock import patch
 from urllib import error
 from pathlib import Path
@@ -103,6 +106,107 @@ class FanoutObserverTests(unittest.TestCase):
         self.assertEqual(result["potential_fanout_run_ids"],
                          [777,778,779,780])
         self.assertEqual(result["decision"],"POTENTIAL_FANOUT_STOP_REVIEW")
+
+
+    def test_early_positive_is_stop_before_during_and_after_observation_lag(self):
+        ref=mod.nonce_ref(NONCE).removeprefix("refs/heads/")
+        for observed,lag in (
+            ("2026-11-20T15:10:00Z",-600),  # before window closes
+            ("2026-11-20T15:21:00Z",60),    # one minute after
+            ("2026-11-20T15:40:00Z",1200)): # after conservative delay
+            with self.subTest(observed=observed):
+                before=capture(Fake())
+                after=capture(Fake({"push":[run(
+                    7,branch=ref,sha=TARGET,actor=BOT)]}),
+                    "after",observed)
+                result=mod.compare(before,after,target_sha=TARGET,
+                                   publisher_actor=BOT)
+                self.assertEqual(result["observation_lag_seconds"],lag)
+                self.assertEqual(result["potential_fanout_run_ids"],[7])
+                self.assertEqual(result["decision"],
+                                 "POTENTIAL_FANOUT_STOP_REVIEW")
+                self.assertFalse(result["execution_authorized"])
+                self.assertFalse(result["quarantine_certified"])
+
+    def test_real_compare_cli_immediately_stops_on_early_positive_evidence(self):
+        # Astra's exact path: main() -> CLI -> artifact reader -> comparator.
+        ref=mod.nonce_ref(NONCE).removeprefix("refs/heads/")
+        before=capture(Fake())
+        after=capture(Fake({"push":[run(
+            7,branch=ref,sha=TARGET,actor=BOT)]}),
+            "after","2026-11-20T15:21:00Z")
+        with tempfile.TemporaryDirectory() as td:
+            before_path=Path(td)/"before.json"
+            after_path=Path(td)/"after.json"
+            mod.save(before_path,before)
+            mod.save(after_path,after)
+            stdout=io.StringIO()
+            argv=["mhb_atc_w3_fanout_observer.py","compare",
+                  "--before-file",str(before_path),
+                  "--after-file",str(after_path),
+                  "--target-sha",TARGET,
+                  "--publisher-actor",BOT]
+            with patch.object(sys,"argv",argv),redirect_stdout(stdout):
+                self.assertEqual(mod.main(),0)
+            result=json.loads(stdout.getvalue())
+            self.assertEqual(result["new_total"],1)
+            self.assertEqual(result["potential_fanout_run_ids"],[7])
+            self.assertEqual(result["observation_lag_seconds"],60)
+            self.assertEqual(result["decision"],"POTENTIAL_FANOUT_STOP_REVIEW")
+            self.assertFalse(result["execution_authorized"])
+            self.assertFalse(result["quarantine_certified"])
+
+    def test_retained_run_identity_is_stable_but_status_may_progress(self):
+        before=capture(Fake({"push":[run(9)]}))
+        after=capture(Fake({"push":[run(9)]}),"after",
+                      "2026-11-20T15:40:00Z")
+        after["runs"][0]["status"]="in_progress"
+        after["runs"][0]["conclusion"]=None
+        result=mod.compare(before,after,target_sha=TARGET,
+                           publisher_actor=BOT)
+        self.assertEqual(result["new_total"],0)
+        self.assertEqual(result["decision"],"NO_CANDIDATE_RUNS_REVIEW_REQUIRED")
+        original=after["runs"][0].copy()
+        ref=mod.nonce_ref(NONCE).removeprefix("refs/heads/")
+        for changed,value in (
+                ("head_branch",ref),("actor",BOT),("head_sha",TARGET),
+                ("event","create"),("path",".github/workflows/other.yml"),
+                ("created_at","2026-11-20T15:08:00Z")):
+            with self.subTest(field=changed):
+                after["runs"][0]=dict(original,**{changed:value})
+                if changed=="event":
+                    after["event_totals"]={"push":0,"create":1,"delete":0}
+                with self.assertRaises(mod.CensusStop):
+                    mod.compare(before,after,target_sha=TARGET,
+                                publisher_actor=BOT)
+                after["event_totals"]={"push":1,"create":0,"delete":0}
+
+    def test_imported_records_cannot_exceed_collector_bounds(self):
+        before=capture(Fake())
+        valid=capture(Fake({"push":[run(91)]}),"after",
+                      "2026-11-20T15:40:00Z")
+        for key,value in (
+                ("actor",""),("head_branch","x"*400),
+                ("actor","x"*128),("path","x"*256),
+                ("head_sha","invalid")):
+            with self.subTest(key=key,value=value[:18]):
+                after=copy.deepcopy(valid)
+                after["runs"][0][key]=value
+                with self.assertRaises(mod.CensusStop):
+                    mod.compare(before,after,target_sha=TARGET,
+                                publisher_actor=BOT)
+        after=copy.deepcopy(valid)
+        after["runs"]=[dict(valid["runs"][0],id=i+1)
+                       for i in range(200)]
+        after["event_totals"]["push"]=200
+        with self.assertRaises(mod.CensusStop):
+            mod.compare(before,after,target_sha=TARGET,
+                        publisher_actor=BOT)
+        after=copy.deepcopy(valid)
+        after["observed_at"]="2026-11-20T14:55:00Z"
+        with self.assertRaises(mod.CensusStop):
+            mod.compare(before,after,target_sha=TARGET,
+                        publisher_actor=BOT)
 
     def test_unrelated_main_traffic_is_not_attributed(self):
         post=capture(Fake({"push":[run(800),run(801,branch="formal-semantics/x",

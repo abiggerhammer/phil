@@ -63,16 +63,23 @@ protected environment, and token generation only after an unprivileged
 read-only preflight. Both exact source and runtime gates must be ON
 only after separate independent activation approval.
 
-Before CREATE or DELETE, revalidate: trusted dispatch SHA and current
+Before either mutation, revalidate trusted dispatch SHA and current
 main, default_branch=main, complete current-default semantic workflow
 quarantine, the pinned target SHA and frozen target workflow tree,
-ruleset ID/version/bypass, a complete empty admitted-ref namespace,
-exact absence/readback of the canary, App slug/installation identity
-and Phil-only token audience. The potential DELETE must recheck
-current-default workflow semantics as independently accepted in #1953.
+ruleset ID/version/bypass, App slug/installation identity and Phil-only
+token audience. The namespace requirement is phase-specific:
 
-Commit an fsynced, nonsecret INTENT and bounded actual status/post-state
-before each write. A failed/ambiguous CREATE must never be retried
+- Before CREATE, require the admitted namespace to be completely empty
+  and the exact proposed canary to be absent.
+- Before DELETE, require the admitted namespace to contain only the
+  exact previously authorized canary at the independently established
+  expected frozen SHA. The DELETE path must recheck current-default
+  workflow semantics under the accepted #1953 contract.
+
+Commit a nonsecret, fsynced INTENT **before** each write. Record the
+bounded actual HTTP status and independently read post-state **after**
+the request; neither may be claimed until observed. A failed/ambiguous
+CREATE must never be retried
 without exact read-only reconciliation; an unexpected existing/foreign
 SHA is a STOP. A failed DELETE requires publisher-only recovery, not a
 maintainer PAT. A cancellation may prevent cleanup or artifact upload.
@@ -136,12 +143,18 @@ flags new runs by the independently confirmed publisher actor or the
 frozen target SHA. Ordinary unrelated main traffic is counted but
 does not automatically become a publisher-fanout claim.
 
-The comparator refuses to treat an observation made less than fifteen
-minutes after the end of the selected interval as complete. This is a
-conservative inspection interval, NOT a GitHub delivery-time guarantee.
+An observed candidate run demands immediate POTENTIAL_FANOUT_STOP_REVIEW,
+even before the window ends or during the fifteen-minute observation lag.
+The lag qualifies only an **absence** of candidates: an early empty
+census returns INCOMPLETE_OBSERVATION_RECHECK. This conservative
+inspection interval is NOT a GitHub delivery-time guarantee.
 A later comparison that finds no candidate runs still reports
 NO_CANDIDATE_RUNS_REVIEW_REQUIRED, with quarantine_certified=false.
-Any candidate result is a STOP for independent investigation.
+Every candidate result is a STOP for independent investigation.
+Imported before/after artifacts are checked against the same curated
+record/volume limits as freshly collected runs; retained run IDs must keep
+the same identity metadata, although status/conclusion may evolve.
+This validation does not establish custody or authenticate local files.
 
 Complete evidence requires original probe run ID, authenticated App
 principal, time-bounded before/after workflow-run IDs, observed events,
