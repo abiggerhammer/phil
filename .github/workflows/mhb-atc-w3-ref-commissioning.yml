@@ -2,6 +2,7 @@ name: MHB ATC W3 Protected Ref Trial (Manual, Source Disabled)
 
 # No automated event ever has worker/publisher credentials.
 # Source policy live_authorized=false; repo runtime variable is OFF by default.
+# Full trusted history is needed to prove frozen targets reachable via merged PR ancestry.
 on:
   workflow_dispatch:
     inputs:
@@ -59,7 +60,7 @@ jobs:
         uses: actions/checkout@v4
         with:
           ref: ${{ github.sha }}
-          fetch-depth: 3
+          fetch-depth: 0
           persist-credentials: false
 
       - name: Prepare a clean exact local main
@@ -128,7 +129,7 @@ jobs:
       - uses: actions/checkout@v4
         with:
           ref: ${{ github.sha }}
-          fetch-depth: 3
+          fetch-depth: 0
           persist-credentials: false
       - name: Prepare exact local main
         run: git switch -C main "$GITHUB_SHA"
@@ -168,7 +169,7 @@ jobs:
       - uses: actions/checkout@v4
         with:
           ref: ${{ github.sha }}
-          fetch-depth: 3
+          fetch-depth: 0
           persist-credentials: false
       - name: Prepare exact local main
         run: git switch -C main "$GITHUB_SHA"
@@ -285,7 +286,7 @@ jobs:
       - uses: actions/checkout@v4
         with:
           ref: ${{ github.sha }}
-          fetch-depth: 3
+          fetch-depth: 0
           persist-credentials: false
       - name: Prepare exact local main
         run: git switch -C main "$GITHUB_SHA"

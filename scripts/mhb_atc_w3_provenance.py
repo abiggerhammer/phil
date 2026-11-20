@@ -14,7 +14,7 @@ import subprocess
 
 REPO = "abiggerhammer/phil"
 WORKFLOW_PATH = ".github/workflows/mhb-atc-w3-ref-commissioning.yml"
-ORIGIN_SCHEMA = "MHB-ATC-W3-ORIGIN-V1"
+ORIGIN_SCHEMA = "MHB-ATC-W3-ORIGIN-V2"
 SHA = re.compile(r"[0-9a-f]{40}\Z")
 NONCE = re.compile(r"[0-9a-f]{12}\Z")
 MAX_BINDING_BYTES = 4096
@@ -43,29 +43,44 @@ def run_id(value):
 
 def snapshot_tree(repo_path: Path, head: str, parent: str, grandparent: str,
                   reviewed_tree: str) -> str:
-    """Check *all* possible target SHAs, never only the current checkout.
+    """Verify immutable pinned targets against trusted main history.
 
-    Because GitHub selects push workflows from the event commit, all three
-    Git object trees MUST equal the independently reviewed quarantine tree.
-    Any missing ancestor or changed workflow set is a STOP.
+    Targets need not be main's latest first-parent commits. They MUST form
+    their own exact first-parent chain, be reachable from checked-out main,
+    and individually select the independently reviewed workflow subtree.
+    This check never executes the pinned target source or mints credentials.
     """
     reviewed_tree = commit_sha(reviewed_tree)
     inspected = (head, parent, grandparent)
-    insist(len(set(inspected)) == 3, "target commit SHAs are not distinct")
+    insist(len(set(inspected)) == 3, "frozen target SHAs are not distinct")
     for revision in inspected:
         commit_sha(revision)
-        p = subprocess.run(
-            ["git", "rev-parse", "--verify",
-             revision + ":" + ".github/workflows"],
-            cwd=repo_path, capture_output=True, text=True, check=False,
-            timeout=20)
-        insist(p.returncode == 0 and
-               p.stdout.strip() == reviewed_tree,
-               "target commit workflow tree differs from reviewed quarantine")
+
+    def git(*args):
+        p = subprocess.run(["git", *args], cwd=repo_path,
+                           capture_output=True, text=True, check=False,
+                           timeout=20)
+        insist(p.returncode == 0, "frozen-target Git ancestry/tree query failed")
+        return p.stdout.strip()
+
+    insist(git("branch", "--show-current") == "main",
+           "frozen target check must run on trusted main")
+    git("rev-parse", "--verify", "HEAD")
+    # A merged PR's second-parent history is allowed, but an unmerged
+    # or foreign commit may not become a disposable protected-ref target.
+    git("merge-base", "--is-ancestor", head, "HEAD")
+    insist(git("rev-parse", "--verify", head + "^1") == parent and
+           git("rev-parse", "--verify", parent + "^1") == grandparent,
+           "frozen target first-parent ancestry differs from source policy")
+    for revision in inspected:
+        insist(git("rev-parse", "--verify",
+                   revision + ":.github/workflows") == reviewed_tree,
+               "frozen target workflow tree differs from reviewed quarantine")
     return reviewed_tree
 
 
-def make_binding(nonce, source, parent, grandparent, tree, attempt_run_id):
+def make_binding(nonce, dispatch, source, parent, grandparent, tree,
+                 attempt_run_id):
     insist(isinstance(nonce, str) and NONCE.fullmatch(nonce),
            "invalid origin nonce")
     head, first_parent, second_ancestor = (
@@ -82,6 +97,7 @@ def make_binding(nonce, source, parent, grandparent, tree, attempt_run_id):
         "run_attempt": 1,
         "run_id": run_id(attempt_run_id),
         "nonce": nonce,
+        "dispatch_sha": commit_sha(dispatch),
         "source_sha": head,
         "parent_sha": first_parent,
         "grandparent_sha": second_ancestor,
@@ -89,15 +105,16 @@ def make_binding(nonce, source, parent, grandparent, tree, attempt_run_id):
     }
 
 
-def validate_binding(doc, *, nonce, original_run_id, reviewed_tree):
+def validate_binding(doc, *, nonce, original_run_id, reviewed_tree,
+                     frozen_targets):
     """Canonical, finite, nonsecret binding; reject any unknown/extra fields."""
     insist(isinstance(doc, dict), "original run binding is not an object")
     expected_keys = set(make_binding(
-        "0"*12, "a"*40, "b"*40, "c"*40, "d"*40, 1))
+        "0"*12, "f"*40, "a"*40, "b"*40, "c"*40, "d"*40, 1))
     insist(set(doc) == expected_keys,
            "original run binding fields are not canonical")
     checked = make_binding(
-        doc.get("nonce"), doc.get("source_sha"),
+        doc.get("nonce"), doc.get("dispatch_sha"), doc.get("source_sha"),
         doc.get("parent_sha"), doc.get("grandparent_sha"),
         doc.get("workflow_tree_sha"), doc.get("run_id"))
     insist(doc == checked and
@@ -108,10 +125,16 @@ def validate_binding(doc, *, nonce, original_run_id, reviewed_tree):
            doc["run_id"] == run_id(original_run_id) and
            doc["workflow_tree_sha"] == commit_sha(reviewed_tree),
            "original run binding does not match reviewed activation")
+    insist(isinstance(frozen_targets, dict) and
+           set(frozen_targets) == {"source_sha", "parent_sha", "grandparent_sha"} and
+           all(doc[key] == commit_sha(frozen_targets[key])
+               for key in ("source_sha", "parent_sha", "grandparent_sha")),
+           "original binding frozen targets differ from reviewed source policy")
     return checked
 
 
-def read_binding(path, *, nonce, original_run_id, reviewed_tree):
+def read_binding(path, *, nonce, original_run_id, reviewed_tree,
+                 frozen_targets):
     path = Path(path)
     insist(path.is_file() and not path.is_symlink(),
            "missing or symlinked original run artifact")
@@ -131,15 +154,16 @@ def read_binding(path, *, nonce, original_run_id, reviewed_tree):
         raise ProvenanceError("invalid original run artifact") from exc
     return validate_binding(
         doc, nonce=nonce, original_run_id=original_run_id,
-        reviewed_tree=reviewed_tree)
+        reviewed_tree=reviewed_tree, frozen_targets=frozen_targets)
 
 
 def verify_origin(client, binding):
     """GET live GitHub provenance and each target commit's workflow tree.
 
     A self-asserted artifact is never sufficient: it must belong to the exact
-    owner-triggered, first-attempt W3 workflow run whose head GitHub attests,
-    and the GitHub commit graph must reproduce its original three SHAs.
+    owner-triggered, first-attempt W3 workflow run whose DISPATCH head GitHub
+    attests. The three separate, source-pinned ref targets must reproduce
+    their reviewed first-parent links and workflow-tree identities.
     """
     def get(endpoint):
         reply = client.request("GET", endpoint)
@@ -152,7 +176,7 @@ def verify_origin(client, binding):
            origin.get("event") == "workflow_dispatch" and
            origin.get("path") == WORKFLOW_PATH and
            origin.get("head_branch") == "main" and
-           origin.get("head_sha") == binding["source_sha"] and
+           origin.get("head_sha") == binding["dispatch_sha"] and
            type(origin.get("run_attempt")) is int and
            origin["run_attempt"] == 1 and
            isinstance(origin.get("actor"), dict) and

@@ -14,7 +14,7 @@ from pathlib import Path
 import re
 import tempfile
 
-SCHEMA = "MHB-ATC-W3-PARTIAL-EVIDENCE-V1"
+SCHEMA = "MHB-ATC-W3-PARTIAL-EVIDENCE-V2"
 SHA = re.compile(r"[0-9a-f]{40}\Z")
 NONCE = re.compile(r"[0-9a-f]{12}\Z")
 REF = re.compile(r"refs/heads/hamster/admitted/w3-([0-9a-f]{12})-(canary|create|seed)\Z")
@@ -49,7 +49,7 @@ def bounded_sha(value):
 class EvidenceLedger:
     def __init__(self, path, *, phase, nonce, run_id, source_sha,
                  parent_sha, grandparent_sha, workflow_tree_sha,
-                 app_id, installation_id):
+                 app_id, installation_id, dispatch_sha=None):
         path = Path(path)
         temp = Path(os.environ.get("RUNNER_TEMP", "/nonexistent"))
         check(path.name == "w3-evidence.json" and path.parent == temp and
@@ -75,6 +75,8 @@ class EvidenceLedger:
             "decision": "INCOMPLETE_NOT_COMMISSIONED",
             "run_id": run_id,
             "nonce": nonce,
+            "dispatch_sha": bounded_sha(
+                source_sha if dispatch_sha is None else dispatch_sha),
             "source_sha": bounded_sha(source_sha),
             "parent_sha": bounded_sha(parent_sha),
             "grandparent_sha": bounded_sha(grandparent_sha),

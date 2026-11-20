@@ -77,12 +77,30 @@ def read(path):
     return json.loads(data)
 
 
+def frozen_targets(trial):
+    """An exact, reviewed three-commit first-parent chain, never a moving window."""
+    selected = trial.get("frozen_target_commits")
+    if selected is None:
+        return None
+    require(type(selected) is dict and
+            set(selected) == {"source_sha", "parent_sha", "grandparent_sha"} and
+            all(isinstance(selected[name], str) and
+                SHA.fullmatch(selected[name])
+                for name in ("source_sha", "parent_sha", "grandparent_sha")) and
+            len(set(selected.values())) == 3,
+            "invalid or ambiguous source-pinned W3 frozen target commits")
+    return (selected["source_sha"], selected["parent_sha"],
+            selected["grandparent_sha"])
+
+
 def policy_check(*, live: bool, nonce=None, recovery=False):
     trial = read(".github/atc-w3-ref-trial.json")
     worker = read(".github/atc-worker-policy.json")
     lanes = read(".github/atc-worker-lanes.json")
     publisher = read(".github/atc-publisher-policy.json")
-    require(trial.get("schema") == "MHB-ATC-W3-REF-TRIAL-V1" and
+    selected = frozen_targets(trial)
+    require(trial.get("schema") == "MHB-ATC-W3-REF-TRIAL-V2" and
+            trial.get("revision") == 2 and and
             trial.get("repository") == REPO and
             trial.get("worker_app_id") == WORKER_ID and
             trial.get("publisher_app_id") == PUBLISHER_ID and
@@ -113,6 +131,8 @@ def policy_check(*, live: bool, nonce=None, recovery=False):
                 "W3 live trials explicitly DISABLED in reviewed source")
         require(trial.get("push_ci_quarantine_verified") is True,
                 "W3 publisher-created ref push CI quarantine NOT reviewed")
+        require(selected is not None,
+                "W3 frozen target commits are not source-pinned")
         require(isinstance(trial.get("reviewed_quarantine_tree_sha"), str) and
                 SHA.fullmatch(trial["reviewed_quarantine_tree_sha"]),
                 "no source-reviewed quarantine workflow tree SHA")
@@ -266,11 +286,14 @@ class Client:
 
 class Trial:
     def __init__(self, client, nonce, current, parent, grandparent,
-                 publisher, evidence=None):
+                 publisher, evidence=None, *, dispatch_sha=None):
         self.client = client
         self.refs = names(nonce)
         self.current, self.parent, self.grandparent = (
             sha(current), sha(parent), sha(grandparent))
+        # 'current' is the frozen CREATE/UPDATE target, not moving main.
+        self.dispatch_sha = sha(dispatch_sha if dispatch_sha is not None
+                                else current)
         self.publisher = publisher
         self.receipts = []
         self.evidence = evidence
@@ -307,7 +330,7 @@ class Trial:
         live = doc.get("object", {}).get("sha")
         sha(live)
         if not allow_drift:
-            require(live == self.current,
+            require(live == self.dispatch_sha,
                     "main moved since trusted workflow dispatch")
         return live
 
@@ -388,7 +411,8 @@ class Trial:
             "schema": "MHB-ATC-W3-REF-TRIAL-RECEIPT-V1",
             "phase": phase, "decision": decision,
             "run_id": os.getenv("GITHUB_RUN_ID", "offline-fixture"),
-            "trusted_sha": self.current,
+            "trusted_sha": self.dispatch_sha,
+            "frozen_target_source_sha": self.current,
             "nonce": self.refs["create"].split("-")[-2],
             "source_live_activation_required": True,
             "worker_app_id": WORKER_ID, "publisher_app_id": PUBLISHER_ID,
@@ -618,7 +642,7 @@ def _write_origin_artifact(binding):
     return path
 
 
-def _verified_recovery_origin(nonce, reviewed_tree):
+def _verified_recovery_origin(nonce, reviewed_tree, frozen):
     """Owner default token, actions:read + contents:read; no App credentials."""
     source_id = os.environ.get("W3_ORIGIN_RUN_ID", "")
     require(isinstance(source_id, str) and
@@ -632,7 +656,9 @@ def _verified_recovery_origin(nonce, reviewed_tree):
             "downloaded original W3 binding is absent")
     original = read_binding(
         path, nonce=nonce, original_run_id=origin_run_id,
-        reviewed_tree=reviewed_tree)
+        reviewed_tree=reviewed_tree,
+        frozen_targets=dict(zip(("source_sha", "parent_sha",
+                                  "grandparent_sha"), frozen)))
     reader = os.environ.get("GITHUB_TOKEN")
     require(isinstance(reader, str) and len(reader) > 8,
             "authenticated read-only GitHub Actions token required")
@@ -655,26 +681,31 @@ def cli():
     live = args.phase not in ("plan",) or args.authorize_live
     recovery = args.phase in ("publisher-cleanup", "recovery-plan")
     publisher = policy_check(live=live, nonce=args.nonce, recovery=recovery)
-    local_current, local_parent, local_grandparent = local_commits()
+    dispatch_sha, local_parent, local_grandparent = local_commits()
     trial_cfg = read(".github/atc-w3-ref-trial.json")
     reviewed_tree = trial_cfg.get("reviewed_quarantine_tree_sha")
+    frozen = frozen_targets(trial_cfg)
 
     independent_recovery = bool(os.environ.get("W3_ORIGIN_RUN_ID"))
     if args.phase == "recovery-plan":
         require(independent_recovery,
                 "recovery-plan must use authenticated original run artifact")
     if independent_recovery:
-        require(args.phase in ("recovery-plan", "publisher-cleanup"),
-                "original-run input only permitted for publisher recovery")
-        binding = _verified_recovery_origin(args.nonce, reviewed_tree)
+        require(args.phase in ("recovery-plan", "publisher-cleanup") and
+                frozen is not None,
+                "original-run recovery requires reviewed frozen targets")
+        binding = _verified_recovery_origin(args.nonce, reviewed_tree, frozen)
         current, parent, grandparent = (
             binding["source_sha"], binding["parent_sha"],
             binding["grandparent_sha"])
     else:
         current, parent, grandparent = (
-            local_current, local_parent, local_grandparent)
-        if live:
+            frozen if frozen is not None else
+            (dispatch_sha, local_parent, local_grandparent))
+        if frozen is not None:
             snapshot_tree(ROOT, current, parent, grandparent, reviewed_tree)
+        elif live:
+            raise StopTrial("live W3 requires reviewed frozen target commits")
 
     protected_token = args.phase in (
         "publisher-seed", "worker-negative", "publisher-cleanup")
@@ -712,13 +743,13 @@ def cli():
             Path(os.environ.get("RUNNER_TEMP", "/nonexistent")) / "w3-evidence.json",
             phase=args.phase, nonce=args.nonce, run_id=int(run_id),
             source_sha=current, parent_sha=parent,
-            grandparent_sha=grandparent,
+            grandparent_sha=grandparent, dispatch_sha=dispatch_sha,
             workflow_tree_sha=reviewed_tree,
             app_id=WORKER_ID if args.phase == "worker-negative" else PUBLISHER_ID,
             installation_id=installation_id)
 
     run = Trial(client, args.nonce, current, parent, grandparent,
-                publisher, evidence=evidence)
+                publisher, evidence=evidence, dispatch_sha=dispatch_sha)
     try:
         if protected_token:
             run.token_audience()
@@ -732,7 +763,7 @@ def cli():
             # complete before uploading the immutable nonsecret run binding.
             run.gate([])
             binding = make_binding(
-                args.nonce, current, parent, grandparent,
+                args.nonce, dispatch_sha, current, parent, grandparent,
                 reviewed_tree, int(os.environ.get("GITHUB_RUN_ID", "0")))
             verify_origin(client, binding)
             _write_origin_artifact(binding)
