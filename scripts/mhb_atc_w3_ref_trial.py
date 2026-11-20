@@ -19,6 +19,10 @@ from urllib import error, request
 
 from mhb_atc_immutable import check_ruleset
 from mhb_atc_w3_readiness import refs_from_api
+from mhb_atc_w3_provenance import (
+    commit_sha, make_binding, read_binding, snapshot_tree, verify_origin,
+)
+from mhb_atc_w3_evidence import EvidenceLedger
 
 ROOT = Path(__file__).resolve().parents[1]
 REPO = "abiggerhammer/phil"
@@ -79,6 +83,9 @@ def policy_check(*, live: bool, nonce=None, recovery=False):
             trial.get("publisher_app_id") == PUBLISHER_ID and
             trial.get("ruleset_id") == RULESET_ID and
             type(trial.get("live_authorized")) is bool and
+            (trial.get("reviewed_quarantine_tree_sha") is None or
+             (isinstance(trial["reviewed_quarantine_tree_sha"], str) and
+              SHA.fullmatch(trial["reviewed_quarantine_tree_sha"]))) and
             trial.get("scope") ==
             "Four disposable protected-ref negative cases only; no PR tests" and
             (trial.get("approved_nonce") is None or
@@ -100,6 +107,9 @@ def policy_check(*, live: bool, nonce=None, recovery=False):
                 "W3 live trials explicitly DISABLED in reviewed source")
         require(trial.get("push_ci_quarantine_verified") is True,
                 "W3 publisher-created ref push CI quarantine NOT reviewed")
+        require(isinstance(trial.get("reviewed_quarantine_tree_sha"), str) and
+                SHA.fullmatch(trial["reviewed_quarantine_tree_sha"]),
+                "no source-reviewed quarantine workflow tree SHA")
         require(isinstance(nonce, str) and
                 trial.get("approved_nonce") == nonce and
                 NONCE.fullmatch(nonce),
@@ -243,13 +253,21 @@ class Client:
 
 
 class Trial:
-    def __init__(self, client, nonce, current, parent, grandparent, publisher):
+    def __init__(self, client, nonce, current, parent, grandparent,
+                 publisher, evidence=None):
         self.client = client
         self.refs = names(nonce)
         self.current, self.parent, self.grandparent = (
             sha(current), sha(parent), sha(grandparent))
         self.publisher = publisher
         self.receipts = []
+        self.evidence = evidence
+        self.last_denial_diagnostic = None
+
+    def audit(self, operation, stage, **fields):
+        if self.evidence is not None:
+            return self.evidence.event(operation, stage, **fields)
+        return None
 
     def get(self, endpoint):
         answer = self.client.request("GET", endpoint)
@@ -379,6 +397,7 @@ class Trial:
             "Repository rule violations found for ",
         )
         accepted = False
+        self.last_denial_diagnostic = None
         for diagnostic in diagnostics:
             if diagnostic == "Validation Failed":
                 # GitHub can wrap an exact per-error ruleset diagnostic in a
@@ -394,6 +413,7 @@ class Trial:
             if named_ref != expected:
                 raise StopTrial("ruleset diagnostic names wrong or ambiguous ref")
             accepted = True
+            self.last_denial_diagnostic = diagnostic
         if not accepted:
             raise StopTrial("HTTP error was not exact-ref ruleset denial")
         return "RULESET_DENIED"
