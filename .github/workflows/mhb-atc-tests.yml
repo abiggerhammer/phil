@@ -29,9 +29,11 @@ on:
       - 'scripts/mhb_atc_worker_broker.py'
       - 'scripts/test_mhb_atc_worker_broker.py'
       - 'scripts/test_mhb_atc_staged_push_ci.py'
+      - 'scripts/test_mhb_atc_privileged_pr_ci.py'
       # Recheck EVERY workflow change; a future unbounded push must fail.
       - '.github/workflows/**'
       - 'docs/phase-2/mhb-atc-worker-broker.md'
+      - 'docs/phase-2/mhb-atc-privileged-pr-ci.md'
       - 'scripts/test_mhb_atc_worker_preflight.py'
       - 'docs/phase-2/mhb-atc-worker-app.md'
       - '.github/workflows/mhb-atc-stage.yml'
@@ -66,9 +68,11 @@ on:
       - 'scripts/mhb_atc_worker_broker.py'
       - 'scripts/test_mhb_atc_worker_broker.py'
       - 'scripts/test_mhb_atc_staged_push_ci.py'
+      - 'scripts/test_mhb_atc_privileged_pr_ci.py'
       # Recheck EVERY workflow change; a future unbounded push must fail.
       - '.github/workflows/**'
       - 'docs/phase-2/mhb-atc-worker-broker.md'
+      - 'docs/phase-2/mhb-atc-privileged-pr-ci.md'
       - 'scripts/test_mhb_atc_worker_preflight.py'
       - 'docs/phase-2/mhb-atc-worker-app.md'
       - '.github/workflows/mhb-atc-stage.yml'
@@ -90,7 +94,7 @@ jobs:
         with:
           persist-credentials: false
       - name: Syntax
-        run: python3 -m py_compile scripts/mhb_atc.py scripts/test_mhb_atc.py scripts/mhb_atc_stage.py scripts/test_mhb_atc_stage.py scripts/mhb_atc_admit.py scripts/test_mhb_atc_admit.py scripts/mhb_atc_immutable.py scripts/test_mhb_atc_immutable.py scripts/mhb_atc_inventory.py scripts/test_mhb_atc_inventory.py scripts/test_mhb_atc_auto_config.py scripts/test_mhb_atc_worker_preflight.py scripts/mhb_atc_worker_broker.py scripts/test_mhb_atc_worker_broker.py scripts/test_mhb_atc_staged_push_ci.py scripts/mhb_atc_reconcile.py scripts/test_mhb_atc_reconcile.py
+        run: python3 -m py_compile scripts/mhb_atc.py scripts/test_mhb_atc.py scripts/mhb_atc_stage.py scripts/test_mhb_atc_stage.py scripts/mhb_atc_admit.py scripts/test_mhb_atc_admit.py scripts/mhb_atc_immutable.py scripts/test_mhb_atc_immutable.py scripts/mhb_atc_inventory.py scripts/test_mhb_atc_inventory.py scripts/test_mhb_atc_auto_config.py scripts/test_mhb_atc_worker_preflight.py scripts/mhb_atc_worker_broker.py scripts/test_mhb_atc_worker_broker.py scripts/test_mhb_atc_staged_push_ci.py scripts/test_mhb_atc_privileged_pr_ci.py scripts/mhb_atc_reconcile.py scripts/test_mhb_atc_reconcile.py
       - name: Offline radar and admission-policy tests
         run: python3 scripts/test_mhb_atc.py
       - name: Offline durable staging-intent tests
@@ -109,6 +113,8 @@ jobs:
             --only-binary=:all: 'PyYAML==6.0.3'
       - name: G1 staged-push CI namespace and historical workflow-tree isolation
         run: python3 scripts/test_mhb_atc_staged_push_ci.py
+      - name: G2 privileged PR environment, token and controller isolation
+        run: python3 scripts/test_mhb_atc_privileged_pr_ci.py
       - name: Immutable publisher, ruleset and receipt negative replay tests
         run: python3 scripts/test_mhb_atc_immutable.py
       - name: Full protected-ref census and authenticated history replays
