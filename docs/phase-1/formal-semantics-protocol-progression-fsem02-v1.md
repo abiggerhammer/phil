@@ -120,3 +120,7 @@ claim-guard, branch protections and all applicable CI.
 ### Two-sided local / synchronous joint Ping seam (FSEM-02)
 
 [Paired local-to-joint source correspondence and conditional Rocq composition](formal-semantics-paired-local-joint-bridge-fsem02-v1.md) adds exact native equality of the complete source-checked Client/Server local progression pair and the production synchronous joint Ping successor, including a live affine-loan frame. Either missing predecessor refuses without any paired successor, and an independently checked minimally changed source Close still rejects with its exact binder class. The Rocq theorem composes **both** local `SessionStep` transitions with restricted ownership movement from `ConcurrencySemantics`, only given a separate `RendezvousValid` premise. This is a bounded source witness / conditional model bridge, not universal native-to-Rocq refinement or new root/disposal authority.
+
+### Paired local Choice and joint source correspondence (FSEM-02)
+
+[Independently checked Select/Offer local state versus exact joint rendezvous context](formal-semantics-paired-choice-joint-bridge-fsem02-v1.md) — bounded Go/Cancel native equality, stale and wrong-peer negatives, conditional Rocq paired choice and separately required rendezvous ownership premises. Non-normative; no universal Haskell/Rocq refinement.
