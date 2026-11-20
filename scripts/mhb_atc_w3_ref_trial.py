@@ -68,7 +68,7 @@ def read(path):
     return json.loads(data)
 
 
-def policy_check(*, live: bool):
+def policy_check(*, live: bool, nonce=None):
     trial = read(".github/atc-w3-ref-trial.json")
     worker = read(".github/atc-worker-policy.json")
     lanes = read(".github/atc-worker-lanes.json")
@@ -80,11 +80,18 @@ def policy_check(*, live: bool):
             trial.get("ruleset_id") == RULESET_ID and
             type(trial.get("live_authorized")) is bool and
             trial.get("scope") ==
-            "Four disposable protected-ref negative cases only; no PR tests",
+            "Four disposable protected-ref negative cases only; no PR tests" and
+            (trial.get("approved_nonce") is None or
+             (isinstance(trial.get("approved_nonce"), str) and
+              NONCE.fullmatch(trial["approved_nonce"]))),
             "unreviewed W3 source-policy configuration")
     if live:
         require(trial["live_authorized"] is True,
                 "W3 live trials explicitly DISABLED in reviewed source")
+        require(isinstance(nonce, str) and
+                trial.get("approved_nonce") == nonce and
+                NONCE.fullmatch(nonce),
+                "current nonce is not source-pinned for single reviewed trial")
         require(os.getenv("MHB_ATC_W3_REF_TRIAL_ENABLED") == "true",
                 "W3 live trials require separately enabled exact repo switch")
         require(os.getenv("W3_CONFIRM") == "AUTHORIZE_W3_PROTECTED_REFS_ONLY",
@@ -394,7 +401,7 @@ def cli():
     require(not args.authorize_live or args.phase == "plan",
             "authorize-live only applies to read-only prepare")
     live = args.phase != "plan" or args.authorize_live
-    publisher = policy_check(live=live)
+    publisher = policy_check(live=live, nonce=args.nonce)
     current, parent, grandparent = local_commits()
     token = os.getenv("W3_APP_TOKEN") if live else os.getenv("GITHUB_TOKEN")
     if live:
