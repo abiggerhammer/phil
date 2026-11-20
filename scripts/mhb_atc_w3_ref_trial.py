@@ -68,7 +68,7 @@ def read(path):
     return json.loads(data)
 
 
-def policy_check(*, live: bool, nonce=None):
+def policy_check(*, live: bool, nonce=None, recovery=False):
     trial = read(".github/atc-w3-ref-trial.json")
     worker = read(".github/atc-worker-policy.json")
     lanes = read(".github/atc-worker-lanes.json")
@@ -86,13 +86,16 @@ def policy_check(*, live: bool, nonce=None):
               NONCE.fullmatch(trial["approved_nonce"]))),
             "unreviewed W3 source-policy configuration")
     if live:
-        # This diagnostic cannot share authority with active W2/admission.
-        for name in ("MHB_ATC_WORKER_BROKER_ENABLED",
-                     "MHB_ATC_IMMUTABLE_HEADS_ENABLED",
-                     "MHB_ATC_AUTO_ADMIT_ENABLED",
-                     "MHB_ATC_PHASE2_STAGE_BRIDGE_ENABLED"):
-            require(os.getenv(name, "").lower() != "true",
-                    "other ATC activation switches must remain OFF")
+        # Never let a repository variable being switched OFF after seed
+        # strand a protected ref: publisher cleanup remains authorized by
+        # the exact reviewed source policy and the original manual run.
+        if not recovery:
+            for name in ("MHB_ATC_WORKER_BROKER_ENABLED",
+                         "MHB_ATC_IMMUTABLE_HEADS_ENABLED",
+                         "MHB_ATC_AUTO_ADMIT_ENABLED",
+                         "MHB_ATC_PHASE2_STAGE_BRIDGE_ENABLED"):
+                require(os.getenv(name, "").lower() != "true",
+                        "other ATC activation switches must remain OFF")
         require(trial["live_authorized"] is True,
                 "W3 live trials explicitly DISABLED in reviewed source")
         require(trial.get("push_ci_quarantine_verified") is True,
@@ -101,8 +104,9 @@ def policy_check(*, live: bool, nonce=None):
                 trial.get("approved_nonce") == nonce and
                 NONCE.fullmatch(nonce),
                 "current nonce is not source-pinned for single reviewed trial")
-        require(os.getenv("MHB_ATC_W3_REF_TRIAL_ENABLED") == "true",
-                "W3 live trials require separately enabled exact repo switch")
+        if not recovery:
+            require(os.getenv("MHB_ATC_W3_REF_TRIAL_ENABLED") == "true",
+                    "W3 live trials require separately enabled exact repo switch")
         require(os.getenv("W3_CONFIRM") == "AUTHORIZE_W3_PROTECTED_REFS_ONLY",
                 "explicit bounded owner confirmation missing")
         require(os.getenv("GITHUB_ACTIONS") == "true" and
@@ -412,7 +416,9 @@ def cli():
     require(not args.authorize_live or args.phase == "plan",
             "authorize-live only applies to read-only prepare")
     live = args.phase != "plan" or args.authorize_live
-    publisher = policy_check(live=live, nonce=args.nonce)
+    publisher = policy_check(
+        live=live, nonce=args.nonce,
+        recovery=(args.phase == "publisher-cleanup"))
     current, parent, grandparent = local_commits()
     token = os.getenv("W3_APP_TOKEN") if live else os.getenv("GITHUB_TOKEN")
     if live:
