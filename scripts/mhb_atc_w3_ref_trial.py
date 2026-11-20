@@ -369,21 +369,31 @@ class Trial:
             raise StopTrial("malformed GitHub denial errors")
         diagnostics = ([message] if isinstance(message, str) else [])
         diagnostics.extend(item["message"] for item in errors)
-        # Extract the WHOLE ref token rather than accepting the prefix of
-        # -create-other, a case-mismatched ref, or a reference in another
-        # field that merely says "invalid SHA".
-        token_pattern = r"(?<![A-Za-z0-9._/-])refs/heads/[^\s'\"\x60,;()<>\[\]{}]+"
+        # Supported diagnostics put the full ref at the END of the message.
+        # Do not tokenize on punctuation: commas, semicolons, parentheses,
+        # braces, and quotes can all be legal Git ref-name characters.
+        # Any trailing characters become part of the captured ref, which
+        # must match the expected spelling byte-for-byte.
+        prefixes = (
+            "GH013: Repository rule violations found for ",
+            "Repository rule violations found for ",
+        )
         accepted = False
         for diagnostic in diagnostics:
-            rule_error = ("repository rule" in diagnostic.lower() or
-                          "gh013" in diagnostic.lower())
-            if not rule_error:
+            if diagnostic == "Validation Failed":
+                # GitHub can wrap an exact per-error ruleset diagnostic in a
+                # generic top-level validation message. Neither field alone
+                # constitutes a valid denial.
                 continue
-            references = re.findall(token_pattern, diagnostic)
-            if references and (len(references) != 1 or references[0] != expected):
+            prefix = next((p for p in prefixes if diagnostic.startswith(p)), None)
+            if prefix is None:
+                # Unknown formats, including a GH013 report with an
+                # unreviewed layout, are not evidence of an exact-ref denial.
+                raise StopTrial("unsupported or ambiguous ruleset denial diagnostic")
+            named_ref = diagnostic[len(prefix):]
+            if named_ref != expected:
                 raise StopTrial("ruleset diagnostic names wrong or ambiguous ref")
-            if references == [expected]:
-                accepted = True
+            accepted = True
         if not accepted:
             raise StopTrial("HTTP error was not exact-ref ruleset denial")
         return "RULESET_DENIED"
