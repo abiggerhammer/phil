@@ -87,13 +87,15 @@ Proof.
       phase1_surface_impl_absent_requirements_record),
     (Phase1RecursiveGroupingImplementationRecordDeclaration
       phase1_surface_impl_present_empty_requirements_record).
-  repeat split.
+  split.
   - exact phase1_surface_accepted_key_absent_requirements_stable.
-  - exact phase1_surface_accepted_key_present_empty_requirements_stable.
-  - exact phase1_surface_recursive_grouping_observation_absent_empty_collapse.
-  - intro Hkey.
-    apply phase1_surface_impl_absent_and_present_empty_are_distinct.
-    exact (f_equal phase1_declaration_spine_selected_tree Hkey).
+  - split.
+    + exact phase1_surface_accepted_key_present_empty_requirements_stable.
+    + split.
+      * exact phase1_surface_recursive_grouping_observation_absent_empty_collapse.
+      * intro Hkey.
+        apply phase1_surface_impl_absent_and_present_empty_are_distinct.
+        exact (f_equal phase1_declaration_spine_selected_tree Hkey).
 Qed.
 
 Example phase1_surface_observation_separation_wrong_tag_rejected :
