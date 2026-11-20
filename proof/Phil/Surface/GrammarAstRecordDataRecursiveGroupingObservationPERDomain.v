@@ -3,6 +3,7 @@ From Stdlib Require Import Strings.String.
 From Phil.Surface Require Import
   GrammarDerivation
   GrammarAstTopLevelSpine
+  GrammarAstRecordDataRecursiveGroupingImplementationRepresentation
   GrammarAstRecordDataRecursiveGroupingTaggedAdmission
   GrammarAstRecordDataRecursiveGroupingDerivedObservables
   GrammarAstRecordDataRecursiveGroupingObservationPER.
