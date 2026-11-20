@@ -55,16 +55,17 @@ class Fake:
             records[(page-1)*mod.PAGE_SIZE:page*mod.PAGE_SIZE])})
 
 
-def capture(fake,role="before",observed="2026-11-20T15:02:00Z"):
-    return mod.collect(fake,role=role,nonce=NONCE,
+def capture(fake,role="before",observed="2026-11-20T15:02:00Z",*,nonce=NONCE):
+    return mod.collect(fake,role=role,nonce=nonce,
         window_start=START,window_end=END,observed_at=observed)
 
 
 class FanoutObserverTests(unittest.TestCase):
-    def test_policy_disabled_and_exact_canary_shape(self):
+    def test_policy_activation_pairing_and_exact_canary_shape(self):
         p=mod.reviewed_policy()
-        self.assertIs(p["source_authorized"],False)
-        self.assertIsNone(p["approved_nonce"])
+        # The same read-only observer must work with dormant and separately
+        # reviewed active source; activation itself belongs to the writer.
+        self.assertIs(p["source_authorized"],p["approved_nonce"] is not None)
         self.assertEqual(p["publisher_app_id"],5782193)
         self.assertEqual(p["frozen_target_sha"],TARGET)
         self.assertEqual(p["max_authorized_ref_mutations"],2)
@@ -130,11 +131,12 @@ class FanoutObserverTests(unittest.TestCase):
 
     def test_real_compare_cli_immediately_stops_on_early_positive_evidence(self):
         # Astra's exact path: main() -> CLI -> artifact reader -> comparator.
-        ref=mod.nonce_ref(NONCE).removeprefix("refs/heads/")
-        before=capture(Fake())
+        cli_nonce=mod.reviewed_policy()["approved_nonce"] or NONCE
+        ref=mod.nonce_ref(cli_nonce).removeprefix("refs/heads/")
+        before=capture(Fake(),nonce=cli_nonce)
         after=capture(Fake({"push":[run(
             7,branch=ref,sha=TARGET,actor=BOT)]}),
-            "after","2026-11-20T15:21:00Z")
+            "after","2026-11-20T15:21:00Z",nonce=cli_nonce)
         with tempfile.TemporaryDirectory() as td:
             before_path=Path(td)/"before.json"
             after_path=Path(td)/"after.json"
@@ -155,6 +157,30 @@ class FanoutObserverTests(unittest.TestCase):
             self.assertEqual(result["decision"],"POTENTIAL_FANOUT_STOP_REVIEW")
             self.assertFalse(result["execution_authorized"])
             self.assertFalse(result["quarantine_certified"])
+
+    def test_compare_cli_rejects_wrong_nonce_under_active_policy(self):
+        # A positive census cannot be compared under a different approved
+        # experiment nonce, even if imported files are otherwise well-formed.
+        before=capture(Fake())
+        after=capture(Fake(),"after","2026-11-20T15:40:00Z")
+        with tempfile.TemporaryDirectory() as td:
+            before_path=Path(td)/"before.json"
+            after_path=Path(td)/"after.json"
+            mod.save(before_path,before)
+            mod.save(after_path,after)
+            argv=["mhb_atc_w3_fanout_observer.py","compare",
+                  "--before-file",str(before_path),
+                  "--after-file",str(after_path),
+                  "--target-sha",TARGET,
+                  "--publisher-actor",BOT]
+            active=dict(mod.reviewed_policy(),source_authorized=True,
+                        approved_nonce="000000000000")
+            self.assertNotEqual(active["approved_nonce"],NONCE)
+            stdout=io.StringIO()
+            with patch.object(mod,"reviewed_policy",return_value=active),\
+                 patch.object(sys,"argv",argv),redirect_stdout(stdout):
+                self.assertEqual(mod.main(),2)
+            self.assertEqual(stdout.getvalue(),"")
 
     def test_retained_run_identity_is_stable_but_status_may_progress(self):
         before=capture(Fake({"push":[run(9)]}))

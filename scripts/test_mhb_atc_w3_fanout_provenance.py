@@ -57,7 +57,10 @@ def initialized_repo(root):
     cmd("config","user.email","fanout@example.invalid")
     path=root/POLICY_PATH
     path.parent.mkdir(parents=True)
-    original=current_policy(ROOT)
+    # Always construct an explicit OFF-after-original fixture, even when
+    # the source checkout itself is an active activation candidate.
+    original=dict(current_policy(ROOT),source_authorized=False,
+                  approved_nonce=None)
     active=dict(original,source_authorized=True,approved_nonce=NONCE)
     policy_check(active,nonce=NONCE,require_active=True)
     path.write_text(json.dumps(active))
@@ -119,7 +122,8 @@ class FanoutProvenanceTests(unittest.TestCase):
             with patch.dict(os.environ,{"GITHUB_SHA":git(root,"rev-parse","HEAD")}):
                 self.assertEqual(trusted_checkout(root),git(root,"rev-parse","HEAD"))
             fake=FakeActions(original)
-            current=current_policy(ROOT)
+            current=dict(current_policy(ROOT),source_authorized=False,
+                         approved_nonce=None)
             self.assertFalse(current["source_authorized"])
             self.assertEqual(verify_original(fake,root,doc,current),doc)
             self.assertEqual(fake.calls,[("GET","/actions/runs/"+str(RUN))])
@@ -159,7 +163,10 @@ class FanoutProvenanceTests(unittest.TestCase):
             doc=make_binding(NONCE,disabled,RUN,policy_blob(root,disabled))
             fake=FakeActions(disabled)
             with self.assertRaisesRegex(FanoutStop,"activation/nonce"):
-                verify_original(fake,root,doc,current_policy(ROOT))
+                verify_original(fake,root,doc,
+                                dict(current_policy(ROOT),
+                                     source_authorized=False,
+                                     approved_nonce=None))
 
 
 if __name__=="__main__":
