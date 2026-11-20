@@ -121,14 +121,15 @@ jobs:
             proof/Phil/Surface/GrammarAstRecordDataRecursiveGroupingObservationSeparation.vo \
             proof/Phil/Surface/GrammarAstRecordDataRecursiveGroupingDerivedObservationDisjointness.vo \
             proof/Phil/Surface/GrammarAstRecordDataRecursiveGroupingObservationPER.vo \
-            proof/Phil/Surface/GrammarAstRecordDataRecursiveGroupingObservationPERDomain.vo
+            proof/Phil/Surface/GrammarAstRecordDataRecursiveGroupingObservationPERDomain.vo \
+            proof/Phil/Surface/GrammarAstRecordDataRecursiveGroupingObservationAdmittedQuotient.vo
 
       - name: Compile new generic-requirement modules with all warnings enabled
         shell: bash
         run: |
           set -euo pipefail
           export PATH="/home/rocq/.opam/${COMPILER}/bin:$PATH"
-          for module in GrammarAstGenericRequirementRecursiveGroupingSpine GrammarAstGenericRequirementRecursiveGroupingSpineTotality GrammarAstGenericRequirementRecursiveGroupingExamples GrammarAstGenericRequirementsRecursiveGroupingSpine GrammarAstGenericRequirementsRecursiveGroupingSpineTotality GrammarAstGenericRequirementsRecursiveGroupingExamples GrammarAstRecordDataGenericRequirementRecursiveGroupingSpine GrammarAstRecordDataGenericRequirementRecursiveGroupingTotality GrammarAstRecordDataGenericRequirementRecursiveGroupingExamples GrammarAstRecordDataRecursiveGroupingImplementationRepresentation GrammarAstRecordDataRecursiveGroupingImplementationRepresentationExtraction GrammarAstRecordDataRecursiveGroupingImplementationAdmissionExamples GrammarAstRecordDataRecursiveGroupingTaggedAdmission GrammarAstRecordDataRecursiveGroupingTaggedAdmissionInjectivity GrammarAstRecordDataRecursiveGroupingTaggedAdmissionStability GrammarAstRecordDataRecursiveGroupingTaggedAdmissionSeparation GrammarAstRecordDataRecursiveGroupingTaggedAdmissionCanonicalExclusion GrammarAstRecordDataRecursiveGroupingCertifiedTagExactness GrammarAstRecordDataRecursiveGroupingCertifiedAdmissionFibers GrammarAstRecordDataRecursiveGroupingCertifiedFiberEquality GrammarAstRecordDataRecursiveGroupingCertifiedRootKeyEquality GrammarAstRecordDataRecursiveGroupingAcceptedKeyExtensionality GrammarAstRecordDataRecursiveGroupingAdmissionImageFibers GrammarAstRecordDataRecursiveGroupingProductionObservables GrammarAstRecordDataRecursiveGroupingDerivedObservables GrammarAstRecordDataRecursiveGroupingObservationSeparation GrammarAstRecordDataRecursiveGroupingDerivedObservationDisjointness GrammarAstRecordDataRecursiveGroupingObservationPER GrammarAstRecordDataRecursiveGroupingObservationPERDomain; do
+          for module in GrammarAstGenericRequirementRecursiveGroupingSpine GrammarAstGenericRequirementRecursiveGroupingSpineTotality GrammarAstGenericRequirementRecursiveGroupingExamples GrammarAstGenericRequirementsRecursiveGroupingSpine GrammarAstGenericRequirementsRecursiveGroupingSpineTotality GrammarAstGenericRequirementsRecursiveGroupingExamples GrammarAstRecordDataGenericRequirementRecursiveGroupingSpine GrammarAstRecordDataGenericRequirementRecursiveGroupingTotality GrammarAstRecordDataGenericRequirementRecursiveGroupingExamples GrammarAstRecordDataRecursiveGroupingImplementationRepresentation GrammarAstRecordDataRecursiveGroupingImplementationRepresentationExtraction GrammarAstRecordDataRecursiveGroupingImplementationAdmissionExamples GrammarAstRecordDataRecursiveGroupingTaggedAdmission GrammarAstRecordDataRecursiveGroupingTaggedAdmissionInjectivity GrammarAstRecordDataRecursiveGroupingTaggedAdmissionStability GrammarAstRecordDataRecursiveGroupingTaggedAdmissionSeparation GrammarAstRecordDataRecursiveGroupingTaggedAdmissionCanonicalExclusion GrammarAstRecordDataRecursiveGroupingCertifiedTagExactness GrammarAstRecordDataRecursiveGroupingCertifiedAdmissionFibers GrammarAstRecordDataRecursiveGroupingCertifiedFiberEquality GrammarAstRecordDataRecursiveGroupingCertifiedRootKeyEquality GrammarAstRecordDataRecursiveGroupingAcceptedKeyExtensionality GrammarAstRecordDataRecursiveGroupingAdmissionImageFibers GrammarAstRecordDataRecursiveGroupingProductionObservables GrammarAstRecordDataRecursiveGroupingDerivedObservables GrammarAstRecordDataRecursiveGroupingObservationSeparation GrammarAstRecordDataRecursiveGroupingDerivedObservationDisjointness GrammarAstRecordDataRecursiveGroupingObservationPER GrammarAstRecordDataRecursiveGroupingObservationPERDomain GrammarAstRecordDataRecursiveGroupingObservationAdmittedQuotient; do
             rocq c -w +all -Q proof/Phil Phil "proof/Phil/Surface/${module}.v"
           done
 
@@ -190,7 +191,8 @@ jobs:
             GrammarAstRecordDataRecursiveGroupingObservationSeparation
             GrammarAstRecordDataRecursiveGroupingDerivedObservationDisjointness
             GrammarAstRecordDataRecursiveGroupingObservationPER
-            GrammarAstRecordDataRecursiveGroupingObservationPERDomain.
+            GrammarAstRecordDataRecursiveGroupingObservationPERDomain
+            GrammarAstRecordDataRecursiveGroupingObservationAdmittedQuotient.
           Print Assumptions phase1_surface_normalize_recursive_grouping_fuel_round_trip.
           Print Assumptions phase1_surface_grouping_well_formed_from_derivation_mutual.
           Print Assumptions phase1_surface_recursive_grouping_sufficient_fuel.
@@ -312,13 +314,20 @@ jobs:
           Print Assumptions phase1_surface_recursive_grouping_derived_record_in_observation_support.
           Print Assumptions phase1_surface_recursive_grouping_derived_data_in_observation_support.
           Print Assumptions phase1_surface_recursive_grouping_record_data_observation_classes_disjoint.
+          Print Assumptions phase1_surface_admitted_observation_equiv_iff_public_related.
+          Print Assumptions phase1_surface_admitted_observation_equiv_reflexive.
+          Print Assumptions phase1_surface_admitted_observation_equiv_symmetric.
+          Print Assumptions phase1_surface_admitted_observation_equiv_transitive.
+          Print Assumptions phase1_surface_admitted_observation_equiv_preserves_tag.
+          Print Assumptions phase1_surface_admitted_observation_equiv_not_exact_key_equality.
+          Print Assumptions phase1_surface_rejected_key_has_no_admitted_observation_representative.
           EOF
           rocq c -Q proof/Phil Phil RecursiveGroupingAssumptions.v \
             | tee recursive-grouping-assumptions.txt
           python3 - <<'PY'
           from pathlib import Path
           output = Path("recursive-grouping-assumptions.txt").read_text()
-          assert output.count("Closed under the global context") == 121, output
+          assert output.count("Closed under the global context") == 128, output
           assert "Axioms:" not in output, output
           PY
           rocq check -silent -Q proof/Phil Phil \
@@ -367,7 +376,8 @@ jobs:
             Phil.Surface.GrammarAstRecordDataRecursiveGroupingObservationSeparation \
             Phil.Surface.GrammarAstRecordDataRecursiveGroupingDerivedObservationDisjointness \
             Phil.Surface.GrammarAstRecordDataRecursiveGroupingObservationPER \
-            Phil.Surface.GrammarAstRecordDataRecursiveGroupingObservationPERDomain
+            Phil.Surface.GrammarAstRecordDataRecursiveGroupingObservationPERDomain \
+            Phil.Surface.GrammarAstRecordDataRecursiveGroupingObservationAdmittedQuotient
 
       - name: Record source representation and recursive grouping identities
         shell: bash
@@ -455,6 +465,8 @@ jobs:
           cp proof/Phil/Surface/GrammarAstRecordDataRecursiveGroupingObservationPERDomain.v surface-grammar-ast-representation/
           cp proof/Phil/Surface/GrammarAstRecordDataRecursiveGroupingObservationPER.vo surface-grammar-ast-representation/
           cp proof/Phil/Surface/GrammarAstRecordDataRecursiveGroupingObservationPERDomain.vo surface-grammar-ast-representation/
+          cp proof/Phil/Surface/GrammarAstRecordDataRecursiveGroupingObservationAdmittedQuotient.v surface-grammar-ast-representation/
+          cp proof/Phil/Surface/GrammarAstRecordDataRecursiveGroupingObservationAdmittedQuotient.vo surface-grammar-ast-representation/
           cp SurfaceGrammarAstRecordDataRecursiveGroupingKernel.hs surface-grammar-ast-representation/
           cp recursive-grouping-assumptions.txt surface-grammar-ast-representation/
           sha256sum \
@@ -591,6 +603,8 @@ jobs:
             proof/Phil/Surface/GrammarAstRecordDataRecursiveGroupingObservationPER.vo \
             proof/Phil/Surface/GrammarAstRecordDataRecursiveGroupingObservationPERDomain.v \
             proof/Phil/Surface/GrammarAstRecordDataRecursiveGroupingObservationPERDomain.vo \
+            proof/Phil/Surface/GrammarAstRecordDataRecursiveGroupingObservationAdmittedQuotient.v \
+            proof/Phil/Surface/GrammarAstRecordDataRecursiveGroupingObservationAdmittedQuotient.vo \
             SurfaceGrammarAstRecordDataRecursiveGroupingKernel.hs \
             > surface-grammar-ast-representation/identities.sha256
           cat surface-grammar-ast-representation/identities.sha256
