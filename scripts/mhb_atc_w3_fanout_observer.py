@@ -27,7 +27,7 @@ SHA = re.compile(r"[0-9a-f]{40}\Z")
 TIMESTAMP = re.compile(r"\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z\Z")
 EVENTS = ("push", "create", "delete")
 MAX_PER_EVENT = 900
-PAGE_SIZE = 100
+PAGE_SIZE = 10
 MAX_WINDOW = timedelta(minutes=120)
 MAX_FILE_BYTES = 300000
 RUN_FIELDS = ("id", "event", "head_branch", "head_sha", "created_at", "actor",
@@ -136,11 +136,11 @@ def collect(client, *, role, nonce, window_start, window_end, observed_at=None):
     for event in EVENTS:
         reported_total = None
         event_runs = {}
-        for page in range(1, 11):
+        for page in range(1, MAX_PER_EVENT // PAGE_SIZE + 2):
             window = quote(window_start + ".." + window_end, safe="")
             endpoint = ("/actions/runs?event=" + event +
                         "&created=" + window +
-                        "&per_page=100&page=" + str(page))
+                        "&per_page=" + str(PAGE_SIZE) + "&page=" + str(page))
             response = client.request("GET", endpoint)
             check(response.status == 200 and
                   isinstance(response.data, dict),
@@ -320,10 +320,13 @@ def cli():
     parser.add_argument("--target-sha")
     parser.add_argument("--publisher-actor")
     args = parser.parse_args()
-    reviewed_policy()
+    policy = reviewed_policy()
     if args.mode == "collect":
         check(args.nonce and args.role and args.window_start and
               args.window_end and args.out, "missing census parameters")
+        if policy["approved_nonce"] is not None:
+            check(args.nonce == policy["approved_nonce"],
+                  "census nonce differs from source-approved experiment")
         token = os.getenv("GH_TOKEN") or os.getenv("GITHUB_TOKEN")
         check(isinstance(token, str) and len(token) >= 9,
               "read-only GitHub token required")
@@ -335,7 +338,14 @@ def cli():
     else:
         check(args.before_file and args.after_file and args.target_sha and
               args.publisher_actor, "missing fanout comparison parameters")
-        print(json.dumps(compare(read(args.before_file),read(args.after_file),
+        before, after = read(args.before_file), read(args.after_file)
+        if policy["approved_nonce"] is not None:
+            check(before.get("nonce") == policy["approved_nonce"] and
+                  after.get("nonce") == policy["approved_nonce"],
+                  "census uses a nonapproved experiment nonce")
+        check(args.target_sha == policy["frozen_target_sha"],
+              "census comparison target differs from source pin")
+        print(json.dumps(compare(before,after,
                                  target_sha=args.target_sha,
                                  publisher_actor=args.publisher_actor),
                          sort_keys=True))

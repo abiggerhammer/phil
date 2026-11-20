@@ -39,7 +39,7 @@ class Fake:
         if parsed.path!="/actions/runs" or set(query)!={
                 "event","created","per_page","page"}:
             raise AssertionError("unexpected GET route")
-        if query["created"] != [START+".."+END] or query["per_page"] != ["100"]:
+        if query["created"] != [START+".."+END] or query["per_page"] != ["10"]:
             raise AssertionError("unapproved observation window")
         event=query["event"][0];page=int(query["page"][0])
         if event not in mod.EVENTS:raise AssertionError("unknown event")
