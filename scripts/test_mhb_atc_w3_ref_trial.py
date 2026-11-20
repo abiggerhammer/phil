@@ -14,6 +14,9 @@ import sys
 import tempfile
 import unittest
 from unittest.mock import patch
+import yaml
+
+from test_mhb_atc_staged_push_ci import StrictWorkflowLoader
 import mhb_atc_w3_ref_trial as module
 
 from mhb_atc_w3_ref_trial import (
@@ -313,7 +316,7 @@ class W3RefTrialTests(unittest.TestCase):
         trial.publisher_seed()
         api.role = "worker"
         api.rule_denial = False
-        with self.assertRaisesRegex(StopTrial, "not explicit ruleset denial"):
+        with self.assertRaisesRegex(StopTrial, "not exact-ref ruleset denial"):
             trial.worker_probe()
         self.assertEqual(api.refs, {names(NONCE)["seed"]: PARENT})
         self.assertEqual(len([x for x in api.requests if x[0] == "POST"]), 3)
@@ -335,7 +338,7 @@ class W3RefTrialTests(unittest.TestCase):
         api.role = "worker"
         api.failures[("POST", "/git/refs")] = Reply(
             422, {"message": "GH013 Repository rule violations found for refs/heads/hamster/admitted/w3-incorrect-create"})
-        with self.assertRaisesRegex(StopTrial, "not explicit ruleset denial"):
+        with self.assertRaisesRegex(StopTrial, "wrong or ambiguous ref"):
             trial.worker_probe()
 
     def test_preflight_detects_occupied_namespace_or_drift(self):
