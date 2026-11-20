@@ -144,9 +144,35 @@ def excludes_staged_push(source: str) -> bool:
         return all(branch_pattern_disjoint_from_staged(p)
                    for p in props["branches"])
     if set(props) == {"branches-ignore"}:
-        # Exactly one reviewed exclusion. Extra rules, including GitHub's
-        # negated-pattern syntax, require another review rather than guesses.
-        return props["branches-ignore"] == ["hamster/staged/**"]
+        # Exactly two reviewed exclusions: staged untrusted code and
+        # protected W3 disposable publisher canary/seed leaves.
+        return props["branches-ignore"] == [
+            "hamster/staged/**", "hamster/admitted/w3-*"]
+    return False
+
+
+def branch_pattern_disjoint_from_w3(pattern: str) -> bool:
+    """Conservative allowlist proof for W3 single-leaf admitted refs."""
+    if not isinstance(pattern, str) or not re.fullmatch(
+            r"[A-Za-z0-9._/-]+(?:\*|\*\*)?", pattern):
+        return False
+    literal_prefix = pattern.rstrip("*")
+    target_prefix = "hamster/admitted/w3-"
+    return not (target_prefix.startswith(literal_prefix) or
+                literal_prefix.startswith(target_prefix))
+
+
+def excludes_w3_disposable_push(source: str) -> bool:
+    props = push_properties(source)
+    if props is None:
+        return True
+    if set(props) == {"branches"}:
+        return all(branch_pattern_disjoint_from_w3(p)
+                   for p in props["branches"])
+    if set(props) == {"branches-ignore"}:
+        # Negation/extra globs are not in the reviewed allowlist.
+        return props["branches-ignore"] == [
+            "hamster/staged/**", "hamster/admitted/w3-*"]
     return False
 
 
@@ -157,17 +183,38 @@ def audit_workflow_inventory(root: Path) -> int:
         raise ValueError("workflow inventory is incomplete")
     for path in workflows:
         try:
-            safe = excludes_staged_push(path.read_text(encoding="utf-8"))
+            source = path.read_text(encoding="utf-8")
+            safe = excludes_staged_push(source) and excludes_w3_disposable_push(source)
         except ValueError as exc:
             raise ValueError(f"{path.name}: malformed or unsupported trigger: {exc}") from exc
         if not safe:
-            raise ValueError(f"{path.name}: push may reach hamster/staged/**")
+            raise ValueError(f"{path.name}: push may reach staged or W3 disposable admitted refs")
     return len(workflows)
 
 
 class StagedPushIsolationTests(unittest.TestCase):
     def test_all_workflow_push_triggers_reject_staged_namespace(self):
         self.assertGreater(audit_workflow_inventory(WORKFLOWS), 500)
+
+    def test_w3_protected_disposable_leaf_cannot_trigger_pre_admission_push(self):
+        sample = "on:\n  push:\n    branches-ignore:\n" \
+                 "      - 'hamster/staged/**'\n" \
+                 "      - 'hamster/admitted/w3-*'\n"
+        self.assertTrue(excludes_w3_disposable_push(sample))
+        for branch in ("hamster/admitted/w3-deadbeef1234-canary",
+                       "hamster/admitted/w3-deadbeef1234-seed",
+                       "hamster/admitted/w3-deadbeef1234-create"):
+            self.assertTrue(fnmatch.fnmatchcase(branch, "hamster/admitted/w3-*"))
+        self.assertFalse(fnmatch.fnmatchcase("hamster/admitted/atc-1-lane-sha",
+                                            "hamster/admitted/w3-*"))
+        for unsafe in [
+            sample.replace("      - 'hamster/admitted/w3-*'\n", ""),
+            sample.replace("'hamster/admitted/w3-*'", "'hamster/admitted/w3/placeholder'"),
+            "on:\n  push:\n    branches: [hamster/admitted/**]\n",
+            "on:\n  push:\n    paths: ['src/**']\n",
+        ]:
+            with self.subTest(source=unsafe):
+                self.assertFalse(excludes_w3_disposable_push(unsafe))
 
     def test_global_audit_is_registered_for_every_future_workflow_change(self):
         ci = (WORKFLOWS / "mhb-atc-tests.yml").read_text()
@@ -180,9 +227,13 @@ class StagedPushIsolationTests(unittest.TestCase):
             source = path.read_text()
             props = push_properties(source)
             with self.subTest(workflow=name):
-                self.assertEqual(props, {"branches-ignore": ["hamster/staged/**"]})
+                self.assertEqual(props, {"branches-ignore": [
+                    "hamster/staged/**", "hamster/admitted/w3-*"]})
                 self.assertIn("  pull_request:", source)
                 self.assertTrue(fnmatch.fnmatchcase(STAGED, props["branches-ignore"][0]))
+                self.assertTrue(fnmatch.fnmatchcase(
+                    "hamster/admitted/w3-d1e2f3a4b5c6-seed",
+                    props["branches-ignore"][1]))
                 self.assertFalse(fnmatch.fnmatchcase("main", props["branches-ignore"][0]))
                 self.assertFalse(fnmatch.fnmatchcase("feature/my-work", props["branches-ignore"][0]))
                 unprotected = source.replace(
@@ -249,7 +300,7 @@ class StagedPushIsolationTests(unittest.TestCase):
                 self.assertFalse(accepted, trigger)
         # Safe nonstandard spelling and indentation are actually parsed.
         self.assertTrue(excludes_staged_push(
-            'on:\n    "push":\n        branches-ignore: ["hamster/staged/**"]\n'))
+            'on:\n    "push":\n        branches-ignore: ["hamster/staged/**", "hamster/admitted/w3-*"]\n'))
         self.assertTrue(excludes_staged_push(
             'on:\n  push:\n    branches: [main]\n  "pull_request":\n    branches: [main]\n'))
         self.assertTrue(excludes_staged_push('on: ["pull_request"]\n'))
