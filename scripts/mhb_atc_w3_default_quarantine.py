@@ -117,10 +117,10 @@ class DefaultWorkflowQuarantine:
             try:
                 source = raw.decode("utf-8")
                 events = parse_workflow_events(source)
-                # A default-branch 'delete' event cannot be restricted by
-                # branch selectors. Reject it even if the shared G1 parser
-                # eventually admits 'delete' as a recognized event kind.
-                safe = ("delete" not in events and
+                # Default 'delete' and 'create' events cannot be restricted
+                # by branch selectors. Reject them even if the shared G1
+                # parser eventually recognizes those event kinds.
+                safe = ("delete" not in events and "create" not in events and
                         excludes_staged_push(source) and
                         excludes_w3_disposable_push(source))
             except (UnicodeError, ValueError):

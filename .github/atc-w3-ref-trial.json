@@ -18,5 +18,6 @@
     "parent_sha": "e38814a2e916252a8a7f3dd438943e8f4a21664a",
     "grandparent_sha": "4b7594ed83648372171a9bb1c34647522c064b22"
   },
-  "quarantine_requirement": "Source-pinned frozen targets are a separately reviewed, first-parent-linked trio already merged into trusted main ancestry; all three workflow subtrees must exactly match the independent reviewed pin. Trusted workflow dispatch SHA remains the current owner/main run, not any frozen target. No live authorization."
+  "default_workflow_quarantine_validator": "MHB-ATC-G1-W3-CURRENT-DEFAULT-V1",
+  "quarantine_requirement": "Frozen first-parent-linked targets select their separately reviewed historical workflow tree. DELETE operations additionally require a fresh SHA/tree-bound semantic validation of the current default-branch workflows, including recovery after main moves. Neither is live authorization."
 }

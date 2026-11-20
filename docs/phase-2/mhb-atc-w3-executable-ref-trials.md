@@ -34,6 +34,23 @@ A valid nonce alone is **not a historical reservation**. Future review of a live
 
 **No PR CREATE or REOPEN operations belong to this slice**. These need different valid disposable PR setup, explicit CI-fanout containment and preauthorized closure. A 422 on an invalid PR head would not establish authorization denial.
 
+## Current-default quarantine required for DELETE
+
+The frozen historical ref-target workflow pin does **not** cover GitHub's
+default-branch workflow selection on branch deletion. Before the publisher
+canary DELETE, worker negative DELETE (including unexpected success) and
+each publisher cleanup/recovery DELETE, trusted main source must validate
+the complete **current default-branch** workflow tree using the strict
+G1/W3 semantic inventory audit, independently of the frozen target SHA.
+It must reject unsafe or unsupported push/delete triggers; a harmless
+additional workflow on main is acceptable if it passes semantic quarantine.
+The current-default SHA and tree are recorded in `default_quarantine_checks`
+separately from the frozen `workflow_tree_sha`, and a changed default
+requires fresh validation before a later deletion, even during recovery.
+A final authenticated main check immediately precedes DELETE; GitHub's
+ordinary APIs do not provide atomicity against a concurrent main change.
+See [frozen-target and current-default validation](mhb-atc-w3-frozen-targets.md).
+
 ## Sanitized durable evidence (never actual App credentials)
 
 `scripts/mhb_atc_w3_evidence.py` writes a finite, **0600**, atomically replaced and fsynced `$RUNNER_TEMP/w3-evidence.json` receipt in each protected job. Every ref write gets an **INTENT** record *and a flushed `W3_EVIDENCE` log line before the API call*. Then it records a bounded HTTP status, exact target, pre/post ref SHA (or absence), and the **only accepted, strictly matched canonical ruleset diagnostic**. The App numeric ID and authenticated action installation ID are included; raw API payloads, arbitrary diagnostic text, JWTs, tokens and private keys are **never** serialized. An interrupted request leaves an explicit unknown/partial attempt, not a fabricated denial. A failed worker test cannot truthfully yield `DENIALS_CONFIRMED`. For tests that complete or fail on a functioning runner, a guarded `if: always()` upload step retains the curated JSON as separate job artifacts (30-day retention), without exposing App tokens. GitHub job logs provide an additional receipt line even before the artifact can be uploaded.
