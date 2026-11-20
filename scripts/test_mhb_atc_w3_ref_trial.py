@@ -71,7 +71,7 @@ class FakeAPI:
         return Reply(status, {"message":
             "GH013: Repository rule violations found for refs/heads/" +
             endpoint.removeprefix("/git/refs/heads/"),
-            "errors": [{"message": "Repository rule violations found for " +
+            "errors": [{"message": "Repository rule violations found for refs/heads/" +
                         endpoint.removeprefix("/git/refs/heads/")}]})
 
     def request(self, method, endpoint, data=None):
@@ -435,6 +435,80 @@ class W3RefTrialTests(unittest.TestCase):
         for index, response in enumerate(invalid):
             with self.subTest(case=index), self.assertRaises(StopTrial):
                 trial.forbidden(Reply(422, response), "create", "deny-create")
+
+    def test_valid_git_punctuation_ref_suffixes_never_match_expected_ref(self):
+        _, trial = make(role="worker")
+        expected = "refs/heads/" + names(NONCE)["create"]
+        # All these longer refs are syntactically VALID Git refs. Therefore
+        # none of their punctuation can delimit the expected ref in a
+        # diagnostic. Capture the entire end-of-message ref or STOP.
+        suffixes = (",other", ";other", "(other)", "{other}", '"other"')
+        prefixes = (
+            "GH013: Repository rule violations found for ",
+            "Repository rule violations found for ",
+        )
+        for suffix in suffixes:
+            longer = expected + suffix
+            valid = subprocess.run(
+                ["git", "check-ref-format", longer],
+                capture_output=True, text=True, timeout=10)
+            with self.subTest(ref=longer):
+                self.assertEqual(valid.returncode, 0, valid.stderr)
+                self.assertEqual(
+                    trial.forbidden(
+                        Reply(403, {"message":
+                            f"GH013: Repository rule violations found for {expected}"}),
+                        "create", "deny-create"),
+                    "RULESET_DENIED")
+                for prefix in prefixes:
+                    with self.subTest(prefix=prefix), self.assertRaisesRegex(
+                            StopTrial, "wrong or ambiguous ref"):
+                        trial.forbidden(
+                            Reply(422, {"message": prefix + longer}),
+                            "create", "deny-create")
+                # Do not accept a right ref embedded in a different diagnostic.
+                with self.assertRaises(StopTrial):
+                    trial.forbidden(Reply(422, {
+                        "message": prefixes[0] + longer,
+                        "errors": [{"message": prefixes[1] + expected}],
+                    }), "create", "deny-create")
+
+    def test_punctuation_ref_denial_stops_each_worker_operation(self):
+        # Astra's counterexample previously allowed all FOUR wrong-ref
+        # diagnostics, yielding a false FOUR_REF_RULE_DENIALS_OBSERVED.
+        for suffix in (",other", ";other", "(other)", "{other}"):
+            for corrupt_index in range(4):
+                with self.subTest(suffix=suffix, operation=corrupt_index):
+                    api, trial = make()
+                    trial.publisher_seed()
+                    api.role = "worker"
+                    original = api.write_result
+                    index = [0]
+                    def malformed(endpoint, status=422):
+                        reply = original(endpoint, status)
+                        i = index[0]
+                        index[0] += 1
+                        if i != corrupt_index:
+                            return reply
+                        return Reply(reply.status, {
+                            "message": reply.data["message"] + suffix,
+                            "errors": [{
+                                "message": reply.data["errors"][0]["message"] + suffix
+                            }],
+                        })
+                    api.write_result = malformed
+                    api.requests.clear()
+                    with self.assertRaisesRegex(
+                            StopTrial, "wrong or ambiguous ref"):
+                        trial.worker_probe()
+                    operations = [method for method, _, _ in api.requests
+                                  if method != "GET"]
+                    self.assertEqual(operations,
+                                     ["POST", "PATCH", "PATCH", "DELETE"][
+                                         :corrupt_index + 1])
+                    self.assertEqual(api.refs, {
+                        names(NONCE)["seed"]: PARENT,
+                    })
 
     def test_wrong_ref_denials_stop_full_worker_sequence_at_each_operation(self):
         for corrupt_index in range(4):
