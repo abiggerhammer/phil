@@ -161,9 +161,11 @@ def audit_snapshot(raw):
         and policy.get("worker_app_id") == APP_ID
         and policy.get("worker_app_slug") == APP_SLUG
         and isinstance(lanes.get("lanes"), dict)
-        and len(lanes["lanes"]) == 2
+        and set(lanes["lanes"]) == {"phase2-selfhost", "phase2-embedded"}
         and all(isinstance(x, dict) and x.get("enabled") is False
-                and x.get("source_repository") is None
+                and all(x.get(k) is None for k in (
+                    "source_repository", "source_owner",
+                    "source_repository_id", "source_owner_id"))
                 for x in lanes["lanes"].values()))
 
     actor = raw.get("actor")
@@ -263,7 +265,8 @@ def live_api(endpoint: str):
     clean_env = dict(os.environ)
     clean_env.pop("GH_DEBUG", None)
     clean_env["GH_PROMPT_DISABLED"] = "1"
-    proc = subprocess.run(["gh", "api", "--method", "GET", endpoint],
+    proc = subprocess.run(["gh", "api", "--hostname", "github.com",
+                           "--method", "GET", endpoint],
                           cwd=ROOT, env=clean_env, capture_output=True,
                           text=True, timeout=30, check=False)
     if proc.returncode:
