@@ -73,10 +73,12 @@ the token was actually revoked.
 
 MHB-ATC-W3-FANOUT-ORIGIN-V1 records the original run ID, owner/main
 dispatch SHA, exact nonce/ref, target/tree, source-policy Git blob SHA,
-workflow path and run identity. Recovery GETs the original Actions run,
-checking ID, owner actor and triggering actor, repository, mode, source
-branch/SHA, first attempt, and original workflow. The original source
-policy blob must be independently reconstructed from the authenticated
+workflow path and run identity. Recovery GETs the original Actions run
+and independently checks its ID, owner and triggering actors, repository,
+source branch/SHA, first attempt, and workflow path. The canonical origin
+artifact and trusted run-only prepare/upload path establish the original
+`mode=run`; the Actions GET does not independently validate that dispatch
+input. The original source policy blob must be reconstructed from the authenticated
 original dispatch commit and must demonstrate source_authorized:true
 and the exact approved nonce. That original commit must remain reachable
 from current trusted main. Current source may have gone OFF while
