@@ -107,6 +107,34 @@ class EvidenceTests(unittest.TestCase):
             self.assertFalse(any(x["denial"]=="RULESET_DENIED" for x in events))
             self.assertIn('"http_status": 201',log.getvalue())
 
+    def test_unexpected_allowed_worker_create_persists_new_sha_before_stop(self):
+        """An unexpectedly permitted create must expose the orphan to recovery."""
+        with tempfile.TemporaryDirectory() as td, \
+             patch.dict(os.environ,{"RUNNER_TEMP":td}):
+            api,trial=make()
+            trial.publisher_seed()
+            # Simulate a dangerous GitHub permission/ruleset failure: the
+            # "worker" token can in fact CREATE, just like publisher.
+            api.role="publisher"
+            with redirect_stdout(io.StringIO()):
+                trial.evidence=ledger(Path(td),"worker-negative")
+                api.requests.clear()
+                with self.assertRaisesRegex(StopTrial,"unexpected or ambiguous"):
+                    trial.worker_probe()
+                trial.evidence.decision("STOP_INCOMPLETE")
+            receipt=json.loads((Path(td)/"w3-evidence.json").read_text())
+            events=receipt["events"]
+            self.assertEqual([x["stage"] for x in events],
+                             ["INTENT","RESPONSE","READ"])
+            self.assertEqual(events[-1]["http_status"],201)
+            self.assertEqual(events[-1]["post_sha"],MAIN)
+            self.assertEqual(events[-1]["ref"],
+                             "refs/heads/"+names(NONCE)["create"])
+            self.assertEqual(receipt["decision"],"STOP_INCOMPLETE")
+            self.assertNotIn("RULESET_DENIED",json.dumps(receipt))
+            self.assertEqual([m for m,_,_ in api.requests if m!="GET"],["POST"])
+            self.assertEqual(api.refs[names(NONCE)["create"]],MAIN)
+
     def test_ambiguous_request_failure_remains_unknown_not_retried(self):
         with tempfile.TemporaryDirectory() as td, \
              patch.dict(os.environ,{"RUNNER_TEMP":td}):
