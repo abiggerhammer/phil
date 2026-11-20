@@ -5,6 +5,14 @@
 This is **not** live push-fanout evidence, permission to dispatch W3 `run`
 or `cleanup`, or authority to mint either GitHub App token.
 
+**Historical notice:** This record accepted tree `6fa265b2b55cef252ffb1e5cf4734df84bbda9fd`
+for a moving-last-three-commits design. The later [source-only frozen-target
+proposal](mhb-atc-w3-frozen-targets.md) deliberately selects a previously
+reviewed, different historical workflow tree and exact immutable target trio.
+The frozen-trio code and its source-policy revision require a NEW independent
+exact-head review; this historical #1951 acceptance does not by itself
+authorize the new target-selection contract or any live operation.
+
 Tracking: [W3 hardening #1948](https://github.com/abiggerhammer/phil/pull/1948),
 [G1/G2 #1935](https://github.com/abiggerhammer/phil/issues/1935),
 [worker trust #1863](https://github.com/abiggerhammer/phil/issues/1863),
