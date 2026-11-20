@@ -29,9 +29,17 @@ class GitHub:
                 "actor":{"login":"abiggerhammer"},
                 "triggering_actor":{"login":"abiggerhammer"},
                 "repository":{"full_name":REPO}},
-            "/git/commits/"+H:{"sha":H,"tree":{"sha":TREE},"parents":[{"sha":P}]},
-            "/git/commits/"+P:{"sha":P,"tree":{"sha":TREE},"parents":[{"sha":G}]},
-            "/git/commits/"+G:{"sha":G,"tree":{"sha":TREE},"parents":[{"sha":"e"*40}]}}
+            "/git/commits/"+H:{"sha":H,"tree":{"sha":"1"*40},"parents":[{"sha":P}]},
+            "/git/commits/"+P:{"sha":P,"tree":{"sha":"2"*40},"parents":[{"sha":G}]},
+            "/git/commits/"+G:{"sha":G,"tree":{"sha":"3"*40},"parents":[{"sha":"e"*40}]},
+            "/git/trees/"+"1"*40:{"sha":"1"*40,"truncated":False,
+                "tree":[{"path":".github","type":"tree","sha":"4"*40}]},
+            "/git/trees/"+"2"*40:{"sha":"2"*40,"truncated":False,
+                "tree":[{"path":".github","type":"tree","sha":"4"*40}]},
+            "/git/trees/"+"3"*40:{"sha":"3"*40,"truncated":False,
+                "tree":[{"path":".github","type":"tree","sha":"4"*40}]},
+            "/git/trees/"+"4"*40:{"sha":"4"*40,"truncated":False,
+                "tree":[{"path":"workflows","type":"tree","sha":TREE}]}}
         self.calls=[]
     def request(self,method,path,data=None):
         self.calls.append((method,path))
@@ -75,7 +83,7 @@ class ProvenanceTests(unittest.TestCase):
     def test_authenticated_run_and_entire_commit_graph(self):
         gh=GitHub()
         self.assertEqual(verify_origin(gh,origin()),origin())
-        self.assertEqual(len(gh.calls),4)
+        self.assertEqual(len(gh.calls),10)
         self.assertTrue(all(x[0]=="GET" for x in gh.calls))
         self.assertIn(("GET","/git/commits/"+G),gh.calls)
 
@@ -88,7 +96,11 @@ class ProvenanceTests(unittest.TestCase):
             ("/actions/runs/"+str(RUN),lambda x:x.update(head_sha="f"*40)),
             ("/git/commits/"+H,lambda x:x["parents"][0].update(sha="f"*40)),
             ("/git/commits/"+P,lambda x:x["tree"].update(sha="f"*40)),
-            ("/git/commits/"+G,lambda x:x["tree"].update(sha="f"*40))]
+            ("/git/commits/"+G,lambda x:x["tree"].update(sha="f"*40)),
+            ("/git/trees/"+"4"*40,
+             lambda x:x["tree"][0].update(sha="f"*40)),
+            ("/git/trees/"+"4"*40,
+             lambda x:x.update(truncated=True))]
         for path,change in cases:
             gh=GitHub();change(gh.records[path])
             with self.subTest(path=path),self.assertRaises(ProvenanceError):
