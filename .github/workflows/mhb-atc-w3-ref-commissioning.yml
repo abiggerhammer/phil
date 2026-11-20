@@ -10,7 +10,7 @@ on:
         type: choice
         required: true
         default: plan
-        options: [plan, run]
+        options: [plan, run, cleanup]
       nonce:
         description: "Fresh, never-used 12-lowercase-hex nonce"
         type: string
@@ -80,6 +80,10 @@ jobs:
               test "$W3_CONFIRM" = AUTHORIZE_W3_PROTECTED_REFS_ONLY
               python3 scripts/mhb_atc_w3_ref_trial.py plan \
                 --nonce "$NONCE" --authorize-live
+              ;;
+            cleanup)
+              test "$W3_CONFIRM" = RECOVER_W3_EXACT_REFS_ONLY
+              python3 scripts/mhb_atc_w3_ref_trial.py recovery-plan --nonce "$NONCE"
               ;;
             *) echo 'Unexpected commissioning mode' >&2; exit 1 ;;
           esac
@@ -152,7 +156,13 @@ jobs:
       needs.prepare.result == 'success' &&
       (needs.publisher_seed.result == 'success' ||
        needs.publisher_seed.result == 'failure') &&
-      inputs.mode == 'run'
+      inputs.mode == 'run' ||
+      (needs.prepare.result == 'success' &&
+       inputs.mode == 'cleanup' &&
+       github.ref == 'refs/heads/main' &&
+       github.actor == 'abiggerhammer' &&
+       github.triggering_actor == 'abiggerhammer' &&
+       github.run_attempt == 1)
     environment: atc-publisher
     runs-on: ubuntu-24.04
     steps:
