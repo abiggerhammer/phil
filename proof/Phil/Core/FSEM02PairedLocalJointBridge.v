@@ -156,3 +156,47 @@ Proof.
     Hrendezvous Hsubject) as [Hbefore Hafter].
   repeat split; assumption.
 Qed.
+
+
+(* NON-NORMATIVE FSEM-02: symmetric paired Ping frame.
+   Both exact continuing local steps preserve each own full abstract loan
+   function and every unrelated linear binding. These Boolean gates are not
+   a proof of RendezvousValid or of native Haskell Map/Set refinement. *)
+Theorem fsem02PairedReplayFramesBothLoansAndIndependentLinearSpectators :
+  forall source admitted sa ra sh rh so sn ro rn sc rc
+         senderAfter receiverAfter senderContinuation receiverContinuation,
+    selectedContinuation sa sh = Some (Some senderContinuation) ->
+    selectedContinuation ra rh = Some (Some receiverContinuation) ->
+    fsem02PairedLocalReplay source admitted sa ra sh rh
+      so sn ro rn sc rc = Some (senderAfter, receiverAfter) ->
+    sharedLoans senderAfter = sharedLoans sc /\
+    sharedLoans receiverAfter = sharedLoans rc /\
+    (forall other,
+      String.eqb other so = false ->
+      String.eqb other sn = false ->
+      linearBindings senderAfter other = linearBindings sc other) /\
+    (forall other,
+      String.eqb other ro = false ->
+      String.eqb other rn = false ->
+      linearBindings receiverAfter other = linearBindings rc other).
+Proof.
+  intros source admitted sa ra sh rh so sn ro rn sc rc
+    senderAfter receiverAfter senderContinuation receiverContinuation
+    HsenderHead HreceiverHead Hpair.
+  unfold fsem02PairedLocalReplay in Hpair.
+  destruct (andb source admitted) eqn:Hgate; [|discriminate].
+  destruct (fsem02Progression sa sh so sn sc) as [|sNext]
+    eqn:HsenderStep; [discriminate|].
+  destruct (fsem02Progression ra rh ro rn rc) as [|rNext]
+    eqn:HreceiverStep; [discriminate|].
+  inversion Hpair; subst; clear Hpair.
+  pose proof (continuing_head_exact_predecessor_and_successor
+    sa sh so sn sc sNext senderContinuation HsenderHead HsenderStep)
+    as HsenderFrame.
+  pose proof (continuing_head_exact_predecessor_and_successor
+    ra rh ro rn rc rNext receiverContinuation HreceiverHead HreceiverStep)
+    as HreceiverFrame.
+  destruct HsenderFrame as [_ [_ [_ [_ [HsenderOther HsenderLoans]]]]].
+  destruct HreceiverFrame as [_ [_ [_ [_ [HreceiverOther HreceiverLoans]]]]].
+  repeat split; assumption.
+Qed.

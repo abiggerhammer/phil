@@ -69,7 +69,7 @@ main = do
         (sourcePingJointTerminalCloseDiamond accepted)
     , test "FSEM-02 source Ping half-Close peer nominal refusal keeps committed state and valid retry"
         (sourcePingJointCloseRefusalRetry accepted)
-    , test "FSEM-02 paired local Ping steps exactly equal the production joint result and reject both stale peers"
+    , test "FSEM-02 paired local Ping with independent Client/Server loans equals joint Core state; stale peers reject"
         (sourcePingPairedLocalJointEquality accepted stale)
     , test "FSEM-02 source stale close rejects with exact binder mismatch"
         (sourceStaleCloseRejected stale)
@@ -3785,7 +3785,8 @@ sourcePingPairedLocalJointEquality accepted stale = do
         (checkedComponentReceiveEndpoint serverPlan)
       serverNext = grammarV1ResolvedBinderCoreName
         (checkedComponentReceiveSuccessor serverPlan)
-      spectator = Name "fsem02.paired.bridge.affine.loan"
+      clientSpectator = Name "fsem02.paired.bridge.client.affine.loan"
+      serverSpectator = Name "fsem02.paired.bridge.server.affine.loan"
       clientSide = ProcessRendezvousSide clientProcess clientOld clientNext
         revision clientRole
       serverSide = ProcessRendezvousSide serverProcess serverOld serverNext
@@ -3797,16 +3798,22 @@ sourcePingPairedLocalJointEquality accepted stale = do
   assert (sourceServerHead plans == dualSession (sourceClientHead plans)
        && clientProcess /= serverProcess
        && clientOld /= clientNext && serverOld /= serverNext
-       && spectator /= serverOld && spectator /= serverNext)
+       && clientSpectator /= clientOld && clientSpectator /= clientNext
+       && serverSpectator /= serverOld && serverSpectator /= serverNext
+       && clientSpectator /= serverSpectator)
     "paired bridge has invalid independently projected source identities"
-  clientBefore <- mapLeft show $ insertProtocolEndpoint
+  rawClient <- mapLeft show $ insertProtocolEndpoint
     clientOld revision clientRole (sourceClientHead plans) emptyProtocolContext
+  clientFramed <- mapLeft show $
+    insertBinding Affine clientSpectator (TyUInt 16) (protocolResources rawClient)
+  clientBorrowed <- mapLeft show $ startSharedLoan clientSpectator clientFramed
+  let clientBefore = rawClient { protocolResources = clientBorrowed }
   rawServer <- mapLeft show $ insertProtocolEndpoint
     serverOld revision serverRole (sourceServerHead plans) emptyProtocolContext
-  framed <- mapLeft show $
-    insertBinding Affine spectator (TyUInt 8) (protocolResources rawServer)
-  borrowed <- mapLeft show $ startSharedLoan spectator framed
-  let serverBefore = rawServer { protocolResources = borrowed }
+  serverFramed <- mapLeft show $
+    insertBinding Affine serverSpectator (TyUInt 8) (protocolResources rawServer)
+  serverBorrowed <- mapLeft show $ startSharedLoan serverSpectator serverFramed
+  let serverBefore = rawServer { protocolResources = serverBorrowed }
       before = Map.fromList
         [(clientProcess, clientBefore), (serverProcess, serverBefore)]
   senderLocal <- mapLeft show $ checkProtocolAction
@@ -3820,11 +3827,15 @@ sourcePingPairedLocalJointEquality accepted stale = do
   joint <- mapLeft show $ runJoint before
   assert (joint == expected && Map.keysSet joint == Map.keysSet before)
     "joint Core Ping differs from full independent pair of local successor contexts"
+  clientAfter <- maybe (Left "paired bridge lost Client") Right
+    (Map.lookup clientProcess joint)
   serverAfter <- maybe (Left "paired bridge lost Server") Right
     (Map.lookup serverProcess joint)
-  assert (affineBindings (protocolResources serverAfter) == affineBindings borrowed
-       && sharedLoans (protocolResources serverAfter) == sharedLoans borrowed)
-    "joint/local exact equality dropped an independent affine spectator loan"
+  assert (affineBindings (protocolResources clientAfter) == affineBindings clientBorrowed
+       && sharedLoans (protocolResources clientAfter) == sharedLoans clientBorrowed
+       && affineBindings (protocolResources serverAfter) == affineBindings serverBorrowed
+       && sharedLoans (protocolResources serverAfter) == sharedLoans serverBorrowed)
+    "joint/local Ping equality dropped one peer's independent affine spectator loan"
 
   let missingClient = clientBefore
         { protocolEndpoints =

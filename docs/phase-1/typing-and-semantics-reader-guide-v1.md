@@ -26,6 +26,8 @@ There are several layers of authority; they must not be conflated.
 | Source implementation and conformance | `src/Phil/Surface/`, `src/Phil/Core/`, `test/`, and `app/`; acceptance must be distinguished from syntactic parse success. |
 | Current completion status | Project Logic Ledger and Conformance Matrix, plus exact-commit proof/certification and CI evidence. Historical `docs/phase-1/*-v1.md` slice notes are **not** current status authorities: see the [Phase 1 notes README](README.md). |
 
+The [non-normative FSEM-02 paired Ping two-sided loan frame](formal-semantics-paired-ping-dual-loan-frame-fsem02-v1.md) extends checked local-versus-joint Send/Receive equality to independent active Client and Server affine spectators. A conditional Rocq theorem frames both abstract loan sets and arbitrary unrelated linear bindings without proving universal native Map/Set refinement or supplying rendezvous authority.
+
 **Suggested reading route:** [Phase 1 Tour](../tutorials/tour-phase1.md)
 → this guide → the canonical grammar → the judgment/proof links below
 → the specific proof and implementation correspondence for any claim you want
