@@ -46,7 +46,7 @@ class Fake:
         records=self.records.get(event,[])
         total=len(records) if self.total_override is None else self.total_override
         return Reply(200,{"total_count":total,"workflow_runs":copy.deepcopy(
-            records[(page-1)*100:page*100])})
+            records[(page-1)*mod.PAGE_SIZE:page*mod.PAGE_SIZE])})
 
 
 def capture(fake,role="before",observed="2026-11-20T15:02:00Z"):
