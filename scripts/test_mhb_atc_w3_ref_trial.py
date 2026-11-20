@@ -396,6 +396,78 @@ class W3RefTrialTests(unittest.TestCase):
         with self.assertRaisesRegex(StopTrial, "wrong or ambiguous ref"):
             trial.worker_probe()
 
+    def test_denial_is_case_sensitive_complete_ref_in_same_diagnostic(self):
+        _, trial = make(role="worker")
+        expected = "refs/heads/" + names(NONCE)["create"]
+        valid = Reply(422, {
+            "message": f"GH013: Repository rule violations found for {expected}",
+            "errors": [{"message":
+                        f"Repository rule violations found for {expected}"}],
+        })
+        self.assertEqual(trial.forbidden(valid, "create", "deny-create"),
+                         "RULESET_DENIED")
+        valid_in_error = Reply(403, {
+            "message": "Validation Failed",
+            "errors": [{"message":
+                        f"GH013: Repository rule violations found for {expected}"}],
+        })
+        self.assertEqual(
+            trial.forbidden(valid_in_error, "create", "deny-create"),
+            "RULESET_DENIED")
+        invalid = [
+            {"message": f"GH013: Repository rule violations found for {expected}-other"},
+            {"message": f"GH013: Repository rule violations found for {expected}/other"},
+            {"message": f"GH013: Repository rule violations found for {expected.upper()}"},
+            {"message": f"GH013: Repository rule violations found for {expected.replace('/w3-', '/W3-')}"},
+            {"message": "Repository rule violation for refs/heads/unrelated",
+             "errors": [{"message": f"Invalid SHA for {expected}"}]},
+            {"message": "GH013 for refs/heads/unrelated",
+             "errors": [{"message": f"Validation Failed for {expected}"}]},
+            {"message": f"Validation Failed for {expected}"},
+            {"message": "GH013: Repository rule violations found for refs/heads/unrelated",
+             "errors": [{"message":
+                         f"Repository rule violations found for {expected}-other"}]},
+            {"message": f"GH013: Repository rule violations found for {expected}",
+             "errors": [{"message": 1234}]},
+            {"message": f"GH013: Repository rule violations found for {expected}",
+             "errors": "invalid shape"},
+        ]
+        for index, response in enumerate(invalid):
+            with self.subTest(case=index), self.assertRaises(StopTrial):
+                trial.forbidden(Reply(422, response), "create", "deny-create")
+
+    def test_wrong_ref_denials_stop_full_worker_sequence_at_each_operation(self):
+        for corrupt_index in range(4):
+            with self.subTest(operation=corrupt_index):
+                api, trial = make()
+                trial.publisher_seed()
+                api.role = "worker"
+                original = api.write_result
+                counter = [0]
+                def altered(endpoint, status=422):
+                    result = original(endpoint, status)
+                    position = counter[0]
+                    counter[0] += 1
+                    if position != corrupt_index:
+                        return result
+                    # Every diagnostic names a longer, different branch.
+                    return Reply(result.status, {
+                        "message": result.data["message"] + "-other",
+                        "errors": [{"message":
+                                    result.data["errors"][0]["message"] + "-other"}],
+                    })
+                api.write_result = altered
+                api.requests.clear()
+                with self.assertRaises(StopTrial):
+                    trial.worker_probe()
+                writes = [method for method, _, _ in api.requests
+                          if method != "GET"]
+                self.assertEqual(writes,
+                                 ["POST", "PATCH", "PATCH", "DELETE"][
+                                     :corrupt_index + 1])
+                self.assertEqual(api.refs,
+                                 {names(NONCE)["seed"]: PARENT})
+
     def test_preflight_detects_occupied_namespace_or_drift(self):
         api, trial = make()
         api.refs["hamster/admitted/other"] = MAIN
