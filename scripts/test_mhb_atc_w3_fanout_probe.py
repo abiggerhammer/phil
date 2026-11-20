@@ -80,7 +80,7 @@ class PublisherCanaryTests(unittest.TestCase):
                        if step.get("uses","").startswith("actions/checkout@")]
             self.assertEqual(len(checkouts),1)
             self.assertEqual(checkouts[0]["with"],{
-                "ref":"${{ github.sha }}","fetch-depth":0,
+                "ref":"${{ github.sha }}","fetch-depth":"0",
                 "persist-credentials":"false"})
         for name in ("publisher_create","publisher_cleanup"):
             self.assertEqual(workflow["jobs"][name]["environment"],

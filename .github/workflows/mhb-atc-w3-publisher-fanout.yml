@@ -155,7 +155,7 @@ jobs:
           run-id: ${{ github.run_id }}
           github-token: ${{ github.token }}
           path: ${{ runner.temp }}/w3-fanout-original
-      - name: Independently verify original run, nonce, default and namespace
+      - name: Independently verify original run, nonce, default and namespace preflight
         shell: bash
         env:
           GITHUB_TOKEN: ${{ github.token }}
