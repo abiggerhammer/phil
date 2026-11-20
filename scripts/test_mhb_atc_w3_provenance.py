@@ -168,7 +168,7 @@ class ProvenanceTests(unittest.TestCase):
             flows=root/".github"/"workflows"
             flows.mkdir(parents=True)
             (flows/"safe.yml").write_text(
-                "on:\\n  push:\\n    branches: [main]\\n")
+                "on:\n  push:\n    branches: [main]\n")
             targets=[]
             for i in range(3):
                 (root/"code").write_text(f"trusted-{i}")
@@ -181,7 +181,7 @@ class ProvenanceTests(unittest.TestCase):
             # Active main can have later, different workflow definitions;
             # existing frozen targets still select their own reviewed tree.
             (flows/"new.yml").write_text(
-                "on:\\n  push:\\n    branches: [feature/other]\\n")
+                "on:\n  push:\n    branches: [feature/other]\n")
             git(root,"add","-A")
             git(root,"commit","-m","unrelated new main workflow")
             self.assertNotEqual(git(root,"rev-parse","HEAD:.github/workflows"),

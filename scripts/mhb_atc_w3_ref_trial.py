@@ -100,7 +100,7 @@ def policy_check(*, live: bool, nonce=None, recovery=False):
     publisher = read(".github/atc-publisher-policy.json")
     selected = frozen_targets(trial)
     require(trial.get("schema") == "MHB-ATC-W3-REF-TRIAL-V2" and
-            trial.get("revision") == 2 and and
+            trial.get("revision") == 2 and
             trial.get("repository") == REPO and
             trial.get("worker_app_id") == WORKER_ID and
             trial.get("publisher_app_id") == PUBLISHER_ID and
