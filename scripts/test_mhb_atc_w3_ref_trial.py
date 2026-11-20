@@ -85,8 +85,15 @@ class FakeAPI:
                 {"ref": "refs/heads/" + k,
                  "object": {"sha": v, "type": "commit"}}
                 for k, v in self.refs.items()])
-        if endpoint.startswith("/git/ref/heads/"):
-            name = endpoint[len("/git/ref/heads/"):]
+        if (endpoint.startswith("/git/ref/heads/") or
+                endpoint.startswith("/git/refs/heads/")):
+            if method == "GET":
+                require_prefix = "/git/ref/heads/"
+            else:
+                require_prefix = "/git/refs/heads/"
+            if not endpoint.startswith(require_prefix):
+                raise AssertionError("wrong read/write Git refs API route")
+            name = endpoint[len(require_prefix):]
             if method == "GET":
                 return (Reply(200, {"ref": "refs/heads/" + name,
                                     "object": {"sha": self.refs[name],
