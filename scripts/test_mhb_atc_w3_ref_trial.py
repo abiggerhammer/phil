@@ -152,7 +152,8 @@ class W3RefTrialTests(unittest.TestCase):
         real_read = module.read
         changed = json.loads((ROOT / ".github/atc-w3-ref-trial.json").read_text())
         changed.update(live_authorized=True, approved_nonce=NONCE,
-                       push_ci_quarantine_verified=True)
+                       push_ci_quarantine_verified=True,
+                       reviewed_quarantine_tree_sha="d"*40)
         def read_for_test(path):
             return changed if path == ".github/atc-w3-ref-trial.json" else real_read(path)
 
