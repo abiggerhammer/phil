@@ -61,8 +61,6 @@ twoStepTrace = do
       s0 = Name "server-initial"
       s1 = Name "server-intermediate"
       s2 = Name "server-terminal"
-      cAction old next = ProtocolSendRequest old next revision client
-      sAction old next = ProtocolReceiveRequest old next revision server
 
   instanceValue <- mapLeft show $
     instantiateBinaryProtocol strictGenericInstantiationPolicy instanceFamily [] []
@@ -73,6 +71,8 @@ twoStepTrace = do
       serverHead = protocolProjectionSession serverProjection
       clientMiddle = Send second (TyUInt 8) (End done)
       serverMiddle = Receive second (TyUInt 8) (End done)
+      cAction old next = ProtocolSendRequest old next revision client
+      sAction old next = ProtocolReceiveRequest old next revision server
   expect (clientHead == Send first (TyUInt 8) clientMiddle
        && serverHead == Receive first (TyUInt 8) serverMiddle)
     "the independently instantiated protocol did not project exact dual two-step heads"
