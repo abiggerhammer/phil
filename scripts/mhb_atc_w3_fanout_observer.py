@@ -26,8 +26,8 @@ NONCE = re.compile(r"[0-9a-f]{12}\Z")
 SHA = re.compile(r"[0-9a-f]{40}\Z")
 TIMESTAMP = re.compile(r"\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z\Z")
 EVENTS = ("push", "create", "delete")
-MAX_PER_EVENT = 900
-PAGE_SIZE = 10
+MAX_PER_EVENT = 200
+PAGE_SIZE = 4
 MAX_WINDOW = timedelta(minutes=120)
 MAX_FILE_BYTES = 300000
 RUN_FIELDS = ("id", "event", "head_branch", "head_sha", "created_at", "actor",

@@ -39,7 +39,7 @@ class Fake:
         if parsed.path!="/actions/runs" or set(query)!={
                 "event","created","per_page","page"}:
             raise AssertionError("unexpected GET route")
-        if query["created"] != [START+".."+END] or query["per_page"] != ["10"]:
+        if query["created"] != [START+".."+END] or query["per_page"] != ["4"]:
             raise AssertionError("unapproved observation window")
         event=query["event"][0];page=int(query["page"][0])
         if event not in mod.EVENTS:raise AssertionError("unknown event")
@@ -112,12 +112,12 @@ class FanoutObserverTests(unittest.TestCase):
         self.assertEqual(result["other_new_run_count"],2)
 
     def test_multi_page_complete_census(self):
-        r=capture(Fake({"push":[run(1000+i) for i in range(204)]}))
-        self.assertEqual(r["event_totals"]["push"],204)
-        self.assertEqual(len(r["runs"]),204)
+        r=capture(Fake({"push":[run(1000+i) for i in range(124)]}))
+        self.assertEqual(r["event_totals"]["push"],124)
+        self.assertEqual(len(r["runs"]),124)
 
     def test_incomplete_oversized_or_duplicate_pagination_rejected(self):
-        for total in (899,900,901):
+        for total in (199,200,201):
             with self.subTest(total=total),self.assertRaises(mod.CensusStop):
                 capture(Fake({"push":[run(1)]},total_override=total))
         with self.assertRaisesRegex(mod.CensusStop,"duplicate"):
