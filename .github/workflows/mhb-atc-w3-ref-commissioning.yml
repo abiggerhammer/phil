@@ -1,0 +1,173 @@
+name: MHB ATC W3 Protected Ref Trial (Manual, Source Disabled)
+
+# No automated event ever has worker/publisher credentials.
+# Source policy live_authorized=false; repo runtime variable is OFF by default.
+on:
+  workflow_dispatch:
+    inputs:
+      mode:
+        description: "plan reads only; run is separately source- and variable-gated"
+        type: choice
+        required: true
+        default: plan
+        options: [plan, run]
+      nonce:
+        description: "Fresh, never-used 12-lowercase-hex nonce"
+        type: string
+        required: true
+      confirm:
+        description: "PLAN_ONLY or separately authorized W3 protected-ref acknowledgment"
+        type: string
+        required: true
+        default: PLAN_ONLY
+
+permissions:
+  contents: read
+
+concurrency:
+  group: mhb-atc-admission-global
+  queue: max
+  cancel-in-progress: false
+
+env:
+  PYTHONDONTWRITEBYTECODE: '1'
+  MHB_ATC_W3_REF_TRIAL_ENABLED: ${{ vars.MHB_ATC_W3_REF_TRIAL_ENABLED }}
+  W3_CONFIRM: ${{ inputs.confirm }}
+
+jobs:
+  prepare:
+    if: >-
+      github.event_name == 'workflow_dispatch' &&
+      github.ref == 'refs/heads/main' &&
+      github.repository == 'abiggerhammer/phil' &&
+      github.actor == 'abiggerhammer'
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Checkout trusted dispatch SHA without credentials
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+
+      - name: Prepare a clean exact local main
+        shell: bash
+        run: |
+          set -euo pipefail
+          git switch -C main "$GITHUB_SHA"
+          test "$(git rev-parse HEAD)" = "$GITHUB_SHA"
+          test -z "$(git status --porcelain --untracked-files=all)"
+
+      - name: Read-only W3 preflight; run requires both dormant-source and variable switches
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+          MODE: ${{ inputs.mode }}
+          NONCE: ${{ inputs.nonce }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          case "$MODE" in
+            plan)
+              test "$W3_CONFIRM" = PLAN_ONLY
+              python3 scripts/mhb_atc_w3_ref_trial.py plan --nonce "$NONCE"
+              ;;
+            run)
+              test "$W3_CONFIRM" = AUTHORIZE_W3_PROTECTED_REFS_ONLY
+              python3 scripts/mhb_atc_w3_ref_trial.py plan \
+                --nonce "$NONCE" --authorize-live
+              ;;
+            *) echo 'Unexpected commissioning mode' >&2; exit 1 ;;
+          esac
+
+  publisher_seed:
+    needs: [prepare]
+    if: >-
+      needs.prepare.result == 'success' &&
+      inputs.mode == 'run' &&
+      vars.MHB_ATC_W3_REF_TRIAL_ENABLED == 'true'
+    environment: atc-publisher
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+      - name: Prepare exact local main
+        run: git switch -C main "$GITHUB_SHA"
+      - name: Mint publisher-only token for canary/seed
+        id: publisher_token
+        uses: actions/create-github-app-token@64ab729a6294000f5aa4a4bc0b73d1f32bc45510 # v3
+        with:
+          client-id: ${{ vars.MHB_ATC_PUBLISHER_APP_CLIENT_ID }}
+          private-key: ${{ secrets.MHB_ATC_PUBLISHER_APP_PRIVATE_KEY }}
+          permission-contents: write
+      - name: Verify publisher CREATE and DELETE cleanup, then create exact seed
+        env:
+          W3_APP_TOKEN: ${{ steps.publisher_token.outputs.token }}
+          W3_ACTION_APP_SLUG: ${{ steps.publisher_token.outputs.app-slug }}
+          W3_ACTION_INSTALLATION_ID: ${{ steps.publisher_token.outputs.installation-id }}
+          NONCE: ${{ inputs.nonce }}
+        run: python3 scripts/mhb_atc_w3_ref_trial.py publisher-seed --nonce "$NONCE"
+
+  worker_denials:
+    needs: [prepare, publisher_seed]
+    if: >-
+      needs.prepare.result == 'success' &&
+      needs.publisher_seed.result == 'success' &&
+      inputs.mode == 'run' &&
+      vars.MHB_ATC_W3_REF_TRIAL_ENABLED == 'true'
+    environment: atc-worker-broker
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+      - name: Prepare exact local main
+        run: git switch -C main "$GITHUB_SHA"
+      - name: Mint worker App token only inside protected broker environment
+        id: worker_token
+        uses: actions/create-github-app-token@64ab729a6294000f5aa4a4bc0b73d1f32bc45510 # v3
+        with:
+          client-id: ${{ vars.MHB_ATC_WORKER_APP_CLIENT_ID }}
+          private-key: ${{ secrets.MHB_ATC_WORKER_APP_PRIVATE_KEY }}
+          permission-contents: write
+      - name: Four serial exact-ref denials, STOP on first unexpected result
+        env:
+          W3_APP_TOKEN: ${{ steps.worker_token.outputs.token }}
+          W3_ACTION_APP_SLUG: ${{ steps.worker_token.outputs.app-slug }}
+          W3_ACTION_INSTALLATION_ID: ${{ steps.worker_token.outputs.installation-id }}
+          NONCE: ${{ inputs.nonce }}
+        run: python3 scripts/mhb_atc_w3_ref_trial.py worker-negative --nonce "$NONCE"
+
+  publisher_cleanup:
+    needs: [prepare, publisher_seed, worker_denials]
+    if: >-
+      always() &&
+      needs.prepare.result == 'success' &&
+      (needs.publisher_seed.result == 'success' ||
+       needs.publisher_seed.result == 'failure') &&
+      inputs.mode == 'run' &&
+      vars.MHB_ATC_W3_REF_TRIAL_ENABLED == 'true'
+    environment: atc-publisher
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+      - name: Prepare exact local main
+        run: git switch -C main "$GITHUB_SHA"
+      - name: Mint publisher token for scoped cleanup regardless of probe result
+        id: cleanup_token
+        uses: actions/create-github-app-token@64ab729a6294000f5aa4a4bc0b73d1f32bc45510 # v3
+        with:
+          client-id: ${{ vars.MHB_ATC_PUBLISHER_APP_CLIENT_ID }}
+          private-key: ${{ secrets.MHB_ATC_PUBLISHER_APP_PRIVATE_KEY }}
+          permission-contents: write
+      - name: Delete only known-SHA disposable canary/create/seed refs
+        env:
+          W3_APP_TOKEN: ${{ steps.cleanup_token.outputs.token }}
+          W3_ACTION_APP_SLUG: ${{ steps.cleanup_token.outputs.app-slug }}
+          W3_ACTION_INSTALLATION_ID: ${{ steps.cleanup_token.outputs.installation-id }}
+          NONCE: ${{ inputs.nonce }}
+        run: python3 scripts/mhb_atc_w3_ref_trial.py publisher-cleanup --nonce "$NONCE"
