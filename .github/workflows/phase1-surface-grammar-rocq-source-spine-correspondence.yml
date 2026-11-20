@@ -293,6 +293,7 @@ jobs:
           Print Assumptions phase1_surface_admitted_observation_equality_preserves_tag.
           Print Assumptions phase1_surface_admitted_record_data_observations_disjoint.
           Print Assumptions phase1_surface_admitted_observation_collides_on_distinct_exact_keys.
+          Print Assumptions phase1_surface_certified_record_data_observations_separated.
           EOF
           rocq c -Q proof/Phil Phil RecursiveGroupingAssumptions.v \
             | tee recursive-grouping-assumptions.txt
@@ -345,7 +346,8 @@ jobs:
             Phil.Surface.GrammarAstRecordDataRecursiveGroupingAdmissionImageFibers \
             Phil.Surface.GrammarAstRecordDataRecursiveGroupingProductionObservables \
             Phil.Surface.GrammarAstRecordDataRecursiveGroupingDerivedObservables \
-            Phil.Surface.GrammarAstRecordDataRecursiveGroupingObservationSeparation
+            Phil.Surface.GrammarAstRecordDataRecursiveGroupingObservationSeparation \
+            Phil.Surface.GrammarAstRecordDataRecursiveGroupingDerivedObservationDisjointness
 
       - name: Record source representation and recursive grouping identities
         shell: bash
@@ -427,6 +429,8 @@ jobs:
           cp proof/Phil/Surface/GrammarAstRecordDataRecursiveGroupingDerivedObservables.vo surface-grammar-ast-representation/
           cp proof/Phil/Surface/GrammarAstRecordDataRecursiveGroupingObservationSeparation.v surface-grammar-ast-representation/
           cp proof/Phil/Surface/GrammarAstRecordDataRecursiveGroupingObservationSeparation.vo surface-grammar-ast-representation/
+          cp proof/Phil/Surface/GrammarAstRecordDataRecursiveGroupingDerivedObservationDisjointness.v surface-grammar-ast-representation/
+          cp proof/Phil/Surface/GrammarAstRecordDataRecursiveGroupingDerivedObservationDisjointness.vo surface-grammar-ast-representation/
           cp SurfaceGrammarAstRecordDataRecursiveGroupingKernel.hs surface-grammar-ast-representation/
           cp recursive-grouping-assumptions.txt surface-grammar-ast-representation/
           sha256sum \
@@ -557,6 +561,8 @@ jobs:
             proof/Phil/Surface/GrammarAstRecordDataRecursiveGroupingDerivedObservables.vo \
             proof/Phil/Surface/GrammarAstRecordDataRecursiveGroupingObservationSeparation.v \
             proof/Phil/Surface/GrammarAstRecordDataRecursiveGroupingObservationSeparation.vo \
+            proof/Phil/Surface/GrammarAstRecordDataRecursiveGroupingDerivedObservationDisjointness.v \
+            proof/Phil/Surface/GrammarAstRecordDataRecursiveGroupingDerivedObservationDisjointness.vo \
             SurfaceGrammarAstRecordDataRecursiveGroupingKernel.hs \
             > surface-grammar-ast-representation/identities.sha256
           cat surface-grammar-ast-representation/identities.sha256
