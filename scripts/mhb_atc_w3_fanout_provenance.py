@@ -181,7 +181,9 @@ def valid_binding(doc, *, nonce, expected_run_id):
     check(set(doc) == keys, "original fanout binding fields are not canonical")
     canonical = make_binding(doc.get("nonce"), doc.get("dispatch_sha"),
                              doc.get("run_id"), doc.get("policy_blob_sha"))
-    check(doc == canonical and doc["nonce"] == nonce and
+    check(type(doc.get("run_attempt")) is int and
+          doc["run_attempt"] == 1 and doc == canonical and
+          doc["nonce"] == nonce and
           doc["run_id"] == run_id(expected_run_id),
           "original fanout binding differs from authorized source")
     return canonical

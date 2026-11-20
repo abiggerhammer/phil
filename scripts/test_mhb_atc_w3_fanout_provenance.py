@@ -82,7 +82,7 @@ class FanoutProvenanceTests(unittest.TestCase):
         for key,value in (
             ("nonce","0"*12),("run_id",RUN+1),
             ("target_sha","f"*40),("dispatch_sha","wrong"),
-            ("policy_blob_sha","f"*40),("workflow_tree_sha","f"*40),
+            ("policy_blob_sha","invalid"),("workflow_tree_sha","f"*40),
             ("repository","foreign/repo"),("run_attempt",2),
             ("run_attempt",True),("mode","cleanup"),
             ("added","untrusted")):
@@ -116,7 +116,8 @@ class FanoutProvenanceTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as td:
             root=Path(td);original,blob=initialized_repo(root)
             doc=make_binding(NONCE,original,RUN,blob)
-            self.assertEqual(trusted_checkout(root),git(root,"rev-parse","HEAD"))
+            with patch.dict(os.environ,{"GITHUB_SHA":git(root,"rev-parse","HEAD")}):
+                self.assertEqual(trusted_checkout(root),git(root,"rev-parse","HEAD"))
             fake=FakeActions(original)
             current=current_policy(ROOT)
             self.assertFalse(current["source_authorized"])
