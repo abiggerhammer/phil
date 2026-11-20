@@ -156,6 +156,8 @@ class W3RefTrialTests(unittest.TestCase):
                           GITHUB_ACTIONS="true",
                           GITHUB_EVENT_NAME="workflow_dispatch",
                           GITHUB_ACTOR="abiggerhammer",
+                          GITHUB_TRIGGERING_ACTOR="abiggerhammer",
+                          GITHUB_RUN_ATTEMPT="1",
                           GITHUB_REPOSITORY=REPO,
                           GITHUB_REF="refs/heads/main",
                           W3_CONFIRM="AUTHORIZE_W3_PROTECTED_REFS_ONLY",
@@ -171,6 +173,8 @@ class W3RefTrialTests(unittest.TestCase):
             for key, value in [
                 ("GITHUB_REF", "refs/heads/hamster/staged/attacker"),
                 ("GITHUB_ACTOR", "unexpected-user"),
+                ("GITHUB_TRIGGERING_ACTOR", "unexpected-user"),
+                ("GITHUB_RUN_ATTEMPT", "2"),
                 ("MHB_ATC_W3_REF_TRIAL_ENABLED", "false"),
                 ("W3_CONFIRM", "PLAN_ONLY"),
                 ("MHB_ATC_AUTO_ADMIT_ENABLED", "true"),
@@ -312,6 +316,8 @@ class W3RefTrialTests(unittest.TestCase):
         self.assertNotIn("\n  push:", source)
         self.assertNotIn("\n  schedule:", source)
         self.assertIn("github.actor == 'abiggerhammer'", source)
+        self.assertIn("github.triggering_actor == 'abiggerhammer'", source)
+        self.assertIn("github.run_attempt == 1", source)
         self.assertIn("github.ref == 'refs/heads/main'", source)
         self.assertIn("vars.MHB_ATC_W3_REF_TRIAL_ENABLED == 'true'", source)
         self.assertIn("environment: atc-publisher", source)
