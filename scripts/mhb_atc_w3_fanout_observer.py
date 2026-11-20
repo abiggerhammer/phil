@@ -16,9 +16,10 @@ from pathlib import Path
 import re
 import sys
 import tempfile
-from urllib.parse import quote
-
-from mhb_atc_w3_ref_trial import Client
+from dataclasses import dataclass
+import http.client
+from urllib import request, error
+from urllib.parse import quote, parse_qs, urlsplit
 
 REPO = "abiggerhammer/phil"
 SCHEMA = "MHB-ATC-W3-PUBLISHER-FANOUT-CENSUS-V1"
@@ -59,6 +60,80 @@ def nonce_ref(nonce):
     check(isinstance(nonce, str) and NONCE.fullmatch(nonce),
           "invalid fanout nonce")
     return "refs/heads/hamster/admitted/w3-fanout-" + nonce + "-canary"
+
+
+
+# Separate from the protected W3 writer: the latter properly rejects all
+# query strings, whereas this observer needs fixed Actions list queries.
+# Do not weaken or repurpose the credential-bearing transport.
+MAX_RESPONSE_BYTES = 65536
+API_ROOT = "https://api.github.com/repos/" + REPO
+
+
+@dataclass(frozen=True)
+class Reply:
+    status: int
+    data: object
+
+
+class _NoRedirect(request.HTTPRedirectHandler):
+    def redirect_request(self, req, fp, code, msg, headers, newurl):
+        return None
+
+
+class ReadOnlyActionsClient:
+    """GET-only, one fixed API route, no redirects or retries, bounded JSON."""
+
+    def __init__(self, token):
+        check(isinstance(token, str) and len(token) >= 9 and
+              "\r" not in token and "\n" not in token,
+              "read-only Actions token invalid")
+        self.token = token
+
+    def request(self, method, endpoint, data=None):
+        check(method == "GET" and data is None and
+              isinstance(endpoint, str),
+              "read-only Actions census forbids mutation")
+        parsed = urlsplit(endpoint)
+        check(parsed.scheme == "" and parsed.netloc == "" and
+              parsed.path == "/actions/runs" and not parsed.fragment,
+              "unreviewed Actions endpoint")
+        query = parse_qs(parsed.query, strict_parsing=True)
+        check(set(query) == {"event", "created", "per_page", "page"} and
+              all(len(x) == 1 for x in query.values()) and
+              query["event"][0] in EVENTS and
+              query["per_page"] == [str(PAGE_SIZE)] and
+              re.fullmatch(r"[1-9][0-9]*", query["page"][0]) and
+              int(query["page"][0]) <= MAX_PER_EVENT // PAGE_SIZE + 1,
+              "unapproved Actions census query")
+        times = query["created"][0].split("..")
+        check(len(times) == 2, "unapproved Actions census time window")
+        beginning, ending = iso(times[0]), iso(times[1])
+        check(beginning < ending and ending - beginning <= MAX_WINDOW,
+              "unapproved Actions census time window")
+        req = request.Request(
+            API_ROOT + endpoint,
+            method="GET",
+            headers={"Authorization": "Bearer " + self.token,
+                     "Accept": "application/vnd.github+json",
+                     "X-GitHub-Api-Version": "2022-11-28"})
+        try:
+            try:
+                with request.build_opener(_NoRedirect).open(req, timeout=20) as response:
+                    status = response.status
+                    raw = response.read(MAX_RESPONSE_BYTES + 1)
+            except error.HTTPError as exc:
+                status = exc.code
+                raw = exc.read(MAX_RESPONSE_BYTES + 1)
+        except (OSError, http.client.HTTPException, ValueError):
+            raise CensusStop("Actions census transport failure") from None
+        check(len(raw) <= MAX_RESPONSE_BYTES,
+              "Actions census response exceeds fixed bound")
+        try:
+            payload = json.loads(raw.decode("utf-8"))
+        except (ValueError, UnicodeError):
+            raise CensusStop("Actions census returned invalid JSON") from None
+        return Reply(status, payload)
 
 
 def reviewed_policy():
@@ -330,7 +405,7 @@ def cli():
         token = os.getenv("GH_TOKEN") or os.getenv("GITHUB_TOKEN")
         check(isinstance(token, str) and len(token) >= 9,
               "read-only GitHub token required")
-        doc = collect(Client(token), role=args.role, nonce=args.nonce,
+        doc = collect(ReadOnlyActionsClient(token), role=args.role, nonce=args.nonce,
                       window_start=args.window_start, window_end=args.window_end)
         save(args.out, doc)
         print(json.dumps({"decision":doc["decision"],"nonce":doc["nonce"],

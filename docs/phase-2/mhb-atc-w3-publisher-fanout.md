@@ -95,9 +95,10 @@ the SAME narrowly defined UTC interval before and after the supervised
 probe. Our source-only script
 scripts/mhb_atc_w3_fanout_observer.py
 performs GitHub GETs only, requires an exact window of at most 120
-minutes, enumerates every reported page in bounded four-run batches (empirically
-within the existing W3 HTTPS client's 64 KiB response limit), refuses
-windows with 200 or more runs of any one event type, and rejects count changes,
+minutes, enumerates every reported page in bounded four-run batches with a
+separate GET-only fixed-route Actions HTTPS reader, no redirects or
+retries and a 64 KiB response bound. It refuses windows with 200 or
+more runs of any one event type and rejects count changes,
 duplicates, foreign/malformed runs and oversized inventories, and
 writes a curated local 0600 JSON snapshot. It deliberately never
 certifies W3 quarantine.
