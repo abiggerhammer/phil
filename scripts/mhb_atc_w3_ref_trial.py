@@ -86,6 +86,13 @@ def policy_check(*, live: bool, nonce=None):
               NONCE.fullmatch(trial["approved_nonce"]))),
             "unreviewed W3 source-policy configuration")
     if live:
+        # This diagnostic cannot share authority with active W2/admission.
+        for name in ("MHB_ATC_WORKER_BROKER_ENABLED",
+                     "MHB_ATC_IMMUTABLE_HEADS_ENABLED",
+                     "MHB_ATC_AUTO_ADMIT_ENABLED",
+                     "MHB_ATC_PHASE2_STAGE_BRIDGE_ENABLED"):
+            require(os.getenv(name, "").lower() != "true",
+                    "other ATC activation switches must remain OFF")
         require(trial["live_authorized"] is True,
                 "W3 live trials explicitly DISABLED in reviewed source")
         require(isinstance(nonce, str) and
