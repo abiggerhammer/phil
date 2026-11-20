@@ -16,16 +16,18 @@ from mhb_atc_w3_provenance import (
     read_binding, verify_origin, snapshot_tree)
 
 NONCE="f1e2d3c4b5a6"; H="a"*40; P="b"*40; G="c"*40; TREE="d"*40; RUN=987654321
+DISPATCH="f"*40
+FROZEN={"source_sha":H,"parent_sha":P,"grandparent_sha":G}
 
 def origin():
-    return make_binding(NONCE,H,P,G,TREE,RUN)
+    return make_binding(NONCE,DISPATCH,H,P,G,TREE,RUN)
 
 class GitHub:
     def __init__(self):
         self.records={
             "/actions/runs/"+str(RUN): {
                 "id":RUN,"event":"workflow_dispatch","path":WORKFLOW_PATH,
-                "head_branch":"main","head_sha":H,"run_attempt":1,
+                "head_branch":"main","head_sha":DISPATCH,"run_attempt":1,
                 "actor":{"login":"abiggerhammer"},
                 "triggering_actor":{"login":"abiggerhammer"},
                 "repository":{"full_name":REPO}},
@@ -51,34 +53,54 @@ class ProvenanceTests(unittest.TestCase):
     def test_binding_canonical_and_nonsecret(self):
         doc=origin()
         self.assertEqual(validate_binding(doc,nonce=NONCE,
-            original_run_id=RUN,reviewed_tree=TREE),doc)
+            original_run_id=RUN,reviewed_tree=TREE,
+            frozen_targets=FROZEN),doc)
         self.assertEqual(doc["parent_sha"],P)
+        self.assertEqual(doc["dispatch_sha"],DISPATCH)
+        self.assertNotEqual(doc["dispatch_sha"],doc["source_sha"])
+        self.assertEqual(doc["schema"],"MHB-ATC-W3-ORIGIN-V2")
         for word in ("token","private_key","jwt","secret"):
             self.assertNotIn(word,json.dumps(doc).lower())
 
     def test_binding_rejects_wrong_nonce_run_lineage_tree_and_shape(self):
         for field,value in (("nonce","e"*12),("run_id",RUN+1),
-                            ("source_sha","invalid-sha"),("workflow_tree_sha","f"*40),
+                            ("source_sha","invalid-sha"),("dispatch_sha","invalid-sha"),
+                            ("workflow_tree_sha","f"*40),
                             ("run_attempt",2),("run_attempt",True),
                             ("repository","attacker/phil"),("mode","cleanup"),
                             ("added","injection")):
             doc=origin();doc[field]=value
             with self.subTest(field=field),self.assertRaises(ProvenanceError):
-                validate_binding(doc,nonce=NONCE,original_run_id=RUN,reviewed_tree=TREE)
+                validate_binding(doc,nonce=NONCE,original_run_id=RUN,
+                    reviewed_tree=TREE,frozen_targets=FROZEN)
+
+    def test_binding_rejects_foreign_valid_frozen_tuple(self):
+        altered=origin()
+        altered["source_sha"]="e"*40
+        with self.assertRaisesRegex(ProvenanceError,"frozen targets"):
+            validate_binding(altered,nonce=NONCE,original_run_id=RUN,
+                             reviewed_tree=TREE,frozen_targets=FROZEN)
+        with self.assertRaisesRegex(ProvenanceError,"frozen targets"):
+            validate_binding(origin(),nonce=NONCE,original_run_id=RUN,
+                reviewed_tree=TREE,
+                frozen_targets={"source_sha":"e"*40,"parent_sha":P,
+                                "grandparent_sha":G})
 
     def test_loader_rejects_duplicates_oversize_and_symlinks(self):
         with tempfile.TemporaryDirectory() as d:
             file=Path(d)/"w3-origin.json";file.write_text(json.dumps(origin()))
             self.assertEqual(read_binding(file,nonce=NONCE,
-                original_run_id=RUN,reviewed_tree=TREE),origin())
+                original_run_id=RUN,reviewed_tree=TREE,
+                frozen_targets=FROZEN),origin())
             link=Path(d)/"symlink.json";link.symlink_to(file)
             with self.assertRaises(ProvenanceError):
-                read_binding(link,nonce=NONCE,original_run_id=RUN,reviewed_tree=TREE)
+                read_binding(link,nonce=NONCE,original_run_id=RUN,
+                             reviewed_tree=TREE,frozen_targets=FROZEN)
             for malformed in ('{"schema":"x","schema":"y"}',"x"*4097):
                 file.write_text(malformed)
                 with self.assertRaises(ProvenanceError):
                     read_binding(file,nonce=NONCE,original_run_id=RUN,
-                                 reviewed_tree=TREE)
+                                 reviewed_tree=TREE,frozen_targets=FROZEN)
 
     def test_authenticated_run_and_entire_commit_graph(self):
         gh=GitHub()
@@ -93,7 +115,7 @@ class ProvenanceTests(unittest.TestCase):
             ("/actions/runs/"+str(RUN),lambda x:x.update(run_attempt=2)),
             ("/actions/runs/"+str(RUN),lambda x:x.update(path="other.yml")),
             ("/actions/runs/"+str(RUN),lambda x:x.update(event="schedule")),
-            ("/actions/runs/"+str(RUN),lambda x:x.update(head_sha="f"*40)),
+            ("/actions/runs/"+str(RUN),lambda x:x.update(head_sha="e"*40)),
             ("/git/commits/"+H,lambda x:x["parents"][0].update(sha="f"*40)),
             ("/git/commits/"+P,lambda x:x["tree"].update(sha="f"*40)),
             ("/git/commits/"+G,lambda x:x["tree"].update(sha="f"*40)),
@@ -132,6 +154,57 @@ class ProvenanceTests(unittest.TestCase):
                 snapshot_tree(root,new,commits[2],commits[1],
                     git(root,"rev-parse","HEAD:.github/workflows"))
 
+    def test_frozen_targets_survive_unrelated_new_main_workflow_changes(self):
+        def git(repo,*args):
+            run=subprocess.run(["git",*args],cwd=repo,
+                               text=True,capture_output=True,timeout=20)
+            self.assertEqual(run.returncode,0,run.stderr)
+            return run.stdout.strip()
+        with tempfile.TemporaryDirectory() as d:
+            root=Path(d)
+            git(root,"init","-b","main")
+            git(root,"config","user.name","fixture")
+            git(root,"config","user.email","fixture@example.invalid")
+            flows=root/".github"/"workflows"
+            flows.mkdir(parents=True)
+            (flows/"safe.yml").write_text(
+                "on:\\n  push:\\n    branches: [main]\\n")
+            targets=[]
+            for i in range(3):
+                (root/"code").write_text(f"trusted-{i}")
+                git(root,"add","-A")
+                git(root,"commit","-m",f"trusted {i}")
+                targets.append(git(root,"rev-parse","HEAD"))
+            selected=targets[::-1]
+            reviewed=git(root,"rev-parse","HEAD:.github/workflows")
+            self.assertEqual(snapshot_tree(root,*selected,reviewed),reviewed)
+            # Active main can have later, different workflow definitions;
+            # existing frozen targets still select their own reviewed tree.
+            (flows/"new.yml").write_text(
+                "on:\\n  push:\\n    branches: [feature/other]\\n")
+            git(root,"add","-A")
+            git(root,"commit","-m","unrelated new main workflow")
+            self.assertNotEqual(git(root,"rev-parse","HEAD:.github/workflows"),
+                                reviewed)
+            self.assertEqual(snapshot_tree(root,*selected,reviewed),reviewed)
+            (root/"code").write_text("later non-workflow work")
+            git(root,"add","-A")
+            git(root,"commit","-m","main moves again")
+            self.assertEqual(snapshot_tree(root,*selected,reviewed),reviewed)
+            with self.assertRaisesRegex(ProvenanceError,"first-parent"):
+                snapshot_tree(root,selected[0],selected[2],selected[1],
+                              reviewed)
+            # A valid-looking but unmerged side-branch trio is NOT a
+            # trusted main ancestor, regardless of workflow-tree equality.
+            git(root,"switch","-c","side",selected[0])
+            (root/"code").write_text("unmerged")
+            git(root,"add","-A")
+            git(root,"commit","-m","unmerged side commit")
+            outside=git(root,"rev-parse","HEAD")
+            git(root,"switch","main")
+            with self.assertRaisesRegex(ProvenanceError,"ancestry/tree"):
+                snapshot_tree(root,outside,selected[0],selected[1],reviewed)
+
     def test_recovery_after_main_moves_twice_uses_original_seed_parent(self):
         # H's seed was P. A fresh K's latest ancestors no longer contain P.
         with tempfile.TemporaryDirectory() as d:
@@ -147,8 +220,10 @@ class ProvenanceTests(unittest.TestCase):
                  patch.object(trial_source,"read",side_effect=lambda p:
                      policy if p==".github/atc-w3-ref-trial.json" else old_read(p)),\
                  patch.object(trial_source,"Client",side_effect=lambda _:gh):
-                observed=trial_source._verified_recovery_origin(NONCE,TREE)
+                observed=trial_source._verified_recovery_origin(NONCE,TREE,
+                                                                  (H,P,G))
                 self.assertEqual(observed["parent_sha"],P)
+                self.assertEqual(observed["dispatch_sha"],DISPATCH)
                 self.assertNotIn(P,("f"*40,"e"*40,H))
                 self.assertTrue(all(m=="GET" for m,_ in gh.calls))
 

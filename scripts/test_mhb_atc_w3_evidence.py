@@ -26,7 +26,7 @@ def ledger(root, phase):
     return EvidenceLedger(
         root/"w3-evidence.json",phase=phase,nonce=NONCE,run_id=RUN,
         source_sha=MAIN,parent_sha=PARENT,grandparent_sha=GRANDPARENT,
-        workflow_tree_sha=TREE,
+        dispatch_sha="f"*40,workflow_tree_sha=TREE,
         app_id=5836223 if phase=="worker-negative" else 5782193,
         installation_id="123456789")
 
@@ -56,6 +56,9 @@ class EvidenceTests(unittest.TestCase):
             self.assertEqual(result["decision"],"PUBLISHER_CLEANUP_CANARY_PASSED")
             doc=json.loads(path.read_text())
             self.assertEqual(doc["decision"],"PUBLISHER_SEED_CONFIRMED")
+            self.assertEqual(doc["dispatch_sha"],"f"*40)
+            self.assertEqual(doc["source_sha"],MAIN)
+            self.assertEqual(doc["schema"],SCHEMA)
             self.assertEqual(doc["app_id"],5782193)
             self.assertEqual(doc["installation_id"],"123456789")
             self.assertEqual(path.stat().st_mode&0o777,0o600)
@@ -212,7 +215,11 @@ class EvidenceTests(unittest.TestCase):
                         return_value=(MAIN,PARENT,GRANDPARENT)))
                     stack.enter_context(patch.object(
                         module,"read",
-                        return_value={"reviewed_quarantine_tree_sha":TREE}))
+                        return_value={
+                            "reviewed_quarantine_tree_sha":TREE,
+                            "frozen_target_commits":{
+                                "source_sha":MAIN,"parent_sha":PARENT,
+                                "grandparent_sha":GRANDPARENT}}))
                     stack.enter_context(patch.object(module,"snapshot_tree"))
                     stack.enter_context(patch.object(module.Trial,"token_audience"))
                     stack.enter_context(patch.object(

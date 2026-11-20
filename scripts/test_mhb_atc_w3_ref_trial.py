@@ -286,7 +286,7 @@ class W3RefTrialTests(unittest.TestCase):
             with self.subTest(bad=bad), self.assertRaises(StopTrial):
                 names(bad)
 
-    def test_all_four_workflow_jobs_fetch_exact_three_commit_history(self):
+    def test_all_four_workflow_jobs_fetch_full_trusted_history(self):
         source = (ROOT / ".github/workflows/mhb-atc-w3-ref-commissioning.yml").read_text()
         wf = yaml.load(source, Loader=StrictWorkflowLoader)
         self.assertEqual(set(wf["jobs"]), {
@@ -298,7 +298,7 @@ class W3RefTrialTests(unittest.TestCase):
                 self.assertEqual(len(checkouts), 1)
                 self.assertEqual(checkouts[0]["with"], {
                     "ref": "${{ github.sha }}",
-                    "fetch-depth": "3",
+                    "fetch-depth": "0",
                     "persist-credentials": "false",
                 })
 
@@ -340,6 +340,41 @@ class W3RefTrialTests(unittest.TestCase):
                             self.assertEqual(
                                 module.local_commits(),
                                 (ancestry[-1], ancestry[-2], ancestry[-3]))
+
+    def test_frozen_targets_are_source_pinned_and_distinct_from_main(self):
+        policy=json.loads((ROOT/".github/atc-w3-ref-trial.json").read_text())
+        frozen=module.frozen_targets(policy)
+        self.assertEqual(frozen,(
+            "d82a60a3c9f448c2e59ebe7bdfc710109159f7a9",
+            "e38814a2e916252a8a7f3dd438943e8f4a21664a",
+            "4b7594ed83648372171a9bb1c34647522c064b22"))
+        self.assertFalse(policy["live_authorized"])
+        self.assertIsNone(policy["approved_nonce"])
+        self.assertFalse(policy["push_ci_quarantine_verified"])
+        self.assertEqual(policy["schema"],"MHB-ATC-W3-REF-TRIAL-V2")
+        for bad in (
+            {"source_sha":MAIN,"parent_sha":MAIN,"grandparent_sha":GRANDPARENT},
+            {"source_sha":MAIN,"parent_sha":PARENT},
+            {"source_sha":"not-a-sha","parent_sha":PARENT,"grandparent_sha":GRANDPARENT},
+        ):
+            with self.subTest(bad=bad),self.assertRaisesRegex(
+                    StopTrial,"frozen target"):
+                module.frozen_targets({"frozen_target_commits":bad})
+
+    def test_worker_moving_main_is_bound_to_dispatch_not_frozen_target(self):
+        api,trial=make()
+        new_dispatch="f"*40
+        api.main=new_dispatch
+        # The frozen source remains MAIN; only the run's current dispatch
+        # source is new. The gate must not compare main to the old target.
+        trial.dispatch_sha=new_dispatch
+        trial.gate([])
+        receipt=trial.public_receipt("plan","SOURCE_ONLY_PLAN_NO_WRITES")
+        self.assertEqual(receipt["trusted_sha"],new_dispatch)
+        self.assertEqual(receipt["frozen_target_source_sha"],MAIN)
+        api.main="e"*40
+        with self.assertRaisesRegex(StopTrial,"main moved"):
+            trial.gate([])
 
     def test_publisher_canary_proves_cleanup_before_seed(self):
         api, trial = make()
