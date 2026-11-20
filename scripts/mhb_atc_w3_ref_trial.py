@@ -387,9 +387,13 @@ def cli():
     parser.add_argument("phase", choices=("plan", "publisher-seed", "worker-negative",
                                           "publisher-cleanup"))
     parser.add_argument("--nonce", required=True)
+    parser.add_argument("--authorize-live", action="store_true",
+                        help="read-only prepare still checks live execution gates")
     args = parser.parse_args()
     names(args.nonce)
-    live = args.phase != "plan"
+    require(not args.authorize_live or args.phase == "plan",
+            "authorize-live only applies to read-only prepare")
+    live = args.phase != "plan" or args.authorize_live
     publisher = policy_check(live=live)
     current, parent, grandparent = local_commits()
     token = os.getenv("W3_APP_TOKEN") if live else os.getenv("GITHUB_TOKEN")
@@ -404,12 +408,13 @@ def cli():
                 "actual token principal/installation not authenticated")
     client = Client(token)
     run = Trial(client, args.nonce, current, parent, grandparent, publisher)
-    if live:
+    if args.phase != "plan":
         run.token_audience()
     if args.phase == "plan":
         run.gate([])
         result = run.public_receipt("plan", "SOURCE_ONLY_PLAN_NO_WRITES")
         result["execution_authorized"] = False
+        result["execution_gates_satisfied"] = bool(args.authorize_live)
     elif args.phase == "publisher-seed":
         result = run.publisher_seed()
     elif args.phase == "worker-negative":
