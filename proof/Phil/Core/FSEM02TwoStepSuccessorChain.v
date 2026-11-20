@@ -51,8 +51,8 @@ Proof.
   repeat split.
   - exact HoldSender.
   - exact HoldReceiver.
-  - rewrite <- HsenderChain in HmiddleSender. exact HmiddleSender.
-  - rewrite <- HreceiverChain in HmiddleReceiver. exact HmiddleReceiver.
+  - rewrite HsenderChain in HmiddleSender. exact HmiddleSender.
+  - rewrite HreceiverChain in HmiddleReceiver. exact HmiddleReceiver.
 Qed.
 
 Theorem fsem02TwoStepSecondUnadmittedSourcePreservesCommittedPrefix :
