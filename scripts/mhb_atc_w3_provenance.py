@@ -162,22 +162,38 @@ def verify_origin(client, binding):
            isinstance(origin.get("repository"), dict) and
            origin["repository"].get("full_name") == REPO,
            "original Actions run identity or source SHA mismatched")
+    def exact_child(parent_tree_sha, child_name):
+        """Walk nonrecursive Git Trees; never compare the ROOT tree to .github/workflows."""
+        doc = get("/git/trees/" + commit_sha(parent_tree_sha))
+        insist(doc.get("sha") == parent_tree_sha and
+               doc.get("truncated") is not True and
+               isinstance(doc.get("tree"), list),
+               "GitHub tree listing is missing/truncated")
+        entries = [x for x in doc["tree"] if
+                   isinstance(x, dict) and x.get("path") == child_name]
+        insist(len(entries) == 1 and
+               entries[0].get("type") == "tree",
+               "original Git tree lacks unique reviewed directory")
+        return commit_sha(entries[0].get("sha"))
+
     for current, next_parent in (
             (binding["source_sha"], binding["parent_sha"]),
-            (binding["parent_sha"], binding["grandparent_sha"])):
+            (binding["parent_sha"], binding["grandparent_sha"]),
+            (binding["grandparent_sha"], None)):
         info = get("/git/commits/" + current)
         parents = info.get("parents")
         tree = info.get("tree")
         insist(info.get("sha") == current and
-               isinstance(parents, list) and parents and
-               isinstance(parents[0], dict) and
-               parents[0].get("sha") == next_parent and
                isinstance(tree, dict) and
-               tree.get("sha") == binding["workflow_tree_sha"],
-               "original GitHub commit ancestry/quarantine tree changed")
-    oldest = get("/git/commits/" + binding["grandparent_sha"])
-    insist(oldest.get("sha") == binding["grandparent_sha"] and
-           isinstance(oldest.get("tree"), dict) and
-           oldest["tree"].get("sha") == binding["workflow_tree_sha"],
-           "oldest selectable target has unreviewed push workflow tree")
+               isinstance(parents, list),
+               "original GitHub commit or root tree missing")
+        if next_parent is not None:
+            insist(parents and isinstance(parents[0], dict) and
+                   parents[0].get("sha") == next_parent,
+                   "original GitHub first-parent ancestry changed")
+        root_tree_sha = commit_sha(tree.get("sha"))
+        github_tree_sha = exact_child(root_tree_sha, ".github")
+        workflows_tree_sha = exact_child(github_tree_sha, "workflows")
+        insist(workflows_tree_sha == binding["workflow_tree_sha"],
+               "original GitHub .github/workflows subtree differs from pin")
     return binding
