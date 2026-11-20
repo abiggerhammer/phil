@@ -95,6 +95,8 @@ def policy_check(*, live: bool, nonce=None):
                     "other ATC activation switches must remain OFF")
         require(trial["live_authorized"] is True,
                 "W3 live trials explicitly DISABLED in reviewed source")
+        require(trial.get("push_ci_quarantine_verified") is True,
+                "W3 publisher-created ref push CI quarantine NOT reviewed")
         require(isinstance(nonce, str) and
                 trial.get("approved_nonce") == nonce and
                 NONCE.fullmatch(nonce),
