@@ -285,6 +285,61 @@ class W3RefTrialTests(unittest.TestCase):
             with self.subTest(bad=bad), self.assertRaises(StopTrial):
                 names(bad)
 
+    def test_all_four_workflow_jobs_fetch_exact_three_commit_history(self):
+        source = (ROOT / ".github/workflows/mhb-atc-w3-ref-commissioning.yml").read_text()
+        wf = yaml.load(source, Loader=StrictWorkflowLoader)
+        self.assertEqual(set(wf["jobs"]), {
+            "prepare", "publisher_seed", "worker_denials", "publisher_cleanup"})
+        for job_name, job in wf["jobs"].items():
+            with self.subTest(job=job_name):
+                checkouts = [step for step in job["steps"]
+                             if step.get("uses", "").startswith("actions/checkout@")]
+                self.assertEqual(len(checkouts), 1)
+                self.assertEqual(checkouts[0]["with"], {
+                    "ref": "${{ github.sha }}",
+                    "fetch-depth": "3",
+                    "persist-credentials": "false",
+                })
+
+    def test_actual_local_commits_refuses_depth_one_and_accepts_depth_three(self):
+        """Exercise the actual CLI Git helper against real shallow clones."""
+        def git(*args, cwd=None):
+            p = subprocess.run(["git", *args], cwd=cwd, text=True,
+                               capture_output=True, timeout=20)
+            self.assertEqual(p.returncode, 0,
+                             f"git {args}: {p.stderr}")
+            return p.stdout.strip()
+
+        with tempfile.TemporaryDirectory() as td:
+            root = Path(td)
+            source = root / "source"
+            git("init", "-b", "main", str(source))
+            git("-C", str(source), "config", "user.name", "W3 fixture")
+            git("-C", str(source), "config", "user.email", "w3@example.invalid")
+            ancestry = []
+            for i in range(4):
+                (source / "fixture.txt").write_text(f"commit {i}\n")
+                git("-C", str(source), "add", "fixture.txt")
+                git("-C", str(source), "commit", "-m", f"fixture {i}")
+                ancestry.append(git("-C", str(source), "rev-parse", "HEAD"))
+            for depth in (1, 3):
+                with self.subTest(fetch_depth=depth):
+                    checkout = root / f"checkout-{depth}"
+                    git("clone", "--quiet", f"--depth={depth}", "--branch",
+                        "main", source.as_uri(), str(checkout))
+                    git("-C", str(checkout), "switch", "-C", "main",
+                        ancestry[-1])
+                    with patch.object(module, "ROOT", checkout), \
+                         patch.dict(os.environ, {"GITHUB_SHA": ancestry[-1]}):
+                        if depth == 1:
+                            with self.assertRaisesRegex(
+                                    StopTrial, "local trusted Git query failed"):
+                                module.local_commits()
+                        else:
+                            self.assertEqual(
+                                module.local_commits(),
+                                (ancestry[-1], ancestry[-2], ancestry[-3]))
+
     def test_publisher_canary_proves_cleanup_before_seed(self):
         api, trial = make()
         receipt = trial.publisher_seed()
