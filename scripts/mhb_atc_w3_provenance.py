@@ -100,7 +100,9 @@ def validate_binding(doc, *, nonce, original_run_id, reviewed_tree):
         doc.get("nonce"), doc.get("source_sha"),
         doc.get("parent_sha"), doc.get("grandparent_sha"),
         doc.get("workflow_tree_sha"), doc.get("run_id"))
-    insist(doc == checked and doc.get("run_attempt") == 1,
+    insist(doc == checked and
+           type(doc.get("run_attempt")) is int and
+           doc["run_attempt"] == 1,
            "original run binding changed or contains unapproved metadata")
     insist(doc["nonce"] == nonce and
            doc["run_id"] == run_id(original_run_id) and
@@ -151,7 +153,8 @@ def verify_origin(client, binding):
            origin.get("path") == WORKFLOW_PATH and
            origin.get("head_branch") == "main" and
            origin.get("head_sha") == binding["source_sha"] and
-           origin.get("run_attempt") == 1 and
+           type(origin.get("run_attempt")) is int and
+           origin["run_attempt"] == 1 and
            isinstance(origin.get("actor"), dict) and
            origin["actor"].get("login") == "abiggerhammer" and
            isinstance(origin.get("triggering_actor"), dict) and
