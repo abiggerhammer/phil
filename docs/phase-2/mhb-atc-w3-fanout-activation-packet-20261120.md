@@ -1,15 +1,15 @@
 # W3 publisher-App canary: nonce-specific activation-readiness packet
 
 **Prepared:** 2026-11-20 (Europe/Brussels).
-**Current decision:** PREPARED FOR OWNER VERIFICATION AND ASTRA REVIEW ONLY.
+**Current decision:** DORMANT PACKET MERGED; LIVE AUTHORIZATION STILL REQUIRES FRESH OWNER VERIFICATION AND SEPARATE EXACT-HEAD REVIEW.
 **No live publisher authority. Do not dispatch mode=run.**
 
 This packet follows accepted, merged dormant W3 publisher canary/recovery
 PR #1963 (reviewed head 4bf41d079fd279c99a44329e780426a8a87a42bb),
 the read-only event-census observer #1961, and frozen-target/current-default
-quarantine #1953. The independent original-run mode wording correction is
-tracked in documentation PR #1964. Source-only cleanup eligibility hardening
-accompanies this packet and needs a new independent exact-head review.
+quarantine #1953. The independent original-run mode wording correction was
+merged in documentation PR #1964. Source-only cleanup eligibility hardening
+and this dormant readiness packet were accepted and merged in PR #1966.
 
 ## 1. Single proposed nonce and exact future mutation
 
@@ -63,12 +63,21 @@ the supervised live preflight.
 
 GitHub's accessible repository APIs do NOT expose the environment and
 Actions variable settings through this connection. These are mandatory
-owner inspection items, not already-green gates.
+owner inspection items, not standing green gates. On 2026-11-20, the owner
+reported: `atc-publisher` allows only `main` and has **no required reviewers**;
+its publisher private-key environment secret exists; the repo-level App client-ID
+variable exists; all six ATC activation variables are UNSET; and publisher App
+5782193 is installed only on `phil` with Contents and Pull requests read/write.
+These are dated observations, **not** authorization for a live run.
 
 - [ ] In GitHub repository Settings > Environments > atc-publisher,
       confirm the environment exists, restricts deployment to trusted
-      main only, and has the intended required reviewers/approvals.
-      Confirm no unreviewed path grants its publisher key to PR/fork jobs.
+      `main` only, and intentionally has **no required reviewers**.
+      Both `publisher_create` and `publisher_cleanup` use this environment:
+      adding a reviewer gate would delay automatic cleanup and independently
+      dispatched recovery, potentially leaving the canary present. Do not add
+      reviewers without a separately reviewed cleanup/approval design.
+      Confirm no PR/fork job can access the publisher private key.
 - [ ] In Settings > Secrets and variables > Actions > Variables,
       confirm MHB_ATC_W3_FANOUT_ENABLED is unset or NOT exactly true
       today; record the observed value/time without disclosing secrets.
@@ -76,9 +85,13 @@ owner inspection items, not already-green gates.
       MHB_ATC_WORKER_BROKER_ENABLED,
       MHB_ATC_IMMUTABLE_HEADS_ENABLED, MHB_ATC_AUTO_ADMIT_ENABLED and
       MHB_ATC_PHASE2_STAGE_BRIDGE_ENABLED are all OFF.
-- [ ] Confirm publisher App installation is scoped to Phil alone with
-      the intended Contents-write token permission, ID 5782193 and
-      authenticated slug phil-atc-publisher. Do not copy private keys,
+- [ ] Confirm publisher App ID 5782193, slug `phil-atc-publisher`, is installed
+      on `phil` only, with Contents and Pull requests read/write permissions
+      for the broader publisher role. W3 CREATE and cleanup intentionally mint
+      a narrower **Contents-write-only** App token, not a PR-write token.
+      Confirm the repository Actions variable `MHB_ATC_PUBLISHER_APP_CLIENT_ID`
+      and the `atc-publisher` environment secret
+      `MHB_ATC_PUBLISHER_APP_PRIVATE_KEY` exist. Do not copy private keys,
       installation tokens, or secret values into PRs, logs or chats.
 - [ ] Recheck the live ruleset ID/version, exact bypass and full admitted
       prefix occupancy; verify current default main's full semantic G1
@@ -153,8 +166,11 @@ D. Single owner/manual first-attempt workflow dispatch from main:
       nonce: d948536ad68f
       confirm: AUTHORIZE_W3_FANOUT_CANARY_ONLY
       original_run_id: (empty)
-   Observe the protected atc-publisher approval. Do not rerun a
-   failed/ambiguous run or reuse the nonce.
+   Observe `publisher_create` entering the `main`-restricted
+   `atc-publisher` environment **without** a reviewer approval prompt;
+   the absence of an environment approval step is deliberate, not proof
+   of live authorization. The separate source/nonce/runtime/owner gates
+   still apply. Do not rerun a failed/ambiguous run or reuse the nonce.
 
 E. Confirm actual publisher CREATE only at the exact frozen SHA,
    HTTP 201, exact ref readback and complete one-ref admitted census.
@@ -207,11 +223,14 @@ A green canary workflow or zero apparent fanout is NOT itself permission
 to activate W3 worker denials, broker, admission or Phase 2 deployment.
 
 **STOP conditions:** missing or unsafe default workflow semantic
-inventory, changed ruleset, any nonempty/foreign admitted ref, main SHA
-drift during original CREATE, mismatched original Actions run or source
-policy, unapproved nonce, inaccessible environment constraints, failed
-App principal/audience check, ambiguous HTTP/readback, incomplete
-cleanup/revocation evidence, or any unexpected Actions run.
+inventory, changed ruleset, nonempty admitted namespace before CREATE,
+foreign or unexpected occupancy at any phase (cleanup permits only absence
+or the sole original canary at its exact pinned SHA), main SHA drift during
+original CREATE, mismatched original Actions run or source policy,
+unapproved nonce, inaccessible or unexpectedly changed environment
+constraints (including a new reviewer gate), failed App principal/audience
+check, ambiguous HTTP/readback, incomplete cleanup/revocation evidence,
+or any unexpected Actions run.
 
 The final read/write gap is not atomic with GitHub. Explicitly accept
 that residual risk in the one-time live review; otherwise defer.
