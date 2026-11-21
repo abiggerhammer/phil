@@ -37,6 +37,7 @@ MODULES = (
     "GrammarAstRecordDataRecursiveGroupingObservationDerivedFiberCertificates",
     "GrammarAstRecordDataRecursiveGroupingObservationCertificateCoherence",
     "GrammarAstRecordDataRecursiveGroupingObservationCertificateFiberLaws",
+    "GrammarAstRecordDataRecursiveGroupingObservationAdmissionReplay",
 )
 
 
