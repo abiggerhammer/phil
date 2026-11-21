@@ -63,8 +63,9 @@ Authenticated origin artifact `14696605839` was uploaded before token mint.
 
 All three workflow artifacts are retained only until approximately
 2026-12-21; preserve them before expiration. **SPENT** means this nonce is
-never eligible for another dispatch, independent of cleanup success or
-any eventual verdict on event fanout. The separate W3 worker/admission
+never eligible for another original `mode=run` dispatch. Authenticated
+`mode=cleanup` recovery of the original run remains permitted if needed,
+independent of cleanup success or any eventual verdict on event fanout. The separate W3 worker/admission
 source remains disabled; no automatic promotion of
 `push_ci_quarantine_verified` is justified. See the audit evidence in
 [#1839](https://github.com/abiggerhammer/phil/issues/1839#issuecomment-7058933619).
