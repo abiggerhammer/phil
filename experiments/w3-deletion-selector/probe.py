@@ -88,8 +88,11 @@ def durable_replace(path, obj):
     tmp = path.with_name(path.name + ".reconcile-tmp")
     durable_new(tmp, obj)
     os.replace(tmp, path)
-    with os.fdopen(os.open(path.parent, os.O_RDONLY), "rb") as directory:
-        os.fsync(directory.fileno())
+    fd = os.open(path.parent, os.O_RDONLY)
+    try:
+        os.fsync(fd)
+    finally:
+        os.close(fd)
 
 class NoRedirect(urllib.request.HTTPRedirectHandler):
     def redirect_request(self, *args, **kwargs):
@@ -363,9 +366,19 @@ def classify(args):
     new={r["id"]:r for r in after["runs"] if r["id"] not in old}
     check(len(old)==len(before["runs"]) and
           len(old)+len(new)==len(after["runs"]) and
-          all(r["id"] in new or r==old[r["id"]] or
-              (r["id"] in old and r["status"]!=old[r["id"]]["status"])
-              for r in after["runs"]), "duplicate or changed run inventory")
+          all(r["id"] in old or r["id"] in new for r in after["runs"]),
+          "duplicate or changed run inventory")
+    for run in after["runs"]:
+        original = old.get(run["id"])
+        if original is None:
+            continue
+        invariant = ("id","event","created_at","path","head_branch",
+                     "head_sha","actor")
+        check(all(run.get(k)==original.get(k) for k in invariant),
+              "retained run identity changed between captures")
+        check(original.get("witness") is None or
+              run.get("witness") == original.get("witness"),
+              "retained witness changed between captures")
     desired_ref = "refs/heads/main" if args.phase=="main" else after["ref"]
     positive = set()
     unexpected = []
