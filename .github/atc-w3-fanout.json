@@ -1,8 +1,8 @@
 {
   "schema": "MHB-ATC-W3-PUBLISHER-FANOUT-V1",
   "repository": "abiggerhammer/phil",
-  "source_authorized": true,
-  "approved_nonce": "d948536ad68f",
+  "source_authorized": false,
+  "approved_nonce": null,
   "experiment": "Publisher App create/delete one exact disposable admitted canary only, separately authorized later",
   "publisher_app_id": 5782193,
   "publisher_app_slug": "phil-atc-publisher",
