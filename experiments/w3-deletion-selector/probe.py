@@ -201,6 +201,8 @@ def execute(args):
     target, default = sha(args.target_sha), sha(args.default_sha)
     api = GitHub(repo)
     before = preflight(api, ref, target, default)
+    check(before["repository_id"] == args.repo_id and args.repo_id > 0,
+          "approved test repository numeric identity changed")
     action = args.action
     if action == "plan":
         print(json.dumps({"decision": "GET_ONLY_PLAN_NO_WRITES", **before},
@@ -278,6 +280,8 @@ def snapshot(args):
           "window outside bounds")
     api = GitHub(repo)
     meta = api.repo_metadata()
+    check(meta["id"] == args.repo_id and args.repo_id > 0,
+          "approved test repository numeric identity changed")
     found = {}
     created = f"{iso(start)}..{iso(end)}"
     for event in EVENTS:
@@ -434,6 +438,7 @@ def cli():
     for name in ("plan","create","delete","abort-cleanup"):
         p=sub.add_parser(name)
         p.add_argument("--repo",required=True)
+        p.add_argument("--repo-id",type=int,required=True)
         p.add_argument("--nonce",required=True)
         p.add_argument("--target-sha",required=True)
         p.add_argument("--default-sha",required=True)
@@ -443,6 +448,7 @@ def cli():
         p.set_defaults(action=name,handler=execute)
     p=sub.add_parser("snapshot")
     p.add_argument("--repo",required=True)
+    p.add_argument("--repo-id",type=int,required=True)
     p.add_argument("--nonce",required=True)
     p.add_argument("--window-start",required=True)
     p.add_argument("--window-end",required=True)
