@@ -1,0 +1,30 @@
+protocol DoublePing {
+  role Client = send (x : U8) then send (y : U8) then end Done;
+  role Server = receive (x : U8) then receive (y : U8) then end Done;
+}
+component ClientWorker(endpoint : Client[DoublePing], first : U8, second : U8) {
+  let middle = send first on endpoint;
+  let done = send second on middle;
+  close done;
+}
+component ServerWorker(endpoint : Server[DoublePing]) {
+  let (middle, received1) = receive U8 on endpoint;
+  let (done, received2) = receive U8 on middle;
+  close done;
+}
+architecture LocalDoublePing {
+  instance client = ClientWorker;
+  instance server = ServerWorker;
+  process client_run = client;
+  process server_run = server;
+  protocol ping = DoublePing;
+  role ping.Client = client;
+  role ping.Server = server;
+  entry first : U8;
+  entry second : U8;
+  bind client.endpoint = ping.Client;
+  bind client.first = first;
+  bind client.second = second;
+  bind server.endpoint = ping.Server;
+}
+program main = instantiate LocalDoublePing;
