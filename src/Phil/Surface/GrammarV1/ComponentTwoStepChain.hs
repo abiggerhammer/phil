@@ -146,3 +146,6 @@ sameBinder one other =
 
 core :: GrammarV1ResolvedBinder -> Name
 core = grammarV1ResolvedBinderCoreName
+
+mapLeft :: (a -> b) -> Either a c -> Either b c
+mapLeft f = either (Left . f) Right
