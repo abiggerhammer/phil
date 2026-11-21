@@ -60,22 +60,23 @@ The initial operator command syntax **for review only** is:
 
     PROBE=experiments/w3-deletion-selector/probe.py
     TEST_REPO='OWNER/w3-delete-selector-probe-APPROVED'
-    NONCE='a-FRESH-12-HEX-NONCE'
+    REPO_ID='PINNED_NUMERIC_TEST_REPO_ID'
+    NONCE='REPLACE_WITH_FRESH_12_HEX'
     TARGET_SHA='40-hex-target-T'
     DEFAULT_SHA='40-hex-main-M'
     STATE_DIR='/owner-private-w3-evidence'
 
-    python3 "$PROBE" plan --repo "$TEST_REPO" --nonce "$NONCE" \
+    python3 "$PROBE" plan --repo "$TEST_REPO" --repo-id "$REPO_ID" --nonce "$NONCE" \
       --target-sha "$TARGET_SHA" --default-sha "$DEFAULT_SHA"
 
     # BEFORE a separately authorized CREATE in its own fixed UTC window
-    python3 "$PROBE" snapshot --repo "$TEST_REPO" --nonce "$NONCE" \
+    python3 "$PROBE" snapshot --repo "$TEST_REPO" --repo-id "$REPO_ID" --nonce "$NONCE" \
       --window-start 'YYYY-MM-DDTHH:MM:SSZ' \
       --window-end 'YYYY-MM-DDTHH:MM:SSZ' \
       --out "$STATE_DIR/phase-b-before.json"
 
     # Separately authorized mutation ONLY in disposable repo:
-    python3 "$PROBE" create --repo "$TEST_REPO" --nonce "$NONCE" \
+    python3 "$PROBE" create --repo "$TEST_REPO" --repo-id "$REPO_ID" --nonce "$NONCE" \
       --target-sha "$TARGET_SHA" --default-sha "$DEFAULT_SHA" \
       --state-dir "$STATE_DIR" --confirm CREATE_TEST_ONLY
 
@@ -85,12 +86,12 @@ The initial operator command syntax **for review only** is:
       --after "$STATE_DIR/phase-b-after.json"
 
     # Separate later approved Phase C:
-    python3 "$PROBE" delete --repo "$TEST_REPO" --nonce "$NONCE" \
+    python3 "$PROBE" delete --repo "$TEST_REPO" --repo-id "$REPO_ID" --nonce "$NONCE" \
       --target-sha "$TARGET_SHA" --default-sha "$DEFAULT_SHA" \
       --state-dir "$STATE_DIR" --confirm DELETE_TEST_ONLY
 
     # Separate abort path if Phase B is inconclusive after CREATE:
-    python3 "$PROBE" abort-cleanup --repo "$TEST_REPO" --nonce "$NONCE" \
+    python3 "$PROBE" abort-cleanup --repo "$TEST_REPO" --repo-id "$REPO_ID" --nonce "$NONCE" \
       --target-sha "$TARGET_SHA" --default-sha "$DEFAULT_SHA" \
       --state-dir "$STATE_DIR" --confirm ABORT_CLEANUP_TEST_ONLY
 
