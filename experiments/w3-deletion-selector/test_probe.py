@@ -46,6 +46,20 @@ class OfflineTests(unittest.TestCase):
                 probe.classify(argparse.Namespace(phase=phase,before=p,after=q))
             return json.loads(buf.getvalue())["decision"]
 
+    def test_exact_fixture_equivalence(self):
+        root = Path(__file__).resolve().parent / "fixtures"
+        for filename in probe.VARIANTS.values():
+            rel = Path(".github/workflows") / ("w3-" + filename + ".yml")
+            target = (root / "target_v1" / rel).read_text()
+            default = (root / "default_v1" / rel).read_text()
+            self.assertEqual(target.replace("TARGET_V1", "DEFAULT_V1"), default)
+            for source in (target, default):
+                self.assertIn("permissions: {}", source)
+                self.assertNotIn("uses:", source)
+                self.assertNotIn("actions/checkout", source)
+                self.assertIn("W3_WITNESS_JSON:", source)
+                self.assertIn('event_boolean("EVENT_DELETED_JSON")', source)
+
     def test_production_target_denied(self):
         for repo in ("abiggerhammer/phil","owner/production","wrong-format"):
             with self.assertRaises(probe.Stop):
