@@ -102,7 +102,7 @@ Proof.
       reflexivity.
     + exfalso.
       apply Hnonempty.
-      exact Hleft.
+      reflexivity.
   - intro Hrelated.
     destruct (proj1
       (phase1_surface_normalized_observation_related_iff_same_success
