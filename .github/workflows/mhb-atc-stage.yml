@@ -50,6 +50,20 @@ jobs:
           title="$(jq -r '.title' /tmp/atc-candidate.json)"
           jq -r '.body' /tmp/atc-candidate.json > /tmp/atc-candidate.md
 
+          # Only new opt-in Phase 2 lanes have the strict one-active plus
+          # one-staged-successor WIP policy. Existing ATC commissioning and
+          # preexisting Phase 1 lanes are unchanged.
+          case "$lane" in
+            phase2-selfhost|phase2-embedded)
+              gh api --paginate "repos/$GH_REPO/issues?state=open&per_page=100" \
+                | jq -s 'add // []' > /tmp/atc-all-open-issues.json
+              python3 scripts/mhb_atc_phase2_wip.py \
+                --issues /tmp/atc-all-open-issues.json \
+                --lane "$lane" --branch "$BRANCH" > /tmp/atc-phase2-wip.json
+              cat /tmp/atc-phase2-wip.json
+              ;;
+          esac
+
           # Labels keep the queue machine-readable and preserve lane ownership.
           for label in "atc: staged" "lane: $lane"; do
             if ! gh label list --repo "$GH_REPO" --limit 1000 --json name \
