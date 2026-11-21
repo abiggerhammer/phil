@@ -56,3 +56,27 @@ Proof.
     Hfirst Hfamily Hstale Hcommitted.
   eapply fsem02TwoStepStaleSenderPingRefusesWithoutRollback; eauto.
 Qed.
+
+(* Bounded production-component binder gate: these are implications about
+   resolved identity equality under an explicit freshness premise, NOT a
+   theorem that the Haskell binder resolver or the full source compiler
+   implements this model. *)
+Theorem fsem02SourceSecondPredecessorStaleIsNotFresh :
+  forall original successor second,
+    original <> successor ->
+    second = original ->
+    second <> successor.
+Proof.
+  intros original successor second Hfresh Hstale.
+  congruence.
+Qed.
+
+Theorem fsem02SourceSecondPredecessorFreshIsNotStale :
+  forall original successor second,
+    original <> successor ->
+    second = successor ->
+    second <> original.
+Proof.
+  intros original successor second Hfresh Hnext.
+  congruence.
+Qed.
