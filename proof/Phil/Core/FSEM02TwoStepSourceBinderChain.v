@@ -1,5 +1,5 @@
 From Phil.Core Require Import
-  Context FSEM02PairedSourceFamilyEnvelope
+  Syntax Context FSEM02PairedSourceFamilyEnvelope
   FSEM02PairedTwoStepOutcomes FSEM02TwoStepStalePrefix
   FSEM02TwoStepSuccessorChain.
 
@@ -62,7 +62,7 @@ Qed.
    theorem that the Haskell binder resolver or the full source compiler
    implements this model. *)
 Theorem fsem02SourceSecondPredecessorStaleIsNotFresh :
-  forall original successor second,
+  forall (original successor second : Name),
     original <> successor ->
     second = original ->
     second <> successor.
@@ -72,7 +72,7 @@ Proof.
 Qed.
 
 Theorem fsem02SourceSecondPredecessorFreshIsNotStale :
-  forall original successor second,
+  forall (original successor second : Name),
     original <> successor ->
     second = successor ->
     second <> original.
