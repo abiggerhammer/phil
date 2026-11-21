@@ -1,5 +1,5 @@
 From Stdlib Require Import Strings.String.
-From Phil.Core Require Import Context SessionStep FSEM02ProtocolHeadProgression.
+From Phil.Core Require Import Syntax Context SessionStep FSEM02ProtocolHeadProgression.
 
 (*
   FSEM-02 NON-NORMATIVE. A fresh continuation cannot take an already
