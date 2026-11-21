@@ -602,3 +602,8 @@ The [two-step native Core protocol trace](formal-semantics-two-step-native-core-
 ### FSEM-02 native two-step disjoint spectator and borrowed-loan frame (non-normative)
 
 The [native two-step spectator/loan frame check](formal-semantics-two-step-native-spectator-loan-frame-fsem02-v1.md) tests actual two-generation `Core.Protocol` Send/Receive and terminal Close with an independently inserted disjoint protocol endpoint and active borrowed affine owner on **both peers**. It verifies exact five-collection checkpoint fidelity, stale/wrong-head/wrong-role refusal, preservation through second-step retry and explicit end-of-loan distinction. Rocq 9.2 proves a **conditional** refused-second-step committed-prefix loan/spectator frame, separately from the executable Haskell trace. Complete-source Ping/Choice witnesses are independent: no source-admitted combined two-send program, general native-to-Rocq refinement or new authority is claimed. FSEM-02 stays open.
+
+
+### FSEM-02 occupied successor refusal across two native transitions (non-normative)
+
+The [native occupied-successor frame check](formal-semantics-successor-occupied-native-frame-fsem02-v1.md) tests both peers' exact duplicate-binding rejection when a fresh second-step endpoint tries to overwrite a spectator endpoint, an active borrowed affine owner or an unrelated unrestricted owner, along with self-successor refusal and successful fresh retry/Close. Existing complete-source accepted and precisely rejected Ping/Choice controls run separately. Rocq proves conditional structural successor-occupancy refusal; this is not a native-to-Rocq refinement or a two-step source-admitted program. FSEM-02 remains open.
