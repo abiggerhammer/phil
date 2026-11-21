@@ -10,10 +10,10 @@ import qualified Data.Map.Strict as Map
 import qualified Data.Set as Set
 import qualified Data.Text as Text
 import qualified Data.Text.IO as TextIO
+import Phil.Core.Context (ResourceContext (..))
 import Phil.Core.Generic (strictGenericInstantiationPolicy)
 import Phil.Core.Protocol
 import Phil.Core.Protocol.Family
-import Phil.Core.Session (SessionError (..))
 import Phil.Core.Static (DeclarationKey (..), InterfaceRevision (..))
 import Phil.Core.Syntax (Name (..), Outcome (..), Session (..), Ty (..))
 import Phil.Surface.GrammarV1.BinderScope
@@ -25,11 +25,6 @@ import Phil.Surface.GrammarV1.ParameterBodyScope
   , grammarV1CheckedLocalValueOccurrenceInScope
   )
 import Phil.Surface.GrammarV1.Parser
-  ( GrammarV1Block (..), GrammarV1ComponentDecl (..)
-  , GrammarV1Expression (..), GrammarV1Pattern (..)
-  , GrammarV1Statement (..), GrammarV1TopLevelDecl (..)
-  , GrammarV1Source (..), parseGrammarV1StructuralSource
-  )
 import Phil.Surface.GrammarV1.PatternBinderScope (grammarV1BindPattern)
 import Phil.Surface.GrammarV1.ProtocolRoles (grammarV1ClosedBinaryProtocolFamily)
 import Phil.Surface.Syntax (Located (..))
