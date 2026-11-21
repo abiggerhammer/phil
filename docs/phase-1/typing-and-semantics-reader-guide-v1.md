@@ -607,3 +607,8 @@ The [native two-step spectator/loan frame check](formal-semantics-two-step-nativ
 ### FSEM-02 occupied successor refusal across two native transitions (non-normative)
 
 The [native occupied-successor frame check](formal-semantics-successor-occupied-native-frame-fsem02-v1.md) tests both peers' exact duplicate-binding rejection when a fresh second-step endpoint tries to overwrite a spectator endpoint, an active borrowed affine owner or an unrelated unrestricted owner, along with self-successor refusal and successful fresh retry/Close. Existing complete-source accepted and precisely rejected Ping/Choice controls run separately. Rocq proves conditional structural successor-occupancy refusal; this is not a native-to-Rocq refinement or a two-step source-admitted program. FSEM-02 remains open.
+
+
+### FSEM-02 complete-source two-step binder identities and native replay (non-normative)
+
+The [bounded two-step source binder-chain check](formal-semantics-two-step-source-binder-chain-fsem02-v1.md) parses one complete Grammar-v1 `DoublePing` source with two sends and receives per peer, resolves both successor endpoints through production lexical binder identities, and replays their two transitions and terminal Closes through native `Core.Protocol`. Separate minimally altered source controls assert exact test-local stale-second-predecessor and wrong-Close diagnostics. Rocq proves conditional two-generation predecessor consumption and committed-prefix preservation after stale second-step refusal; it does **not** prove generalized component-body elaboration, source-to-Core producer fidelity, native-to-Rocq refinement, rendezvous, or new nominal protocol/architecture authority. FSEM-02 remains open.
