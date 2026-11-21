@@ -33,6 +33,7 @@ MODULES = (
     "GrammarAstRecordDataRecursiveGroupingObservationClassifier",
     "GrammarAstRecordDataRecursiveGroupingObservationClassifierCertificates",
     "GrammarAstRecordDataRecursiveGroupingObservationDerivedPairFibers",
+    "GrammarAstRecordDataRecursiveGroupingObservationFiberPartition",
 )
 
 
