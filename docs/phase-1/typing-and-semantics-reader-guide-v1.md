@@ -592,3 +592,8 @@ The [two-step cross-family stale-prefix proof](formal-semantics-two-step-stale-p
 ### FSEM-02 two-step successor chaining and missing admission (non-normative)
 
 The [two-step successor-chain proof](formal-semantics-two-step-successor-chain-fsem02-v1.md) shows conditional two-generation predecessor consumption when both peers' exact second-step predecessor keys equal first-step successor keys. It also distinguishes missing first-step source admission from missing second-step source/rendezvous admission, preserving the initial or committed context pair respectively. GHC 9.6.7 runs independent accepted/rejected Ping and Choice source witnesses; Rocq 9.2 checks the model laws. No combined two-step source trace, general native resource-state refinement or external protocol authority is asserted. FSEM-02 remains non-normative and open.
+
+
+### FSEM-02 two-step native Core resource-state trace (non-normative)
+
+The [two-step native Core protocol trace](formal-semantics-two-step-native-core-trace-fsem02-v1.md) executes two real successive Send/Receive transitions from an independently instantiated dual two-message protocol, inspects exact intermediate/final production endpoint metadata and linear resource maps, checks precise stale/wrong-action/wrong-role refusals without rolling back the first committed contexts, and closes both terminal endpoints. Existing accepted/rejected Grammar-v1 Ping/Choice source witnesses run separately; there is **no** combined source-accepted two-step program. Conditional Rocq 9.2 composition proves exact chained consumption plus two-peer shared-loan and disjoint-spectator framing under external admission/continuation premises, not native Haskell-to-Rocq refinement or new nominal authority. FSEM-02 remains open.
