@@ -99,7 +99,7 @@ Proof.
       exists observed.
       split; [exact Hleft |].
       rewrite <- Heq.
-      exact Hleft.
+      reflexivity.
     + exfalso.
       apply Hnonempty.
       exact Hleft.
