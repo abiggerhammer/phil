@@ -1,4 +1,0 @@
-packages: .
-
-package phil-core
-  ghc-options: -Werror

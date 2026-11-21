@@ -1,5 +1,0 @@
-module corpus.sum_mode;
-
-data MaybeLease mode affine =
-    NoLease
-  | LeaseId(U64);

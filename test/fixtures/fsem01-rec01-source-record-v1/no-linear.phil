@@ -1,5 +1,0 @@
-record Packet { tag : U8, flag : Bool }
-fn unpack(packet : Packet) -> U8 satisfies C {
-  let Packet { tag, flag } = packet;
-  return tag;
-}

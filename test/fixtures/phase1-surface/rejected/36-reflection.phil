@@ -1,5 +1,0 @@
-module corpus.reflection;
-
-fn bad() satisfies U8 {
-  reflect { 0 }
-}

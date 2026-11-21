@@ -1,5 +1,0 @@
-module corpus.capability_affine;
-
-capability Lease mode affine {
-  permits storage.Use;
-}

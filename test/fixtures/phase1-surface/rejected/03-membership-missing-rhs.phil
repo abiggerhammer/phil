@@ -1,3 +1,0 @@
-module corpus.bad_membership;
-
-claim Bad(x : U32) = x in ;

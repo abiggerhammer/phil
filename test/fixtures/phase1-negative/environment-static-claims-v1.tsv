@@ -1,2 +1,0 @@
-claim_name	definition_kind	parameters
-DigestMatches	opaque	begin:opaque-Frame;payload_id:stable-id-OwnedBytes

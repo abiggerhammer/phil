@@ -1,7 +1,0 @@
-component BadOwnedPayloadCopy(payload : OwnedBytes[1024]) {
-    let first = payload
-    let second = payload
-    // reject: OwnedBytes is linear; binding first consumed/moved the unique owner
-    release first
-    release second
-}

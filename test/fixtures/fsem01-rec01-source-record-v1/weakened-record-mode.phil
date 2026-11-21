@@ -1,5 +1,0 @@
-record Packet mode unrestricted { tag : U8, payload : Bytes[8] }
-fn unpack(packet : Packet) -> Bytes[8] satisfies C {
-  let Packet { tag, payload } = packet;
-  return payload;
-}

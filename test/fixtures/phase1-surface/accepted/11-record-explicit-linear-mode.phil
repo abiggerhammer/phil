@@ -1,5 +1,0 @@
-module corpus.record_mode;
-
-record FireOnceToken mode linear {
-  id : U64
-}

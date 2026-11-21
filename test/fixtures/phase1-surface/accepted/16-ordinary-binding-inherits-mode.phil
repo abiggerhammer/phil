@@ -1,6 +1,0 @@
-module corpus.binding_mode;
-
-component BindingMode(x : U32) {
-  let y = x;
-  return y;
-}

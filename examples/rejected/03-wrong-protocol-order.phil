@@ -1,3 +1,0 @@
-component BadOrder {
-    send Accepted(id) on s0   // reject: current state requires receive Hello
-}

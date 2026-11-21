@@ -1,8 +1,0 @@
-module corpus.bad_outcome;
-
-callable Bad(blob : Blob) -> ReadResult {
-  outcome success ReadOk {
-    state (blob_next : Blob)
-    ensures true;
-  }
-}

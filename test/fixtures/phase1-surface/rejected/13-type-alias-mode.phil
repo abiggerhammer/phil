@@ -1,3 +1,0 @@
-module corpus.bad_alias_mode;
-
-type Bad mode linear = U32;

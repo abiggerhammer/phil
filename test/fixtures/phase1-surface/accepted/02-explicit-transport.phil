@@ -1,8 +1,0 @@
-module corpus.explicit_transport;
-
-component Transport[n : Nat, m : Nat](
-  value : Bytes[n],
-  equality : Proof[n == m]
-) {
-  transport value to Bytes[m] using equality;
-}

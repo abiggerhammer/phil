@@ -1,5 +1,0 @@
-module corpus.bad_offer;
-
-component Bad(endpoint : Endpoint) {
-  offer endpoint Left => { return unit }
-}

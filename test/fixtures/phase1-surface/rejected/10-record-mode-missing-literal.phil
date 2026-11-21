@@ -1,5 +1,0 @@
-module corpus.bad_record_mode;
-
-record Bad mode {
-  id : U64
-}

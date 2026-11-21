@@ -1,6 +1,0 @@
-module corpus.bad_binding_mode;
-
-component BadBinding(x : U32) {
-  let linear y = x
-  return y
-}

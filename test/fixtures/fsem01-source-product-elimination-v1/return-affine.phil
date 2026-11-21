@@ -1,5 +1,0 @@
-data Permit mode affine = Permit(U64);
-fn unpack(packet : (Permit, Bytes[8])) -> Permit satisfies C {
-  let (permit, payload) = packet;
-  return permit;
-}

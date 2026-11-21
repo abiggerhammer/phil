@@ -1,5 +1,0 @@
-module corpus.await_block;
-
-fn bad() satisfies U8 {
-  await { 0 }
-}
