@@ -57,13 +57,13 @@ data SourcePair = SourcePair
 main :: IO ()
 main = do
   accepted <- TextIO.readFile "test/fixtures/fsem02-two-step-source-chain-v1/accepted.phil"
-  stale <- TextIO.readFile "test/fixtures/fsem02-two-step-source-chain-v1/second-stale.phil"
+  staleSource <- TextIO.readFile "test/fixtures/fsem02-two-step-source-chain-v1/second-stale.phil"
   badClose <- TextIO.readFile "test/fixtures/fsem02-two-step-source-chain-v1/wrong-close.phil"
   let cases =
         [ ("two source-checked binder generations replay exact native two-step endpoints",
             sourceReplay accepted)
         , ("source second-step stale predecessor rejects at the exact chain gate",
-            expectClientError ChainSecondPredecessorMismatch stale)
+            expectClientError ChainSecondPredecessorMismatch staleSource)
         , ("source terminal close of first successor rejects at exact chain gate",
             expectClientError ChainTerminalCloseMismatch badClose)
         ]
