@@ -80,3 +80,18 @@ Proof.
   intros original successor second Hfresh Hnext.
   congruence.
 Qed.
+
+(* The bounded Send payload gate compares actual post-let occurrence identity
+   with externally supplied parameter identity. This lemma only states the
+   consequence of explicit freshness and selected-identity premises; it does
+   not prove Haskell lexical resolution or payload typing. *)
+Theorem fsem02LaterBoundPayloadNotOriginalParameter :
+  forall (originalParameter laterBinder resolved : Name),
+    originalParameter <> laterBinder ->
+    resolved = laterBinder ->
+    resolved <> originalParameter.
+Proof.
+  intros originalParameter laterBinder resolved Hfresh Hresolved.
+  congruence.
+Qed.
+Print Assumptions fsem02LaterBoundPayloadNotOriginalParameter.

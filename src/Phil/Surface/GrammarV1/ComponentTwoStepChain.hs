@@ -30,6 +30,7 @@ data ChainError
   = ChainUnsupportedSourceShape
   | ChainUnresolvedOccurrence
   | ChainFirstEndpointNotParameter
+  | ChainSecondPayloadNotParameter
   | ChainSecondPredecessorMismatch
   | ChainTerminalCloseMismatch
   | ChainPatternShape
@@ -88,16 +89,19 @@ checkSendChain declaration component =
             (_, scope0) <- mapLeft (ChainBinderError . show) $
               grammarV1ComponentParameterScope declaration component
             p1Binder <- local scope0 payload1
-            p2Binder <- local scope0 payload2
             first <- local scope0 endpoint1
             expectChain (grammarV1ResolvedBinderKind first ==
               GrammarV1ComponentParameterBinder &&
               grammarV1ResolvedBinderKind p1Binder ==
-              GrammarV1ComponentParameterBinder &&
-              grammarV1ResolvedBinderKind p2Binder ==
               GrammarV1ComponentParameterBinder)
               ChainFirstEndpointNotParameter
             (middle, scope1) <- bindOne p1 scope0
+            -- The second payload is resolved AFTER the first let binding.
+            -- A real, newly bound endpoint must not be mistaken for a
+            -- component-parameter U8 payload by consulting scope0.
+            p2Binder <- local scope1 payload2
+            expectChain (grammarV1ResolvedBinderKind p2Binder ==
+              GrammarV1ComponentParameterBinder) ChainSecondPayloadNotParameter
             usedMiddle <- local scope1 endpoint2
             expectChain (sameBinder usedMiddle middle) ChainSecondPredecessorMismatch
             (final, scope2) <- bindOne p2 scope1

@@ -616,3 +616,7 @@ The [bounded two-step source binder-chain check](formal-semantics-two-step-sourc
 ### FSEM-02 bounded production two-step component boundary (non-normative)
 
 The [production two-step component boundary](formal-semantics-production-two-step-component-fsem02-v1.md) moves the exact lexical two-generation Send/Receive/Close checker from test-local code into the built `Phil.Surface.GrammarV1.ComponentTwoStepChain` module, with accepted complete-source `DoublePing` and minimally rejected stale-second/wrong-Close fixtures now exercising those production-library error constructors. Strict Haskell and conditional Rocq binder freshness checks do not establish general component elaboration, all payload typing, source-to-Core fidelity, or universal implementation refinement. FSEM-02 remains open.
+
+### FSEM-02 post-let Send payload scope classification (non-normative)
+
+The [production two-step component boundary](formal-semantics-production-two-step-component-fsem02-v1.md) now resolves its second Send payload **after** binding the first successor. A source-bound successor used as the second payload receives an exact non-parameter rejection, not an out-of-scope diagnosis. This does not certify general Send payload typing, nominal authority, or Haskell-to-Rocq refinement.
