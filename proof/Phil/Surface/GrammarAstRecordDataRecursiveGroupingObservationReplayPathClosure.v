@@ -6,9 +6,11 @@ From Phil.Surface Require Import
   GrammarAstRecordDataRecursiveGroupingImplementationRepresentation
   GrammarAstRecordDataRecursiveGroupingImplementationAdmissionExamples
   GrammarAstRecordDataRecursiveGroupingTaggedAdmission
+  GrammarAstRecordDataRecursiveGroupingProductionObservables
   GrammarAstRecordDataRecursiveGroupingObservationPER
   GrammarAstRecordDataRecursiveGroupingObservationPERDomain
   GrammarAstRecordDataRecursiveGroupingObservationAdmittedQuotient
+  GrammarAstRecordDataRecursiveGroupingObservationClassifier
   GrammarAstRecordDataRecursiveGroupingObservationCertificateFiberLaws
   GrammarAstRecordDataRecursiveGroupingObservationReplayPairCoherence.
 
@@ -141,9 +143,17 @@ Proof.
     (phase1_surface_recursive_grouping_observation_related_has_admitted_endpoints
       right (phase1_admitted_observation_key second) Hsecond)
     as [[refined Hnormalize] _].
+  assert (Hobserved :
+    phase1_surface_normalized_observation right =
+      Some (phase1_surface_observe_recursive_grouping_record_data refined)).
+  {
+    unfold phase1_surface_normalized_observation.
+    rewrite Hnormalize.
+    reflexivity.
+  }
   apply (phase1_surface_distinct_certificates_cannot_share_successful_fiber
     right (phase1_surface_observe_recursive_grouping_record_data refined)
-    first second Hnormalize Hdistinct).
+    first second Hobserved Hdistinct).
   split; assumption.
 Qed.
 
