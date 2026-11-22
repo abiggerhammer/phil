@@ -562,7 +562,11 @@ def load_intent(path, before, after, phase):
                  ("approved_actor", "approved_actor"),
                  ("api_origin", "api_origin")):
         check(marker.get(a) == after[b], "mutation and census provenance mismatch")
-    check(marker.get("http_status") == (201 if phase == "create" else 204) and
+    check(type(marker.get("repository_id")) is int and
+          type(marker.get("http_status")) is int and
+          marker["http_status"] == (201 if phase == "create" else 204) and
+          marker.get("observed_refs") ==
+          ({} if phase == "create" else {after["ref"]: after["target_sha"]}) and
           marker.get("observed_refs_after") ==
           ({after["ref"]: after["target_sha"]} if phase == "create" else {}),
           "mutation receipt not exact and verified")
@@ -630,8 +634,10 @@ def classify(args):
     t0, t1 = utc(before["observed_at"]), utc(after["observed_at"])
     check(start <= t0 <= t1 and t1 >= end + dt.timedelta(minutes=30),
           "incomplete bounded observation delay")
+    earliest_run = t0
     if args.phase in ("create", "delete"):
-        load_intent(getattr(args, "intent", None), before, after, args.phase)
+        marker = load_intent(getattr(args, "intent", None), before, after, args.phase)
+        earliest_run = utc(marker["request_started_at"])
     else:
         check(getattr(args, "intent", None) is None,
               "main control does not use a mutation receipt")
@@ -658,7 +664,8 @@ def classify(args):
                  else {"MAIN_ONLY", "IGNORE_PAIR"})
     for run in new.values():
         witness = valid_witness(run, after)
-        if (witness is None or run["status"] != "completed" or
+        if (utc(run["created_at"]) < earliest_run or
+            witness is None or run["status"] != "completed" or
             run["conclusion"] != "success" or
             run["log_provenance"]["status"] != "ONE_RECORD"):
             unexpected.append(run["id"])

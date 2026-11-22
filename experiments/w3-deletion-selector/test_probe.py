@@ -79,6 +79,7 @@ def receipt(phase):
         "request_started_at": "2026-11-21T11:07:00Z",
         "request_completed_at": "2026-11-21T11:08:00Z",
         "http_status": 201 if phase == "create" else 204,
+        "observed_refs": {} if phase == "create" else {REF: TARGET},
         "observed_refs_after": {REF: TARGET} if phase == "create" else {}}
 
 
@@ -319,6 +320,27 @@ class OfflineTests(unittest.TestCase):
                                              deleted=phase=="delete")
                 self.assertEqual(self.classify(phase, positives+[forbidden_run]),
                                  "COUNTEREXAMPLE_STOP")
+
+    def test_phase_cannot_use_witnesses_from_before_its_request(self):
+        for phase in ("create", "delete"):
+            with self.subTest(phase=phase):
+                runs = [
+                    witness(1, "UNFILTERED", created=phase == "create",
+                            deleted=phase == "delete",
+                            started="2026-11-21T11:06:59Z"),
+                    witness(2, "W3_ONLY", created=phase == "create",
+                            deleted=phase == "delete", source="TARGET_V1"),
+                ]
+                self.assertEqual(self.classify(phase, runs),
+                                 "STOP_UNRELATED_OR_AMBIGUOUS_TRAFFIC")
+
+    def test_receipt_requires_exact_pre_mutation_ref_state(self):
+        for phase, wrong_refs in (("create", {REF: TARGET}), ("delete", {}),
+                                  ("delete", {REF: DEFAULT})):
+            with self.subTest(phase=phase, wrong_refs=wrong_refs):
+                with self.assertRaisesRegex(probe.Stop, "receipt not exact"):
+                    self.classify(phase, [], alter_intent=lambda doc: doc.update(
+                        observed_refs=wrong_refs))
 
     def test_delayed_create_cannot_count_as_delete(self):
         self.assertEqual(self.classify("delete", [
