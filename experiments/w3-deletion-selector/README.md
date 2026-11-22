@@ -61,22 +61,23 @@ The initial operator command syntax **for review only** is:
     PROBE=experiments/w3-deletion-selector/probe.py
     TEST_REPO='OWNER/w3-delete-selector-probe-APPROVED'
     REPO_ID='PINNED_NUMERIC_TEST_REPO_ID'
+    APPROVED_ACTOR='OWNER_APPROVED_GITHUB_LOGIN'
     NONCE='REPLACE_WITH_FRESH_12_HEX'
     TARGET_SHA='40-hex-target-T'
     DEFAULT_SHA='40-hex-main-M'
     STATE_DIR='/owner-private-w3-evidence'
 
-    python3 "$PROBE" plan --repo "$TEST_REPO" --repo-id "$REPO_ID" --nonce "$NONCE" \
+    python3 "$PROBE" plan --repo "$TEST_REPO" --repo-id "$REPO_ID" --actor "$APPROVED_ACTOR" --nonce "$NONCE" \
       --target-sha "$TARGET_SHA" --default-sha "$DEFAULT_SHA"
 
     # BEFORE a separately authorized CREATE in its own fixed UTC window
-    python3 "$PROBE" snapshot --repo "$TEST_REPO" --repo-id "$REPO_ID" --nonce "$NONCE" \
+    python3 "$PROBE" snapshot --repo "$TEST_REPO" --repo-id "$REPO_ID" --actor "$APPROVED_ACTOR" --nonce "$NONCE" \
       --window-start 'YYYY-MM-DDTHH:MM:SSZ' \
       --window-end 'YYYY-MM-DDTHH:MM:SSZ' \
       --out "$STATE_DIR/phase-b-before.json"
 
     # Separately authorized mutation ONLY in disposable repo:
-    python3 "$PROBE" create --repo "$TEST_REPO" --repo-id "$REPO_ID" --nonce "$NONCE" \
+    python3 "$PROBE" create --repo "$TEST_REPO" --repo-id "$REPO_ID" --actor "$APPROVED_ACTOR" --nonce "$NONCE" \
       --target-sha "$TARGET_SHA" --default-sha "$DEFAULT_SHA" \
       --state-dir "$STATE_DIR" --confirm CREATE_TEST_ONLY
 
@@ -86,12 +87,12 @@ The initial operator command syntax **for review only** is:
       --after "$STATE_DIR/phase-b-after.json"
 
     # Separate later approved Phase C:
-    python3 "$PROBE" delete --repo "$TEST_REPO" --repo-id "$REPO_ID" --nonce "$NONCE" \
+    python3 "$PROBE" delete --repo "$TEST_REPO" --repo-id "$REPO_ID" --actor "$APPROVED_ACTOR" --nonce "$NONCE" \
       --target-sha "$TARGET_SHA" --default-sha "$DEFAULT_SHA" \
       --state-dir "$STATE_DIR" --confirm DELETE_TEST_ONLY
 
     # Separate abort path if Phase B is inconclusive after CREATE:
-    python3 "$PROBE" abort-cleanup --repo "$TEST_REPO" --repo-id "$REPO_ID" --nonce "$NONCE" \
+    python3 "$PROBE" abort-cleanup --repo "$TEST_REPO" --repo-id "$REPO_ID" --actor "$APPROVED_ACTOR" --nonce "$NONCE" \
       --target-sha "$TARGET_SHA" --default-sha "$DEFAULT_SHA" \
       --state-dir "$STATE_DIR" --confirm ABORT_CLEANUP_TEST_ONLY
 
@@ -130,3 +131,74 @@ selected source versions, GitHub API response statuses, raw run logs,
 the curated before/after inventories, the phase-specific classifier
 outputs and SHA-256 hashes before considering test repository deletion.
 A bounded run inventory is NOT a delivery-completeness proof.
+
+
+## Source-only security repair contract (2026-11-22; PR #1982)
+
+**Nothing in this directory is approved for live testing or commissioning.**
+PR-only offline tests and CI cannot prove GitHub event-delivery semantics,
+effective token limitations, run-log authenticity, or signed environment
+provenance. An independent Astra review of the exact repaired HEAD is
+mandatory before any merge, and *separate human security authorization*
+would be required before a live disposable experiment.
+
+The GitHub.com client deliberately fixes REST to
+\`https://api.github.com\`, obtains a token only for \`github.com\` via
+\`gh auth token --hostname github.com\`, and checks the authenticated
+\`GET /user\` principal against the separately approved \`--actor\`.
+\`GH_HOST\` targeting anything other than GitHub.com and enterprise-token
+context fail closed. The log command is explicitly passed the **same**
+token, \`GH_HOST=github.com\`, immutable repo slug and run ID with
+\`--attempt 1\`, never an implicitly different CLI credential/host.
+The client checks repository-owner/name/numeric ID, original run API
+and HTML URLs, run repository ID, original attempt, actor, head SHA,
+workflow path/ref, witness SHA/actor/run ID and exact selected source
+marker. The repo name pattern alone is **not** authorization.
+
+For each source revision, the eight fixture bytes must match the
+independently selected exact target/default commits. Snapshot now
+requires \`--target-sha\`, \`--default-sha\` and \`--actor\` in addition to
+repo and numeric ID. It preserves one \`W3-SELECTOR-CENSUS-V2\` file per
+before/after observation, event-by-event pinned pagination counts, and
+each retrieved log's SHA-256 and retrieval-status evidence. Changing
+totals, short/missing pages, duplicate IDs, outside-window runs,
+unexpected repository/actor/run URL, replay attempt or source SHA
+**STOP**, not a truncated apparent success. A stable REST count still
+is not a cryptographic consistency snapshot and cannot prove that no
+unreported GitHub event exists.
+
+\`classify --phase create|delete\` now **requires \`--intent\`** pointing
+to the exact successful one-use mutation receipt. The approved action
+must match the phase, and its prepared/request/completion times must
+fall strictly between the clean pre-mutation snapshot and the bounded
+post-mutation snapshot. A typed successful \`abort-cleanup\` has a
+*separate* \`ABORT_CLEANUP_STATE_VERIFIED\` decision; it can never
+satisfy Phase C, even if a deletion-looking push witness exists.
+\`ALREADY_ABSENT_NO_WRITE\` cannot satisfy either planned phase.
+
+The before inventory must contain no observed runs in the selected
+event window. All after-window \`push\`, \`create\`, and \`delete\`
+runs are accounted for; only the correct, independently bound
+UNFILTERED auxiliary \`create\` or \`delete\` is allowed as context,
+never counted as a positive \`push\` witness. Any other event run,
+invalid log, duplicate control, wrong ref/timestamp/SHA/actor or
+missing response is \`STOP_UNRELATED_OR_AMBIGUOUS_TRAFFIC\`. A valid
+forbidden filter witness is a \`COUNTEREXAMPLE_STOP\`. The absent
+required positive remains \`INCONCLUSIVE_MISSING_POSITIVE_WITNESS\`,
+not a failure observation or certification.
+
+Both UNFILTERED and W3_ONLY planned Phase C controls must carry
+**literal JSON** \`event_deleted=true\` and \`event_created=false\`,
+with the exact selected deleted ref. The fixed TARGET_V1/DEFAULT_V1
+markers must agree with each run's independently selected target or
+default SHA and workflow ref. The unchanged eight inert YAML fixtures
+remain the only designed positive controls. A signed provenance claim,
+full native GitHub ref/response isolation, concurrent event absence,
+and effective GitHub App/ruleset permissions remain explicitly open.
+
+Fail-closed directory durability: the exclusive one-use intent file
+and its containing directory must both be \`fsync\`ed **before**
+any prospective mutation call. Errors abort without retries, leaving
+the one-use path occupied. Poststate reconciliation is separate and
+cannot retroactively make an unfynced intent safe. Do not run the
+source mutator to exercise this guarantee outside mocked offline tests.
