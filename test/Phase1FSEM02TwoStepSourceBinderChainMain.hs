@@ -36,6 +36,8 @@ main = do
   staleSource <- TextIO.readFile "test/fixtures/fsem02-two-step-source-chain-v1/second-stale.phil"
   badClose <- TextIO.readFile "test/fixtures/fsem02-two-step-source-chain-v1/wrong-close.phil"
   localPayload <- TextIO.readFile "test/fixtures/fsem02-two-step-source-chain-v1/second-local-payload.phil"
+  wrongFirstReceiveType <- TextIO.readFile "test/fixtures/fsem02-two-step-source-chain-v1/receive-first-u16.phil"
+  wrongSecondReceiveType <- TextIO.readFile "test/fixtures/fsem02-two-step-source-chain-v1/receive-second-u16.phil"
   let cases =
         [ ("two source-checked binder generations replay exact native two-step endpoints",
             sourceReplay accepted)
@@ -43,6 +45,10 @@ main = do
             expectClientError ChainSecondPredecessorMismatch staleSource)
         , ("post-first-let endpoint payload is bound, but not a source parameter",
             expectClientError ChainSecondPayloadNotParameter localPayload)
+        , ("first Receive annotation outside DoublePing U8 envelope rejects exactly",
+            expectServerError ChainFirstReceiveAnnotationNotU8 wrongFirstReceiveType)
+        , ("second Receive annotation outside DoublePing U8 envelope rejects exactly",
+            expectServerError ChainSecondReceiveAnnotationNotU8 wrongSecondReceiveType)
         , ("source terminal close of first successor rejects at exact chain gate",
             expectClientError ChainTerminalCloseMismatch badClose)
         ]
@@ -112,6 +118,20 @@ expectClientError expected source = do
         other -> Left ("expected exact source error " <> show expected
           <> ", got " <> show other)
     _ -> Left "negative source was not structurally parsed as a component"
+
+expectServerError :: ChainError -> Text.Text -> Either String ()
+expectServerError expected source = do
+  parsed <- mapLeft show (parseGrammarV1StructuralSource "fsem02-negative-receive-source" source)
+  let decls = map (locatedValue . grammarV1Declaration . locatedValue)
+        (grammarV1TopLevelDecls parsed)
+      components = [c | GrammarV1ComponentDeclaration c <- decls]
+  case components of
+    [_client, server] ->
+      case checkReceiveChain (DeclarationKey "component.ServerWorker") server of
+        Left actual | actual == expected -> Right ()
+        other -> Left ("expected exact source receive error " <> show expected
+          <> ", got " <> show other)
+    _ -> Left "negative source must contain exactly two parsed components"
 
 sourceReplay :: Text.Text -> Either String ()
 sourceReplay source = do

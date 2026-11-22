@@ -31,6 +31,8 @@ data ChainError
   | ChainUnresolvedOccurrence
   | ChainFirstEndpointNotParameter
   | ChainSecondPayloadNotParameter
+  | ChainFirstReceiveAnnotationNotU8
+  | ChainSecondReceiveAnnotationNotU8
   | ChainSecondPredecessorMismatch
   | ChainTerminalCloseMismatch
   | ChainPatternShape
@@ -120,8 +122,8 @@ checkReceiveChain declaration component =
       , Located _ (GrammarV1LetStatement p2 e2)
       , Located _ (GrammarV1ExpressionStatement eClose)
       ] -> case (locatedValue e1, locatedValue e2, locatedValue eClose) of
-        ( GrammarV1ReceiveExpression _type1 endpoint1
-          , GrammarV1ReceiveExpression _type2 endpoint2
+        ( GrammarV1ReceiveExpression writtenType1 endpoint1
+          , GrammarV1ReceiveExpression writtenType2 endpoint2
           , GrammarV1CloseExpression closed
           ) -> do
             (_, scope0) <- mapLeft (ChainBinderError . show) $
@@ -130,9 +132,15 @@ checkReceiveChain declaration component =
             expectChain (grammarV1ResolvedBinderKind first ==
               GrammarV1ComponentParameterBinder)
               ChainFirstEndpointNotParameter
+            -- Restricted DoublePing U8/U8 witness envelope only.
+            -- Protocol-head authority is supplied externally, not inferred here.
+            expectChain (locatedValue writtenType1 == GrammarV1UnsignedType "U8")
+              ChainFirstReceiveAnnotationNotU8
             (middle, scope1) <- bindReceive p1 scope0
             usedMiddle <- local scope1 endpoint2
             expectChain (sameBinder usedMiddle middle) ChainSecondPredecessorMismatch
+            expectChain (locatedValue writtenType2 == GrammarV1UnsignedType "U8")
+              ChainSecondReceiveAnnotationNotU8
             (final, scope2) <- bindReceive p2 scope1
             closedBinder <- local scope2 closed
             expectChain (sameBinder final closedBinder) ChainTerminalCloseMismatch
