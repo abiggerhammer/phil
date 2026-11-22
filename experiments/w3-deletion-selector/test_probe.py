@@ -477,5 +477,32 @@ class OfflineTests(unittest.TestCase):
             probe.log_witness(api, {"id": 7, "run_attempt": 2})
 
 
+    def test_log_duplicate_or_unparsable_records_never_count(self):
+        good = probe.WITNESS_PREFIX + json.dumps(
+            witness(7, "UNFILTERED")["witness"])
+        for body in (good+"\n"+good+"\n",
+                     good+"\n"+probe.WITNESS_PREFIX+"garbage\n",
+                     "no marker\n"):
+            with self.subTest(length=len(body)):
+                fake = types.SimpleNamespace(
+                    returncode=0, stdout=body)
+                api = types.SimpleNamespace(
+                    repo=REPO, _log_env={"GH_HOST": "github.com",
+                                        "GH_TOKEN": "test-only"})
+                with mock.patch.object(probe.subprocess, "run",
+                                       return_value=fake):
+                    doc, source = probe.log_witness(
+                        api, {"id": 7, "run_attempt": 1})
+                self.assertIsNone(doc)
+                self.assertEqual(source["status"], "AMBIGUOUS_OR_MISSING")
+
+    def test_non_github_host_context_refuses_before_token_lookup(self):
+        with mock.patch.dict(probe.os.environ, {"GH_HOST": "github.enterprise.test"}):
+            with mock.patch.object(probe.subprocess, "run") as run:
+                with self.assertRaises(probe.Stop):
+                    probe.GitHub(REPO)
+                run.assert_not_called()
+
+
 if __name__ == "__main__":
     unittest.main()
