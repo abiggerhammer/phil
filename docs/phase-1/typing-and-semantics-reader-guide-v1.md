@@ -620,3 +620,11 @@ The [production two-step component boundary](formal-semantics-production-two-ste
 ### FSEM-02 post-let Send payload scope classification (non-normative)
 
 The [production two-step component boundary](formal-semantics-production-two-step-component-fsem02-v1.md) now resolves its second Send payload **after** binding the first successor. A source-bound successor used as the second payload receives an exact non-parameter rejection, not an out-of-scope diagnosis. This does not certify general Send payload typing, nominal authority, or Haskell-to-Rocq refinement.
+
+### FSEM-02 two-Receive written U8 witness envelope (non-normative)
+
+The [restricted two-step production checker](formal-semantics-production-two-step-component-fsem02-v1.md)
+now checks both source-written Receive annotations against U8 in the externally
+established `DoublePing` U8/U8 projection, with stage-specific exact
+rejections. This is partial source conformance, not general Receive type
+checking, inferred authority, or a source-to-Rocq refinement theorem.
