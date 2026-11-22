@@ -4,9 +4,12 @@ import argparse
 import contextlib
 import io
 import json
+import os
 from pathlib import Path
+import stat
 import tempfile
 import unittest
+from unittest import mock
 import probe
 
 REF = "refs/heads/hamster/admitted/w3-a1b2c3d4e5f6-canary"
@@ -45,6 +48,46 @@ class OfflineTests(unittest.TestCase):
             with contextlib.redirect_stdout(buf):
                 probe.classify(argparse.Namespace(phase=phase,before=p,after=q))
             return json.loads(buf.getvalue())["decision"]
+
+    def test_repo_root_get_uses_exact_github_route(self):
+        # Fake transport: no gh token, no external HTTP, no live test repo.
+        observed = []
+        class Response:
+            status = 200
+            def read(self, limit):
+                return json.dumps({"full_name": REPO, "default_branch": "main",
+                                   "archived": False, "id": 1234}).encode()
+            def __enter__(self):
+                return self
+            def __exit__(self, *args):
+                return False
+        class Opener:
+            def open(self, req, timeout):
+                observed.append((req.full_url, req.get_method()))
+                return Response()
+        api = object.__new__(probe.GitHub)
+        api.repo, api._token, api._opener = REPO, "offline-fixture", Opener()
+        self.assertEqual(api.repo_metadata()["id"], 1234)
+        self.assertEqual(observed, [
+            ("https://api.github.com/repos/" + REPO, "GET")])
+        with self.assertRaises(probe.Stop):
+            api.request("POST", "")  # root mutation remains forbidden
+
+    def test_durable_intent_fsyncs_file_and_parent_directory(self):
+        with tempfile.TemporaryDirectory() as d:
+            p = Path(d) / "nonce.create-intent.json"
+            observed_types = []
+            original_fsync = os.fsync
+            def recording_fsync(fd):
+                observed_types.append(stat.S_IFMT(os.fstat(fd).st_mode))
+                return original_fsync(fd)
+            with mock.patch.object(probe.os, "fsync", side_effect=recording_fsync):
+                probe.durable_new(p, {"decision": "INTENT_UNKNOWN_AFTER_INTERRUPTION"})
+            self.assertEqual(observed_types, [stat.S_IFREG, stat.S_IFDIR])
+            self.assertEqual(json.loads(p.read_text())["decision"],
+                             "INTENT_UNKNOWN_AFTER_INTERRUPTION")
+            with self.assertRaises(probe.Stop):
+                probe.durable_new(p, {"decision": "INVALID_REUSE"})
 
     def test_exact_fixture_equivalence(self):
         root = Path(__file__).resolve().parent / "fixtures"
