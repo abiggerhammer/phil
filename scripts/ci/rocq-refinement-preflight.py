@@ -41,6 +41,7 @@ MODULES = (
     "GrammarAstRecordDataRecursiveGroupingObservationReplayFiberTransport",
     "GrammarAstRecordDataRecursiveGroupingObservationReplayPairCoherence",
     "GrammarAstRecordDataRecursiveGroupingObservationReplayChainCoherence",
+    "GrammarAstRecordDataRecursiveGroupingObservationReplayPathClosure",
 )
 
 
