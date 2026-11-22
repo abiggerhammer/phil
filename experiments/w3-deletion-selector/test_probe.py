@@ -136,10 +136,16 @@ class OfflineTests(unittest.TestCase):
             ("https://api.github.com/repos/" + REPO, "GET"),
             ("https://api.github.com/user", "GET")])
         for method, route in (("POST", ""), ("DELETE", ""), ("POST", "@user"),
-                              ("GET", "//attacker"), ("POST", "//attacker")):
+                              ("GET", "//attacker"), ("POST", "//attacker"),
+                              ("DELETE", "/git/refs/heads/main"),
+                              ("POST", "/../../production/git/refs"),
+                              ("DELETE", "/git/refs/heads/hamster/staged/w3-a1b2c3d4e5f6-canary")):
             with self.subTest(method=method, route=route):
                 with self.assertRaises(probe.Stop):
                     api.request(method, route)
+        with self.assertRaises(probe.Stop):
+            api.request("POST", "/git/refs", {"ref":"refs/heads/main",
+                                              "sha": DEFAULT})
 
     def test_durable_intent_fsyncs_file_and_parent_directory(self):
         with tempfile.TemporaryDirectory() as d:
