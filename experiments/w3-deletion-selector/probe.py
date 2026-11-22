@@ -77,10 +77,20 @@ def durable_new(path, obj):
     flags = os.O_CREAT | os.O_EXCL | os.O_WRONLY
     if hasattr(os, "O_NOFOLLOW"):
         flags |= os.O_NOFOLLOW
-    with os.fdopen(os.open(path, flags, 0o600), "wb") as fd:
-        fd.write(data)
-        fd.flush()
-        os.fsync(fd.fileno())
+    # Bind the marker creation and directory fsync to the SAME verified
+    # directory handle. An fsynced file alone does not make its name durable.
+    dir_flags = os.O_RDONLY | getattr(os, "O_DIRECTORY", 0)
+    if hasattr(os, "O_NOFOLLOW"):
+        dir_flags |= os.O_NOFOLLOW
+    dir_fd = os.open(path.parent, dir_flags)
+    try:
+        with os.fdopen(os.open(path.name, flags, 0o600, dir_fd=dir_fd), "wb") as fd:
+            fd.write(data)
+            fd.flush()
+            os.fsync(fd.fileno())
+        os.fsync(dir_fd)
+    finally:
+        os.close(dir_fd)
     return path
 
 def durable_replace(path, obj):
@@ -111,7 +121,10 @@ class GitHub:
         self._opener = urllib.request.build_opener(NoRedirect())
 
     def request(self, method, suffix, payload=None):
-        check(method in ("GET", "POST", "DELETE") and suffix.startswith("/") and
+        # The repository metadata endpoint is the repository root itself:
+        # GET /repos/{owner}/{repo}, with no suffix. No mutating empty routes.
+        check(method in ("GET", "POST", "DELETE") and
+              (suffix.startswith("/") or (method == "GET" and suffix == "")) and
               "\n" not in suffix and "\r" not in suffix,
               "unapproved API route")
         path = f"https://api.github.com/repos/{self.repo}{suffix}"
