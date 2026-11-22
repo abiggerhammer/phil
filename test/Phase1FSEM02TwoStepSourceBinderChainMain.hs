@@ -35,11 +35,14 @@ main = do
   accepted <- TextIO.readFile "test/fixtures/fsem02-two-step-source-chain-v1/accepted.phil"
   staleSource <- TextIO.readFile "test/fixtures/fsem02-two-step-source-chain-v1/second-stale.phil"
   badClose <- TextIO.readFile "test/fixtures/fsem02-two-step-source-chain-v1/wrong-close.phil"
+  localPayload <- TextIO.readFile "test/fixtures/fsem02-two-step-source-chain-v1/second-local-payload.phil"
   let cases =
         [ ("two source-checked binder generations replay exact native two-step endpoints",
             sourceReplay accepted)
         , ("source second-step stale predecessor rejects at the exact chain gate",
             expectClientError ChainSecondPredecessorMismatch staleSource)
+        , ("post-first-let endpoint payload is bound, but not a source parameter",
+            expectClientError ChainSecondPayloadNotParameter localPayload)
         , ("source terminal close of first successor rejects at exact chain gate",
             expectClientError ChainTerminalCloseMismatch badClose)
         ]
