@@ -143,17 +143,35 @@ class GitHub:
               (suffix.startswith("/") or (method == "GET" and suffix in ("", "@user"))) and
               "\n" not in suffix and "\r" not in suffix,
               "unapproved API route")
+        route = urllib.parse.urlsplit(suffix)
         check(not suffix.startswith("//") and not any(c in suffix for c in
-              ("\\", "#", "\t")) and
-              (suffix in ("", "@user") or
-               (urllib.parse.urlsplit(suffix).path.startswith("/") and
-                urllib.parse.urlsplit(suffix).scheme == "" and
-                urllib.parse.urlsplit(suffix).netloc == "")),
+              ("\\", "#", "\t")) and not route.scheme and not route.netloc and
+              (suffix in ("", "@user") or route.path.startswith("/")),
               "invalid API suffix")
-        # Exact mutating-route allowlist. Never permit path traversal or a
-        # generic content/ref mutation even if a future caller is mistaken.
-        check(not any(part in suffix.lower() for part in (
+        check(not any(part in route.path.lower() for part in (
               "..", "%2f", "%2e", "%5c", "%00")), "unsafe API route encoding")
+        if method == "GET" and "?" in suffix:
+            try:
+                query = urllib.parse.parse_qs(route.query, strict_parsing=True,
+                                             keep_blank_values=True)
+            except ValueError as exc:
+                raise Stop("invalid API query") from exc
+            if route.path == "/actions/runs":
+                check(set(query) == {"event", "created", "per_page", "page"} and
+                      all(len(values) == 1 for values in query.values()) and
+                      query["event"][0] in EVENTS and query["per_page"] == ["100"] and
+                      query["page"][0] in ("1", "2", "3"), "invalid census query")
+                bounds = query["created"][0].split("..")
+                check(len(bounds) == 2 and
+                      all(re.fullmatch(r"[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}Z",
+                                       bound) for bound in bounds) and
+                      dt.timedelta(0) < utc(bounds[1]) - utc(bounds[0]) <=
+                      dt.timedelta(minutes=120), "invalid census query window")
+            else:
+                check(route.path in {f"/contents/.github/workflows/w3-{name}.yml"
+                                     for name in VARIANTS.values()} and
+                      set(query) == {"ref"} and len(query["ref"]) == 1 and
+                      HEX.fullmatch(query["ref"][0]), "invalid fixture query")
         if method == "POST":
             check(suffix == "/git/refs" and isinstance(payload, dict) and
                   set(payload) == {"ref", "sha"} and
@@ -358,9 +376,14 @@ def log_witness(api, run):
     raw_log = cp.stdout
     records = []
     for line in raw_log.splitlines():
-        if WITNESS_PREFIX not in line:
+        # gh prefixes each runner log line with job and step columns. The
+        # runner timestamps the message before gh adds those columns.
+        message = re.sub(
+            r"^(?:[^\t]+\t[^\t]+\t)?[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9:.]+Z ",
+            "", line, count=1)
+        if not message.startswith(WITNESS_PREFIX):
             continue
-        raw = line.split(WITNESS_PREFIX, 1)[1].strip()
+        raw = message.removeprefix(WITNESS_PREFIX).strip()
         try:
             doc = strict_json(raw)
         except (ValueError, Stop):
@@ -389,6 +412,20 @@ def snapshot(args):
     operator = api.operator(args.actor)
     check(api.main() == default, "selected default SHA has moved")
     api.verify_fixture(default, target)
+    main_before = getattr(args, "main_before_sha", None)
+    if main_before is not None:
+        check(sha(main_before) not in (default, target), "invalid Phase A setup SHA")
+        setup = api.must_get("/git/commits/" + main_before)
+        control = api.must_get("/git/commits/" + default)
+        check(isinstance(setup, dict) and setup.get("sha") == main_before and
+              isinstance(control, dict) and control.get("sha") == default and
+              isinstance(setup.get("tree"), dict) and
+              isinstance(control.get("tree"), dict) and
+              sha(setup["tree"].get("sha")) == control["tree"].get("sha") and
+              isinstance(control.get("parents"), list) and
+              len(control["parents"]) == 1 and isinstance(control["parents"][0], dict) and
+              control["parents"][0].get("sha") == main_before,
+              "Phase A requires an exact empty child of the setup SHA")
     found, counts = {}, {}
     created = f"{iso(start)}..{iso(end)}"
     for event in EVENTS:
@@ -466,12 +503,13 @@ def snapshot(args):
                     "transport": LOG_TRANSPORT, "status": "NOT_COMPLETED"}
             found[rid] = item
     evidence = {
-        "schema": "W3-SELECTOR-CENSUS-V2",
+        "schema": "W3-SELECTOR-CENSUS-V3",
         "repository": repo, "repository_id": meta["id"],
         "api_origin": API_ORIGIN, "log_transport": LOG_TRANSPORT,
         "approved_actor": operator,
         "ref": nonce_ref, "nonce": args.nonce,
         "target_sha": target, "default_sha": default,
+        "main_before_sha": main_before,
         "window_start": iso(start), "window_end": iso(end),
         "observed_at": iso(dt.datetime.now(UTC)),
         "event_totals": counts,
@@ -486,7 +524,7 @@ def snapshot(args):
 def load_snapshot(path):
     doc = strict_json(Path(path).read_text())
     check(isinstance(doc, dict) and
-          doc.get("schema") == "W3-SELECTOR-CENSUS-V2" and
+          doc.get("schema") == "W3-SELECTOR-CENSUS-V3" and
           doc.get("decision") == "READ_ONLY_NOT_CERTIFIED" and
           doc.get("api_origin") == API_ORIGIN and
           doc.get("log_transport") == LOG_TRANSPORT and
@@ -499,6 +537,10 @@ def load_snapshot(path):
           doc.get("ref") == ref_for(doc.get("nonce")) and
           sha(doc.get("target_sha")) != sha(doc.get("default_sha")),
           "census repository, identity or source binding mismatch")
+    check("main_before_sha" in doc and
+          (doc["main_before_sha"] is None or
+           sha(doc["main_before_sha"]) not in (doc["target_sha"], doc["default_sha"])),
+          "invalid Phase A setup SHA")
     check(doc["repository"] == repo and
           isinstance(doc.get("event_totals"), dict) and
           set(doc["event_totals"]) == set(EVENTS) and
@@ -587,9 +629,9 @@ def valid_witness(run, census):
     if not isinstance(witness, dict):
         return None
     keys = {"schema", "variant", "source_marker", "event_name", "event_ref",
-            "event_created", "event_deleted", "github_ref", "github_sha",
+            "event_created", "event_deleted", "event_ref_type", "github_ref", "github_sha",
             "run_id", "actor", "workflow_ref"}
-    if set(witness) != keys or witness["schema"] != "PHIL-W3-SELECTOR-WITNESS-V1":
+    if set(witness) != keys or witness["schema"] != "PHIL-W3-SELECTOR-WITNESS-V2":
         return None
     kind = witness["variant"]
     if kind not in VARIANTS or witness["source_marker"] not in (
@@ -597,6 +639,8 @@ def valid_witness(run, census):
         return None
     if (type(witness["event_created"]) not in (bool, type(None)) or
         type(witness["event_deleted"]) not in (bool, type(None)) or
+        witness["event_ref_type"] not in (
+            ("branch", "tag") if run["event"] in ("create", "delete") else (None,)) or
         type(witness["run_id"]) is not str or
         str(run["id"]) != witness["run_id"] or
         run["event"] != witness["event_name"] or
@@ -625,9 +669,18 @@ def classify(args):
     before, after = load_snapshot(args.before), load_snapshot(args.after)
     keys = ("repository", "repository_id", "ref", "nonce", "window_start",
             "window_end", "api_origin", "log_transport", "approved_actor",
-            "target_sha", "default_sha")
+            "target_sha")
     check(all(before.get(k) == after.get(k) for k in keys),
           "census binding mismatch")
+    check(before["main_before_sha"] is None, "invalid before capture")
+    if args.phase == "main":
+        check(after["main_before_sha"] == before["default_sha"] and
+              before["default_sha"] != after["default_sha"],
+              "unexpected Phase A default SHA transition")
+    else:
+        check(after["main_before_sha"] is None and
+              before["default_sha"] == after["default_sha"],
+              "unexpected default SHA transition")
     check(before["event_totals"] == {name: 0 for name in EVENTS} and
           not before["runs"], "before capture already has event traffic")
     start, end = utc(before["window_start"]), utc(before["window_end"])
@@ -679,12 +732,15 @@ def classify(args):
                 witness["event_ref"] == short_ref and
                 witness["event_created"] is None and
                 witness["event_deleted"] is None and
-                witness["source_marker"] == "DEFAULT_V1"):
+                witness["event_ref_type"] == "branch" and
+                witness["source_marker"] ==
+                ("TARGET_V1" if run["event"] == "create" else "DEFAULT_V1")):
                 auxiliary.append(run["id"])
             else:
                 unexpected.append(run["id"])
             continue
-        if run["event"] != "push" or witness["event_ref"] != desired_ref:
+        if (run["event"] != "push" or witness["event_ref"] != desired_ref or
+            (args.phase == "main" and witness["source_marker"] != "DEFAULT_V1")):
             unexpected.append(run["id"])
             continue
         if witness["variant"] in forbidden:
@@ -738,6 +794,8 @@ def cli():
     p.add_argument("--nonce",required=True)
     p.add_argument("--target-sha",required=True)
     p.add_argument("--default-sha",required=True)
+    p.add_argument("--main-before-sha",
+                   help="Phase A after capture only: exact setup commit before the empty main push")
     p.add_argument("--window-start",required=True)
     p.add_argument("--window-end",required=True)
     p.add_argument("--out",required=True)

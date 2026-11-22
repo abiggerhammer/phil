@@ -18,6 +18,7 @@ jobs:
           SOURCE_MARKER: TARGET_V1
           EVENT_NAME: "${{ github.event_name }}"
           EVENT_REF: "${{ github.event.ref }}"
+          EVENT_REF_TYPE_JSON: "${{ toJSON(github.event.ref_type) }}"
           EVENT_CREATED_JSON: "${{ toJSON(github.event.created) }}"
           EVENT_DELETED_JSON: "${{ toJSON(github.event.deleted) }}"
           GITHUB_EVENT_REF: "${{ github.ref }}"
@@ -33,12 +34,16 @@ jobs:
               if raw not in ("true", "false", "null"):
                   raise ValueError("noncanonical event flag")
               return json.loads(raw)
+          ref_type = json.loads(os.environ["EVENT_REF_TYPE_JSON"])
+          if ref_type not in ("branch", "tag", None):
+              raise ValueError("noncanonical event ref type")
           witness = {
-              "schema": "PHIL-W3-SELECTOR-WITNESS-V1",
+              "schema": "PHIL-W3-SELECTOR-WITNESS-V2",
               "variant": os.environ["WITNESS_KIND"],
               "source_marker": os.environ["SOURCE_MARKER"],
               "event_name": os.environ["EVENT_NAME"],
               "event_ref": os.environ["EVENT_REF"],
+              "event_ref_type": ref_type,
               "event_created": event_boolean("EVENT_CREATED_JSON"),
               "event_deleted": event_boolean("EVENT_DELETED_JSON"),
               "github_ref": os.environ["GITHUB_EVENT_REF"],

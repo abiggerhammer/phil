@@ -37,10 +37,12 @@ repo-name guard is not itself authorization.
    files into its root `.github/workflows/`, commit them as T.
 2. Replace them with the four DEFAULT_V1 files, commit as D and push to
    the test repository's `main`. Record both SHAs and workflow bytes.
-3. Wait for setup CI to settle. During Phase A, perform one ordinary
-   empty main commit and push from the owner-local clone to exercise
-   UNFILTERED/MAIN_ONLY/IGNORE_PAIR positive controls. Record the new
-   main SHA M (same DEFAULT_V1 workflow bytes).
+3. Wait for setup CI to settle. Take the Phase A before snapshot
+   while `main` is at D. The separately approved control would advance
+   `main` with one empty commit M whose sole parent is D. After the
+   observation delay, take the Phase A after snapshot at M and classify
+   the pair. The UNFILTERED, MAIN_ONLY and IGNORE_PAIR controls must
+   bind to M.
 4. On the exact reviewed Phil implementation head, run read-only
    `probe.py plan` using the test repo, T, M, and the fresh nonce.
    It checks test repo identity, current main, exact source bytes at T
@@ -64,8 +66,28 @@ The initial operator command syntax **for review only** is:
     APPROVED_ACTOR='OWNER_APPROVED_GITHUB_LOGIN'
     NONCE='REPLACE_WITH_FRESH_12_HEX'
     TARGET_SHA='40-hex-target-T'
+    SETUP_SHA='40-hex-main-D'
     DEFAULT_SHA='40-hex-main-M'
     STATE_DIR='/owner-private-w3-evidence'
+    PHASE_A_START='YYYY-MM-DDTHH:MM:SSZ'
+    PHASE_A_END='YYYY-MM-DDTHH:MM:SSZ'
+
+    # Phase A before capture at D, within the Phase A window:
+    python3 "$PROBE" snapshot --repo "$TEST_REPO" --repo-id "$REPO_ID" \
+      --actor "$APPROVED_ACTOR" --nonce "$NONCE" \
+      --target-sha "$TARGET_SHA" --default-sha "$SETUP_SHA" \
+      --window-start "$PHASE_A_START" --window-end "$PHASE_A_END" \
+      --out "$STATE_DIR/phase-a-before.json"
+
+    # Phase A after capture at M, at least 30m after the same window ends:
+    python3 "$PROBE" snapshot --repo "$TEST_REPO" --repo-id "$REPO_ID" \
+      --actor "$APPROVED_ACTOR" --nonce "$NONCE" \
+      --target-sha "$TARGET_SHA" --default-sha "$DEFAULT_SHA" \
+      --main-before-sha "$SETUP_SHA" \
+      --window-start "$PHASE_A_START" --window-end "$PHASE_A_END" \
+      --out "$STATE_DIR/phase-a-after.json"
+    python3 "$PROBE" classify --phase main \
+      --before "$STATE_DIR/phase-a-before.json" --after "$STATE_DIR/phase-a-after.json"
 
     python3 "$PROBE" plan --repo "$TEST_REPO" --repo-id "$REPO_ID" --actor "$APPROVED_ACTOR" --nonce "$NONCE" \
       --target-sha "$TARGET_SHA" --default-sha "$DEFAULT_SHA"
@@ -131,7 +153,7 @@ current-false quarantine precondition remain separate obligations.
 
 ## Review and evidence retention
 
-Run `python3 experiments/w3-deletion-selector/test_probe.py` offline.
+Run `python3 -B experiments/w3-deletion-selector/test_probe.py -v` offline.
 The implementation reviewer must examine actual YAML version selection,
 one-use mutation gate, test-repository identity, owner credential
 scoping, exact ref/SHA checks, event payload flags, capture windows,
@@ -168,20 +190,25 @@ marker. The repo name pattern alone is **not** authorization.
 For each source revision, the eight fixture bytes must match the
 independently selected exact target/default commits. Snapshot now
 requires `--target-sha`, `--default-sha` and `--actor` in addition to
-repo and numeric ID. It preserves one `W3-SELECTOR-CENSUS-V2` file per
+repo and numeric ID. It preserves one `W3-SELECTOR-CENSUS-V3` file per
 before/after observation, event-by-event pinned pagination counts, and
 each retrieved log's SHA-256 and retrieval-status evidence. Changing
 totals, short/missing pages, duplicate IDs, outside-window runs,
 unexpected repository/actor/run URL, replay attempt or source SHA
 **STOP**, not a truncated apparent success. A stable REST count still
 is not a cryptographic consistency snapshot and cannot prove that no
-unreported GitHub event exists.
+unreported GitHub event exists. Both Phase A captures verify the
+DEFAULT_V1 bytes at their pinned main revisions. The after capture
+additionally checks that M has D as its sole parent and the same Git
+tree. Phases B and C require an unchanged default SHA within each pair.
 
 `classify --phase create|delete` now **requires `--intent`** pointing
 to the exact successful one-use mutation receipt. The approved action
 must match the phase, and its prepared/request/completion times must
-fall strictly between the clean pre-mutation snapshot and the bounded
-post-mutation snapshot. A typed successful `abort-cleanup` has a
+fall between the clean pre-mutation snapshot and the bounded
+post-mutation snapshot. Runs earlier than the recorded request start
+are unexpected. Timestamps have whole-second resolution and equality
+is allowed, so this check establishes ordering at the recorded resolution. A typed successful `abort-cleanup` has a
 *separate* `ABORT_CLEANUP_STATE_VERIFIED` decision; it can never
 satisfy Phase C, even if a deletion-looking push witness exists.
 `ALREADY_ABSENT_NO_WRITE` cannot satisfy either planned phase.
@@ -189,8 +216,11 @@ satisfy Phase C, even if a deletion-looking push witness exists.
 The before inventory must contain no observed runs in the selected
 event window. All after-window `push`, `create`, and `delete`
 runs are accounted for; only the correct, independently bound
-UNFILTERED auxiliary `create` or `delete` is allowed as context,
-never counted as a positive `push` witness. Any other event run,
+UNFILTERED auxiliary branch events are allowed as context. CREATE
+uses the created W3 ref and target SHA. DELETE uses the default ref
+and SHA. Both must name the experimental branch and carry
+`event_ref_type=branch`. Auxiliary events supply no positive push
+witnesses. Any other event run,
 invalid log, duplicate control, wrong ref/timestamp/SHA/actor or
 missing response is `STOP_UNRELATED_OR_AMBIGUOUS_TRAFFIC`. A valid
 forbidden filter witness is a `COUNTEREXAMPLE_STOP`. The absent
@@ -201,8 +231,11 @@ Both UNFILTERED and W3_ONLY planned Phase C controls must carry
 **literal JSON** `event_deleted=true` and `event_created=false`,
 with the exact selected deleted ref. The fixed TARGET_V1/DEFAULT_V1
 markers must agree with each run's independently selected target or
-default SHA and workflow ref. The unchanged eight inert YAML fixtures
-remain the only designed positive controls. A signed provenance claim,
+default SHA and workflow ref. The eight inert YAML fixtures remain the only designed positive
+controls. Their V2 witness records include the typed payload ref kind.
+The log parser reads records at the start of runner messages after
+removing the CLI log prefix and runner timestamp. Duplicate or malformed
+emitted records remain ambiguous. A signed provenance claim,
 full native GitHub ref/response isolation, concurrent event absence,
 and effective GitHub App/ruleset permissions remain explicitly open.
 

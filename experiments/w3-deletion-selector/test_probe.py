@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """SOURCE-ONLY deterministic W3 counterexamples; NEVER use live GitHub or tokens."""
 import argparse
+import base64
 import contextlib
 import copy
 import io
@@ -8,6 +9,9 @@ import json
 import os
 from pathlib import Path
 import stat
+import subprocess
+import sys
+import textwrap
 import tempfile
 import types
 import unittest
@@ -19,12 +23,13 @@ import probe
 REF = "refs/heads/hamster/admitted/w3-a1b2c3d4e5f6-canary"
 REPO = "owner/w3-delete-selector-probe-example"
 TARGET, DEFAULT = "b"*40, "a"*40
+SETUP = "c"*40
 ACTOR, ID = "owner", 1234
 WIN_START, WIN_END = "2026-11-21T11:00:00Z", "2026-11-21T11:30:00Z"
 
 
 def witness(run_id, kind, *, event="push", created=False, deleted=False,
-            ref=REF, source="DEFAULT_V1", started="2026-11-21T11:15:00Z"):
+            ref=REF, source="DEFAULT_V1", ref_type="branch", started="2026-11-21T11:15:00Z"):
     path = ".github/workflows/w3-" + probe.VARIANTS[kind] + ".yml"
     branch_ref = "refs/heads/main" if source == "DEFAULT_V1" else REF
     head_sha = DEFAULT if source == "DEFAULT_V1" else TARGET
@@ -44,10 +49,11 @@ def witness(run_id, kind, *, event="push", created=False, deleted=False,
         "log_provenance": {"transport": probe.LOG_TRANSPORT,
                            "status": "ONE_RECORD", "sha256": "0"*64},
         "witness": {
-            "schema": "PHIL-W3-SELECTOR-WITNESS-V1",
+            "schema": "PHIL-W3-SELECTOR-WITNESS-V2",
             "variant": kind, "source_marker": source,
             "event_name": event, "event_ref": event_ref,
             "event_created": created, "event_deleted": deleted,
+            "event_ref_type": ref_type if event in ("create", "delete") else None,
             "github_ref": branch_ref, "github_sha": head_sha,
             "run_id": str(run_id), "actor": ACTOR,
             "workflow_ref": f"{REPO}/{path}@{branch_ref}"}}
@@ -58,11 +64,11 @@ def snapshot(runs, observed):
     for run in runs:
         totals[run["event"]] += 1
     return {
-        "schema": "W3-SELECTOR-CENSUS-V2", "repository": REPO,
+        "schema": "W3-SELECTOR-CENSUS-V3", "repository": REPO,
         "repository_id": ID, "ref": REF, "nonce": "a1b2c3d4e5f6",
         "api_origin": probe.API_ORIGIN, "log_transport": probe.LOG_TRANSPORT,
         "approved_actor": ACTOR, "target_sha": TARGET, "default_sha": DEFAULT,
-        "window_start": WIN_START, "window_end": WIN_END,
+        "main_before_sha": None, "window_start": WIN_START, "window_end": WIN_END,
         "observed_at": observed, "event_totals": totals, "runs": runs,
         "decision": "READ_ONLY_NOT_CERTIFIED"}
 
@@ -91,6 +97,9 @@ class OfflineTests(unittest.TestCase):
                                           "intent.json"))
             before = snapshot([], "2026-11-21T11:05:00Z")
             after = snapshot(runs, after_time)
+            if phase == "main":
+                before["default_sha"] = SETUP
+                after["main_before_sha"] = SETUP
             if alter_before:
                 alter_before(before)
             if alter_after:
@@ -283,6 +292,13 @@ class OfflineTests(unittest.TestCase):
             witness(3, "UNFILTERED", event="delete")]),
             "INCONCLUSIVE_MISSING_POSITIVE_WITNESS")
 
+    def test_same_name_tag_delete_is_unexpected(self):
+        self.assertEqual(self.classify("delete", [
+            witness(1, "UNFILTERED", deleted=True),
+            witness(2, "W3_ONLY", deleted=True, source="TARGET_V1"),
+            witness(3, "UNFILTERED", event="delete", ref_type="tag")]),
+            "STOP_UNRELATED_OR_AMBIGUOUS_TRAFFIC")
+
     def test_main_control(self):
         self.assertEqual(self.classify("main", [
             witness(1, "UNFILTERED", ref="refs/heads/main"),
@@ -291,11 +307,17 @@ class OfflineTests(unittest.TestCase):
             "SUPPORTS_MODEL_BOUNDED_NOT_CERTIFIED")
 
     def test_create_control_and_expected_auxiliary_create(self):
-        self.assertEqual(self.classify("create", [
-            witness(1, "UNFILTERED", created=True),
-            witness(2, "W3_ONLY", created=True, source="TARGET_V1"),
-            witness(3, "UNFILTERED", event="create")]),
-            "SUPPORTS_MODEL_BOUNDED_NOT_CERTIFIED")
+        controls = [witness(1, "UNFILTERED", created=True),
+                    witness(2, "W3_ONLY", created=True, source="TARGET_V1")]
+        for source, ref_type, expected in (
+            ("TARGET_V1", "branch", "SUPPORTS_MODEL_BOUNDED_NOT_CERTIFIED"),
+            ("DEFAULT_V1", "branch", "STOP_UNRELATED_OR_AMBIGUOUS_TRAFFIC"),
+            ("TARGET_V1", "tag", "STOP_UNRELATED_OR_AMBIGUOUS_TRAFFIC"),
+        ):
+            with self.subTest(source=source, ref_type=ref_type):
+                auxiliary = witness(3, "UNFILTERED", event="create",
+                                    source=source, ref_type=ref_type)
+                self.assertEqual(self.classify("create", controls + [auxiliary]), expected)
 
     def test_forbidden_branch_controls_are_counterexamples(self):
         for phase, forbidden in (("delete", "MAIN_ONLY"),
@@ -441,6 +463,110 @@ class OfflineTests(unittest.TestCase):
                     d["runs"].append(witness(1, "UNFILTERED", deleted=True)),
                     d["event_totals"].update(push=1)))
 
+    def test_phase_a_capture_main_transition_through_real_request_builder(self):
+        tree = "d"*40
+        control_records = {
+            rid: witness(rid, kind, ref="refs/heads/main")
+            for rid, kind in enumerate(("UNFILTERED", "MAIN_ONLY", "IGNORE_PAIR"), 1)
+        }
+        requests = []
+
+        def open_request(request, timeout):
+            self.assertEqual(request.get_method(), "GET")
+            url = urllib.parse.urlsplit(request.full_url)
+            self.assertEqual(url.netloc, "api.github.com")
+            requests.append((url.path, urllib.parse.parse_qs(url.query)))
+            path, query = requests[-1]
+            if path == "/user":
+                data = {"login": ACTOR, "id": 12}
+            else:
+                self.assertTrue(path.startswith("/repos/" + REPO))
+                path = path.removeprefix("/repos/" + REPO)
+                if not path:
+                    data = {"id": ID, "full_name": REPO, "default_branch": "main",
+                            "archived": False, "owner": {"login": ACTOR}}
+                elif path == "/git/ref/heads/main":
+                    data = {"ref": "refs/heads/main", "object": {"sha": main}}
+                elif path.startswith("/git/commits/"):
+                    revision = path.rsplit("/", 1)[-1]
+                    data = {"sha": revision, "tree": {
+                                "sha": changed_tree if revision == DEFAULT else tree},
+                            "parents": [{"sha": SETUP if revision == DEFAULT else TARGET}]}
+                elif path.startswith("/contents/"):
+                    revision = query["ref"][0]
+                    self.assertIn(revision, (TARGET, main))
+                    flavor = "target_v1" if revision == TARGET else "default_v1"
+                    fixture = probe.ROOT / "fixtures" / flavor / path.removeprefix("/contents/")
+                    data = {"encoding": "base64", "content":
+                            base64.b64encode(fixture.read_bytes()).decode()}
+                else:
+                    self.assertEqual(path, "/actions/runs")
+                    self.assertEqual(query["created"], [f"{WIN_START}..{WIN_END}"])
+                    self.assertEqual(query["per_page"], ["100"])
+                    self.assertEqual(query["page"], ["1"])
+                    rows = []
+                    if main == DEFAULT and query["event"] == ["push"]:
+                        for run in control_records.values():
+                            rows.append({**run, "repository": {"id": ID},
+                                         "head_repository": {"id": ID},
+                                         "actor": {"login": ACTOR}})
+                    data = {"total_count": len(rows), "workflow_runs": rows}
+            response = mock.MagicMock()
+            response.__enter__.return_value.status = 200
+            response.__enter__.return_value.read.return_value = json.dumps(data).encode()
+            return response
+
+        api = object.__new__(probe.GitHub)
+        api.repo, api._token = REPO, "offline-fixture"
+        api._opener = types.SimpleNamespace(open=open_request)
+        api._log_env = {"GH_HOST": "github.com", "GH_TOKEN": "offline-fixture"}
+
+        def fake_log(argv, **kwargs):
+            run_id = int(argv[3])
+            return types.SimpleNamespace(
+                returncode=0, stdout=probe.WITNESS_PREFIX +
+                json.dumps(control_records[run_id]["witness"]) + "\n")
+
+        with tempfile.TemporaryDirectory() as directory, contextlib.redirect_stdout(io.StringIO()):
+            before, after = (Path(directory) / filename for filename in ("before", "after"))
+            args = argparse.Namespace(repo=REPO, repo_id=ID, actor=ACTOR,
+                                      nonce="a1b2c3d4e5f6", target_sha=TARGET,
+                                      default_sha=SETUP, main_before_sha=None,
+                                      window_start=WIN_START, window_end=WIN_END, out=before)
+            with mock.patch.object(probe, "GitHub", return_value=api), \
+                 mock.patch.object(probe.dt, "datetime", wraps=probe.dt.datetime) as clock, \
+                 mock.patch.object(probe.subprocess, "run", side_effect=fake_log):
+                main, changed_tree = SETUP, tree
+                clock.now.return_value = probe.utc("2026-11-21T11:05:00Z")
+                probe.snapshot(args)
+                main = DEFAULT
+                args.default_sha, args.main_before_sha, args.out = DEFAULT, SETUP, after
+                clock.now.return_value = probe.utc("2026-11-21T12:05:00Z")
+                changed_tree = "e"*40
+                with self.assertRaisesRegex(probe.Stop, "exact empty child"):
+                    probe.snapshot(args)
+                changed_tree = tree
+                probe.snapshot(args)
+                phases = argparse.Namespace(phase="main", before=before, after=after, intent=None)
+                with contextlib.redirect_stdout(io.StringIO()) as result:
+                    probe.classify(phases)
+                self.assertEqual(json.loads(result.getvalue())["decision"],
+                                 "SUPPORTS_MODEL_BOUNDED_NOT_CERTIFIED")
+        self.assertEqual(sum(path.endswith("/actions/runs") for path, _ in requests), 6)
+        for revision in (SETUP, DEFAULT):
+            self.assertEqual(sum(path.startswith(f"/repos/{REPO}/contents/") and
+                                 query == {"ref": [revision]} for path, query in requests),
+                             4 if revision == SETUP else 8)
+
+    def test_unapproved_census_query_rejected_before_transport(self):
+        api = object.__new__(probe.GitHub)
+        api.repo, api._token, api._opener = REPO, "offline-fixture", mock.Mock()
+        for suffix in ("/actions/../runs", "/actions/runs?event=push",
+                       "/actions/runs?event=push&event=delete"):
+            with self.subTest(suffix=suffix), self.assertRaises(probe.Stop):
+                api.must_get(suffix)
+        api._opener.open.assert_not_called()
+
     def test_pagination_total_drift_and_short_page_stop(self):
         class Fake:
             repo = REPO
@@ -507,6 +633,42 @@ class OfflineTests(unittest.TestCase):
         with self.assertRaises(probe.Stop):
             probe.log_witness(api, {"id": 7, "run_attempt": 2})
 
+
+    def test_runner_script_echo_and_actual_emission(self):
+        fixture = (probe.ROOT / "fixtures/default_v1/.github/workflows/w3-unfiltered.yml")
+        script = textwrap.dedent(fixture.read_text().split("run: |\n", 1)[1])
+        body = script.split("python3 - <<'PY'\n", 1)[1].rsplit("\nPY", 1)[0]
+        env = {
+            "WITNESS_KIND": "UNFILTERED", "SOURCE_MARKER": "DEFAULT_V1",
+            "EVENT_NAME": "delete", "EVENT_REF": REF.removeprefix("refs/heads/"),
+            "EVENT_CREATED_JSON": "null", "EVENT_DELETED_JSON": "null",
+            "GITHUB_EVENT_REF": "refs/heads/main", "GITHUB_EVENT_SHA": DEFAULT,
+            "GITHUB_RUN_IDENTIFIER": "7", "GITHUB_EVENT_ACTOR": ACTOR,
+            "WORKFLOW_SOURCE_REF": f"{REPO}/.github/workflows/w3-unfiltered.yml@refs/heads/main",
+        }
+        api = types.SimpleNamespace(repo=REPO, _log_env={})
+        prefix = "witness\tEmit strictly typed event metadata\t2026-11-21T11:15:00.123Z "
+        for ref_type in ("branch", "tag"):
+            with self.subTest(ref_type=ref_type):
+                output = subprocess.run(
+                    [sys.executable, "-B", "-c", body], text=True, capture_output=True,
+                    check=True, env={**env, "EVENT_REF_TYPE_JSON": json.dumps(ref_type)},
+                ).stdout
+                runner_log = "".join(prefix + line + "\n" for line in
+                                     (script + output).splitlines())
+                self.assertEqual(runner_log.count(probe.WITNESS_PREFIX), 2)
+                for extra in ("", output.strip(), probe.WITNESS_PREFIX + "malformed"):
+                    stdout = runner_log + (prefix + extra + "\n" if extra else "")
+                    with mock.patch.object(probe.subprocess, "run", return_value=
+                                           types.SimpleNamespace(returncode=0, stdout=stdout)):
+                        record, details = probe.log_witness(api, {"id": 7, "run_attempt": 1})
+                    if extra:
+                        self.assertIsNone(record)
+                        self.assertEqual(details["status"], "AMBIGUOUS_OR_MISSING")
+                    else:
+                        self.assertEqual(record, witness(7, "UNFILTERED", event="delete",
+                                                         ref_type=ref_type)["witness"])
+                        self.assertEqual(details["status"], "ONE_RECORD")
 
     def test_log_duplicate_or_unparsable_records_never_count(self):
         good = probe.WITNESS_PREFIX + json.dumps(
