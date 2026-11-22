@@ -28,3 +28,29 @@ Focused exact-work-head CI: `.github/workflows/fsem02-production-two-step-compon
 The second Send payload is now resolved in the real lexical scope **after** the first `let`, never in the original component parameter scope. In the accepted complete `DoublePing`, `second` still resolves to its U8 component parameter. The minimally rejected complete-source fixture `second-local-payload.phil` changes only `send second on middle` to `send middle on middle`: `middle` is **in scope** but is the first endpoint successor (a let-pattern binder), not a permitted component-parameter payload in this narrow checker. It must produce the distinct production diagnostic `ChainSecondPayloadNotParameter`, rather than the incorrect `ChainUnresolvedOccurrence` obtained when consulting pre-let scope. Existing stale-second-predecessor and wrong-Close controls are unchanged.
 
 The source premise is lexical binder kind, **not** complete type/protocol checking: the checker still does not validate arbitrary Send payload types, legitimate endpoint delegation, full component elaboration, process authority or source-to-Core refinement. Active name shadowing is already rejected independently by `GrammarV1BindLocal`; it is not used as an accepted fixture or mischaracterized as newly discovered compiler acceptance. The conditional Rocq name inequality only expresses what follows from supplied distinct identities; production binder fidelity remains a separate Haskell test and nonclaim.
+
+## Follow-on DoublePing two-Receive U8 annotation envelope (non-normative)
+
+For the **externally established** `DoublePing` server projection
+(`Receive U8; Receive U8; End Done`), the bounded production checker
+now verifies that each written Receive annotation is exactly the original
+source form `U8`. The accepted complete source stays accepted. Minimally
+rejected original-source `receive-first-u16.phil` and
+`receive-second-u16.phil` modify one annotation each and must obtain the
+specific production `ChainFirstReceiveAnnotationNotU8` or
+`ChainSecondReceiveAnnotationNotU8` result. These are **restricted
+U8 witness-envelope refusals**, not universal type errors: a different
+protocol could legitimately receive `U16`.
+
+The caller separately establishes the protocol instance, projected expected
+heads and duality, then supplies its independently justified declaration
+identity to the bounded checker. The checker does **not** derive that nominal
+authority from source names, nor infer expected types for arbitrary protocol
+instances, validate arbitrary received payload expressions, perform general
+component compilation, or certify architecture, activation, rendezvous,
+disposal or assurance. The Rocq theorem
+`fsem02TwoReceiveU8WitnessGateSound` establishes only that a finite
+two-annotation **model** gate can succeed when both modeled tags are U8.
+There is no proof of compiler AST-to-model fidelity or Haskell-to-Rocq
+refinement. Native predecessor/successor/Close replay remains separately
+tested. This is non-normative and FSEM-02 remains open.

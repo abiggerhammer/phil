@@ -95,3 +95,28 @@ Proof.
   congruence.
 Qed.
 Print Assumptions fsem02LaterBoundPayloadNotOriginalParameter.
+
+(* This is a finite U8 witness-envelope classifier, not the source type AST
+   or an implementation-refinement theorem. Every other written annotation
+   belongs to Other; the expected U8 protocol head is supplied externally. *)
+Inductive FSEM02WrittenReceiveType : Type :=
+| FSEM02WrittenU8
+| FSEM02WrittenOther.
+
+Definition fsem02TwoReceiveU8WitnessGate
+    (first second : FSEM02WrittenReceiveType) : bool :=
+  match first, second with
+  | FSEM02WrittenU8, FSEM02WrittenU8 => true
+  | _, _ => false
+  end.
+
+Theorem fsem02TwoReceiveU8WitnessGateSound :
+  forall first second,
+    fsem02TwoReceiveU8WitnessGate first second = true ->
+    first = FSEM02WrittenU8 /\ second = FSEM02WrittenU8.
+Proof.
+  intros first second Hgate.
+  destruct first, second; simpl in Hgate; try discriminate;
+    split; reflexivity.
+Qed.
+Print Assumptions fsem02TwoReceiveU8WitnessGateSound.
