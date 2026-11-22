@@ -1,0 +1,78 @@
+name: Phase 2 S00 L0 source admission
+
+on:
+  pull_request:
+    paths:
+      - 'src/Phil/Experimental/Bytes8/**'
+      - 'test/phase2/s00/**'
+      - 'docs/phase-2/bytes8-source-admission.md'
+      - '.github/workflows/phase2-s00-l0-source-preflight.yml'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow_ref }}-${{ github.event.pull_request.number || github.run_id }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  strict-source:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+          persist-credentials: false
+      - uses: haskell-actions/setup@v2
+        with:
+          ghc-version: '9.6.7'
+          cabal-version: '3.18.1.0'
+      - name: Identify exact source, parser, and test inputs
+        env:
+          EXPECTED_HEAD: ${{ github.event.pull_request.head.sha }}
+        run: |
+          set -euo pipefail
+          git rev-parse HEAD
+          test "$(git rev-parse HEAD)" = "$EXPECTED_HEAD"
+          ghc --version
+          test "$(ghc --numeric-version)" = 9.6.7
+          cabal --version
+          test "$(git hash-object grammar/phase1-surface.ebnf)" = 933fa282487eeae6ba224d68a8d49b9691c4e1dd
+          test "$(git hash-object src/Phil/Surface/GrammarV1/Parser.hs)" = 70aabbf9ea95271b1ed6852dfe5ace049bbda959
+          git ls-tree -r HEAD grammar/phase1-surface.ebnf src/Phil/Experimental/Bytes8 \
+            src/Phil/Surface/GrammarV1 src/Phil/Surface/Check/Engine.hs test/phase2/s00 \
+            'test/Phase1FSEM01BorrowResourceMain.hs' 'test/Phase1FSEM01BorrowResourceTraceMain.hs'
+          sha256sum test/phase2/s00/fixtures/*.phil
+      - name: Replay strict source admission and production regressions
+        run: |
+          set -euo pipefail
+          cabal build lib:phil-core --only-dependencies
+          for test in test/phase2/s00/Bytes8SourceMain.hs \
+            test/Phase1FSEM01BorrowResourceMain.hs test/Phase1FSEM01BorrowResourceTraceMain.hs
+          do
+            cabal exec -- runghc -isrc -Wall -Werror "$test"
+          done
+      - name: Verify the imported-client authority boundary
+        run: |
+          set -euo pipefail
+          client=test/phase2/s00/fixtures/ImportedClient.hs
+          cabal exec -- ghc -isrc -Wall -Werror -fno-code "$client"
+          log=$(mktemp)
+          for attack in FORGE_CONSTRUCTOR UPDATE_SEALED UPGRADE_REPORT FORGE_CONTRACT
+          do
+            if cabal exec -- ghc -isrc -Wall -Werror -fno-code "-D$attack" "$client" >"$log" 2>&1
+            then
+              echo "Unexpectedly compiled $attack"
+              exit 1
+            fi
+            case "$attack" in
+              FORGE_CONSTRUCTOR) diagnostic='Illegal term-level use of the type constructor.*CheckedBody' ;;
+              UPDATE_SEALED) diagnostic='record update at field.*bodyCheckpoints' ;;
+              UPGRADE_REPORT) diagnostic='match expected type.*CheckedBody' ;;
+              FORGE_CONTRACT) diagnostic='applied to two value arguments' ;;
+            esac
+            rg -F "$client:" "$log"
+            rg "$diagnostic" "$log"
+            echo "PASS: rejected $attack"
+          done
