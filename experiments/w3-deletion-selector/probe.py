@@ -6,7 +6,6 @@ import base64
 import datetime as dt
 import hashlib
 import json
-import math
 import os
 from pathlib import Path
 import re
@@ -26,7 +25,7 @@ VARIANTS = {"UNFILTERED": "unfiltered", "MAIN_ONLY": "main-only",
 WITNESS_PREFIX = "W3_WITNESS_JSON:"
 MAX_RUNS = 200
 API_ORIGIN = "https://api.github.com"
-LOG_TRANSPORT = "gh run view --hostname github.com (pinned GH_TOKEN)"
+LOG_TRANSPORT = "gh run view (GH_HOST=github.com, pinned GH_TOKEN)"
 UTC = dt.timezone.utc
 
 class Stop(RuntimeError):
@@ -151,6 +150,25 @@ class GitHub:
                 urllib.parse.urlsplit(suffix).scheme == "" and
                 urllib.parse.urlsplit(suffix).netloc == "")),
               "invalid API suffix")
+        # Exact mutating-route allowlist. Never permit path traversal or a
+        # generic content/ref mutation even if a future caller is mistaken.
+        check(not any(part in suffix.lower() for part in (
+              "..", "%2f", "%2e", "%5c", "%00")), "unsafe API route encoding")
+        if method == "POST":
+            check(suffix == "/git/refs" and isinstance(payload, dict) and
+                  set(payload) == {"ref", "sha"} and
+                  isinstance(payload["ref"], str) and
+                  bool(re.fullmatch(
+                      r"refs/heads/hamster/admitted/w3-[0-9a-f]{12}-canary",
+                      payload["ref"])) and
+                  bool(NONCE.fullmatch(
+                      payload["ref"].split("/w3-", 1)[1].split("-canary", 1)[0])) and
+                  sha(payload["sha"]) == payload["sha"],
+                  "unapproved REST ref create")
+        if method == "DELETE":
+            check(payload is None and bool(re.fullmatch(
+                  r"/git/refs/heads/hamster/admitted/w3-[0-9a-f]{12}-canary",
+                  suffix)), "unapproved REST ref deletion")
         if suffix == "@user":
             check(method == "GET" and payload is None, "user endpoint is GET only")
             path = API_ORIGIN + "/user"
