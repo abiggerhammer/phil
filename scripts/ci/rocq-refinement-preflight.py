@@ -45,6 +45,7 @@ MODULES = (
     "GrammarAstRecordDataRecursiveGroupingObservationReplayPathQuotient",
     "GrammarAstRecordDataRecursiveGroupingObservationReplayPathClassifier",
     "GrammarAstRecordDataRecursiveGroupingObservationReplayPathSingleStep",
+    "GrammarAstRecordDataRecursiveGroupingObservationReplayPathDecision",
 )
 
 
