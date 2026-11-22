@@ -146,7 +146,7 @@ class GitHub:
               "unapproved API route")
         check(not suffix.startswith("//") and not any(c in suffix for c in
               ("\\", "#", "\t")) and
-              (suffix == "" or
+              (suffix in ("", "@user") or
                (urllib.parse.urlsplit(suffix).path.startswith("/") and
                 urllib.parse.urlsplit(suffix).scheme == "" and
                 urllib.parse.urlsplit(suffix).netloc == "")),
