@@ -141,7 +141,7 @@ class GitHub:
         # The repository metadata endpoint is the repository root itself:
         # GET /repos/{owner}/{repo}, with no suffix. No mutating empty routes.
         check(method in ("GET", "POST", "DELETE") and
-              (suffix.startswith("/") or (method == "GET" and suffix == "")) and
+              (suffix.startswith("/") or (method == "GET" and suffix in ("", "@user"))) and
               "\n" not in suffix and "\r" not in suffix,
               "unapproved API route")
         check(not suffix.startswith("//") and not any(c in suffix for c in
@@ -151,7 +151,11 @@ class GitHub:
                 urllib.parse.urlsplit(suffix).scheme == "" and
                 urllib.parse.urlsplit(suffix).netloc == "")),
               "invalid API suffix")
-        path = f"{API_ORIGIN}/repos/{self.repo}{suffix}"
+        if suffix == "@user":
+            check(method == "GET" and payload is None, "user endpoint is GET only")
+            path = API_ORIGIN + "/user"
+        else:
+            path = f"{API_ORIGIN}/repos/{self.repo}{suffix}"
         body = None if payload is None else json.dumps(
             payload, separators=(",", ":")).encode()
         request = urllib.request.Request(path, data=body, method=method, headers={
@@ -195,7 +199,7 @@ class GitHub:
         check(isinstance(expected, str) and
               bool(re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9-]{0,38}", expected)),
               "approved operator login required")
-        person = self.must_get("/user")
+        person = self.must_get("@user")
         check(isinstance(person, dict) and
               isinstance(person.get("login"), str) and
               person["login"].casefold() == expected.casefold() and
@@ -351,9 +355,12 @@ def log_witness(api, run):
         "sha256": hashlib.sha256(raw_log.encode()).hexdigest()}
     return (records[0] if receipt["status"] == "ONE_RECORD" else None), receipt
 
+
 def snapshot(args):
     repo = verify_repo_name(args.repo)
     nonce_ref = ref_for(args.nonce)
+    target, default = sha(args.target_sha), sha(args.default_sha)
+    check(target != default, "source revisions must be distinct")
     start, end = utc(args.window_start), utc(args.window_end)
     check(dt.timedelta(0) < end-start <= dt.timedelta(minutes=120),
           "window outside bounds")
@@ -361,155 +368,328 @@ def snapshot(args):
     meta = api.repo_metadata()
     check(meta["id"] == args.repo_id and args.repo_id > 0,
           "approved test repository numeric identity changed")
-    found = {}
+    operator = api.operator(args.actor)
+    check(api.main() == default, "selected default SHA has moved")
+    api.verify_fixture(default, target)
+    found, counts = {}, {}
     created = f"{iso(start)}..{iso(end)}"
     for event in EVENTS:
         event_runs = {}
+        total = None
         for page in range(1, 4):
-            query = urllib.parse.urlencode({"event":event, "created":created,
-                                            "per_page":100, "page":page})
+            query = urllib.parse.urlencode({"event": event, "created": created,
+                                            "per_page": 100, "page": page})
             doc = api.must_get("/actions/runs?" + query)
-            total, runs = doc.get("total_count"), doc.get("workflow_runs")
-            check(type(total) is int and 0 <= total < MAX_RUNS and
-                  isinstance(runs, list), "unbounded/invalid run census")
+            check(isinstance(doc, dict), "run census is not an object")
+            observed_total, runs = doc.get("total_count"), doc.get("workflow_runs")
+            check(type(observed_total) is int and
+                  0 <= observed_total < MAX_RUNS and isinstance(runs, list),
+                  "unbounded/invalid run census")
+            if total is None:
+                total = observed_total
+            check(observed_total == total,
+                  "run census total drifted between pages")
+            expected_len = max(0, min(100, total - len(event_runs)))
+            check(len(runs) == expected_len,
+                  "run census page has a hole or unstable page length")
             for run in runs:
-                check(run.get("event") == event and
-                      type(run.get("id")) is int and
+                check(isinstance(run, dict) and run.get("event") == event and
+                      type(run.get("id")) is int and run["id"] > 0 and
                       run["id"] not in event_runs and
-                      start <= utc(run["created_at"]) <= end,
-                      "noncanonical/duplicate run inventory")
-                event_runs[run["id"]] = {
-                    "id": run["id"], "event": event,
+                      start <= utc(run.get("created_at")) <= end and
+                      type(run.get("run_attempt")) is int and
+                      run["run_attempt"] == 1,
+                      "noncanonical/replayed/duplicate run inventory")
+                rid = run["id"]
+                check(run.get("url") ==
+                      f"{API_ORIGIN}/repos/{repo}/actions/runs/{rid}" and
+                      run.get("html_url") ==
+                      f"https://github.com/{repo}/actions/runs/{rid}" and
+                      isinstance(run.get("repository"), dict) and
+                      type(run["repository"].get("id")) is int and
+                      run["repository"]["id"] == meta["id"] and
+                      (run.get("head_repository") is None or
+                       (type(run["head_repository"].get("id")) is int and
+                        run["head_repository"]["id"] == meta["id"])) and
+                      isinstance(run.get("actor"), dict) and
+                      run["actor"].get("login") == operator and
+                      type(run.get("workflow_id")) is int and
+                      run["workflow_id"] > 0 and
+                      type(run.get("run_number")) is int and
+                      run["run_number"] > 0,
+                      "untrusted run host/repository/operator/attempt provenance")
+                head = sha(run.get("head_sha"))
+                check(head in (target, default),
+                      "run head SHA not one of the two independently pinned sources")
+                event_runs[rid] = {
+                    "id": rid, "event": event,
                     "created_at": run["created_at"],
-                    "path": run.get("path"), "head_branch": run.get("head_branch"),
-                    "head_sha": run.get("head_sha"),
-                    "actor": (run.get("actor") or {}).get("login"),
+                    "path": run.get("path"),
+                    "head_branch": run.get("head_branch"),
+                    "head_sha": head, "actor": operator,
                     "status": run.get("status"),
-                    "conclusion": run.get("conclusion")}
-            check(len(event_runs) <= total, "inconsistent pagination")
+                    "conclusion": run.get("conclusion"),
+                    "workflow_id": run["workflow_id"],
+                    "run_number": run["run_number"],
+                    "run_attempt": run["run_attempt"],
+                    "repository_id": meta["id"],
+                    "url": run["url"], "html_url": run["html_url"]}
             if len(event_runs) == total:
                 break
-        check(len(event_runs) == total, "truncated event pagination")
+        check(len(event_runs) == total, "truncated run census")
+        counts[event] = total
         for rid, item in event_runs.items():
             check(rid not in found, "duplicate run across event inventories")
-            item["witness"] = (log_witness(repo, rid)
-                               if item["status"] == "completed" else None)
+            if item["status"] == "completed":
+                item["witness"], item["log_provenance"] = log_witness(api, item)
+            else:
+                item["witness"] = None
+                item["log_provenance"] = {
+                    "transport": LOG_TRANSPORT, "status": "NOT_COMPLETED"}
             found[rid] = item
-    evidence = {"schema":"W3-SELECTOR-CENSUS-V1",
-                "repository":repo, "repository_id":meta["id"],
-                "ref":nonce_ref, "nonce":args.nonce,
-                "window_start":iso(start), "window_end":iso(end),
-                "observed_at":iso(dt.datetime.now(UTC)),
-                "runs":sorted(found.values(),key=lambda j:j["id"]),
-                "decision":"READ_ONLY_NOT_CERTIFIED"}
+    evidence = {
+        "schema": "W3-SELECTOR-CENSUS-V2",
+        "repository": repo, "repository_id": meta["id"],
+        "api_origin": API_ORIGIN, "log_transport": LOG_TRANSPORT,
+        "approved_actor": operator,
+        "ref": nonce_ref, "nonce": args.nonce,
+        "target_sha": target, "default_sha": default,
+        "window_start": iso(start), "window_end": iso(end),
+        "observed_at": iso(dt.datetime.now(UTC)),
+        "event_totals": counts,
+        "runs": sorted(found.values(), key=lambda j: j["id"]),
+        "decision": "READ_ONLY_NOT_CERTIFIED"}
     durable_new(args.out, evidence)
-    print(json.dumps({"decision":evidence["decision"],"count":len(found),
-                      "out":str(args.out)},sort_keys=True))
+    print(json.dumps({"decision": evidence["decision"], "count": len(found),
+                      "event_totals": counts, "out": str(args.out)},
+                     sort_keys=True))
+
 
 def load_snapshot(path):
     doc = strict_json(Path(path).read_text())
-    check(isinstance(doc, dict) and doc.get("schema") == "W3-SELECTOR-CENSUS-V1" and
+    check(isinstance(doc, dict) and
+          doc.get("schema") == "W3-SELECTOR-CENSUS-V2" and
           doc.get("decision") == "READ_ONLY_NOT_CERTIFIED" and
+          doc.get("api_origin") == API_ORIGIN and
+          doc.get("log_transport") == LOG_TRANSPORT and
           isinstance(doc.get("runs"), list), "invalid census snapshot")
+    repo = verify_repo_name(doc.get("repository"))
+    check(type(doc.get("repository_id")) is int and doc["repository_id"] > 0 and
+          isinstance(doc.get("approved_actor"), str) and
+          bool(re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9-]{0,38}",
+                            doc["approved_actor"])) and
+          doc.get("ref") == ref_for(doc.get("nonce")) and
+          sha(doc.get("target_sha")) != sha(doc.get("default_sha")),
+          "census repository, identity or source binding mismatch")
+    check(doc["repository"] == repo and
+          isinstance(doc.get("event_totals"), dict) and
+          set(doc["event_totals"]) == set(EVENTS) and
+          all(type(v) is int and 0 <= v < MAX_RUNS for v in
+              doc["event_totals"].values()) and
+          len(doc["runs"]) == sum(doc["event_totals"].values()),
+          "census pagination evidence missing or inconsistent")
+    start, end = utc(doc.get("window_start")), utc(doc.get("window_end"))
+    observed = utc(doc.get("observed_at"))
+    check(dt.timedelta(0) < end-start <= dt.timedelta(minutes=120) and
+          observed >= start, "invalid census capture window")
+    ids, per_event = set(), {name: 0 for name in EVENTS}
+    for run in doc["runs"]:
+        check(isinstance(run, dict) and type(run.get("id")) is int and
+              run["id"] > 0 and run["id"] not in ids and
+              run.get("event") in EVENTS and
+              type(run.get("repository_id")) is int and
+              run["repository_id"] == doc["repository_id"] and
+              run.get("url") == f"{API_ORIGIN}/repos/{repo}/actions/runs/{run['id']}" and
+              run.get("html_url") ==
+              f"https://github.com/{repo}/actions/runs/{run['id']}" and
+              type(run.get("workflow_id")) is int and run["workflow_id"] > 0 and
+              type(run.get("run_number")) is int and run["run_number"] > 0 and
+              type(run.get("run_attempt")) is int and run["run_attempt"] == 1 and
+              run.get("actor") == doc["approved_actor"] and
+              sha(run.get("head_sha")) in (doc["target_sha"], doc["default_sha"]) and
+              start <= utc(run.get("created_at")) <= end and
+              utc(run["created_at"]) <= observed and
+              isinstance(run.get("log_provenance"), dict) and
+              run["log_provenance"].get("transport") == LOG_TRANSPORT and
+              run["log_provenance"].get("status") in
+              ("ONE_RECORD", "AMBIGUOUS_OR_MISSING",
+               "UNAVAILABLE", "NOT_COMPLETED"),
+              "census run provenance is inconsistent or forged")
+        ids.add(run["id"])
+        per_event[run["event"]] += 1
+        if run["log_provenance"]["status"] == "ONE_RECORD":
+            check(isinstance(run.get("witness"), dict) and
+                  isinstance(run["log_provenance"].get("sha256"), str) and
+                  bool(re.fullmatch("[0-9a-f]{64}",
+                                    run["log_provenance"]["sha256"])),
+                  "log witness lacks authenticated retrieval checksum")
+        else:
+            check(run.get("witness") is None, "unverified log witness")
+    check(per_event == doc["event_totals"], "event totals do not reconcile")
     return doc
 
-def valid_witness(run):
+
+def load_intent(path, before, after, phase):
+    check(path is not None, "phase requires exact one-use mutation receipt")
+    marker = strict_json(Path(path).read_text())
+    check(isinstance(marker, dict) and
+          marker.get("schema") == "W3-SELECTOR-LOCAL-MUTATION-V1" and
+          marker.get("action") == phase and
+          marker.get("decision") == "EXACT_STATE_VERIFIED",
+          "planned phase requires its own successful receipt; abort-cleanup is NOT Phase C")
+    for a, b in (("repo", "repository"),
+                 ("repository_id", "repository_id"),
+                 ("ref", "ref"), ("target_sha", "target_sha"),
+                 ("default_sha", "default_sha"),
+                 ("approved_actor", "approved_actor"),
+                 ("api_origin", "api_origin")):
+        check(marker.get(a) == after[b], "mutation and census provenance mismatch")
+    check(marker.get("http_status") == (201 if phase == "create" else 204) and
+          marker.get("observed_refs_after") ==
+          ({after["ref"]: after["target_sha"]} if phase == "create" else {}),
+          "mutation receipt not exact and verified")
+    start = utc(before["window_start"])
+    end = utc(before["window_end"])
+    early = utc(before["observed_at"])
+    prepared, request, completed = (
+        utc(marker.get(key)) for key in
+        ("prepared_at", "request_started_at", "request_completed_at"))
+    check(start <= early <= prepared <= request <= completed <= end and
+          completed <= utc(after["observed_at"]),
+          "mutation not time-bound inside selected window")
+    return marker
+
+
+def valid_witness(run, census):
     witness = run.get("witness")
     if not isinstance(witness, dict):
         return None
-    keys = {"schema","variant","source_marker","event_name","event_ref",
-            "event_created","event_deleted","github_ref","github_sha",
-            "run_id","actor","workflow_ref"}
+    keys = {"schema", "variant", "source_marker", "event_name", "event_ref",
+            "event_created", "event_deleted", "github_ref", "github_sha",
+            "run_id", "actor", "workflow_ref"}
     if set(witness) != keys or witness["schema"] != "PHIL-W3-SELECTOR-WITNESS-V1":
         return None
-    if witness["variant"] not in VARIANTS or witness["source_marker"] not in (
-            "TARGET_V1","DEFAULT_V1"):
+    kind = witness["variant"]
+    if kind not in VARIANTS or witness["source_marker"] not in (
+            "TARGET_V1", "DEFAULT_V1"):
         return None
-    if (type(witness["event_created"]) not in (bool,type(None)) or
-        type(witness["event_deleted"]) not in (bool,type(None)) or
+    if (type(witness["event_created"]) not in (bool, type(None)) or
+        type(witness["event_deleted"]) not in (bool, type(None)) or
+        type(witness["run_id"]) is not str or
         str(run["id"]) != witness["run_id"] or
-        run["event"] != witness["event_name"]):
+        run["event"] != witness["event_name"] or
+        run["actor"] != witness["actor"] or
+        witness["actor"] != census["approved_actor"] or
+        witness["github_sha"] != run["head_sha"]):
         return None
-    expected_path = ".github/workflows/w3-" + VARIANTS[witness["variant"]] + ".yml"
-    if run["path"] != expected_path:
+    path = ".github/workflows/w3-" + VARIANTS[kind] + ".yml"
+    source_sha = (census["target_sha"] if
+                  witness["source_marker"] == "TARGET_V1"
+                  else census["default_sha"])
+    selected_ref = ("refs/heads/main" if source_sha == census["default_sha"]
+                    else census["ref"])
+    if (run["path"] != path or run["head_sha"] != source_sha or
+        witness["github_ref"] != selected_ref or
+        witness["workflow_ref"] !=
+            census["repository"] + "/" + path + "@" + selected_ref or
+        run["head_branch"] !=
+            ("main" if source_sha == census["default_sha"]
+             else census["ref"].removeprefix("refs/heads/"))):
         return None
     return witness
 
+
 def classify(args):
     before, after = load_snapshot(args.before), load_snapshot(args.after)
-    keys = ("repository","repository_id","ref","nonce","window_start","window_end")
-    check(all(before.get(k)==after.get(k) for k in keys), "census binding mismatch")
-    verify_repo_name(before["repository"])
-    ref_for(before["nonce"])
+    keys = ("repository", "repository_id", "ref", "nonce", "window_start",
+            "window_end", "api_origin", "log_transport", "approved_actor",
+            "target_sha", "default_sha")
+    check(all(before.get(k) == after.get(k) for k in keys),
+          "census binding mismatch")
+    check(before["event_totals"] == {name: 0 for name in EVENTS} and
+          not before["runs"], "before capture already has event traffic")
     start, end = utc(before["window_start"]), utc(before["window_end"])
-    t0,t1 = utc(before["observed_at"]), utc(after["observed_at"])
-    check(t0<=t1 and t0>=start and t1>=end+dt.timedelta(minutes=30),
+    t0, t1 = utc(before["observed_at"]), utc(after["observed_at"])
+    check(start <= t0 <= t1 and t1 >= end + dt.timedelta(minutes=30),
           "incomplete bounded observation delay")
-    old={r["id"]:r for r in before["runs"]}
-    new={r["id"]:r for r in after["runs"] if r["id"] not in old}
-    check(len(old)==len(before["runs"]) and
-          len(old)+len(new)==len(after["runs"]) and
-          all(r["id"] in old or r["id"] in new for r in after["runs"]),
-          "duplicate or changed run inventory")
-    for run in after["runs"]:
-        original = old.get(run["id"])
-        if original is None:
-            continue
-        invariant = ("id","event","created_at","path","head_branch",
-                     "head_sha","actor")
-        check(all(run.get(k)==original.get(k) for k in invariant),
-              "retained run identity changed between captures")
+    if args.phase in ("create", "delete"):
+        load_intent(getattr(args, "intent", None), before, after, args.phase)
+    else:
+        check(getattr(args, "intent", None) is None,
+              "main control does not use a mutation receipt")
+    old = {r["id"]: r for r in before["runs"]}
+    new = {r["id"]: r for r in after["runs"] if r["id"] not in old}
+    check(len(old) == len(before["runs"]) and
+          len(old)+len(new) == len(after["runs"]), "run inventory changed")
+    for rid, original in old.items():
+        run = next((r for r in after["runs"] if r["id"] == rid), None)
+        check(run is not None, "previously observed run disappeared")
+        invariant = ("id", "event", "created_at", "path", "head_branch",
+                     "head_sha", "actor", "workflow_id", "run_number",
+                     "run_attempt", "repository_id", "url", "html_url")
+        check(all(run.get(k) == original.get(k) for k in invariant),
+              "retained run provenance changed between captures")
         check(original.get("witness") is None or
               run.get("witness") == original.get("witness"),
               "retained witness changed between captures")
-    desired_ref = "refs/heads/main" if args.phase=="main" else after["ref"]
-    positive = set()
-    unexpected = []
-    contrary = set()
+    desired_ref = "refs/heads/main" if args.phase == "main" else after["ref"]
+    positives, forbidden_seen, unexpected, auxiliary = {}, set(), [], []
+    required = ({"UNFILTERED", "MAIN_ONLY", "IGNORE_PAIR"} if
+                args.phase == "main" else {"UNFILTERED", "W3_ONLY"})
+    forbidden = ({"W3_ONLY"} if args.phase == "main"
+                 else {"MAIN_ONLY", "IGNORE_PAIR"})
     for run in new.values():
-        w=valid_witness(run)
-        if w is None or run["status"]!="completed" or run["conclusion"]!="success":
+        witness = valid_witness(run, after)
+        if (witness is None or run["status"] != "completed" or
+            run["conclusion"] != "success" or
+            run["log_provenance"]["status"] != "ONE_RECORD"):
             unexpected.append(run["id"])
             continue
-        if (w["event_name"]!="push" or w["event_ref"]!=desired_ref or
-            not isinstance(w["event_created"],bool) or
-            not isinstance(w["event_deleted"],bool)):
-            # Separate create/delete events may legitimately be reported;
-            # never count them as a deletion-caused PUSH witness.
-            if run["event"] in ("create","delete") and w["variant"]=="UNFILTERED":
-                continue
+        if run["event"] in ("create", "delete"):
+            # Auxiliary events are observable evidence, NOT deletion-caused
+            # push controls. Allow only the one expected unfiltered event.
+            short_ref = after["ref"].removeprefix("refs/heads/")
+            if (args.phase == run["event"] and
+                witness["variant"] == "UNFILTERED" and
+                witness["event_ref"] == short_ref and
+                witness["event_created"] is None and
+                witness["event_deleted"] is None and
+                witness["source_marker"] == "DEFAULT_V1"):
+                auxiliary.append(run["id"])
+            else:
+                unexpected.append(run["id"])
+            continue
+        if run["event"] != "push" or witness["event_ref"] != desired_ref:
             unexpected.append(run["id"])
             continue
-        if args.phase=="main" and not w["event_created"] and not w["event_deleted"]:
-            positive.add(w["variant"])
-        elif args.phase=="create" and w["event_created"] and not w["event_deleted"]:
-            positive.add(w["variant"])
-        elif args.phase=="delete" and w["event_deleted"] and not w["event_created"]:
-            positive.add(w["variant"])
-            if w["variant"] in ("MAIN_ONLY","IGNORE_PAIR"):
-                contrary.add(w["variant"])
+        if witness["variant"] in forbidden:
+            forbidden_seen.add(witness["variant"])
+        expected_flags = (False, False) if args.phase == "main" else (
+            (True, False) if args.phase == "create" else (False, True))
+        if ((witness["event_created"], witness["event_deleted"]) !=
+                expected_flags or witness["variant"] in positives):
+            unexpected.append(run["id"])
         else:
-            unexpected.append(run["id"])
-    required={"UNFILTERED","MAIN_ONLY","IGNORE_PAIR"} if args.phase=="main" \
-             else {"UNFILTERED","W3_ONLY"}
-    forbidden={"W3_ONLY"} if args.phase=="main" else {"MAIN_ONLY","IGNORE_PAIR"}
-    if contrary:
-        decision="COUNTEREXAMPLE_STOP"
-    elif unexpected:
-        decision="INCONCLUSIVE_AMBIGUOUS_RUNS"
-    elif not required.issubset(positive):
-        decision="INCONCLUSIVE_MISSING_POSITIVE_WITNESS"
-    elif positive & forbidden:
-        decision="COUNTEREXAMPLE_STOP"
+            positives[witness["variant"]] = run["id"]
+    if forbidden_seen:
+        decision = "COUNTEREXAMPLE_STOP"
+    elif unexpected or len(auxiliary) > 1:
+        decision = "STOP_UNRELATED_OR_AMBIGUOUS_TRAFFIC"
+    elif not required.issubset(positives):
+        decision = "INCONCLUSIVE_MISSING_POSITIVE_WITNESS"
     else:
-        decision="SUPPORTS_MODEL_BOUNDED_NOT_CERTIFIED"
-    print(json.dumps({"decision":decision,"phase":args.phase,
-                      "required":sorted(required),"positive":sorted(positive),
-                      "unexpected_run_ids":sorted(unexpected),
-                      "new_run_ids":sorted(new),
-                      "observation_lag_seconds":int((t1-end).total_seconds()),
-                      "execution_authorized":False,
-                      "quarantine_certified":False},sort_keys=True))
+        decision = "SUPPORTS_MODEL_BOUNDED_NOT_CERTIFIED"
+    print(json.dumps({
+        "decision": decision, "phase": args.phase,
+        "required": sorted(required), "positive": sorted(positives),
+        "forbidden": sorted(forbidden_seen),
+        "unexpected_run_ids": sorted(unexpected),
+        "auxiliary_event_run_ids": sorted(auxiliary),
+        "new_run_ids": sorted(new),
+        "event_totals": after["event_totals"],
+        "observation_lag_seconds": int((t1-end).total_seconds()),
+        "execution_authorized": False, "quarantine_certified": False},
+        sort_keys=True))
 
 def cli():
     ap=argparse.ArgumentParser(description=__doc__)
@@ -518,6 +698,7 @@ def cli():
         p=sub.add_parser(name)
         p.add_argument("--repo",required=True)
         p.add_argument("--repo-id",type=int,required=True)
+        p.add_argument("--actor",required=True)
         p.add_argument("--nonce",required=True)
         p.add_argument("--target-sha",required=True)
         p.add_argument("--default-sha",required=True)
@@ -528,7 +709,10 @@ def cli():
     p=sub.add_parser("snapshot")
     p.add_argument("--repo",required=True)
     p.add_argument("--repo-id",type=int,required=True)
+    p.add_argument("--actor",required=True)
     p.add_argument("--nonce",required=True)
+    p.add_argument("--target-sha",required=True)
+    p.add_argument("--default-sha",required=True)
     p.add_argument("--window-start",required=True)
     p.add_argument("--window-end",required=True)
     p.add_argument("--out",required=True)
@@ -537,6 +721,7 @@ def cli():
     p.add_argument("--phase",choices=("main","create","delete"),required=True)
     p.add_argument("--before",required=True)
     p.add_argument("--after",required=True)
+    p.add_argument("--intent",help="required verified create/delete receipt; never abort-cleanup")
     p.set_defaults(handler=classify)
     args=ap.parse_args()
     try:
