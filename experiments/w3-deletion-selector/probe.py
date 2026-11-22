@@ -6,6 +6,7 @@ import base64
 import datetime as dt
 import hashlib
 import json
+import math
 import os
 from pathlib import Path
 import re
@@ -24,6 +25,8 @@ VARIANTS = {"UNFILTERED": "unfiltered", "MAIN_ONLY": "main-only",
             "W3_ONLY": "w3-only", "IGNORE_PAIR": "ignore-pair"}
 WITNESS_PREFIX = "W3_WITNESS_JSON:"
 MAX_RUNS = 200
+API_ORIGIN = "https://api.github.com"
+LOG_TRANSPORT = "gh run view --hostname github.com (pinned GH_TOKEN)"
 UTC = dt.timezone.utc
 
 class Stop(RuntimeError):
@@ -109,16 +112,30 @@ class NoRedirect(urllib.request.HTTPRedirectHandler):
         return None
 
 class GitHub:
+
     def __init__(self, repo):
         self.repo = verify_repo_name(repo)
         check(os.getenv("GITHUB_ACTIONS", "").lower() != "true",
               "forbidden inside GitHub Actions")
-        cp = subprocess.run(["gh", "auth", "token"], text=True,
-                            capture_output=True, timeout=15, check=False)
+        check(os.getenv("GH_HOST", "github.com").lower() == "github.com",
+              "GH_HOST must be github.com")
+        check(not os.getenv("GH_ENTERPRISE_TOKEN") and
+              not os.getenv("GITHUB_ENTERPRISE_TOKEN"),
+              "enterprise token context forbidden")
+        cp = subprocess.run(["gh", "auth", "token", "--hostname", "github.com"],
+                            text=True, capture_output=True, timeout=15, check=False)
         check(cp.returncode == 0 and bool(cp.stdout.strip()) and
-              "\n" not in cp.stdout.strip(), "GitHub CLI local auth unavailable")
+              "\n" not in cp.stdout.strip(), "GitHub.com CLI local auth unavailable")
         self._token = cp.stdout.strip()
         self._opener = urllib.request.build_opener(NoRedirect())
+        # gh log retrieval and direct REST MUST use the same GitHub.com bearer,
+        # never an implicit alternate GH_HOST/GITHUB_TOKEN credential.
+        self._log_env = dict(os.environ)
+        for name in ("GITHUB_TOKEN", "GH_ENTERPRISE_TOKEN",
+                     "GITHUB_ENTERPRISE_TOKEN", "GH_REPO"):
+            self._log_env.pop(name, None)
+        self._log_env["GH_HOST"] = "github.com"
+        self._log_env["GH_TOKEN"] = self._token
 
     def request(self, method, suffix, payload=None):
         # The repository metadata endpoint is the repository root itself:
@@ -127,7 +144,14 @@ class GitHub:
               (suffix.startswith("/") or (method == "GET" and suffix == "")) and
               "\n" not in suffix and "\r" not in suffix,
               "unapproved API route")
-        path = f"https://api.github.com/repos/{self.repo}{suffix}"
+        check(not suffix.startswith("//") and not any(c in suffix for c in
+              ("\\", "#", "\t")) and
+              (suffix == "" or
+               (urllib.parse.urlsplit(suffix).path.startswith("/") and
+                urllib.parse.urlsplit(suffix).scheme == "" and
+                urllib.parse.urlsplit(suffix).netloc == "")),
+              "invalid API suffix")
+        path = f"{API_ORIGIN}/repos/{self.repo}{suffix}"
         body = None if payload is None else json.dumps(
             payload, separators=(",", ":")).encode()
         request = urllib.request.Request(path, data=body, method=method, headers={
@@ -154,12 +178,30 @@ class GitHub:
         check(status == 200, f"read-only GitHub GET rejected HTTP {status}")
         return data
 
+
     def repo_metadata(self):
         meta = self.must_get("")
-        check(meta.get("full_name") == self.repo and meta.get("default_branch") == "main" and
-              meta.get("archived") is False and isinstance(meta.get("id"), int),
+        check(isinstance(meta, dict) and meta.get("full_name") == self.repo and
+              meta.get("default_branch") == "main" and
+              meta.get("archived") is False and
+              type(meta.get("id")) is int and meta["id"] > 0 and
+              isinstance(meta.get("owner"), dict) and
+              meta["owner"].get("login", "").casefold() ==
+              self.repo.split("/", 1)[0].casefold(),
               "disposable repository identity/default changed")
         return meta
+
+    def operator(self, expected):
+        check(isinstance(expected, str) and
+              bool(re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9-]{0,38}", expected)),
+              "approved operator login required")
+        person = self.must_get("/user")
+        check(isinstance(person, dict) and
+              isinstance(person.get("login"), str) and
+              person["login"].casefold() == expected.casefold() and
+              type(person.get("id")) is int and person["id"] > 0,
+              "authenticated GitHub.com principal not approved")
+        return person["login"]
 
     def main(self):
         j = self.must_get("/git/ref/heads/main")
@@ -208,18 +250,21 @@ def preflight(api, ref, target, default):
             "target_sha": target, "default_sha": default,
             "observed_refs": refs}
 
+
 def execute(args):
     repo = verify_repo_name(args.repo)
     ref = ref_for(args.nonce)
     target, default = sha(args.target_sha), sha(args.default_sha)
     api = GitHub(repo)
+    operator = api.operator(args.actor)
     before = preflight(api, ref, target, default)
     check(before["repository_id"] == args.repo_id and args.repo_id > 0,
           "approved test repository numeric identity changed")
     action = args.action
     if action == "plan":
-        print(json.dumps({"decision": "GET_ONLY_PLAN_NO_WRITES", **before},
-                         sort_keys=True))
+        print(json.dumps({"decision": "GET_ONLY_PLAN_NO_WRITES",
+                          "api_origin": API_ORIGIN, "approved_actor": operator,
+                          **before}, sort_keys=True))
         return
     check(args.confirm == {"create": "CREATE_TEST_ONLY",
                            "delete": "DELETE_TEST_ONLY",
@@ -236,8 +281,10 @@ def execute(args):
                                         else ".delete-intent.json"))
     intent = {"schema": "W3-SELECTOR-LOCAL-MUTATION-V1", "action": action,
               "decision": "INTENT_UNKNOWN_AFTER_INTERRUPTION",
+              "prepared_at": iso(dt.datetime.now(UTC)),
+              "api_origin": API_ORIGIN, "approved_actor": operator,
               **before}
-    durable_new(marker, intent)  # one-use marker BEFORE request; no retries
+    durable_new(marker, intent)  # file AND containing-directory fsynced
     if action != "create" and not before["observed_refs"]:
         intent["decision"] = "ALREADY_ABSENT_NO_WRITE"
         durable_replace(marker, intent)
@@ -245,6 +292,7 @@ def execute(args):
         return
     status = None
     try:
+        intent["request_started_at"] = iso(dt.datetime.now(UTC))
         if action == "create":
             status, _ = api.request("POST", "/git/refs",
                                     {"ref": ref, "sha": target})
@@ -254,36 +302,54 @@ def execute(args):
             status, _ = api.request("DELETE", "/git/refs/" + suffix)
             expected_status = 204
         actual = api.admitted()
+        intent["request_completed_at"] = iso(dt.datetime.now(UTC))
         intent["http_status"] = status
         intent["observed_refs_after"] = actual
-        intent["decision"] = ("EXACT_STATE_VERIFIED" if status == expected_status and
-                              actual == ({ref: target} if action == "create" else {})
-                              else "STOP_UNEXPECTED_OR_AMBIGUOUS_POSTSTATE")
+        verified = status == expected_status and actual == (
+            {ref: target} if action == "create" else {})
+        intent["decision"] = (
+            ("ABORT_CLEANUP_STATE_VERIFIED" if action == "abort-cleanup"
+             else "EXACT_STATE_VERIFIED") if verified else
+            "STOP_UNEXPECTED_OR_AMBIGUOUS_POSTSTATE")
     except Exception:
         intent["decision"] = "STOP_UNKNOWN_AFTER_REQUEST"
         durable_replace(marker, intent)
         raise
     durable_replace(marker, intent)
     print(json.dumps(intent, sort_keys=True))
-    check(intent["decision"] == "EXACT_STATE_VERIFIED", "mutation is not VERIFIED")
+    check(intent["decision"] in ("EXACT_STATE_VERIFIED",
+                                 "ABORT_CLEANUP_STATE_VERIFIED"),
+          "mutation is not VERIFIED")
 
-def log_witness(repo, run_id):
-    cp = subprocess.run(["gh", "run", "view", str(run_id), "--repo", repo,
-                         "--log"], capture_output=True, text=True,
-                        timeout=50, check=False)
+
+def log_witness(api, run):
+    # Bound log provenance to the same credential, host, repository, run ID,
+    # and original attempt used for the direct GitHub.com REST inventory.
+    run_id = run["id"]
+    check(type(run_id) is int and run_id > 0 and run["run_attempt"] == 1,
+          "log target is not original authenticated run")
+    cp = subprocess.run(["gh", "run", "view", str(run_id), "--repo", api.repo,
+                         "--attempt", "1", "--log"], env=api._log_env,
+                        capture_output=True, text=True, timeout=50, check=False)
     if cp.returncode != 0 or len(cp.stdout) > 2_000_000:
-        return None
+        return None, {"transport": LOG_TRANSPORT, "status": "UNAVAILABLE"}
+    raw_log = cp.stdout
     records = []
-    for line in cp.stdout.splitlines():
+    for line in raw_log.splitlines():
         if WITNESS_PREFIX not in line:
             continue
         raw = line.split(WITNESS_PREFIX, 1)[1].strip()
         try:
             doc = strict_json(raw)
         except (ValueError, Stop):
+            records.append(None)  # malformed witness never becomes absence
             continue
         records.append(doc)
-    return records[0] if len(records) == 1 else None
+    receipt = {"transport": LOG_TRANSPORT, "status": (
+        "ONE_RECORD" if len(records) == 1 and isinstance(records[0], dict)
+        else "AMBIGUOUS_OR_MISSING"),
+        "sha256": hashlib.sha256(raw_log.encode()).hexdigest()}
+    return (records[0] if receipt["status"] == "ONE_RECORD" else None), receipt
 
 def snapshot(args):
     repo = verify_repo_name(args.repo)
