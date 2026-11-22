@@ -272,6 +272,16 @@ class OfflineTests(unittest.TestCase):
             witness(2, "W3_ONLY", deleted=True, source="TARGET_V1")]),
             "SUPPORTS_MODEL_BOUNDED_NOT_CERTIFIED")
 
+    def test_legitimate_deletion_auxiliary_does_not_count_as_push(self):
+        self.assertEqual(self.classify("delete", [
+            witness(1, "UNFILTERED", deleted=True),
+            witness(2, "W3_ONLY", deleted=True, source="TARGET_V1"),
+            witness(3, "UNFILTERED", event="delete")]),
+            "SUPPORTS_MODEL_BOUNDED_NOT_CERTIFIED")
+        self.assertEqual(self.classify("delete", [
+            witness(3, "UNFILTERED", event="delete")]),
+            "INCONCLUSIVE_MISSING_POSITIVE_WITNESS")
+
     def test_main_control(self):
         self.assertEqual(self.classify("main", [
             witness(1, "UNFILTERED", ref="refs/heads/main"),
@@ -335,7 +345,6 @@ class OfflineTests(unittest.TestCase):
             witness(3, "UNFILTERED", event="create"),
             witness(3, "UNFILTERED", event="delete", ref="refs/heads/other"),
             witness(3, "UNFILTERED", deleted=True, ref="refs/heads/other"),
-            witness(3, "UNFILTERED", event="delete"),
             witness(3, "UNFILTERED", deleted=True)):
             with self.subTest(event=hostile["event"],
                               ref=hostile["witness"]["event_ref"]):
