@@ -1,3 +1,4 @@
+From Stdlib Require Import Arith.PeanoNat.
 From Phil.Core Require Import
   Syntax Context FSEM02PairedSourceFamilyEnvelope
   FSEM02PairedTwoStepOutcomes FSEM02TwoStepStalePrefix
@@ -120,3 +121,33 @@ Proof.
     split; reflexivity.
 Qed.
 Print Assumptions fsem02TwoReceiveU8WitnessGateSound.
+
+(* The options model primitive elaboration at the two resolved binder
+   identities. The external projection premise supplies the abstract U8
+   carrier. The model does not establish either producer's fidelity. *)
+Definition fsem02SendU8Parameter (width : option nat) : bool :=
+  match width with
+  | Some n => Nat.eqb n 8
+  | None => false
+  end.
+
+Definition fsem02TwoSendU8ParameterGate (first second : option nat) : bool :=
+  andb (fsem02SendU8Parameter first) (fsem02SendU8Parameter second).
+
+Theorem fsem02TwoSendU8ParameterGateSound :
+  forall first second,
+    fsem02TwoSendU8ParameterGate first second = true ->
+    first = Some 8 /\ second = Some 8.
+Proof.
+  intros first second H.
+  unfold fsem02TwoSendU8ParameterGate in H.
+  apply Bool.andb_true_iff in H as [Hfirst Hsecond].
+  split.
+  - destruct first as [width |]; try discriminate.
+    change (Nat.eqb width 8 = true) in Hfirst.
+    now apply Nat.eqb_eq in Hfirst; subst.
+  - destruct second as [width |]; try discriminate.
+    change (Nat.eqb width 8 = true) in Hsecond.
+    now apply Nat.eqb_eq in Hsecond; subst.
+Qed.
+Print Assumptions fsem02TwoSendU8ParameterGateSound.

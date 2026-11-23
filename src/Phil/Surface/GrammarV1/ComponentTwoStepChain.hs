@@ -12,12 +12,14 @@ module Phil.Surface.GrammarV1.ComponentTwoStepChain
   , checkReceiveChain
   ) where
 
+import Data.Maybe (fromMaybe)
 import Phil.Core.Static (DeclarationKey)
-import Phil.Core.Syntax (Name)
+import Phil.Core.Syntax (Name, Ty (..))
 import Phil.Surface.GrammarV1.BinderScope
   ( GrammarV1BinderKind (..), GrammarV1LexicalScope
   , GrammarV1ResolvedBinder (..), grammarV1ComponentParameterScope
   )
+import Phil.Surface.GrammarV1.Elaborate (grammarV1PrimitiveType)
 import Phil.Surface.GrammarV1.ParameterBodyScope
   ( GrammarV1CheckedLocalValueOccurrence (..)
   , grammarV1CheckedLocalValueOccurrenceInScope
@@ -31,6 +33,8 @@ data ChainError
   | ChainUnresolvedOccurrence
   | ChainFirstEndpointNotParameter
   | ChainSecondPayloadNotParameter
+  | ChainFirstSendPayloadNotU8
+  | ChainSecondSendPayloadNotU8
   | ChainFirstReceiveAnnotationNotU8
   | ChainSecondReceiveAnnotationNotU8
   | ChainSecondPredecessorMismatch
@@ -88,7 +92,7 @@ checkSendChain declaration component =
           , GrammarV1SendExpression payload2 endpoint2
           , GrammarV1CloseExpression closed
           ) -> do
-            (_, scope0) <- mapLeft (ChainBinderError . show) $
+            (parameterBinders, scope0) <- mapLeft (ChainBinderError . show) $
               grammarV1ComponentParameterScope declaration component
             p1Binder <- local scope0 payload1
             first <- local scope0 endpoint1
@@ -97,6 +101,12 @@ checkSendChain declaration component =
               grammarV1ResolvedBinderKind p1Binder ==
               GrammarV1ComponentParameterBinder)
               ChainFirstEndpointNotParameter
+            -- Type authority is the existing primitive elaborator applied to
+            -- the declaration attached to this exact parameter identity.
+            -- The caller independently establishes the DoublePing projection.
+            let parameters = zip (fromMaybe [] parameterBinders)
+                  (fromMaybe [] (grammarV1ComponentTermParams component))
+            expectChain (isU8Parameter parameters p1Binder) ChainFirstSendPayloadNotU8
             (middle, scope1) <- bindOne p1 scope0
             -- The second payload is resolved AFTER the first let binding.
             -- A real, newly bound endpoint must not be mistaken for a
@@ -104,6 +114,7 @@ checkSendChain declaration component =
             p2Binder <- local scope1 payload2
             expectChain (grammarV1ResolvedBinderKind p2Binder ==
               GrammarV1ComponentParameterBinder) ChainSecondPayloadNotParameter
+            expectChain (isU8Parameter parameters p2Binder) ChainSecondSendPayloadNotU8
             usedMiddle <- local scope1 endpoint2
             expectChain (sameBinder usedMiddle middle) ChainSecondPredecessorMismatch
             (final, scope2) <- bindOne p2 scope1
@@ -112,6 +123,16 @@ checkSendChain declaration component =
             pure $ CheckedChain (core first) (core middle) (core final)
         _ -> Left ChainUnsupportedSourceShape
     _ -> Left ChainUnsupportedSourceShape
+
+isU8Parameter :: [(GrammarV1ResolvedBinder, Located GrammarV1TermParam)]
+              -> GrammarV1ResolvedBinder -> Bool
+isU8Parameter parameters occurrence =
+  any matchesPayload parameters
+  where
+    matchesPayload (binder, param) =
+      sameBinder binder occurrence &&
+      grammarV1PrimitiveType
+        (locatedValue (grammarV1TermParamType (locatedValue param))) == Just (TyUInt 8)
 
 checkReceiveChain :: DeclarationKey -> GrammarV1ComponentDecl
                   -> Either ChainError CheckedChain
