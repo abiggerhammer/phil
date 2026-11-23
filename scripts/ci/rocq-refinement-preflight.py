@@ -50,6 +50,7 @@ MODULES = (
     "GrammarAstRecordDataRecursiveGroupingObservationReplayPathBooleanRows",
     "GrammarAstRecordDataRecursiveGroupingObservationReplayPathClassifierFibers",
     "GrammarAstRecordDataRecursiveGroupingObservationReplayPathClassifierExtensionality",
+    "GrammarAstRecordDataRecursiveGroupingObservationReplayPathTwoProbeClassifier",
 )
 
 
