@@ -104,8 +104,15 @@ Theorem phase1_surface_replay_two_probe_equalb_iff_classifier :
     phase1_surface_normalized_observation right.
 Proof.
   intros left right.
-  rewrite phase1_surface_replay_two_probe_equalb_iff_rows.
-  apply phase1_surface_replay_rows_equal_iff_classifier_equal.
+  split.
+  - intro Htest.
+    exact (proj1 (phase1_surface_replay_rows_equal_iff_classifier_equal
+      left right) (proj1 (phase1_surface_replay_two_probe_equalb_iff_rows
+      left right) Htest)).
+  - intro Hclassifier.
+    exact (proj2 (phase1_surface_replay_two_probe_equalb_iff_rows
+      left right) (proj2 (phase1_surface_replay_rows_equal_iff_classifier_equal
+      left right) Hclassifier)).
 Qed.
 
 Example phase1_surface_replay_two_probe_malformed_rejected_collision :
