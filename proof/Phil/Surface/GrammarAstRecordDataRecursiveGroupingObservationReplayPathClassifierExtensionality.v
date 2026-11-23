@@ -77,9 +77,9 @@ Proof.
     + intro Hequal.
       discriminate Hequal.
   - split.
-    + intro _.
+    + intro Hrows.
       reflexivity.
-    + intro _.
+    + intro Hequal.
       intro probe.
       rewrite (phase1_surface_replay_connectedb_rejected_row_empty
         left Hleft probe).
