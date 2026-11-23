@@ -140,7 +140,7 @@ Proof.
       rewrite Hdisconnected in Hconnected.
       discriminate Hconnected.
     + split.
-      * exact Hleft.
+      * reflexivity.
       * symmetry. exact Hequal.
   - intros [Hleft Hright].
     split.
