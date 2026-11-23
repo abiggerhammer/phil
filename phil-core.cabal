@@ -274,6 +274,7 @@ library
       Phil.Surface.GrammarV1.ComponentSendClose
       Phil.Surface.GrammarV1.ComponentReceiveClose
       Phil.Surface.GrammarV1.ComponentTwoStepChain
+      Phil.Surface.GrammarV1.ProtocolEndpointType
       Phil.Surface.GrammarV1.TwoOwnerBorrowResourceSurface
       Phil.Surface.GrammarV1.ReferenceKernelBridge
       Phil.Surface.GrammarV1.ReferenceToken
