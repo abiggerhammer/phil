@@ -13,8 +13,10 @@ module Phil.Surface.GrammarV1.ComponentTwoStepChain
   ) where
 
 import Data.Maybe (fromMaybe)
+import Phil.Core.Protocol.Family
+  ( ProtocolProjectionEvidence (..) )
 import Phil.Core.Static (DeclarationKey)
-import Phil.Core.Syntax (Name, Ty (..))
+import Phil.Core.Syntax (Name, Outcome (..), Session (..), Ty (..))
 import Phil.Surface.GrammarV1.BinderScope
   ( GrammarV1BinderKind (..), GrammarV1LexicalScope
   , GrammarV1ResolvedBinder (..), grammarV1ComponentParameterScope
@@ -26,6 +28,11 @@ import Phil.Surface.GrammarV1.ParameterBodyScope
   )
 import Phil.Surface.GrammarV1.Parser
 import Phil.Surface.GrammarV1.PatternBinderScope (grammarV1BindPattern)
+import Phil.Surface.GrammarV1.ProtocolEndpointType
+  ( GrammarV1ProtocolEndpointResolution, GrammarV1ProtocolEndpointTypeError
+  , GrammarV1ResolvedProtocolEndpointType (..)
+  , grammarV1ResolvedProtocolEndpointType
+  )
 import Phil.Surface.Syntax (Located (..))
 
 data ChainError
@@ -33,6 +40,10 @@ data ChainError
   | ChainUnresolvedOccurrence
   | ChainFirstEndpointNotParameter
   | ChainSecondPayloadNotParameter
+  | ChainUnsupportedSendProjection
+  | ChainSendEndpointTypeUnresolved
+  | ChainSendEndpointTypeError GrammarV1ProtocolEndpointTypeError
+  | ChainSendEndpointProjectionMismatch
   | ChainFirstSendPayloadNotU8
   | ChainSecondSendPayloadNotU8
   | ChainFirstReceiveAnnotationNotU8
@@ -79,9 +90,12 @@ bindReceive patternSource scope =
         _ -> Left ChainPatternShape
     _ -> Left ChainPatternShape
 
-checkSendChain :: DeclarationKey -> GrammarV1ComponentDecl
+checkSendChain :: [GrammarV1ProtocolEndpointResolution]
+               -> ProtocolProjectionEvidence
+               -> DeclarationKey
+               -> GrammarV1ComponentDecl
                -> Either ChainError CheckedChain
-checkSendChain declaration component =
+checkSendChain resolutions expectedProjection declaration component =
   case locatedValue (grammarV1ComponentBody component) of
     GrammarV1Block
       [ Located _ (GrammarV1LetStatement p1 e1)
@@ -106,6 +120,15 @@ checkSendChain declaration component =
             -- The caller independently establishes the DoublePing projection.
             let parameters = zip (fromMaybe [] parameterBinders)
                   (fromMaybe [] (grammarV1ComponentTermParams component))
+            case protocolProjectionSession expectedProjection of
+              Send _ (TyUInt 8) (Send _ (TyUInt 8) (End (Outcome "Done"))) -> Right ()
+              _ -> Left ChainUnsupportedSendProjection
+            endpointProjection <-
+              case parameterType parameters first >>= grammarV1ResolvedProtocolEndpointType resolutions of
+                Nothing -> Left ChainSendEndpointTypeUnresolved
+                Just resolved -> mapLeft ChainSendEndpointTypeError resolved
+            expectChain (resolvedProtocolEndpointProjection endpointProjection == expectedProjection)
+              ChainSendEndpointProjectionMismatch
             expectChain (isU8Parameter parameters p1Binder) ChainFirstSendPayloadNotU8
             (middle, scope1) <- bindOne p1 scope0
             -- The second payload is resolved AFTER the first let binding.
@@ -127,12 +150,14 @@ checkSendChain declaration component =
 isU8Parameter :: [(GrammarV1ResolvedBinder, Located GrammarV1TermParam)]
               -> GrammarV1ResolvedBinder -> Bool
 isU8Parameter parameters occurrence =
-  any matchesPayload parameters
-  where
-    matchesPayload (binder, param) =
-      sameBinder binder occurrence &&
-      grammarV1PrimitiveType
-        (locatedValue (grammarV1TermParamType (locatedValue param))) == Just (TyUInt 8)
+  (parameterType parameters occurrence >>= grammarV1PrimitiveType) == Just (TyUInt 8)
+
+parameterType :: [(GrammarV1ResolvedBinder, Located GrammarV1TermParam)]
+              -> GrammarV1ResolvedBinder -> Maybe GrammarV1Type
+parameterType parameters occurrence =
+  case [param | (binder, param) <- parameters, sameBinder binder occurrence] of
+    [param] -> Just (locatedValue (grammarV1TermParamType (locatedValue param)))
+    _ -> Nothing
 
 checkReceiveChain :: DeclarationKey -> GrammarV1ComponentDecl
                   -> Either ChainError CheckedChain

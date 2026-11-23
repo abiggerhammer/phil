@@ -77,3 +77,30 @@ results are width eight. Source binder and elaborator fidelity and agreement
 with projected protocol types remain outside the proof. This slice covers
 primitive component-parameter payloads inside the fixed witness envelope.
 General Send typing and source-to-Core refinement remain open.
+
+## Follow-on DoublePing Send endpoint projection (non-normative)
+
+The caller supplies protocol endpoint resolutions and the expected checked Core
+projection to `checkSendChain`. The checker admits the bounded two-Send U8
+session ending in Done. It resolves the initial endpoint's source parameter type
+using its exact lexical identity and the existing Grammar-v1 endpoint resolver.
+The resolved result must equal the expected protocol-instance revision, role,
+and session. The endpoint annotation supplies the lookup reference and role.
+The supplied Core protocol instance determines the nominal and session evidence.
+
+`send-endpoint-server-role.phil` changes the client endpoint annotation to the
+other role and exercises `ChainSendEndpointProjectionMismatch`.
+`send-endpoint-u8.phil` changes that annotation to a primitive parameter and
+exercises `ChainSendEndpointTypeUnresolved`. A separate control independently
+projects a second nominal protocol instance with the same role and session
+and verifies that the first instance's resolved evidence refuses it. The
+original accepted specimen still exercises native predecessor consumption,
+stale reuse and Close.
+
+The conditional Rocq lemma
+`fsem02ExactSendProjectionRejectsDifferentRevision` gives the consequence of
+exact triple equality when independently supplied revisions differ. Source
+lookup fidelity and native equality correspondence remain test obligations.
+This slice covers the bounded Send chain's initial source endpoint projection.
+Receive endpoint binding, architecture provisioning, general component
+elaboration, runtime activation and Haskell-to-Rocq refinement remain open.

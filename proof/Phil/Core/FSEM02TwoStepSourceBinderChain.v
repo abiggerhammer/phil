@@ -151,3 +151,22 @@ Proof.
     now apply Nat.eqb_eq in Hsecond; subst.
 Qed.
 Print Assumptions fsem02TwoSendU8ParameterGateSound.
+
+(* The model receives resolved projection evidence independently. Name stands
+   for an already-resolved revision or role identity. The resolver and native
+   equality implementation are outside this statement. *)
+Definition fsem02ExactSendProjection
+    (actual expected : (Name * Name * Session)%type) : Prop :=
+  actual = expected.
+
+Theorem fsem02ExactSendProjectionRejectsDifferentRevision :
+  forall actualRevision expectedRevision role session,
+    actualRevision <> expectedRevision ->
+    ~ fsem02ExactSendProjection
+        (actualRevision, role, session) (expectedRevision, role, session).
+Proof.
+  unfold fsem02ExactSendProjection.
+  intros actualRevision expectedRevision role session Hrevision Hequal.
+  now inversion Hequal.
+Qed.
+Print Assumptions fsem02ExactSendProjectionRejectsDifferentRevision.
