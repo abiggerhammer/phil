@@ -135,7 +135,7 @@ Proof.
   unfold phase1_surface_replay_path_connectedb.
   destruct (phase1_surface_admitted_replay_path_dec left right)
     as [Hpath | Hno]; simpl.
-  - split; [intro _ | intro _]; [exact Hpath | reflexivity].
+  - split; [intro Htrue; exact Hpath | intro Hproved; reflexivity].
   - split; [discriminate | intro Hpath; contradiction].
 Qed.
 
