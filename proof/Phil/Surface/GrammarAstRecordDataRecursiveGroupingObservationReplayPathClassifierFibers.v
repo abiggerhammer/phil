@@ -72,7 +72,9 @@ Proof.
   apply (proj1 (phase1_surface_replay_fiber_anchor_row
     left right left_observed Hleft)) in Hconnected.
   rewrite Hright in Hconnected.
+  exfalso.
   apply Hneq.
+  symmetry.
   now injection Hconnected.
 Qed.
 
@@ -145,6 +147,7 @@ Proof.
     apply (proj1 (phase1_surface_replay_fiber_anchor_row
       left right left_observed Hleft)) in Hcolumns.
     rewrite Hright in Hcolumns.
+    symmetry.
     now injection Hcolumns.
   - intro Hequal.
     subst right_observed.
