@@ -38,6 +38,8 @@ main = do
   localPayload <- TextIO.readFile "test/fixtures/fsem02-two-step-source-chain-v1/second-local-payload.phil"
   wrongFirstReceiveType <- TextIO.readFile "test/fixtures/fsem02-two-step-source-chain-v1/receive-first-u16.phil"
   wrongSecondReceiveType <- TextIO.readFile "test/fixtures/fsem02-two-step-source-chain-v1/receive-second-u16.phil"
+  wrongFirstSendType <- TextIO.readFile "test/fixtures/fsem02-two-step-source-chain-v1/send-first-u16.phil"
+  wrongSecondSendType <- TextIO.readFile "test/fixtures/fsem02-two-step-source-chain-v1/send-second-u16.phil"
   let cases =
         [ ("two source-checked binder generations replay exact native two-step endpoints",
             sourceReplay accepted)
@@ -45,6 +47,10 @@ main = do
             expectClientError ChainSecondPredecessorMismatch staleSource)
         , ("post-first-let endpoint payload is bound, but not a source parameter",
             expectClientError ChainSecondPayloadNotParameter localPayload)
+        , ("first Send uses a parameter that elaborates to U16",
+            expectClientError ChainFirstSendPayloadNotU8 wrongFirstSendType)
+        , ("second Send uses a parameter that elaborates to U16",
+            expectClientError ChainSecondSendPayloadNotU8 wrongSecondSendType)
         , ("first Receive annotation outside DoublePing U8 envelope rejects exactly",
             expectServerError ChainFirstReceiveAnnotationNotU8 wrongFirstReceiveType)
         , ("second Receive annotation outside DoublePing U8 envelope rejects exactly",

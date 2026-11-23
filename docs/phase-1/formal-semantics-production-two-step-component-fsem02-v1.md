@@ -54,3 +54,26 @@ two-annotation **model** gate can succeed when both modeled tags are U8.
 There is no proof of compiler AST-to-model fidelity or Haskell-to-Rocq
 refinement. Native predecessor/successor/Close replay remains separately
 tested. This is non-normative and FSEM-02 remains open.
+
+## Follow-on DoublePing two-Send payload types (non-normative)
+
+For the independently projected `Send U8; Send U8; End Done` envelope,
+`checkSendChain` also checks both resolved payload parameter types. The
+parameter scope allocates binders in telescope order. The checker pairs each
+binder with its source parameter declaration and uses exact binder-key equality
+to select the declaration for each occurrence. The existing Grammar-v1
+primitive elaborator must return `TyUInt 8`. The second occurrence still
+resolves after the first let.
+
+The complete `accepted.phil` specimen retains its two U8 parameters.
+`send-first-u16.phil` and `send-second-u16.phil` each change one component
+parameter type and must produce `ChainFirstSendPayloadNotU8` and
+`ChainSecondSendPayloadNotU8`, respectively. The accepted specimen checks
+independent Core projection, both native transitions, stale predecessor
+refusal and terminal Close. Protocol-instance authority remains external.
+The Rocq theorem `fsem02TwoSendU8ParameterGateSound` establishes that the
+finite model gate succeeds only when both modeled primitive elaboration
+results are width eight. Source binder and elaborator fidelity and agreement
+with projected protocol types remain outside the proof. This slice covers
+primitive component-parameter payloads inside the fixed witness envelope.
+General Send typing and source-to-Core refinement remain open.
