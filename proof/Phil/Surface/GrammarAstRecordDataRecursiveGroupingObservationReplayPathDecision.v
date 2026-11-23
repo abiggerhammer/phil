@@ -35,7 +35,9 @@ Definition phase1_surface_observed_payload_eq_dec :
   forall left right : Phase1SurfaceRecursiveGroupingObservedPayload,
     {left = right} + {left <> right}.
 Proof.
-  decide equality; try apply string_dec; try apply Nat.eq_dec.
+  decide equality;
+    try apply Nat.eq_dec;
+    try (apply list_eq_dec; apply string_dec).
 Defined.
 
 Definition phase1_surface_observed_variant_eq_dec :
@@ -54,6 +56,14 @@ Proof.
   decide equality; try apply string_dec; try apply Nat.eq_dec.
 Defined.
 
+Definition phase1_surface_observed_optional_mode_eq_dec :
+  forall left right : option Phase1SurfaceStructuralMode,
+    {left = right} + {left <> right}.
+Proof.
+  decide equality.
+  apply phase1_surface_observed_mode_eq_dec.
+Defined.
+
 Definition phase1_surface_observed_record_data_eq_dec :
   forall left right : Phase1SurfaceRecursiveGroupingObservedRecordData,
     {left = right} + {left <> right}.
@@ -64,7 +74,12 @@ Proof.
     try apply phase1_surface_observed_mode_eq_dec;
     try apply phase1_surface_observed_payload_eq_dec;
     try apply phase1_surface_observed_variant_eq_dec;
-    try apply phase1_surface_observed_generic_param_eq_dec.
+    try apply phase1_surface_observed_generic_param_eq_dec;
+    try apply phase1_surface_observed_optional_mode_eq_dec;
+    try (apply list_eq_dec; apply string_dec);
+    try (apply list_eq_dec; apply Nat.eq_dec);
+    try (apply list_eq_dec; apply phase1_surface_observed_generic_param_eq_dec);
+    try (apply list_eq_dec; apply phase1_surface_observed_variant_eq_dec).
 Defined.
 
 Definition phase1_surface_admitted_replay_path_dec :
