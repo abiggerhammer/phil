@@ -4,6 +4,7 @@ From Phil.Surface Require Import
   GrammarDerivation
   GrammarAstTopLevelSpine
   GrammarAstRecordDataRecursiveGroupingProductionObservables
+  GrammarAstRecordDataRecursiveGroupingObservationClassifier
   GrammarAstRecordDataRecursiveGroupingObservationReplayPathClosure
   GrammarAstRecordDataRecursiveGroupingObservationReplayPathQuotient
   GrammarAstRecordDataRecursiveGroupingObservationReplayPathDecision.
