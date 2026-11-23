@@ -46,6 +46,10 @@ data ChainError
   | ChainSendEndpointProjectionMismatch
   | ChainFirstSendPayloadNotU8
   | ChainSecondSendPayloadNotU8
+  | ChainUnsupportedReceiveProjection
+  | ChainReceiveEndpointTypeUnresolved
+  | ChainReceiveEndpointTypeError GrammarV1ProtocolEndpointTypeError
+  | ChainReceiveEndpointProjectionMismatch
   | ChainFirstReceiveAnnotationNotU8
   | ChainSecondReceiveAnnotationNotU8
   | ChainSecondPredecessorMismatch
@@ -118,16 +122,15 @@ checkSendChain resolutions expectedProjection declaration component =
             -- Type authority is the existing primitive elaborator applied to
             -- the declaration attached to this exact parameter identity.
             -- The caller independently establishes the DoublePing projection.
-            let parameters = zip (fromMaybe [] parameterBinders)
-                  (fromMaybe [] (grammarV1ComponentTermParams component))
+            let parameters = parameterDeclarations parameterBinders component
             case protocolProjectionSession expectedProjection of
               Send _ (TyUInt 8) (Send _ (TyUInt 8) (End (Outcome "Done"))) -> Right ()
               _ -> Left ChainUnsupportedSendProjection
             endpointProjection <-
-              case parameterType parameters first >>= grammarV1ResolvedProtocolEndpointType resolutions of
+              case endpointProjectionFor resolutions parameters first of
                 Nothing -> Left ChainSendEndpointTypeUnresolved
                 Just resolved -> mapLeft ChainSendEndpointTypeError resolved
-            expectChain (resolvedProtocolEndpointProjection endpointProjection == expectedProjection)
+            expectChain (endpointProjection == expectedProjection)
               ChainSendEndpointProjectionMismatch
             expectChain (isU8Parameter parameters p1Binder) ChainFirstSendPayloadNotU8
             (middle, scope1) <- bindOne p1 scope0
@@ -159,9 +162,26 @@ parameterType parameters occurrence =
     [param] -> Just (locatedValue (grammarV1TermParamType (locatedValue param)))
     _ -> Nothing
 
-checkReceiveChain :: DeclarationKey -> GrammarV1ComponentDecl
+parameterDeclarations :: Maybe [GrammarV1ResolvedBinder]
+                      -> GrammarV1ComponentDecl
+                      -> [(GrammarV1ResolvedBinder, Located GrammarV1TermParam)]
+parameterDeclarations binders component =
+  zip (fromMaybe [] binders) (fromMaybe [] (grammarV1ComponentTermParams component))
+
+endpointProjectionFor :: [GrammarV1ProtocolEndpointResolution]
+                      -> [(GrammarV1ResolvedBinder, Located GrammarV1TermParam)]
+                      -> GrammarV1ResolvedBinder
+                      -> Maybe (Either GrammarV1ProtocolEndpointTypeError ProtocolProjectionEvidence)
+endpointProjectionFor resolutions parameters endpoint =
+  fmap (fmap resolvedProtocolEndpointProjection) $
+    parameterType parameters endpoint >>= grammarV1ResolvedProtocolEndpointType resolutions
+
+checkReceiveChain :: [GrammarV1ProtocolEndpointResolution]
+                  -> ProtocolProjectionEvidence
+                  -> DeclarationKey
+                  -> GrammarV1ComponentDecl
                   -> Either ChainError CheckedChain
-checkReceiveChain declaration component =
+checkReceiveChain resolutions expectedProjection declaration component =
   case locatedValue (grammarV1ComponentBody component) of
     GrammarV1Block
       [ Located _ (GrammarV1LetStatement p1 e1)
@@ -172,14 +192,23 @@ checkReceiveChain declaration component =
           , GrammarV1ReceiveExpression writtenType2 endpoint2
           , GrammarV1CloseExpression closed
           ) -> do
-            (_, scope0) <- mapLeft (ChainBinderError . show) $
+            (parameterBinders, scope0) <- mapLeft (ChainBinderError . show) $
               grammarV1ComponentParameterScope declaration component
             first <- local scope0 endpoint1
             expectChain (grammarV1ResolvedBinderKind first ==
               GrammarV1ComponentParameterBinder)
               ChainFirstEndpointNotParameter
-            -- Restricted DoublePing U8/U8 witness envelope only.
-            -- Protocol-head authority is supplied externally, not inferred here.
+            case protocolProjectionSession expectedProjection of
+              Receive _ (TyUInt 8) (Receive _ (TyUInt 8) (End (Outcome "Done"))) -> Right ()
+              _ -> Left ChainUnsupportedReceiveProjection
+            let parameters = parameterDeclarations parameterBinders component
+            endpointProjection <-
+              case endpointProjectionFor resolutions parameters first of
+                Nothing -> Left ChainReceiveEndpointTypeUnresolved
+                Just resolved -> mapLeft ChainReceiveEndpointTypeError resolved
+            expectChain (endpointProjection == expectedProjection)
+              ChainReceiveEndpointProjectionMismatch
+            -- The two written annotations remain independent source checks.
             expectChain (locatedValue writtenType1 == GrammarV1UnsignedType "U8")
               ChainFirstReceiveAnnotationNotU8
             (middle, scope1) <- bindReceive p1 scope0

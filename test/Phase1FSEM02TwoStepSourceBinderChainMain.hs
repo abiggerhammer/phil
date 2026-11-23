@@ -44,6 +44,8 @@ main = do
   wrongSecondSendType <- TextIO.readFile "test/fixtures/fsem02-two-step-source-chain-v1/send-second-u16.phil"
   wrongEndpointRole <- TextIO.readFile "test/fixtures/fsem02-two-step-source-chain-v1/send-endpoint-server-role.phil"
   primitiveEndpoint <- TextIO.readFile "test/fixtures/fsem02-two-step-source-chain-v1/send-endpoint-u8.phil"
+  wrongReceiveRole <- TextIO.readFile "test/fixtures/fsem02-two-step-source-chain-v1/receive-endpoint-client-role.phil"
+  primitiveReceiveEndpoint <- TextIO.readFile "test/fixtures/fsem02-two-step-source-chain-v1/receive-endpoint-u8.phil"
   let cases =
         [ ("two source-checked binder generations replay exact native two-step endpoints",
             sourceReplay accepted)
@@ -65,6 +67,12 @@ main = do
             expectServerError ChainFirstReceiveAnnotationNotU8 wrongFirstReceiveType)
         , ("second Receive annotation outside DoublePing U8 envelope rejects exactly",
             expectServerError ChainSecondReceiveAnnotationNotU8 wrongSecondReceiveType)
+        , ("Receive endpoint resolves to the wrong role on the same instance",
+            expectServerError ChainReceiveEndpointProjectionMismatch wrongReceiveRole)
+        , ("Receive endpoint is a primitive parameter",
+            expectServerError ChainReceiveEndpointTypeUnresolved primitiveReceiveEndpoint)
+        , ("Receive endpoint with a same-shaped projection from a different nominal instance refuses",
+            expectDifferentReceiveInstanceError accepted)
         , ("source terminal close of first successor rejects at exact chain gate",
             expectClientError ChainTerminalCloseMismatch badClose)
         ]
@@ -90,7 +98,7 @@ sourcePair source = do
   checkedClient <- mapLeft show $
     checkClient instanceValue clientProjection client
   checkedServer <- mapLeft show $
-    checkReceiveChain (DeclarationKey "component.ServerWorker") server
+    checkServer instanceValue serverProjection server
   let expectedClient = Send (Name "x") (TyUInt 8)
         (Send (Name "y") (TyUInt 8) (End (Outcome "Done")))
       expectedServer = Receive (Name "x") (TyUInt 8)
@@ -132,19 +140,24 @@ sourceInstance key protocol = do
 checkClient :: BinaryProtocolInstance -> ProtocolProjectionEvidence
             -> GrammarV1ComponentDecl -> Either ChainError CheckedChain
 checkClient instanceValue expected =
-  checkSendChain [resolution] expected (DeclarationKey "component.ClientWorker")
-  where
-    resolution = GrammarV1ProtocolEndpointResolution
-      (ReferencedGenericStaticActual "DoublePing") instanceValue
+  checkSendChain [endpointResolution instanceValue] expected (DeclarationKey "component.ClientWorker")
+
+checkServer :: BinaryProtocolInstance -> ProtocolProjectionEvidence
+            -> GrammarV1ComponentDecl -> Either ChainError CheckedChain
+checkServer instanceValue expected =
+  checkReceiveChain [endpointResolution instanceValue] expected (DeclarationKey "component.ServerWorker")
+
+endpointResolution :: BinaryProtocolInstance -> GrammarV1ProtocolEndpointResolution
+endpointResolution = GrammarV1ProtocolEndpointResolution (ReferencedGenericStaticActual "DoublePing")
 
 expectClientError :: ChainError -> Text.Text -> Either String ()
 expectClientError expected source = do
   (instanceValue, client, _) <- sourceComponents (DeclarationKey "protocol.DoublePing") source
   projection <- mapLeft show $ projectProtocolRole instanceValue (ProtocolRoleKey "Client")
-  expectClientResult expected (checkClient instanceValue projection client)
+  expectChainResult expected (checkClient instanceValue projection client)
 
-expectClientResult :: ChainError -> Either ChainError CheckedChain -> Either String ()
-expectClientResult expected result = case result of
+expectChainResult :: ChainError -> Either ChainError CheckedChain -> Either String ()
+expectChainResult expected result = case result of
   Left actual | actual == expected -> Right ()
   other -> Left ("expected exact source error " <> show expected <> ", got " <> show other)
 
@@ -157,21 +170,25 @@ expectDifferentInstanceError source = do
   expect (protocolProjectionSession original == protocolProjectionSession projection &&
           protocolProjectionInstance original /= protocolProjectionInstance projection)
     "negative control must have equal sessions and distinct nominal instances"
-  expectClientResult ChainSendEndpointProjectionMismatch (checkClient instanceValue projection client)
+  expectChainResult ChainSendEndpointProjectionMismatch (checkClient instanceValue projection client)
 
 expectServerError :: ChainError -> Text.Text -> Either String ()
 expectServerError expected source = do
-  parsed <- mapLeft show (parseGrammarV1StructuralSource "fsem02-negative-receive-source" source)
-  let decls = map (locatedValue . grammarV1Declaration . locatedValue)
-        (grammarV1TopLevelDecls parsed)
-      components = [c | GrammarV1ComponentDeclaration c <- decls]
-  case components of
-    [_client, server] ->
-      case checkReceiveChain (DeclarationKey "component.ServerWorker") server of
-        Left actual | actual == expected -> Right ()
-        other -> Left ("expected exact source receive error " <> show expected
-          <> ", got " <> show other)
-    _ -> Left "negative source must contain exactly two parsed components"
+  (instanceValue, _, server) <- sourceComponents (DeclarationKey "protocol.DoublePing") source
+  projection <- mapLeft show $ projectProtocolRole instanceValue (ProtocolRoleKey "Server")
+  expectChainResult expected (checkServer instanceValue projection server)
+
+expectDifferentReceiveInstanceError :: Text.Text -> Either String ()
+expectDifferentReceiveInstanceError source = do
+  (instanceValue, _, server) <- sourceComponents (DeclarationKey "protocol.DoublePing") source
+  (other, _, _) <- sourceComponents (DeclarationKey "other.protocol.DoublePing") source
+  let role = ProtocolRoleKey "Server"
+  projection <- mapLeft show $ projectProtocolRole other role
+  original <- mapLeft show $ projectProtocolRole instanceValue role
+  expect (protocolProjectionSession original == protocolProjectionSession projection &&
+          protocolProjectionInstance original /= protocolProjectionInstance projection)
+    "negative control must have equal Receive sessions and distinct nominal instances"
+  expectChainResult ChainReceiveEndpointProjectionMismatch (checkServer instanceValue projection server)
 
 sourceReplay :: Text.Text -> Either String ()
 sourceReplay source = do

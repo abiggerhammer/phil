@@ -104,3 +104,28 @@ lookup fidelity and native equality correspondence remain test obligations.
 This slice covers the bounded Send chain's initial source endpoint projection.
 Receive endpoint binding, architecture provisioning, general component
 elaboration, runtime activation and Haskell-to-Rocq refinement remain open.
+
+## Follow-on DoublePing Receive endpoint projection (non-normative)
+
+`checkReceiveChain` now uses the same initial parameter lookup and endpoint
+resolver as the Send chain. Its caller supplies a checked projection and the
+protocol resolutions. The expected session must be two U8 Receives ending in
+Done, and the initial endpoint's resolved nominal revision, role and session
+must equal the supplied projection. Both written U8 annotations are checked
+independently as before.
+
+The complete `receive-endpoint-client-role.phil` changes the server endpoint
+to the other role and exercises `ChainReceiveEndpointProjectionMismatch`.
+`receive-endpoint-u8.phil` changes that annotation to a primitive parameter
+and exercises `ChainReceiveEndpointTypeUnresolved`. An independent projection
+from a different nominal instance with the same Receive session also refuses.
+The accepted original source still drives native two-generation replay,
+stale predecessor refusal and terminal Close.
+
+The conditional Rocq theorem
+`fsem02ExactReceiveProjectionRejectsDifferentRole` shows that distinct roles
+refuse exact projection equality. It uses the existing abstract `Ty` in
+`Session` and takes projection identities as inputs. This does not prove the
+native resolver or equality implementation. General component elaboration,
+architecture provisioning, activation, and Haskell-to-Rocq refinement remain
+open.
