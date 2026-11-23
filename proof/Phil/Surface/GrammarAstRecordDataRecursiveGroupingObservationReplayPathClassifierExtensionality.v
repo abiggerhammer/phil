@@ -134,14 +134,14 @@ Proof.
       as [observed|] eqn:Hleft.
     + assert (Hright :
         phase1_surface_normalized_observation right = Some observed).
-      { rewrite <- Hequal. exact Hleft. }
+      { symmetry. exact Hequal. }
       pose proof (phase1_surface_replay_fiber_equal_observations_connected
         left right observed Hleft Hright) as Hconnected.
       rewrite Hdisconnected in Hconnected.
       discriminate Hconnected.
     + split.
       * exact Hleft.
-      * rewrite <- Hequal. exact Hleft.
+      * symmetry. exact Hequal.
   - intros [Hleft Hright].
     split.
     + intro probe.
