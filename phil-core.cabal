@@ -74,6 +74,22 @@ library
       Phil.Handoff.Phase1AssuranceInputs
       Phil.Handoff.Phase1RuntimeBuild
   other-modules:
+      ConsoleImplementationKernel
+      FileSystemKernel
+      Phil.Core.ProviderEvidenceQualification
+      Phil.Core.ProviderLawQualification
+      Phil.Core.ProviderLifecycleQualification
+      Phil.Core.ProviderStateQualification
+      Phil.Examples.Steve.ApplicationShell
+      Phil.Examples.Steve.ProviderQualifications
+      Phil.IO.Bytes
+      Phil.IO.Console
+      Phil.IO.FileSystem
+      ProviderEvidenceQualificationKernel
+      ProviderLawQualificationKernel
+      ProviderLifecycleQualificationKernel
+      ProviderStateQualificationKernel
+      SteveProviderQualificationWitnessKernel
       ArchitectureIdentityKernel
       ArchitectureImportKernel
       ArchitectureInstantiationKernel
