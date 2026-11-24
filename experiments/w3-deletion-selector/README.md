@@ -257,14 +257,22 @@ exact ref and source SHAs, UTC timestamps, and probe file SHA-256.
 Its diagnostic digest covers the canonical JSON of the sanitized
 diagnostic object. It does not cover the original response bytes.
 
-- `complete` means a bounded JSON error object was read and classified.
+- `complete` requires both confirmed HTTP framing and a bounded JSON
+  error object. Declared lengths must be satisfied. Chunked bodies
+  require a terminating chunk and final trailer delimiter. For a
+  close-delimited response the HTTP reader must observe EOF. Such EOF
+  satisfies HTTP framing without proving the sender's intended length.
   Only a fixed message category and allowlisted, format-validated
   request ID or rate-limit fields are retained.
 - `truncated` means the 4 KiB body cap was exceeded, as detected by
   reading one extra byte. No body text or partial message is retained.
 - `unavailable` means there was no usable error body or HTTP response.
   Check the separately recorded HTTP status, which may be null.
-- `failed` means reading or validating the diagnostic failed. If writing
+- `failed` covers read errors, premature EOF, unconfirmed framing and
+  invalid JSON or UTF-8. An ordinary mutation response that cannot be
+  processed also records failed capture with its observed status and
+  completion time, without retaining its body. A matching status and
+  poststate cannot qualify that response as successful. If writing
   or syncing the sidecar fails, the intent records diagnostic failure
   when possible. The original durable marker remains consumed even if
   the intent summary itself cannot be updated. Sidecar presence alone

@@ -6,6 +6,7 @@ import contextlib
 import copy
 from email.message import Message
 import hashlib
+from http.client import HTTPResponse
 import io
 import json
 import os
@@ -225,11 +226,32 @@ class OfflineTests(unittest.TestCase):
             self.assertEqual(marker["decision"], "EXACT_STATE_VERIFIED")
             self.assertEqual(marker["action"], "create")
 
-    def run_refusal(self, directory, error, fail_at=None, action="create"):
+    @staticmethod
+    def http_response(body, framing, status=403):
+        wire = (f"HTTP/1.1 {status} Synthetic\r\n".encode() + framing +
+                b"\r\n" + body)
+        sock = types.SimpleNamespace(makefile=lambda mode: io.BytesIO(wire))
+        response = HTTPResponse(sock)
+        response.begin()
+        return response
+
+    def http_error(self, body, framing=None, headers=None):
+        response = None if body is None else self.http_response(
+            body, framing if framing is not None else
+            f"Content-Length: {len(body)}\r\n".encode())
+        error = urllib.error.HTTPError(
+            "https://example.invalid", 403, "refusal", headers or Message(), response)
+        if response is None:
+            error.fp = None  # HTTPError otherwise substitutes an empty BytesIO.
+        return error
+
+    def run_refusal(self, directory, outcome, fail_at=None, action="create",
+                    poststate=None):
         api = object.__new__(probe.GitHub)
         api.repo, api._token = REPO, "offline-secret"
         api.operator = mock.Mock(return_value=ACTOR)
-        api.admitted = mock.Mock(return_value={})
+        api.admitted = (mock.Mock(side_effect=poststate) if isinstance(poststate, Exception)
+                        else mock.Mock(return_value={} if poststate is None else poststate))
         api._opener = mock.Mock()
         suffix = "create" if action == "create" else "delete"
         prior = {} if action == "create" else {REF: TARGET}
@@ -240,7 +262,9 @@ class OfflineTests(unittest.TestCase):
             self.assertEqual(request.get_method(), "POST" if action == "create" else "DELETE")
             self.assertEqual(json.loads(marker.read_text())["decision"],
                              "INTENT_UNKNOWN_AFTER_INTERRUPTION")
-            raise error
+            if isinstance(outcome, Exception):
+                raise outcome
+            return outcome
 
         api._opener.open.side_effect = open_request
         args = argparse.Namespace(repo=REPO, repo_id=ID, actor=ACTOR,
@@ -256,8 +280,12 @@ class OfflineTests(unittest.TestCase):
 
         def fail_diagnostic_sync(fd):
             nonlocal injected
+            is_directory = stat.S_ISDIR(os.fstat(fd).st_mode)
+            final = "STOP" in json.loads(marker.read_text())["decision"]
             if (not injected and sidecar.exists() and
-                stat.S_ISDIR(os.fstat(fd).st_mode) == (fail_at == "directory")):
+                ((fail_at == "final-directory" and is_directory and final) or
+                 (fail_at == "directory" and is_directory) or
+                 (fail_at == "file" and not is_directory))):
                 injected = True
                 raise OSError("injected diagnostic sync failure")
             sync(fd)
@@ -269,24 +297,36 @@ class OfflineTests(unittest.TestCase):
 
         if fail_at == "write":
             context = mock.patch.object(probe, "durable_new", side_effect=fail_diagnostic_write)
+        elif fail_at == "replace":
+            context = mock.patch.object(probe.os, "replace", side_effect=OSError("offline-secret"))
         elif fail_at:
             context = mock.patch.object(probe.os, "fsync", side_effect=fail_diagnostic_sync)
         else:
             context = contextlib.nullcontext()
+        argv = ["probe.py", action]
+        for key, value in vars(args).items():
+            if key != "action":
+                argv.extend(["--" + key.replace("_", "-"), str(value)])
         with mock.patch.object(probe, "GitHub", return_value=api), \
              mock.patch.object(probe, "preflight", return_value=pre), \
-             contextlib.redirect_stdout(io.StringIO()) as output:
-            with context, self.assertRaises(probe.Stop):
-                probe.execute(args)
+             contextlib.redirect_stdout(io.StringIO()) as output, \
+             contextlib.redirect_stderr(io.StringIO()) as errors:
+            with context, mock.patch.object(sys, "argv", argv), self.assertRaises(SystemExit) as stop:
+                probe.cli()
+            self.assertEqual(stop.exception.code, 1)
             with self.assertRaisesRegex(probe.Stop, "evidence path occupied"):
                 probe.execute(args)
         api._opener.open.assert_called_once()
         intent = json.loads(marker.read_text())
-        self.assertTrue(intent["decision"].startswith("STOP"))
+        if fail_at == "replace":
+            self.assertEqual(intent["decision"], "INTENT_UNKNOWN_AFTER_INTERRUPTION")
+        else:
+            self.assertTrue(intent["decision"].startswith("STOP"))
         with self.assertRaisesRegex(probe.Stop, "requires its own successful receipt"):
             probe.load_intent(marker, {}, {}, suffix)
-        self.assertNotIn("offline-secret", output.getvalue())
-        self.assertNotIn("message_category", output.getvalue())
+        self.assertTrue(errors.getvalue().startswith("W3 DISPOSABLE SELECTOR STOP: "))
+        for field in ("offline-secret", "message_category", "example.invalid"):
+            self.assertNotIn(field, output.getvalue() + errors.getvalue())
         return intent, sidecar
 
     def test_http_refusal_private_diagnostic_binding_and_sanitization(self):
@@ -301,8 +341,7 @@ class OfflineTests(unittest.TestCase):
         raw = b'{"message":"Forbidden","errors":[{"value":"offline-secret"}]}'
         for action in ("create", "delete", "abort-cleanup"):
             with self.subTest(action=action), tempfile.TemporaryDirectory() as directory:
-                error = urllib.error.HTTPError("https://example.invalid", 403, "refusal",
-                                               headers, io.BytesIO(raw))
+                error = self.http_error(raw, headers=headers)
                 intent, sidecar = self.run_refusal(directory, error, action=action)
                 self.assertEqual(intent["http_status"], 403)
                 self.assertEqual(intent["diagnostic_capture"], "complete")
@@ -335,9 +374,7 @@ class OfflineTests(unittest.TestCase):
         for raw, expected in ((b'{"message":', "failed"), (b"{}", "complete"),
                               (b"x" * 9000, "truncated"), (None, "unavailable")):
             with self.subTest(expected=expected), tempfile.TemporaryDirectory() as directory:
-                stream = io.BytesIO(raw) if raw is not None else None
-                error = urllib.error.HTTPError("https://example.invalid", 403, "refusal",
-                                               Message(), stream)
+                error = self.http_error(raw)
                 intent, sidecar = self.run_refusal(directory, error)
                 self.assertEqual(intent["diagnostic_capture"], expected)
                 record = json.loads(sidecar.read_text())
@@ -352,10 +389,72 @@ class OfflineTests(unittest.TestCase):
     def test_diagnostic_file_and_directory_sync_failure_preserve_consumed_intent(self):
         for stage in ("write", "file", "directory"):
             with self.subTest(stage=stage), tempfile.TemporaryDirectory() as directory:
-                error = urllib.error.HTTPError("https://example.invalid", 403, "refusal",
-                                               Message(), io.BytesIO(b'{"message":"Forbidden"}'))
+                error = self.http_error(b'{"message":"Forbidden"}')
                 intent, _ = self.run_refusal(directory, error, fail_at=stage)
                 self.assertEqual(intent["diagnostic_capture"], "failed")
+
+    def test_actual_http_response_framing_and_capture_boundaries(self):
+        exact = b"{}" + b" " * (probe.HTTP_ERROR_LIMIT - 2)
+        chunked = b"Transfer-Encoding: chunked\r\n"
+        for body, framing, expected, examined in (
+            (b"{}", b"Content-Length: 2\r\n", "complete", 2),
+            (b"{}", b"Content-Length: 100\r\n", "failed", 2),
+            (b"{}", b"Content-Length: 9000\r\n", "failed", 2),
+            (b"{}", b"Content-Length: invalid\r\n", "failed", 0),
+            (b"{}", b"Content-Length: 2\r\nContent-Length: 100\r\n", "failed", 0),
+            (b"2\r\n{}\r\n0\r\n\r\n", chunked, "complete", 2),
+            (b"2\r\n{}\r\n", chunked, "failed", 0),
+            (b"2\r\n{}\r\n0\r\n", chunked, "failed", 2),
+            (b"{}", b"Connection: close\r\n", "complete", 2),
+            (exact, b"Content-Length: 4096\r\n", "complete", 4096),
+            (exact + b" ", b"Content-Length: 4097\r\n", "truncated", 4097),
+        ):
+            with self.subTest(framing=framing, size=len(body)), tempfile.TemporaryDirectory() as directory:
+                intent, sidecar = self.run_refusal(directory, self.http_error(body, framing))
+                self.assertEqual(intent["diagnostic_capture"], expected)
+                self.assertEqual(json.loads(sidecar.read_text())["diagnostic"]["body_bytes_inspected"],
+                                 examined)
+
+    def test_malformed_ordinary_201_cannot_succeed_with_matching_poststate(self):
+        for body in (b'{"message":"offline-secret"', b"\xffoffline-secret", b'{"x":1,"x":2}'):
+            with self.subTest(body=body), tempfile.TemporaryDirectory() as directory:
+                response = self.http_response(
+                    body, f"Content-Length: {len(body)}\r\n".encode(), status=201)
+                intent, sidecar = self.run_refusal(directory, response, poststate={REF: TARGET})
+                self.assertEqual(intent["http_status"], 201)
+                self.assertEqual(intent["observed_refs_after"], {REF: TARGET})
+                self.assertEqual(intent["diagnostic_capture"], "failed")
+                record = json.loads(sidecar.read_text())
+                self.assertEqual(record["http_status"], 201)
+                self.assertEqual(record["request_completed_at"], intent["request_completed_at"])
+                self.assertEqual(record["diagnostic"]["failure_stage"], "ordinary-response-processing")
+                self.assertNotIn("offline-secret", sidecar.read_text())
+
+    def test_diagnostic_read_and_duplicate_json_fail_closed(self):
+        for body in (b'{"message":"Forbidden","message":"offline-secret"}', None):
+            with self.subTest(body=body), tempfile.TemporaryDirectory() as directory:
+                error = self.http_error(body if body is not None else b"{}")
+                if body is None:
+                    error.fp.read = mock.Mock(side_effect=OSError("offline-secret"))
+                intent, sidecar = self.run_refusal(directory, error)
+                self.assertEqual(intent["diagnostic_capture"], "failed")
+                self.assertNotIn("offline-secret", sidecar.read_text())
+
+    def test_diagnostic_survives_poststate_and_final_stop_persistence_failures(self):
+        for failure in ("poststate", "replace", "final-directory"):
+            with self.subTest(failure=failure), tempfile.TemporaryDirectory() as directory:
+                kwargs = ({"poststate": OSError("offline-secret")} if failure == "poststate"
+                          else {"fail_at": failure})
+                _, sidecar = self.run_refusal(directory, self.http_error(b"{}"), **kwargs)
+                record = json.loads(sidecar.read_text())
+                self.assertEqual(record["http_status"], 403)
+                self.assertEqual(record["diagnostic"]["capture"], "complete")
+
+    def test_synthetic_historical_403_stop_receipt_remains_rejected(self):
+        with self.assertRaisesRegex(probe.Stop, "requires its own successful receipt"):
+            self.classify("create", [], alter_intent=lambda intent: intent.update(
+                decision="STOP_UNEXPECTED_OR_AMBIGUOUS_POSTSTATE",
+                http_status=403, observed_refs_after={}))
 
     def test_abort_cleanup_never_relabels_phase_c(self):
         with tempfile.TemporaryDirectory() as d:

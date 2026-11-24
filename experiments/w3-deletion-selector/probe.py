@@ -6,6 +6,7 @@ import base64
 from dataclasses import dataclass
 import datetime as dt
 import hashlib
+from http.client import HTTPResponse
 import json
 import os
 from pathlib import Path
@@ -129,6 +130,53 @@ class HttpErrorDiagnostic:
     payload: dict
 
 
+class ChunkTrailerObserver:
+    """Observe the final line because HTTPResponse tolerates EOF in trailers."""
+
+    def __init__(self, stream):
+        self.stream = stream
+        self.last_line = None
+
+    def readline(self, limit):
+        self.last_line = self.stream.readline(limit)
+        return self.last_line
+
+    def read(self, limit):
+        return self.stream.read(limit)
+
+    def close(self):
+        self.stream.close()
+
+
+def bounded_body(response, limit):
+    """Return bounded body bytes and whether HTTP framing finished."""
+    if not isinstance(response, HTTPResponse):
+        return response.read(limit), False
+    lengths = response.headers.get_all("Content-Length", [])
+    encodings = response.headers.get_all("Transfer-Encoding", [])
+    if (len(lengths) > 1 or (lengths and not re.fullmatch(r"[0-9]+", lengths[0])) or
+        (encodings and (lengths or len(encodings) != 1 or not response.chunked))):
+        return b"", False
+    if response.chunked:
+        observer = ChunkTrailerObserver(response.fp)
+        response.fp = observer
+        try:
+            body = response.read(limit)
+            return body, response.isclosed() and observer.last_line == b"\r\n"
+        finally:
+            if response.fp is observer:
+                response.fp = observer.stream
+    if response.length is not None:
+        body = response.read(limit)
+        return body, response.length == 0
+    # Close-delimited bodies have no declared size. Require the HTTP reader
+    # to observe EOF while staying within the same cumulative byte budget.
+    body = bytearray()
+    while len(body) < limit and not response.isclosed():
+        body.extend(response.read(limit - len(body)))
+    return bytes(body), response.will_close and response.isclosed()
+
+
 def capture_http_error(error, token):
     """Read bounded error evidence without retaining server-supplied prose."""
     evidence = {"capture": "unavailable", "headers": {}, "body_bytes_inspected": 0}
@@ -141,13 +189,13 @@ def capture_http_error(error, token):
                     evidence["headers"][name.lower()] = values[0]
         if error.fp is None:
             return evidence
-        raw = error.read(HTTP_ERROR_LIMIT + 1)
+        raw, complete = bounded_body(error.fp, HTTP_ERROR_LIMIT + 1)
         evidence["body_bytes_inspected"] = len(raw)
         if len(raw) > HTTP_ERROR_LIMIT:
             evidence["capture"] = "truncated"
-        elif not raw:
-            evidence["capture"] = "unavailable"
-        else:
+        elif not complete:
+            evidence["capture"] = "failed"
+        elif raw:
             doc = strict_json(raw.decode("utf-8"))
             check(isinstance(doc, dict), "invalid error response shape")
             message = doc.get("message")
@@ -282,10 +330,18 @@ class GitHub:
             "X-GitHub-Api-Version": "2022-11-28",
             "Content-Type": "application/json",
         })
+        status = None
         try:
             with self._opener.open(request, timeout=20) as resp:
                 status = resp.status
-                raw = resp.read(1024 * 1024 + 1)
+                limit = 1024 * 1024 + 1
+                if method != "GET" and isinstance(resp, HTTPResponse):
+                    raw, complete = bounded_body(resp, limit)
+                    check(complete, "incomplete mutation response framing")
+                else:
+                    raw = resp.read(limit)
+                check(len(raw) < limit, "oversized API response")
+                return status, strict_json(raw.decode()) if raw.strip() else None
         except urllib.error.HTTPError as exc:
             try:
                 diagnostic = (None if method == "GET" else
@@ -296,10 +352,15 @@ class GitHub:
                     exc.close()
                 except Exception:
                     pass  # A close failure does not erase a received HTTP status.
-        except Exception as exc:
-            raise Stop("UNKNOWN_AFTER_API_REQUEST: reconcile before any retry") from exc
-        check(len(raw) <= 1024 * 1024, "oversized API response")
-        return status, strict_json(raw.decode()) if raw.strip() else None
+        except Exception:
+            if method != "GET" and status is not None:
+                # No untrusted bytes from ordinary response processing are
+                # admitted into the diagnostic sidecar.
+                return status, HttpErrorDiagnostic({
+                    "capture": "failed", "headers": {}, "body_bytes_inspected": 0,
+                    "failure_stage": "ordinary-response-processing",
+                })
+            raise Stop("API response unavailable or invalid") from None
 
     def must_get(self, suffix):
         status, data = self.request("GET", suffix)
@@ -454,9 +515,15 @@ def execute(args):
             "STOP_UNEXPECTED_OR_AMBIGUOUS_POSTSTATE")
     except Exception:
         intent["decision"] = "STOP_UNKNOWN_AFTER_REQUEST"
+        try:
+            durable_replace(marker, intent)
+        except (OSError, Stop):
+            raise Stop("final STOP receipt could not be preserved; intent remains consumed") from None
+        raise Stop("mutation evidence incomplete; intent remains consumed") from None
+    try:
         durable_replace(marker, intent)
-        raise
-    durable_replace(marker, intent)
+    except (OSError, Stop):
+        raise Stop("final mutation receipt could not be preserved; intent remains consumed") from None
     # Only the intent summary is printable. The sidecar stays owner-local.
     print(json.dumps(intent, sort_keys=True))
     check(intent["decision"] in ("EXACT_STATE_VERIFIED",
