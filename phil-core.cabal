@@ -6,6 +6,8 @@ build-type:          Simple
 extra-source-files:
   test/fixtures/fsem01-rec01-source-record-v1/accepted-full.phil
   test/fixtures/fsem01-rec02a-record-origin-v1/accepted.tsv
+  test/fixtures/fsem02-two-step-source-chain-v1/accepted.phil
+  test/fixtures/fsem03-doubleping-origin-v1/candidate.tsv
 
 data-files:
     examples/upload/*.phil
@@ -274,6 +276,16 @@ library
       Phil.Surface.GrammarV1.ComponentSendClose
       Phil.Surface.GrammarV1.ComponentReceiveClose
       Phil.Surface.GrammarV1.ComponentTwoStepChain
+      Phil.Surface.GrammarV1.DoublePingOrigin
+      Phil.Surface.GrammarV1.ArchitectureComponentActivation
+      Phil.Surface.GrammarV1.ArchitectureComponentProvisioning
+      Phil.Surface.GrammarV1.CallableSignature
+      Phil.Surface.GrammarV1.ProtocolRoles
+      Phil.Surface.GrammarV1.SemanticBindingState
+      Phil.Surface.GrammarV1.SemanticCheckedType
+      Phil.Surface.GrammarV1.SemanticComponentHeader
+      Phil.Surface.GrammarV1.SemanticRefinementType
+      Phil.Surface.GrammarV1.SessionSemantics
       Phil.Surface.GrammarV1.ProtocolEndpointType
       Phil.Surface.GrammarV1.TwoOwnerBorrowResourceSurface
       Phil.Surface.GrammarV1.ReferenceKernelBridge
