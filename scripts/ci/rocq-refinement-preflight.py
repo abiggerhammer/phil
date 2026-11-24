@@ -52,6 +52,7 @@ MODULES = (
     "GrammarAstRecordDataRecursiveGroupingObservationReplayPathClassifierExtensionality",
     "GrammarAstRecordDataRecursiveGroupingObservationReplayPathTwoProbeClassifier",
     "GrammarAstRecordDataRecursiveGroupingObservationReplayPathComparison",
+    "GrammarAstRecordDataRecursiveGroupingObservationReplayPathComparisonLaws",
 )
 
 
