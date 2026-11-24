@@ -1,0 +1,45 @@
+name: FSEM-03 DoublePing Origin Candidate Preflight
+
+on:
+  pull_request:
+    paths:
+      - 'src/Phil/Surface/GrammarV1/DoublePingOrigin.hs'
+      - 'test/Phase1FSEM03DoublePingOriginMain.hs'
+      - 'test/fixtures/fsem03-doubleping-origin-v1/**'
+      - '.github/workflows/fsem03-doubleping-origin-preflight.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  candidate:
+    name: Strict GHC 9.6.7 conditional origin and source controls
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          ref: ${{ github.event.pull_request.head.sha }}
+      - uses: haskell-actions/setup@v2
+        with:
+          ghc-version: '9.6.7'
+          cabal-version: 'latest'
+          cabal-update: false
+      - name: Verify original source bytes against the Git pin
+        run: |
+          set -euo pipefail
+          source=test/fixtures/fsem02-two-step-source-chain-v1/accepted.phil
+          pin=2fc0c4abe970f398b516a2bdff2000ac4d09333f
+          test "$(git rev-parse "$pin:$source")" = 76f1d238407397ec09d358a42ff9ebaac4c44909
+          git show "$pin:$source" | cmp - "$source"
+          printf '%s  %s\n' 33687d0c4320dda4d136fa16038f4fad043d14e1367729b8db43044e2d5c51e7 "$source" | sha256sum -c -
+          sha256sum test/fixtures/fsem03-doubleping-origin-v1/candidate.tsv
+      - run: bash scripts/ci/cabal-update-retry.sh
+      - run: cabal build lib:phil-core --ghc-options=-Werror
+      - name: Candidate, existing source, and native controls
+        run: |
+          set -euo pipefail
+          for file in test/Phase1FSEM03DoublePingOriginMain.hs test/Phase1FSEM02TwoStepSourceBinderChainMain.hs test/Phase1FSEM02TwoStepCoreTraceMain.hs; do
+            cabal exec -- ghc -isrc -Wall -Werror -fno-code "$file"
+            cabal exec -- runghc -isrc -Wall -Werror "$file"
+          done
