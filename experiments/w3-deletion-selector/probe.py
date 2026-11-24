@@ -130,51 +130,90 @@ class HttpErrorDiagnostic:
     payload: dict
 
 
-class ChunkTrailerObserver:
-    """Observe the final line because HTTPResponse tolerates EOF in trailers."""
+FRAMING_OVERHEAD_LIMIT = 4096
+MAX_BODY_READ = 4096
 
-    def __init__(self, stream):
-        self.stream = stream
-        self.last_line = None
 
-    def readline(self, limit):
-        self.last_line = self.stream.readline(limit)
-        return self.last_line
+def read_bounded(stream, size):
+    # Socket makefiles are buffered. read1 avoids read-ahead from repeated
+    # raw reads here. Header parsing may already have buffered body bytes.
+    check(0 < size <= MAX_BODY_READ, "invalid body read size")
+    data = stream.read1(size)
+    check(len(data) <= size, "invalid body read result")
+    return data
 
-    def read(self, limit):
-        return self.stream.read(limit)
 
-    def close(self):
-        self.stream.close()
+def chunked_body(stream, limit):
+    body = bytearray()
+    overhead_left = FRAMING_OVERHEAD_LIMIT
+
+    def framing_byte():
+        nonlocal overhead_left
+        check(overhead_left > 0, "chunk framing budget exhausted")
+        overhead_left -= 1
+        return read_bounded(stream, 1)
+
+    def separator():
+        check(framing_byte() == b"\r" and framing_byte() == b"\n",
+              "invalid chunk separator")
+
+    while True:
+        size_line = bytearray()
+        digit = framing_byte()
+        while digit and digit in b"0123456789abcdefABCDEF":
+            check(len(size_line) < 16, "unsupported chunk size width")
+            size_line.extend(digit)
+            digit = framing_byte()
+        check(size_line and digit == b"\r" and framing_byte() == b"\n",
+              "invalid or unsupported chunk size line")
+        size = int(size_line, 16)
+        if size == 0:
+            separator()  # Empty trailer section only.
+            return bytes(body), True
+
+        remaining = size
+        while remaining and len(body) < limit:
+            data = read_bounded(stream, min(remaining, limit - len(body), MAX_BODY_READ))
+            check(data, "premature EOF in chunk data")
+            body.extend(data)
+            remaining -= len(data)
+        if len(body) == limit:
+            return bytes(body), False  # Detection byte reached.
+        separator()
 
 
 def bounded_body(response, limit):
-    """Return bounded body bytes and whether HTTP framing finished."""
-    if not isinstance(response, HTTPResponse):
-        return response.read(limit), False
+    """Read the supported HTTP body subset without HTTPResponse body decoding."""
+    check(isinstance(response, HTTPResponse) and response.fp is not None,
+          "HTTP response framing unavailable")
     lengths = response.headers.get_all("Content-Length", [])
     encodings = response.headers.get_all("Transfer-Encoding", [])
-    if (len(lengths) > 1 or (lengths and not re.fullmatch(r"[0-9]+", lengths[0])) or
-        (encodings and (lengths or len(encodings) != 1 or not response.chunked))):
-        return b"", False
-    if response.chunked:
-        observer = ChunkTrailerObserver(response.fp)
-        response.fp = observer
-        try:
-            body = response.read(limit)
-            return body, response.isclosed() and observer.last_line == b"\r\n"
-        finally:
-            if response.fp is observer:
-                response.fp = observer.stream
-    if response.length is not None:
-        body = response.read(limit)
-        return body, response.length == 0
-    # Close-delimited bodies have no declared size. Require the HTTP reader
-    # to observe EOF while staying within the same cumulative byte budget.
+    check(len(lengths) <= 1 and len(encodings) <= 1 and not (lengths and encodings),
+          "ambiguous HTTP framing")
+    declared = None
+    if lengths:
+        value = lengths[0].strip(" \t")
+        check(re.fullmatch(r"[0-9]{1,16}", value), "invalid or unsupported content length")
+        declared = int(value)
+    if encodings:
+        check(encodings[0].strip(" \t").lower() == "chunked",
+              "unsupported transfer encoding")
+    if response.status == 204:
+        check(not encodings and declared in (None, 0), "invalid no-body response framing")
+        return b"", True
+    check(response.status >= 200 and response.status != 304, "unsupported no-body response")
+    if encodings:
+        return chunked_body(response.fp, limit)
+    if declared is None:
+        check(response.will_close, "close-delimited framing unavailable")
+    target = min(declared, limit) if declared is not None else limit
     body = bytearray()
-    while len(body) < limit and not response.isclosed():
-        body.extend(response.read(limit - len(body)))
-    return bytes(body), response.will_close and response.isclosed()
+    while len(body) < target:
+        data = read_bounded(response.fp, min(target - len(body), MAX_BODY_READ))
+        if not data:
+            return bytes(body), declared is None
+        body.extend(data)
+    return bytes(body), declared is not None and len(body) == declared
 
 
 def capture_http_error(error, token):
@@ -335,7 +374,7 @@ class GitHub:
             with self._opener.open(request, timeout=20) as resp:
                 status = resp.status
                 limit = 1024 * 1024 + 1
-                if method != "GET" and isinstance(resp, HTTPResponse):
+                if method != "GET":
                     raw, complete = bounded_body(resp, limit)
                     check(complete, "incomplete mutation response framing")
                 else:

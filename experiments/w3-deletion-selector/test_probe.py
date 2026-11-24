@@ -227,23 +227,52 @@ class OfflineTests(unittest.TestCase):
             self.assertEqual(marker["action"], "create")
 
     @staticmethod
-    def http_response(body, framing, status=403):
+    def http_response(body, framing, status=403, fragment=None):
         wire = (f"HTTP/1.1 {status} Synthetic\r\n".encode() + framing +
                 b"\r\n" + body)
-        sock = types.SimpleNamespace(makefile=lambda mode: io.BytesIO(wire))
-        response = HTTPResponse(sock)
+
+        class Wire(io.BytesIO):
+            requests = None
+
+            def read(self, size=-1):
+                if self.requests is None:
+                    return super().read(size)
+                if not 0 < size <= 4096:
+                    self.requests.append((size, 0))
+                    raise AssertionError("unbounded underlying read")
+                data = super().read(min(size, fragment) if fragment else size)
+                self.requests.append((size, len(data)))
+                return data
+
+            def read1(self, size=-1):
+                return self.read(size)
+
+            def readline(self, size=-1):
+                if self.requests is not None:
+                    self.requests.append((size, 0))
+                    raise AssertionError("unexpected body readline")
+                return super().readline(size)
+
+        stream = Wire(wire)
+        response = HTTPResponse(types.SimpleNamespace(makefile=lambda mode: stream))
         response.begin()
+        stream.requests = []
         return response
 
-    def http_error(self, body, framing=None, headers=None):
+    def http_error(self, body, framing=None, headers=None, fragment=None):
         response = None if body is None else self.http_response(
             body, framing if framing is not None else
-            f"Content-Length: {len(body)}\r\n".encode())
+            f"Content-Length: {len(body)}\r\n".encode(), fragment=fragment)
         error = urllib.error.HTTPError(
             "https://example.invalid", 403, "refusal", headers or Message(), response)
         if response is None:
             error.fp = None  # HTTPError otherwise substitutes an empty BytesIO.
         return error
+
+    def assert_wire_reads(self, stream, consumed):
+        self.assertTrue(all(0 < request <= 4096 and 0 <= got <= request
+                            for request, got in stream.requests), stream.requests[:8])
+        self.assertEqual(sum(got for _, got in stream.requests), consumed)
 
     def run_refusal(self, directory, outcome, fail_at=None, action="create",
                     poststate=None):
@@ -404,7 +433,7 @@ class OfflineTests(unittest.TestCase):
             (b"{}", b"Content-Length: 2\r\nContent-Length: 100\r\n", "failed", 0),
             (b"2\r\n{}\r\n0\r\n\r\n", chunked, "complete", 2),
             (b"2\r\n{}\r\n", chunked, "failed", 0),
-            (b"2\r\n{}\r\n0\r\n", chunked, "failed", 2),
+            (b"2\r\n{}\r\n0\r\n", chunked, "failed", 0),
             (b"{}", b"Connection: close\r\n", "complete", 2),
             (exact, b"Content-Length: 4096\r\n", "complete", 4096),
             (exact + b" ", b"Content-Length: 4097\r\n", "truncated", 4097),
@@ -414,6 +443,79 @@ class OfflineTests(unittest.TestCase):
                 self.assertEqual(intent["diagnostic_capture"], expected)
                 self.assertEqual(json.loads(sidecar.read_text())["diagnostic"]["body_bytes_inspected"],
                                  examined)
+
+    def test_strict_chunk_syntax_and_unusable_length_bound_wire_reads(self):
+        chunked = b"Transfer-Encoding: chunked\r\n"
+        for prefix, framing, consumed in (
+            (b"-1\r\n", chunked, 1),
+            (b"+2\r\n", chunked, 1),
+            (b"0x2\r\n", chunked, 2),
+            (b"0_2\r\n", chunked, 2),
+            (b"2;extension\r\n", chunked, 2),
+            (b"2" * 17 + b"\r\n", chunked, 17),
+            (b"2\r\n{}XY0\r\n\r\n", chunked, 6),
+            (b"2\r\n{}\r\n0\r\nTrailer: value\r\n\r\n", chunked, 11),
+            (b"", b"Content-Length: " + b"9" * 5000 + b"\r\n", 0),
+            (b"", b"Transfer-Encoding: gzip, chunked\r\n", 0),
+            (b"", chunked + b"Content-Length: 2\r\n", 0),
+        ):
+            with self.subTest(prefix=prefix, consumed=consumed), tempfile.TemporaryDirectory() as directory:
+                error = self.http_error(prefix + b"x" * 10000, framing, fragment=1)
+                stream = error.fp.fp
+                intent, sidecar = self.run_refusal(directory, error)
+                self.assertEqual(intent["diagnostic_capture"], "failed")
+                self.assertEqual(json.loads(sidecar.read_text())["diagnostic"]["capture"], "failed")
+                self.assert_wire_reads(stream, consumed)
+
+    def test_strict_wire_budgets_with_fragmentation(self):
+        chunked = b"Transfer-Encoding: chunked\r\n"
+        for size in (4096, 4097):
+            body = b"{}" + b" " * (size - 2)
+            size_line = f"{size:x}\r\n".encode()
+            for framing, wire, consumed in (
+                (f"Content-Length: {size}\r\n".encode(), body, size),
+                (chunked, size_line + body + b"\r\n0\r\n\r\n",
+                 len(size_line) + size + (7 if size == 4096 else 0)),
+            ):
+                with self.subTest(size=size, framing=framing), tempfile.TemporaryDirectory() as directory:
+                    error = self.http_error(wire, framing, fragment=1)
+                    stream = error.fp.fp
+                    intent, _ = self.run_refusal(directory, error)
+                    self.assertEqual(intent["diagnostic_capture"],
+                                     "complete" if size == 4096 else "truncated")
+                    self.assert_wire_reads(stream, consumed)
+        with tempfile.TemporaryDirectory() as directory:
+            wire = b"1\r\n \r\n" * 2000 + b"0\r\n\r\n"
+            error = self.http_error(wire, chunked, fragment=1)
+            stream = error.fp.fp
+            intent, _ = self.run_refusal(directory, error)
+            self.assertEqual(intent["diagnostic_capture"], "failed")
+            budget = probe.FRAMING_OVERHEAD_LIMIT
+            self.assert_wire_reads(stream, budget + (budget + 2) // 5)
+
+    def test_incomplete_chunked_frames_bound_wire_reads(self):
+        for wire in (b"3\r\n{}", b"2\r\n{}\r\n", b"2\r\n{}\r\n0\r\n\r"):
+            with self.subTest(wire=wire), tempfile.TemporaryDirectory() as directory:
+                error = self.http_error(wire, b"Transfer-Encoding: chunked\r\n", fragment=1)
+                stream = error.fp.fp
+                intent, _ = self.run_refusal(directory, error)
+                self.assertEqual(intent["diagnostic_capture"], "failed")
+                self.assert_wire_reads(stream, len(wire))
+
+    def test_bad_chunk_separator_on_ordinary_201_is_stop(self):
+        with tempfile.TemporaryDirectory() as directory:
+            response = self.http_response(
+                b"2\r\n{}XY0\r\n\r\n", b"Transfer-Encoding: chunked\r\n",
+                status=201, fragment=1)
+            stream = response.fp
+            intent, sidecar = self.run_refusal(directory, response, poststate={REF: TARGET})
+            self.assertEqual(intent["http_status"], 201)
+            self.assertEqual(intent["observed_refs_after"], {REF: TARGET})
+            record = json.loads(sidecar.read_text())
+            self.assertEqual(record["http_status"], 201)
+            self.assertEqual(record["request_completed_at"], intent["request_completed_at"])
+            self.assertEqual(record["diagnostic"]["capture"], "failed")
+            self.assert_wire_reads(stream, 6)
 
     def test_malformed_ordinary_201_cannot_succeed_with_matching_poststate(self):
         for body in (b'{"message":"offline-secret"', b"\xffoffline-secret", b'{"x":1,"x":2}'):
@@ -430,12 +532,31 @@ class OfflineTests(unittest.TestCase):
                 self.assertEqual(record["diagnostic"]["failure_stage"], "ordinary-response-processing")
                 self.assertNotIn("offline-secret", sidecar.read_text())
 
+    def test_supported_ordinary_mutation_responses_keep_success_contract(self):
+        api = object.__new__(probe.GitHub)
+        api.repo, api._token, api._opener = REPO, "offline-secret", mock.Mock()
+        for body, framing, status in (
+            (b"{}", b"Content-Length: 2\r\n", 201),
+            (b"2\r\n{}\r\n0\r\n\r\n", b"Transfer-Encoding: chunked\r\n", 201),
+            (b"", b"", 204),
+        ):
+            with self.subTest(framing=framing, status=status):
+                response = self.http_response(body, framing, status=status, fragment=1)
+                stream = response.fp
+                api._opener.open.return_value = response
+                if status == 201:
+                    result = api.request("POST", "/git/refs", {"ref": REF, "sha": TARGET})
+                else:
+                    result = api.request("DELETE", "/git/refs/" + REF.removeprefix("refs/"))
+                self.assertEqual(result, (status, {} if status == 201 else None))
+                self.assert_wire_reads(stream, len(body))
+
     def test_diagnostic_read_and_duplicate_json_fail_closed(self):
         for body in (b'{"message":"Forbidden","message":"offline-secret"}', None):
             with self.subTest(body=body), tempfile.TemporaryDirectory() as directory:
                 error = self.http_error(body if body is not None else b"{}")
                 if body is None:
-                    error.fp.read = mock.Mock(side_effect=OSError("offline-secret"))
+                    error.fp.fp.read1 = mock.Mock(side_effect=OSError("offline-secret"))
                 intent, sidecar = self.run_refusal(directory, error)
                 self.assertEqual(intent["diagnostic_capture"], "failed")
                 self.assertNotIn("offline-secret", sidecar.read_text())

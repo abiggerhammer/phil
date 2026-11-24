@@ -250,12 +250,37 @@ source mutator to exercise this guarantee outside mocked offline tests.
 
 On an attempted mutation with an unexpected HTTP response, the probe
 preserves a mode-0600 sidecar beside the consumed intent in the
-owner-private state directory. A transport or response-processing
-failure also receives an unavailable diagnostic when preservation
-succeeds. The sidecar binds the operation, repository, actor, nonce,
+owner-private state directory. A transport failure without a response
+receives an unavailable diagnostic when preservation succeeds. A failure
+processing an observed ordinary response receives a failed diagnostic.
+The sidecar binds the operation, repository, actor, nonce,
 exact ref and source SHAs, UTC timestamps, and probe file SHA-256.
 Its diagnostic digest covers the canonical JSON of the sanitized
 diagnostic object. It does not cover the original response bytes.
+
+HTTP error capture and ordinary mutation responses share a strict body
+framing reader. The standard library supplies the parsed status and headers,
+the close-delimited connection indication, and the buffered body stream.
+The probe reads that stream with positive, bounded `read1` requests of at
+most 4,096 bytes. It never calls the standard-library body decoder for
+mutations. These are post-header consumption bounds. Standard-library
+header parsing and any bytes it has already buffered are outside them.
+
+Supported framing is a single Content-Length of 1–16 ASCII decimal digits,
+a single `chunked` transfer coding with no Content-Length, or an explicitly
+close-delimited response with neither header. Chunk sizes are 1–16 ASCII hex
+digits. Every size line and data separator requires CRLF, and a zero chunk
+must be followed by an empty CRLF-terminated trailer section. Chunk
+extensions and nonempty trailers are unsupported. Duplicate or conflicting
+framing headers, unusable lengths, other transfer codings, and incomplete
+frames fail closed. HTTP 204 allows no transfer coding or nonzero length
+and consumes no body. Interim and 304 responses are unsupported here.
+
+The decoded error-body budget is 4,096 bytes plus one detection byte.
+Ordinary mutation responses retain their 1 MiB cap plus one detection byte.
+The independent 4,096-byte chunk-framing budget covers size lines,
+separators and terminal framing. The reader stops immediately at budget
+exhaustion or a malformed frame. Short reads do not reset either budget.
 
 - `complete` requires both confirmed HTTP framing and a bounded JSON
   error object. Declared lengths must be satisfied. Chunked bodies
