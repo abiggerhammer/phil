@@ -245,3 +245,65 @@ any prospective mutation call. Errors abort without retries, leaving
 the one-use path occupied. Poststate reconciliation is separate and
 cannot retroactively make an unfynced intent safe. Do not run the
 source mutator to exercise this guarantee outside mocked offline tests.
+
+## Private HTTP diagnostic receipts
+
+On an attempted mutation with an unexpected HTTP response, the probe
+preserves a mode-0600 sidecar beside the consumed intent in the
+owner-private state directory. A transport failure without a response
+receives an unavailable diagnostic when preservation succeeds. A failure
+processing an observed ordinary response receives a failed diagnostic.
+The sidecar binds the operation, repository, actor, nonce,
+exact ref and source SHAs, UTC timestamps, and probe file SHA-256.
+Its diagnostic digest covers the canonical JSON of the sanitized
+diagnostic object. It does not cover the original response bytes.
+
+HTTP error capture and ordinary mutation responses share a strict body
+framing reader. The standard library supplies the parsed status and headers,
+the close-delimited connection indication, and the buffered body stream.
+The probe reads that stream with positive, bounded `read1` requests of at
+most 4,096 bytes. It never calls the standard-library body decoder for
+mutations. These are post-header consumption bounds. Standard-library
+header parsing and any bytes it has already buffered are outside them.
+
+Supported framing is a single Content-Length of 1–16 ASCII decimal digits,
+a single `chunked` transfer coding with no Content-Length, or an explicitly
+close-delimited response with neither header. Chunk sizes are 1–16 ASCII hex
+digits. Every size line and data separator requires CRLF, and a zero chunk
+must be followed by an empty CRLF-terminated trailer section. Chunk
+extensions and nonempty trailers are unsupported. Duplicate or conflicting
+framing headers, unusable lengths, other transfer codings, and incomplete
+frames fail closed. HTTP 204 allows no transfer coding or nonzero length
+and consumes no body. Interim and 304 responses are unsupported here.
+
+The decoded error-body budget is 4,096 bytes plus one detection byte.
+Ordinary mutation responses retain their 1 MiB cap plus one detection byte.
+The independent 4,096-byte chunk-framing budget covers size lines,
+separators and terminal framing. The reader stops immediately at budget
+exhaustion or a malformed frame. Short reads do not reset either budget.
+
+- `complete` requires both confirmed HTTP framing and a bounded JSON
+  error object. Declared lengths must be satisfied. Chunked bodies
+  require a terminating chunk and final trailer delimiter. For a
+  close-delimited response the HTTP reader must observe EOF. Such EOF
+  satisfies HTTP framing without proving the sender's intended length.
+  Only a fixed message category and allowlisted, format-validated
+  request ID or rate-limit fields are retained.
+- `truncated` means the 4 KiB body cap was exceeded, as detected by
+  reading one extra byte. No body text or partial message is retained.
+- `unavailable` means there was no usable error body or HTTP response.
+  Check the separately recorded HTTP status, which may be null.
+- `failed` covers read errors, premature EOF, unconfirmed framing and
+  invalid JSON or UTF-8. An ordinary mutation response that cannot be
+  processed also records failed capture with its observed status and
+  completion time, without retaining its body. A matching status and
+  poststate cannot qualify that response as successful. If writing
+  or syncing the sidecar fails, the intent records diagnostic failure
+  when possible. The original durable marker remains consumed even if
+  the intent summary itself cannot be updated. Sidecar presence alone
+  does not establish successful preservation.
+
+The sidecar never supplies success evidence. Preserve it privately with
+the corresponding STOP receipt and disclose only independently reviewed
+details. See the [GitHub support appendix](github-support-appendix.md)
+for the historical diagnostic gap and unresolved platform questions.
