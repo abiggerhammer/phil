@@ -35,7 +35,7 @@ jobs:
           printf '%s  %s\n' 33687d0c4320dda4d136fa16038f4fad043d14e1367729b8db43044e2d5c51e7 "$source" | sha256sum -c -
           sha256sum test/fixtures/fsem03-doubleping-origin-v1/candidate.tsv
       - run: bash scripts/ci/cabal-update-retry.sh
-      - run: cabal build lib:phil-core --ghc-options='-Wall -Werror'
+      - run: cabal build lib:phil-core --ghc-options=-Werror
       - name: Candidate, existing source, and native controls
         run: |
           set -euo pipefail
