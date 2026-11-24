@@ -1,0 +1,284 @@
+name: MHB ATC W3 Publisher Fanout Canary (Manual, Source Disabled)
+
+# SOURCE DISABLED: fanout source_authorized=false, approved_nonce=null.
+# No App token or protected ref writes unless source, runtime, manual owner
+# and protected environment were separately reviewed and activated.
+on:
+  workflow_dispatch:
+    inputs:
+      mode:
+        description: "plan=GET only; run=one canary; cleanup=original-run recovery"
+        type: choice
+        required: true
+        default: plan
+        options: [plan, run, cleanup]
+      nonce:
+        description: "Separately source-approved fresh 12-hex nonce"
+        type: string
+        required: true
+      confirm:
+        description: "PLAN_ONLY or reviewed one-run publisher acknowledgment"
+        type: string
+        required: true
+        default: PLAN_ONLY
+      original_run_id:
+        description: "Original owner run ID, required only for manual cleanup"
+        type: string
+        required: false
+        default: ''
+
+permissions:
+  contents: read
+  actions: read
+
+concurrency:
+  group: mhb-atc-admission-global
+  queue: max
+  cancel-in-progress: false
+
+env:
+  PYTHONDONTWRITEBYTECODE: '1'
+  MHB_ATC_W3_FANOUT_ENABLED: ${{ vars.MHB_ATC_W3_FANOUT_ENABLED }}
+  MHB_ATC_W3_REF_TRIAL_ENABLED: ${{ vars.MHB_ATC_W3_REF_TRIAL_ENABLED }}
+  MHB_ATC_WORKER_BROKER_ENABLED: ${{ vars.MHB_ATC_WORKER_BROKER_ENABLED }}
+  MHB_ATC_IMMUTABLE_HEADS_ENABLED: ${{ vars.MHB_ATC_IMMUTABLE_HEADS_ENABLED }}
+  MHB_ATC_AUTO_ADMIT_ENABLED: ${{ vars.MHB_ATC_AUTO_ADMIT_ENABLED }}
+  MHB_ATC_PHASE2_STAGE_BRIDGE_ENABLED: ${{ vars.MHB_ATC_PHASE2_STAGE_BRIDGE_ENABLED }}
+  W3_FANOUT_CONFIRM: ${{ inputs.confirm }}
+  W3_FANOUT_MODE: ${{ inputs.mode }}
+
+jobs:
+  prepare:
+    if: >-
+      github.event_name == 'workflow_dispatch' &&
+      github.ref == 'refs/heads/main' &&
+      github.repository == 'abiggerhammer/phil' &&
+      github.actor == 'abiggerhammer' &&
+      github.triggering_actor == 'abiggerhammer' &&
+      github.run_attempt == 1
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Checkout exact owner/main dispatch without credentials
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.sha }}
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Bind clean local main to trusted dispatch
+        shell: bash
+        run: |
+          set -euo pipefail
+          git switch -C main "$GITHUB_SHA"
+          test "$(git rev-parse HEAD)" = "$GITHUB_SHA"
+          test -z "$(git status --porcelain --untracked-files=all)"
+      - name: Install hash-pinned strict G1 parser (no App token)
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 -c 'import sys,platform; assert sys.version_info[:2] == (3,12) and platform.machine() == "x86_64"'
+          python3 -m pip install --disable-pip-version-check --no-deps --only-binary=:all: --require-hashes --ignore-installed -r scripts/ci/mhb-atc-w3-pyyaml-6.0.3-hashes.txt
+      - name: Download original authenticated binding only for manual recovery
+        if: inputs.mode == 'cleanup'
+        uses: actions/download-artifact@v4
+        with:
+          name: mhb-atc-w3-fanout-origin
+          run-id: ${{ inputs.original_run_id }}
+          github-token: ${{ github.token }}
+          path: ${{ runner.temp }}/w3-fanout-original
+      - name: Owner-only read-only planning or original-run preflight
+        shell: bash
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+          NONCE: ${{ inputs.nonce }}
+          ORIGINAL_RUN_ID: ${{ inputs.original_run_id }}
+          W3_FANOUT_BINDING_FILE: ${{ runner.temp }}/w3-fanout-original/w3-fanout-origin.json
+        run: |
+          set -euo pipefail
+          case "$W3_FANOUT_MODE" in
+            plan)
+              test "$W3_FANOUT_CONFIRM" = PLAN_ONLY
+              test -z "$ORIGINAL_RUN_ID"
+              python3 scripts/mhb_atc_w3_fanout_probe.py plan --nonce "$NONCE"
+              ;;
+            run)
+              test "$W3_FANOUT_CONFIRM" = AUTHORIZE_W3_FANOUT_CANARY_ONLY
+              test -z "$ORIGINAL_RUN_ID"
+              python3 scripts/mhb_atc_w3_fanout_probe.py prepare-origin --nonce "$NONCE"
+              ;;
+            cleanup)
+              test "$W3_FANOUT_CONFIRM" = RECOVER_W3_FANOUT_CANARY_ONLY
+              [[ "$ORIGINAL_RUN_ID" =~ ^[1-9][0-9]{0,15}$ ]]
+              W3_FANOUT_ORIGIN_RUN_ID="$ORIGINAL_RUN_ID" \
+                python3 scripts/mhb_atc_w3_fanout_probe.py recovery-plan --nonce "$NONCE"
+              ;;
+            *) echo 'W3 FANOUT STOP: invalid owner mode' >&2; exit 1 ;;
+          esac
+      - name: Upload nonsecret original binding BEFORE any publisher token
+        if: inputs.mode == 'run'
+        uses: actions/upload-artifact@v4
+        with:
+          name: mhb-atc-w3-fanout-origin
+          path: ${{ runner.temp }}/w3-fanout-origin.json
+          if-no-files-found: error
+          retention-days: 30
+
+  publisher_create:
+    needs: [prepare]
+    if: >-
+      needs.prepare.result == 'success' &&
+      inputs.mode == 'run' &&
+      vars.MHB_ATC_W3_FANOUT_ENABLED == 'true'
+    environment: atc-publisher
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.sha }}
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Reconstruct exact trusted main checkout
+        shell: bash
+        run: |
+          set -euo pipefail
+          git switch -C main "$GITHUB_SHA"
+          test -z "$(git status --porcelain --untracked-files=all)"
+      - name: Install hash-pinned strict G1 parser BEFORE publisher key
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 -c 'import sys,platform; assert sys.version_info[:2] == (3,12) and platform.machine() == "x86_64"'
+          python3 -m pip install --disable-pip-version-check --no-deps --only-binary=:all: --require-hashes --ignore-installed -r scripts/ci/mhb-atc-w3-pyyaml-6.0.3-hashes.txt
+      - name: Download original run binding for read-only authorization
+        uses: actions/download-artifact@v4
+        with:
+          name: mhb-atc-w3-fanout-origin
+          run-id: ${{ github.run_id }}
+          github-token: ${{ github.token }}
+          path: ${{ runner.temp }}/w3-fanout-original
+      - name: Independently verify original run, nonce, default and namespace preflight
+        shell: bash
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+          W3_FANOUT_ORIGIN_RUN_ID: ${{ github.run_id }}
+          W3_FANOUT_BINDING_FILE: ${{ runner.temp }}/w3-fanout-original/w3-fanout-origin.json
+          NONCE: ${{ inputs.nonce }}
+        run: |
+          set -euo pipefail
+          python3 scripts/mhb_atc_w3_fanout_probe.py create-preflight --nonce "$NONCE"
+      - name: Mint Phil-only publisher App Contents token
+        id: publisher_token
+        uses: actions/create-github-app-token@64ab729a6294000f5aa4a4bc0b73d1f32bc45510 # v3
+        with:
+          client-id: ${{ vars.MHB_ATC_PUBLISHER_APP_CLIENT_ID }}
+          private-key: ${{ secrets.MHB_ATC_PUBLISHER_APP_PRIVATE_KEY }}
+          permission-contents: write
+          skip-token-revoke: false
+      - name: One exact publisher-App canary CREATE with fsynced intent
+        shell: bash
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+          W3_FANOUT_ORIGIN_RUN_ID: ${{ github.run_id }}
+          W3_FANOUT_BINDING_FILE: ${{ runner.temp }}/w3-fanout-original/w3-fanout-origin.json
+          W3_FANOUT_APP_TOKEN: ${{ steps.publisher_token.outputs.token }}
+          W3_FANOUT_ACTION_APP_SLUG: ${{ steps.publisher_token.outputs.app-slug }}
+          W3_FANOUT_ACTION_INSTALLATION_ID: ${{ steps.publisher_token.outputs.installation-id }}
+          NONCE: ${{ inputs.nonce }}
+        run: python3 scripts/mhb_atc_w3_fanout_probe.py publisher-create --nonce "$NONCE"
+      - name: Preserve sanitized CREATE evidence even on failure
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: mhb-atc-w3-fanout-create
+          path: ${{ runner.temp }}/w3-fanout-evidence.json
+          if-no-files-found: ignore
+          retention-days: 30
+
+  publisher_cleanup:
+    needs: [prepare, publisher_create]
+    if: >-
+      always() &&
+      needs.prepare.result == 'success' &&
+      ((inputs.mode == 'run' &&
+        (needs.publisher_create.result == 'success' ||
+         needs.publisher_create.result == 'failure' ||
+         needs.publisher_create.result == 'cancelled')) ||
+       (inputs.mode == 'cleanup' &&
+        github.ref == 'refs/heads/main' &&
+        github.actor == 'abiggerhammer' &&
+        github.triggering_actor == 'abiggerhammer' &&
+        github.run_attempt == 1))
+    environment: atc-publisher
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.sha }}
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Reconstruct exact current controller checkout
+        shell: bash
+        run: |
+          set -euo pipefail
+          git switch -C main "$GITHUB_SHA"
+          test -z "$(git status --porcelain --untracked-files=all)"
+      - name: Install hash-pinned strict G1 parser BEFORE publisher key
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 -c 'import sys,platform; assert sys.version_info[:2] == (3,12) and platform.machine() == "x86_64"'
+          python3 -m pip install --disable-pip-version-check --no-deps --only-binary=:all: --require-hashes --ignore-installed -r scripts/ci/mhb-atc-w3-pyyaml-6.0.3-hashes.txt
+      - name: Download authenticated original origin (same run or recovery)
+        uses: actions/download-artifact@v4
+        with:
+          name: mhb-atc-w3-fanout-origin
+          run-id: ${{ inputs.mode == 'cleanup' && inputs.original_run_id || github.run_id }}
+          github-token: ${{ github.token }}
+          path: ${{ runner.temp }}/w3-fanout-original
+      - name: GET-only original-run recovery and exact current ref preflight
+        id: recovery_plan
+        shell: bash
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+          W3_FANOUT_ORIGIN_RUN_ID: ${{ inputs.mode == 'cleanup' && inputs.original_run_id || github.run_id }}
+          W3_FANOUT_BINDING_FILE: ${{ runner.temp }}/w3-fanout-original/w3-fanout-origin.json
+          NONCE: ${{ inputs.nonce }}
+        run: |
+          set -euo pipefail
+          python3 scripts/mhb_atc_w3_fanout_probe.py recovery-plan \
+            --nonce "$NONCE" > "$RUNNER_TEMP/w3-fanout-cleanup-plan.json"
+          jq -e '.decision == "READ_ONLY_PREFLIGHT_NO_WRITES" and
+                 (.cleanup_required | type == "boolean")' \
+            "$RUNNER_TEMP/w3-fanout-cleanup-plan.json" > /dev/null
+          needed="$(jq -r '.cleanup_required' \
+            "$RUNNER_TEMP/w3-fanout-cleanup-plan.json")"
+          printf 'cleanup_needed=%s\n' "$needed" >> "$GITHUB_OUTPUT"
+          echo "W3 fanout read-only cleanup needed: $needed"
+      - name: Mint publisher-only token only if authenticated canary exists
+        if: steps.recovery_plan.outputs.cleanup_needed == 'true'
+        id: cleanup_token
+        uses: actions/create-github-app-token@64ab729a6294000f5aa4a4bc0b73d1f32bc45510 # v3
+        with:
+          client-id: ${{ vars.MHB_ATC_PUBLISHER_APP_CLIENT_ID }}
+          private-key: ${{ secrets.MHB_ATC_PUBLISHER_APP_PRIVATE_KEY }}
+          permission-contents: write
+          skip-token-revoke: false
+      - name: Delete original exact-SHA canary only; verify absence
+        if: steps.recovery_plan.outputs.cleanup_needed == 'true'
+        shell: bash
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+          W3_FANOUT_ORIGIN_RUN_ID: ${{ inputs.mode == 'cleanup' && inputs.original_run_id || github.run_id }}
+          W3_FANOUT_BINDING_FILE: ${{ runner.temp }}/w3-fanout-original/w3-fanout-origin.json
+          W3_FANOUT_APP_TOKEN: ${{ steps.cleanup_token.outputs.token }}
+          W3_FANOUT_ACTION_APP_SLUG: ${{ steps.cleanup_token.outputs.app-slug }}
+          W3_FANOUT_ACTION_INSTALLATION_ID: ${{ steps.cleanup_token.outputs.installation-id }}
+          NONCE: ${{ inputs.nonce }}
+        run: python3 scripts/mhb_atc_w3_fanout_probe.py publisher-cleanup --nonce "$NONCE"
+      - name: Preserve sanitized cleanup evidence even after failure
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: mhb-atc-w3-fanout-cleanup
+          path: ${{ runner.temp }}/w3-fanout-evidence.json
+          if-no-files-found: ignore
+          retention-days: 30

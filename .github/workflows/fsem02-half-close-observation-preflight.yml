@@ -1,0 +1,61 @@
+name: FSEM-02 Source Half-Close Retry Observation Preflight
+
+on:
+  push:
+    branches:
+      - formal-semantics/fsem02-source-half-close-retry-observation
+    paths:
+      - 'test/Phase1FSEM02RestrictedSourceTransferMain.hs'
+      - 'proof/Phil/Core/FSEM02HalfCloseObservation*.v'
+      - 'docs/phase-1/formal-semantics-half-close-observation-wire-fsem02-v1.md'
+      - 'docs/phase-1/typing-and-semantics-reader-guide-v1.md'
+      - '.github/workflows/fsem02-half-close-observation-preflight.yml'
+  pull_request:
+    paths:
+      - 'test/Phase1FSEM02RestrictedSourceTransferMain.hs'
+      - 'proof/Phil/Core/FSEM02HalfCloseObservation*.v'
+      - 'docs/phase-1/formal-semantics-half-close-observation-wire-fsem02-v1.md'
+      - 'docs/phase-1/typing-and-semantics-reader-guide-v1.md'
+      - '.github/workflows/fsem02-half-close-observation-preflight.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  strict-source-core:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: haskell-actions/setup@v2
+        with:
+          ghc-version: '9.6.7'
+          cabal-version: 'latest'
+          cabal-update: false
+      - run: bash scripts/ci/cabal-update-retry.sh
+      - run: cabal build lib:phil-core --ghc-options=-Werror
+      - name: Native half-Close stale retry, live peer suffix and exact observation
+        run: |
+          set -euo pipefail
+          cabal exec -- ghc -isrc -Wall -Werror -fno-code test/Phase1FSEM02RestrictedSourceTransferMain.hs
+          cabal exec -- runghc -isrc -Wall -Werror test/Phase1FSEM02RestrictedSourceTransferMain.hs
+          cabal exec -- runghc -isrc -Wall -Werror test/Phase1FSEM02RestrictedSourceTransferMain.hs emit-rocq-half-close-observation > /tmp/fsem02-half-close-observed.v
+          diff -u proof/Phil/Core/FSEM02HalfCloseObservationData.v /tmp/fsem02-half-close-observed.v
+          sha256sum /tmp/fsem02-half-close-observed.v proof/Phil/Core/FSEM02HalfCloseObservationData.v
+  rocq:
+    runs-on: ubuntu-24.04
+    container:
+      image: rocq/rocq-prover:9.2.0
+      options: --user root
+    steps:
+      - uses: actions/checkout@v4
+      - name: Finite half-Close model, data and proof checks
+        shell: bash
+        run: |
+          set -euo pipefail
+          export PATH="/home/rocq/.opam/$COMPILER/bin:$PATH"
+          rocq c -Q proof/Phil Phil proof/Phil/Core/FSEM02CloseOrderObservationModel.v
+          for f in FSEM02HalfCloseObservationModel FSEM02HalfCloseObservationData FSEM02HalfCloseObservationChecks; do
+            rocq c -Q proof/Phil Phil "proof/Phil/Core/$f.v"
+          done
+          if grep -nE '^[[:space:]]*(Admitted[.]|Axiom[[:space:]]|Parameter[[:space:]])' proof/Phil/Core/FSEM02HalfCloseObservation*.v; then exit 1; fi
+          sha256sum proof/Phil/Core/FSEM02HalfCloseObservation*.vo

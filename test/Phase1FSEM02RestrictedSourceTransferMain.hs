@@ -31,6 +31,7 @@ import Phil.Surface.GrammarV1.ComponentSendClose
 import Phil.Surface.GrammarV1.Parser
 import Phil.Surface.GrammarV1.ProtocolRoles (grammarV1CheckedBinaryProtocolFamily)
 import Phil.Surface.Syntax (Located (..))
+import System.Environment (getArgs)
 import System.Exit (exitFailure)
 
 main :: IO ()
@@ -39,6 +40,10 @@ main = do
     "test/fixtures/fsem02-restricted-source-transfer-v1/accepted.phil"
   rejected <- TextIO.readFile
     "test/fixtures/fsem02-restricted-source-transfer-v1/rejected-stale-close.phil"
+  rejectedReceiver <- TextIO.readFile
+    "test/fixtures/fsem02-restricted-source-transfer-v1/rejected-receiver-stale-close.phil"
+  rejectedBoth <- TextIO.readFile
+    "test/fixtures/fsem02-restricted-source-transfer-v1/rejected-both-stale-close.phil"
   let result = do
         fx <- fixture accepted
         sequence_
@@ -63,6 +68,9 @@ main = do
           , borrowedOccupiedReceiverCollision accepted
           , crossModeSenderPayloadRefusal accepted
           , missingSenderResourceBeforeReceiverCollision accepted
+          , receiverClosePreemptsNativeFaults accepted rejectedReceiver
+          , dualStaleCloseRepairDiamond accepted rejected rejectedReceiver rejectedBoth
+          , restrictedHalfCloseObservationWire accepted rejected rejectedReceiver rejectedBoth >> Right ()
           , wrongSessionHeadRejects fx
           , sourceCloseReplay fx
           , sourceCloseRejectsForgedRequest fx
@@ -110,8 +118,28 @@ main = do
           , sourceTerminalRejectWrongPredecessorHead fx
           ]
   case result of
-    Right () -> putStrLn "PASS: FSEM-02 source restricted transfer and exact negative replay"
     Left err -> putStrLn ("FAIL: " <> err) >> exitFailure
+    Right () -> do
+      args <- getArgs
+      case args of
+        [] -> putStrLn "PASS: FSEM-02 source restricted transfer and exact negative replay"
+        ["emit-rocq-observation"] ->
+          case restrictedObservationWire accepted rejected rejectedReceiver rejectedBoth of
+            Right wire -> TextIO.putStr wire
+            Left err -> putStrLn ("FAIL: " <> err) >> exitFailure
+        ["emit-rocq-close-order-observation"] ->
+          case restrictedCloseOrderObservationWire accepted rejected rejectedReceiver rejectedBoth of
+            Right wire -> TextIO.putStr wire
+            Left err -> putStrLn ("FAIL: " <> err) >> exitFailure
+        ["emit-rocq-terminal-observation"] ->
+          case restrictedTerminalObservationWire accepted rejected rejectedReceiver rejectedBoth of
+            Right wire -> TextIO.putStr wire
+            Left err -> putStrLn ("FAIL: " <> err) >> exitFailure
+        ["emit-rocq-half-close-observation"] ->
+          case restrictedHalfCloseObservationWire accepted rejected rejectedReceiver rejectedBoth of
+            Right wire -> TextIO.putStr wire
+            Left err -> putStrLn ("FAIL: " <> err) >> exitFailure
+        _ -> putStrLn "FAIL: unsupported FSEM-02 observation argument" >> exitFailure
 
 data Fixture = Fixture
   { fxSender :: GrammarV1ComponentDecl
@@ -1352,6 +1380,400 @@ missingSenderResourceBeforeReceiverCollision source = do
       other -> Left ("missing sender masked bad source: " <> show (mode, other))
     | mode <- [Linear, Affine, Unrestricted]]
   acceptedReplay fx
+
+
+-- NON-NORMATIVE FSEM-02: one stale *receiver* Close operand is rejected at
+-- the source layer even when both native payload resource sites are corrupt.
+receiverClosePreemptsNativeFaults :: Text -> Text -> Either String ()
+receiverClosePreemptsNativeFaults source badSource = do
+  fx <- fixture source
+  let valid = "let (done, received) = receive Bytes[8] on endpoint;\n  close done;"
+      invalid = "let (done, received) = receive Bytes[8] on endpoint;\n  close endpoint;"
+      original = fxBefore fx
+      senderKey = fxClientProcess fx
+      receiverKey = fxServerProcess fx
+      senderName = fxPayloadOwner fx
+      receiverName = fxPayloadReceiver fx
+      contexts = communicationProtocolContexts original
+      replay receiver state = checked fx (fxSender fx) receiver state
+  assert (Text.isInfixOf valid source && badSource /= source
+       && Text.replace valid invalid source == badSource)
+    "receiver negative is not the exact one-Close-operand source edit"
+  (_, badSender, badReceiver) <- parseParts badSource
+  assert (badSender == fxSender fx)
+    "receiver-only negative changed the parsed sender"
+  sender <- requireProtocol senderKey original
+  receiver <- requireProtocol receiverKey original
+  let sr = protocolResources sender
+      rr = protocolResources receiver
+      missing = sr { linearBindings = Map.delete senderName (linearBindings sr) }
+      state senderResources receiverResources =
+        original { communicationProtocolContexts =
+          Map.insert senderKey (sender { protocolResources = senderResources }) $
+            Map.insert receiverKey (receiver { protocolResources = receiverResources })
+              contexts }
+      expectBadReceiver st = case replay badReceiver st of
+        Left (RestrictedSourceReceiveError
+          (GrammarV1ComponentReceiveCloseCloseMismatch wanted got)) ->
+            assert (grammarV1ResolvedBinderCoreName wanted == fxServerNext fx
+                 && grammarV1ResolvedBinderCoreName got == fxServerOld fx)
+              "receiver source refusal lost exact successor/predecessor"
+        other -> Left ("stale receiver Close escaped source guard: " <> show other)
+      expectSenderFault err st = case replay (fxReceiver fx) st of
+        Left (RestrictedSourceCoreError
+          (RestrictedMessageSenderResourceError process observed)) ->
+            assert (process == senderKey && observed == err)
+              "sender resource refusal lost exact owner/process diagnostic"
+        other -> Left ("expected sender resource refusal: " <> show other)
+      expectReceiverBusy st = case replay (fxReceiver fx) st of
+        Left (RestrictedSourceCoreError
+          (RestrictedMessageReceiverResourceError process (DuplicateBinding name))) ->
+            assert (process == receiverKey && name == receiverName)
+              "receiver resource refusal lost exact occupied binder"
+        other -> Left ("expected occupied receiver refusal: " <> show other)
+  borrowed <- mapLeft show $ startSharedLoan senderName sr
+  wrongMode <- mapLeft show $ insertBinding Affine senderName payloadTy missing
+  assert (Map.lookup senderName (linearBindings sr) == Just payloadTy
+       && Map.lookup senderName (affineBindings wrongMode) == Just payloadTy
+       && Map.lookup payloadOccurrence (communicationRestrictedOwners original)
+            == Just (senderKey, senderName))
+    "source owner ledger and native resource faults were not isolated"
+  let faults = [("borrowed", borrowed, OwnerBorrowed senderName)
+              ,("missing", missing, UnknownBinding senderName)
+              ,("wrong-mode", wrongMode, WrongStructuralMode senderName Linear Affine)]
+  expectBadReceiver original
+  sequence_ [do
+    occupied <- mapLeft show $ insertBinding mode receiverName TyBool rr
+    expectBadReceiver (state sr occupied)
+    expectReceiverBusy (state sr occupied)
+    sequence_ [do
+      let both = state corrupted occupied
+          senderOnly = state corrupted rr
+      expectBadReceiver both
+      expectBadReceiver senderOnly
+      expectSenderFault fault both
+      expectSenderFault fault senderOnly
+      assert (replay badReceiver both == replay badReceiver both
+           && replay (fxReceiver fx) both == replay (fxReceiver fx) both)
+        ("receiver source/native refusal replay nondeterministic: " <> label)
+      | (label, corrupted, fault) <- faults]
+    | mode <- [Linear, Affine, Unrestricted]]
+  assert (state sr rr == original
+       && replay (fxReceiver fx) original == replay (fxReceiver fx) (state sr rr))
+    "repairing both native contexts failed to reconstruct the accepted state"
+  acceptedReplay fx
+
+-- Simultaneous stale source Close operands are not two independent admits.
+-- The source-checking order is observable; repairing only one source defect
+-- must expose the other, not admit the rendezvous or mutate its Core state.
+dualStaleCloseRepairDiamond :: Text -> Text -> Text -> Text -> Either String ()
+dualStaleCloseRepairDiamond accepted senderOnly receiverOnly both = do
+  let validClose = "  close done;"
+      staleClose = "  close endpoint;"
+  -- Exact source-byte reconstruction establishes that the three negatives
+  -- differ from the accepted fixture only at the stated Close operands.
+  -- Parsed declarations carry source offsets; changing the sender operand's
+  -- length shifts the receiver's locations even when its text is unchanged.
+  case Text.splitOn validClose accepted of
+    [beforeSender, between, afterReceiver] ->
+      assert (senderOnly == beforeSender <> staleClose <> between <> validClose <> afterReceiver
+           && receiverOnly == beforeSender <> validClose <> between <> staleClose <> afterReceiver
+           && both == beforeSender <> staleClose <> between <> staleClose <> afterReceiver)
+        "dual stale-Close witness changed text beyond the two operands"
+    _ -> Left "accepted source does not have exactly two Close operands"
+  fx <- fixture accepted
+  (_, badSender, _) <- parseParts senderOnly
+  (_, receiverFixtureSender, badReceiver) <- parseParts receiverOnly
+  (_, bothSender, bothReceiver) <- parseParts both
+  -- The sender occurs before either changed receiver operand, so its
+  -- location-bearing parsed declaration can be compared exactly.
+  assert (bothSender == badSender && receiverFixtureSender == fxSender fx)
+    "dual stale-Close sender declarations changed unexpectedly"
+  -- Source-exactness above covers the unchanged receiver contents across
+  -- shifted source offsets; both parsed variants are exercised below.
+  let replay sender receiver = checked fx sender receiver (fxBefore fx)
+      expectBadSender actual =
+        case actual of
+          Left (RestrictedSourceSendError
+            (GrammarV1ComponentSendCloseCloseMismatch wanted got)) ->
+              assert (grammarV1ResolvedBinderCoreName wanted == fxClientNext fx
+                   && grammarV1ResolvedBinderCoreName got == fxClientOld fx)
+                "dual source refusal lost sender successor/predecessor"
+          other -> Left ("dual stale sender Close was not rejected first: " <> show other)
+      expectBadReceiver actual =
+        case actual of
+          Left (RestrictedSourceReceiveError
+            (GrammarV1ComponentReceiveCloseCloseMismatch wanted got)) ->
+              assert (grammarV1ResolvedBinderCoreName wanted == fxServerNext fx
+                   && grammarV1ResolvedBinderCoreName got == fxServerOld fx)
+                "source repair lost receiver successor/predecessor"
+          other -> Left ("receiver stale Close was not exposed after sender repair: " <> show other)
+  expectBadSender (replay badSender badReceiver)
+  expectBadSender (replay badSender (fxReceiver fx))
+  expectBadReceiver (replay (fxSender fx) badReceiver)
+  assert (replay badSender badReceiver == replay bothSender bothReceiver
+       && replay (fxSender fx) (fxReceiver fx)
+          == replay receiverFixtureSender (fxReceiver fx))
+    "source repair replay changed pure refusal or accepted transition"
+  acceptedReplay fx
+
+-- FSEM-02 OBS-V1: a *checked finite source/Core observation*, not an
+-- independently extracted interpreter or a general Haskell-to-Rocq theorem.
+-- A verdict is emitted only after actual restricted source checking, exact
+-- error-constructor discrimination and the native ownership/frame replay.
+-- The checked-in Rocq datum is compared byte-for-byte with this output in CI.
+restrictedObservationWire :: Text -> Text -> Text -> Text -> Either String Text
+restrictedObservationWire accepted senderStale receiverStale bothStale = do
+  dualStaleCloseRepairDiamond accepted senderStale receiverStale bothStale
+  fx <- fixture accepted
+  acceptedReplay fx
+  first <- mapLeft show $
+    checked fx (fxSender fx) (fxReceiver fx) (fxBefore fx)
+  (_, badSender, _) <- parseParts senderStale
+  (_, _, badReceiver) <- parseParts receiverStale
+  (_, bothSender, bothReceiver) <- parseParts bothStale
+  let sourceResult sender receiver = checked fx sender receiver (fxBefore fx)
+      senderTag result = case result of
+        Left (RestrictedSourceSendError
+          (GrammarV1ComponentSendCloseCloseMismatch wanted actual)) -> do
+            assert (grammarV1ResolvedBinderCoreName wanted == fxClientNext fx
+                 && grammarV1ResolvedBinderCoreName actual == fxClientOld fx)
+              "OBS-V1 sender Close error lost exact endpoint identities"
+            Right "FSEM02SenderCloseRefused"
+        other -> Left ("OBS-V1 expected exact sender source refusal: " <> show other)
+      receiverTag result = case result of
+        Left (RestrictedSourceReceiveError
+          (GrammarV1ComponentReceiveCloseCloseMismatch wanted actual)) -> do
+            assert (grammarV1ResolvedBinderCoreName wanted == fxServerNext fx
+                 && grammarV1ResolvedBinderCoreName actual == fxServerOld fx)
+              "OBS-V1 receiver Close error lost exact endpoint identities"
+            Right "FSEM02ReceiverCloseRefused"
+        other -> Left ("OBS-V1 expected exact receiver source refusal: " <> show other)
+  sender <- senderTag (sourceResult badSender (fxReceiver fx))
+  receiver <- receiverTag (sourceResult (fxSender fx) badReceiver)
+  both <- senderTag (sourceResult bothSender bothReceiver)
+  stale <- case checked fx (fxSender fx) (fxReceiver fx)
+              (restrictedSourceNext first) of
+    Left (RestrictedSourceCoreError
+      (RestrictedMessageOwnerMismatch key _ _ actualProcess actualName)) -> do
+        assert (key == payloadOccurrence
+             && actualProcess == fxServerProcess fx
+             && actualName == fxPayloadReceiver fx)
+          "OBS-V1 stale replay did not preserve transferred owner identity"
+        Right "FSEM02StaleReplayRefused"
+    other -> Left ("OBS-V1 stale native replay was admitted: " <> show other)
+  let tags = ["FSEM02TransferCommitted", sender, receiver, both, stale]
+  assert (tags == ["FSEM02TransferCommitted", "FSEM02SenderCloseRefused",
+                   "FSEM02ReceiverCloseRefused", "FSEM02SenderCloseRefused",
+                   "FSEM02StaleReplayRefused"])
+    "OBS-V1 event classification changed without a reviewed wire revision"
+  Right $ Text.unlines
+    [ "From Stdlib Require Import Lists.List."
+    , "From Phil.Core Require Import FSEM02RestrictedSourceObservationModel."
+    , "Import ListNotations."
+    , "(* OBS-V1; generated by the real strict Haskell source/Core observer. *)"
+    , "Definition fsem02ObservedEvents : list FSEM02ObservationTag :="
+    , "  [" <> Text.intercalate "; " tags <> "]."
+    ]
+
+
+-- FSEM-02 terminal OBS-V1: extend the real accepted/rejected source/Core
+-- checks with the independently supplied terminal outcome and explicit
+-- endpoint retirement. This is finite producer-tested evidence, not a
+-- general Haskell-to-Rocq simulation or source-granted close authority.
+restrictedTerminalObservationWire :: Text -> Text -> Text -> Text -> Either String Text
+restrictedTerminalObservationWire accepted senderStale receiverStale bothStale = do
+  _ <- restrictedObservationWire accepted senderStale receiverStale bothStale
+  fx <- fixture accepted
+  sourceCloseReplay fx
+  sourceCloseWrongOutcome fx
+  rendezvous <- mapLeft show $
+    checked fx (fxSender fx) (fxReceiver fx) (fxBefore fx)
+  let before = restrictedSourceNext rendezvous
+      incorrect = Outcome "NotDone"
+      closeWith outcome = closeFromSource fx (fxSender fx) (fxReceiver fx)
+        rendezvous clientRole serverRole doneOutcome outcome
+  wrongOutcome <- case closeWith incorrect of
+    Left (RestrictedSourceCloseReceiverCoreError
+      (EndpointClosureProtocolError process
+        (ProtocolSessionError (CloseOutcomeMismatch expected actual)))) -> do
+          assert (process == fxServerProcess fx && expected == doneOutcome
+               && actual == incorrect)
+            "terminal observation lost exact wrong-outcome provenance"
+          Right "FSEM02WrongTerminalOutcomeRefused"
+    other -> Left ("terminal observation admitted wrong outcome: " <> show other)
+  closed <- mapLeft show (closeWith doneOutcome)
+  let after = restrictedSourceCloseNext closed
+      ownersBefore = communicationRestrictedOwners before
+      ownersAfter = communicationRestrictedOwners after
+  assert (restrictedSourceClosedSender closed == fxClientNext fx
+       && restrictedSourceClosedReceiver closed == fxServerNext fx
+       && ownersAfter == Map.delete clientEndpointOccurrence
+            (Map.delete serverEndpointOccurrence ownersBefore)
+       && Map.lookup payloadOccurrence ownersAfter
+            == Just (fxServerProcess fx, fxPayloadReceiver fx)
+       && Map.lookup spectatorOccurrence ownersAfter
+            == Map.lookup spectatorOccurrence ownersBefore)
+    "terminal observation violated endpoint retirement or spectator frame"
+  staleClose <- case closeFromSource fx (fxSender fx) (fxReceiver fx)
+    (rendezvous { restrictedSourceNext = after })
+    clientRole serverRole doneOutcome doneOutcome of
+      Left (RestrictedSourceCloseSenderCoreError
+        (EndpointClosureOccurrenceUnknown process endpoint)) -> do
+          assert (process == fxClientProcess fx && endpoint == fxClientNext fx)
+            "terminal observation stale retry lost the consumed sender identity"
+          Right "FSEM02TerminalReplayRefused"
+      other -> Left ("terminal observation replayed retired endpoint: " <> show other)
+  let tags = [wrongOutcome, "FSEM02TerminalClosed", staleClose]
+  assert (tags == ["FSEM02WrongTerminalOutcomeRefused",
+                   "FSEM02TerminalClosed", "FSEM02TerminalReplayRefused"])
+    "terminal observation tags changed without a reviewed wire revision"
+  Right $ Text.unlines
+    [ "From Stdlib Require Import Lists.List."
+    , "From Phil.Core Require Import FSEM02TerminalObservationModel."
+    , "Import ListNotations."
+    , "(* Terminal OBS-V1; actual source/Core observation, bounded. *)"
+    , "Definition fsem02TerminalObservedEvents : list FSEM02TerminalObservationTag :="
+    , "  [" <> Text.intercalate "; " tags <> "]."
+    ]
+
+-- NON-NORMATIVE FSEM-02: source/Core Close-order observation. The existing
+-- complete source and its three minimally rejected variants are rechecked
+-- before observing both real native closing orders. Process, network,
+-- protocol, outcome and owner occurrence authority are separate premises.
+restrictedCloseOrderObservationWire :: Text -> Text -> Text -> Text -> Either String Text
+restrictedCloseOrderObservationWire accepted senderStale receiverStale bothStale = do
+  _ <- restrictedTerminalObservationWire accepted senderStale receiverStale bothStale
+  fx <- fixture accepted
+  sourceCloseDiamondReplay fx
+  diamond <- mapLeft show $
+    sourceCloseDiamondFrom fx (fxSender fx) (fxReceiver fx)
+      (fxBefore fx) doneOutcome doneOutcome
+  let senderFirst = restrictedSourceCloseNext (restrictedSourceDiamondForward diamond)
+      receiverFirst = restrictedSourceDiamondReverse diamond
+      receiverHalf = restrictedSourceDiamondReceiverFirst diamond
+      afterTransfer = restrictedSourceNext (restrictedSourceDiamondRendezvous diamond)
+      ownersTransfer = communicationRestrictedOwners afterTransfer
+      ownersHalf = communicationRestrictedOwners receiverHalf
+      ownersAfter = communicationRestrictedOwners senderFirst
+      revision = binaryProtocolInstanceRevision (fxInstance fx)
+      checkRetired st process endpoint role =
+        case closeProcessEndpointState (fxNetwork fx) st
+            process endpoint revision role doneOutcome of
+          Left (EndpointClosureOccurrenceUnknown actualProcess actualEndpoint) -> do
+            assert (actualProcess == process && actualEndpoint == endpoint)
+              "Close-order OBS lost exact retired endpoint/process identity"
+            Right "FSEM02StaleEndpointRefused"
+          other -> Left ("Close-order OBS unexpectedly admitted retired endpoint: " <> show other)
+  assert (senderFirst == receiverFirst
+       && Map.lookup serverEndpointOccurrence ownersHalf == Nothing
+       && Map.lookup clientEndpointOccurrence ownersHalf
+            == Map.lookup clientEndpointOccurrence ownersTransfer
+       && Map.lookup payloadOccurrence ownersHalf
+            == Map.lookup payloadOccurrence ownersTransfer
+       && Map.lookup spectatorOccurrence ownersHalf
+            == Map.lookup spectatorOccurrence ownersTransfer
+       && ownersAfter == Map.delete clientEndpointOccurrence
+            (Map.delete serverEndpointOccurrence ownersTransfer)
+       && Map.lookup payloadOccurrence ownersAfter
+            == Just (fxServerProcess fx, fxPayloadReceiver fx)
+       && Map.lookup spectatorOccurrence ownersAfter
+            == Map.lookup spectatorOccurrence ownersTransfer)
+    "Close-order OBS diverged, resurrected a predecessor or lost framed owners"
+  senderAfterForward <- checkRetired senderFirst
+    (fxClientProcess fx) (fxClientNext fx) clientRole
+  receiverAfterForward <- checkRetired senderFirst
+    (fxServerProcess fx) (fxServerNext fx) serverRole
+  senderAfterReverse <- checkRetired receiverFirst
+    (fxClientProcess fx) (fxClientNext fx) clientRole
+  receiverAfterReverse <- checkRetired receiverFirst
+    (fxServerProcess fx) (fxServerNext fx) serverRole
+  let tags = ["FSEM02SenderFirstConverged", "FSEM02ReceiverFirstConverged",
+              senderAfterForward, receiverAfterForward,
+              senderAfterReverse, receiverAfterReverse]
+  assert (tags == ["FSEM02SenderFirstConverged", "FSEM02ReceiverFirstConverged",
+                   "FSEM02StaleEndpointRefused", "FSEM02StaleEndpointRefused",
+                   "FSEM02StaleEndpointRefused", "FSEM02StaleEndpointRefused"])
+    "Close-order OBS tags changed without a reviewed revision"
+  Right $ Text.unlines
+    [ "From Stdlib Require Import Lists.List."
+    , "From Phil.Core Require Import FSEM02CloseOrderObservationModel."
+    , "Import ListNotations."
+    , "(* Close-order OBS-V1; checked finite Haskell source/Core observation. *)"
+    , "Definition fsem02CloseOrderObservedEvents : list FSEM02CloseOrderTag :="
+    , "  [" <> Text.intercalate "; " tags <> "]."
+    ]
+
+
+-- NON-NORMATIVE FSEM-02 half-Close OBS-V1. Unlike the final-state stale
+-- probes, these retries happen between the two externally authorized Closes.
+-- Rejecting one used successor must not retire its still-live peer. The
+-- immutable rejected input can still execute its authorized peer suffix.
+restrictedHalfCloseObservationWire :: Text -> Text -> Text -> Text -> Either String Text
+restrictedHalfCloseObservationWire accepted senderStale receiverStale bothStale = do
+  _ <- restrictedCloseOrderObservationWire accepted senderStale receiverStale bothStale
+  fx <- fixture accepted
+  diamond <- mapLeft show $
+    sourceCloseDiamondFrom fx (fxSender fx) (fxReceiver fx)
+      (fxBefore fx) doneOutcome doneOutcome
+  let afterTransfer = restrictedSourceNext (restrictedSourceDiamondRendezvous diamond)
+      senderFinal = restrictedSourceCloseNext (restrictedSourceDiamondForward diamond)
+      receiverFinal = restrictedSourceDiamondReverse diamond
+      receiverHalf = restrictedSourceDiamondReceiverFirst diamond
+      revision = binaryProtocolInstanceRevision (fxInstance fx)
+      ownersBefore = communicationRestrictedOwners afterTransfer
+      ownersReceiverHalf = communicationRestrictedOwners receiverHalf
+      tryClose st process endpoint role =
+        closeProcessEndpointState (fxNetwork fx) st
+          process endpoint revision role doneOutcome
+      refuseRetired st process endpoint role =
+        case tryClose st process endpoint role of
+          Left (EndpointClosureOccurrenceUnknown actualProcess actualEndpoint) -> do
+            assert (actualProcess == process && actualEndpoint == endpoint)
+              "half-Close OBS stale retry lost exact process/endpoint identity"
+            Right ()
+          other -> Left ("half-Close OBS admitted stale retry: " <> show other)
+  senderHalf <- mapLeft show $
+    tryClose afterTransfer (fxClientProcess fx) (fxClientNext fx) clientRole
+  let ownersSenderHalf = communicationRestrictedOwners senderHalf
+  assert (Map.lookup clientEndpointOccurrence ownersSenderHalf == Nothing
+       && Map.lookup serverEndpointOccurrence ownersSenderHalf
+            == Map.lookup serverEndpointOccurrence ownersBefore
+       && Map.lookup serverEndpointOccurrence ownersReceiverHalf == Nothing
+       && Map.lookup clientEndpointOccurrence ownersReceiverHalf
+            == Map.lookup clientEndpointOccurrence ownersBefore
+       && Map.lookup payloadOccurrence ownersSenderHalf
+            == Map.lookup payloadOccurrence ownersBefore
+       && Map.lookup payloadOccurrence ownersReceiverHalf
+            == Map.lookup payloadOccurrence ownersBefore
+       && Map.lookup spectatorOccurrence ownersSenderHalf
+            == Map.lookup spectatorOccurrence ownersBefore
+       && Map.lookup spectatorOccurrence ownersReceiverHalf
+            == Map.lookup spectatorOccurrence ownersBefore)
+    "half-Close OBS lost the still-live peer or changed payload/spectator ownership"
+  refuseRetired senderHalf (fxClientProcess fx) (fxClientNext fx) clientRole
+  completedSenderFirst <- mapLeft show $
+    tryClose senderHalf (fxServerProcess fx) (fxServerNext fx) serverRole
+  refuseRetired receiverHalf (fxServerProcess fx) (fxServerNext fx) serverRole
+  completedReceiverFirst <- mapLeft show $
+    tryClose receiverHalf (fxClientProcess fx) (fxClientNext fx) clientRole
+  assert (completedSenderFirst == senderFinal
+       && completedReceiverFirst == receiverFinal
+       && completedSenderFirst == completedReceiverFirst
+       && communicationRestrictedOwners completedSenderFirst
+            == Map.delete clientEndpointOccurrence
+                 (Map.delete serverEndpointOccurrence ownersBefore))
+    "half-Close OBS retry changed the authorized suffix or final Core state"
+  let tags = ["FSEM02SenderHalfReplayRefused", "FSEM02SenderPeerClosed",
+              "FSEM02ReceiverHalfReplayRefused", "FSEM02ReceiverPeerClosed"]
+  Right $ Text.unlines
+    [ "From Stdlib Require Import Lists.List."
+    , "From Phil.Core Require Import FSEM02HalfCloseObservationModel."
+    , "Import ListNotations."
+    , "(* Half-close OBS-V1; checked finite Haskell source/Core observation. *)"
+    , "Definition fsem02HalfCloseObservedEvents : list FSEM02HalfCloseTag :="
+    , "  [" <> Text.intercalate "; " tags <> "]."
+    ]
 
 wrongSessionHeadRejects :: Fixture -> Either String ()
 wrongSessionHeadRejects fx = do

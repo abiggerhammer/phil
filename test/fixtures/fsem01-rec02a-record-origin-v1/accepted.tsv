@@ -1,0 +1,3 @@
+phil-record-origin-v1	grammar-v1	test/fixtures/fsem01-rec01-source-record-v1/accepted-full.phil	5a7853282fdf151245a8def87242e1edeabd7253f97de023bbc822b1e57b3593
+record	packet-site	decl.fsem01.rec02a.packet	0	60
+fn	unpack-site	decl.fsem01.rec02a.unpack	60	179

@@ -69,6 +69,8 @@ main = do
         (sourcePingJointTerminalCloseDiamond accepted)
     , test "FSEM-02 source Ping half-Close peer nominal refusal keeps committed state and valid retry"
         (sourcePingJointCloseRefusalRetry accepted)
+    , test "FSEM-02 paired local Ping with independent Client/Server loans equals joint Core state; stale peers reject"
+        (sourcePingPairedLocalJointEquality accepted stale)
     , test "FSEM-02 source stale close rejects with exact binder mismatch"
         (sourceStaleCloseRejected stale)
     , test "FSEM-02 mismatched session head rejects with precise action error"
@@ -3759,3 +3761,108 @@ assert condition why = if condition then Right () else Left why
 
 mapLeft :: (a -> b) -> Either a c -> Either b c
 mapLeft f = either (Left . f) Right
+
+-- The finite two-sided bridge checks ACTUAL checked source Ping projections,
+-- not just two matching model tags. On the same separately instantiated
+-- protocol and activated process network, the pure production joint result
+-- must equal the complete pair of independent local Core checkProtocolAction
+-- successor contexts, including an unrelated outstanding affine loan.
+-- An invalid peer never yields a partially advanced pair.
+-- The source-level negative is deliberately a minimally changed close operand.
+sourcePingPairedLocalJointEquality :: Text.Text -> Text.Text -> Either String ()
+sourcePingPairedLocalJointEquality accepted stale = do
+  sourceStaleCloseRejected stale
+  plans <- sourcePlans accepted
+  (network, clientProcess, serverProcess) <- sourcePingJointNetwork
+  let revision = sourceProtocolInstance plans
+      clientPlan = sourceClientPlan plans
+      serverPlan = sourceServerPlan plans
+      clientOld = grammarV1ResolvedBinderCoreName
+        (checkedComponentSendEndpoint clientPlan)
+      clientNext = grammarV1ResolvedBinderCoreName
+        (checkedComponentSendSuccessor clientPlan)
+      serverOld = grammarV1ResolvedBinderCoreName
+        (checkedComponentReceiveEndpoint serverPlan)
+      serverNext = grammarV1ResolvedBinderCoreName
+        (checkedComponentReceiveSuccessor serverPlan)
+      clientSpectator = Name "fsem02.paired.bridge.client.affine.loan"
+      serverSpectator = Name "fsem02.paired.bridge.server.affine.loan"
+      clientSide = ProcessRendezvousSide clientProcess clientOld clientNext
+        revision clientRole
+      serverSide = ProcessRendezvousSide serverProcess serverOld serverNext
+        revision serverRole
+      request = JointProcessRendezvous
+        (SendReceiveRendezvous clientSide serverSide)
+      runJoint contexts = checkProcessCommunication
+        (sourceBinaryInstance plans) network contexts request
+  assert (sourceServerHead plans == dualSession (sourceClientHead plans)
+       && clientProcess /= serverProcess
+       && clientOld /= clientNext && serverOld /= serverNext
+       && clientSpectator /= clientOld && clientSpectator /= clientNext
+       && serverSpectator /= serverOld && serverSpectator /= serverNext
+       && clientSpectator /= serverSpectator)
+    "paired bridge has invalid independently projected source identities"
+  rawClient <- mapLeft show $ insertProtocolEndpoint
+    clientOld revision clientRole (sourceClientHead plans) emptyProtocolContext
+  clientFramed <- mapLeft show $
+    insertBinding Affine clientSpectator (TyUInt 16) (protocolResources rawClient)
+  clientBorrowed <- mapLeft show $ startSharedLoan clientSpectator clientFramed
+  let clientBefore = rawClient { protocolResources = clientBorrowed }
+  rawServer <- mapLeft show $ insertProtocolEndpoint
+    serverOld revision serverRole (sourceServerHead plans) emptyProtocolContext
+  serverFramed <- mapLeft show $
+    insertBinding Affine serverSpectator (TyUInt 8) (protocolResources rawServer)
+  serverBorrowed <- mapLeft show $ startSharedLoan serverSpectator serverFramed
+  let serverBefore = rawServer { protocolResources = serverBorrowed }
+      before = Map.fromList
+        [(clientProcess, clientBefore), (serverProcess, serverBefore)]
+  senderLocal <- mapLeft show $ checkProtocolAction
+    (ProtocolSendRequest clientOld clientNext revision clientRole) clientBefore
+  receiverLocal <- mapLeft show $ checkProtocolAction
+    (ProtocolReceiveRequest serverOld serverNext revision serverRole) serverBefore
+  exactSuccessor clientOld clientNext revision clientRole senderLocal
+  exactSuccessor serverOld serverNext revision serverRole receiverLocal
+  let expected = Map.insert clientProcess (checkedProtocolContext senderLocal) $
+        Map.insert serverProcess (checkedProtocolContext receiverLocal) before
+  joint <- mapLeft show $ runJoint before
+  assert (joint == expected && Map.keysSet joint == Map.keysSet before)
+    "joint Core Ping differs from full independent pair of local successor contexts"
+  clientAfter <- maybe (Left "paired bridge lost Client") Right
+    (Map.lookup clientProcess joint)
+  serverAfter <- maybe (Left "paired bridge lost Server") Right
+    (Map.lookup serverProcess joint)
+  assert (affineBindings (protocolResources clientAfter) == affineBindings clientBorrowed
+       && sharedLoans (protocolResources clientAfter) == sharedLoans clientBorrowed
+       && affineBindings (protocolResources serverAfter) == affineBindings serverBorrowed
+       && sharedLoans (protocolResources serverAfter) == sharedLoans serverBorrowed)
+    "joint/local Ping equality dropped one peer's independent affine spectator loan"
+
+  let missingClient = clientBefore
+        { protocolEndpoints =
+            Map.delete clientOld (protocolEndpoints clientBefore) }
+      missingServer = serverBefore
+        { protocolEndpoints =
+            Map.delete serverOld (protocolEndpoints serverBefore) }
+  case runJoint (Map.insert clientProcess missingClient before) of
+    Left (RendezvousEndpointNotOwnedByProcess p name) ->
+      assert (p == clientProcess && name == clientOld)
+        "paired bridge Client stale rejection lost exact process/endpoint"
+    other -> Left ("paired bridge Client predecessor unexpectedly progressed: "
+                  <> show other)
+  case runJoint (Map.insert serverProcess missingServer before) of
+    Left (RendezvousEndpointNotOwnedByProcess p name) ->
+      assert (p == serverProcess && name == serverOld)
+        "paired bridge Server stale rejection lost exact process/endpoint"
+    other -> Left ("paired bridge Server predecessor unexpectedly progressed: "
+                  <> show other)
+  -- Both rejected attempts return Left, hence no partial pair state. Replaying
+  -- the untouched original state must reproduce the exact accepted result.
+  retried <- mapLeft show $ runJoint before
+  assert (retried == expected)
+    "refusing either stale peer changed the authorized full paired replay"
+  case runJoint joint of
+    Left (RendezvousEndpointNotOwnedByProcess p name) ->
+      assert (p == clientProcess && name == clientOld)
+        "paired bridge duplicate joint Ping lost source predecessor identity"
+    other -> Left ("paired bridge accepted consumed joint predecessors: "
+                  <> show other)

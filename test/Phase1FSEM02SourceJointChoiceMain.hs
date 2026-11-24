@@ -8,7 +8,7 @@ import qualified Data.Map.Strict as Map
 import Data.Text (Text)
 import qualified Data.Text.IO as TextIO
 import Phil.Core.CheckedBindingMode (CheckedTypeMode (..))
-import Phil.Core.Context (ResourceContext (..), insertBinding)
+import Phil.Core.Context (ResourceContext (..), insertBinding, startSharedLoan)
 import Phil.Core.Generic (strictGenericInstantiationPolicy)
 import Phil.Core.Process
 import Phil.Core.ProcessActivation
@@ -40,6 +40,10 @@ main = do
   outcomes <- sequence
     [ test "two source Go arms rendezvous, consuming two exact predecessors" (accepted go offer "Go" (Outcome "Done"))
     , test "two source Cancel arms rendezvous, preserving terminal outcomes" (accepted cancel offer "Cancel" (Outcome "Cancel"))
+    , test "two independent Go local Choice steps equal the entire joint Core state with borrowed spectator"
+        (pairedLocalChoiceJointEquality go offer "Go" (Outcome "Done"))
+    , test "two independent Cancel local Choice steps equal the joint state, refusing stale and mismatched peers"
+        (pairedLocalChoiceJointEquality cancel offer "Cancel" (Outcome "Cancel"))
     , test "external peer mismatch rejects before any local step" (peerMismatch go offer)
     , test "bad source offer body rejects exact class, not opaque admission" (wrongBodyRejected go offer wrongBody)
     , test "source unlisted select label rejected by production offer projection" (unlistedSourceLabelRejected unknown offer)
@@ -345,6 +349,91 @@ accepted client server label outcome = do
     expected revision clientRole
   checkSide next (fxServerProcess fx) (fxServerOld fx) serverNext
     expected revision serverRole
+
+
+-- Non-normative exact finite correspondence: the source-checked Select and
+-- Offer heads are executed by the production local checker independently.
+-- Their complete native contexts must equal the separately executed joint
+-- ProcessRendezvous successor, including an untouched affine shared loan.
+-- The external peer label, network and nominal protocol instance are premises.
+pairedLocalChoiceJointEquality :: Text -> Text -> Text -> Outcome -> Either String ()
+pairedLocalChoiceJointEquality client server label outcome = do
+  fx <- fixture client server
+  let revision = binaryProtocolInstanceRevision (fxInstance fx)
+      clientKey = fxClientProcess fx
+      serverKey = fxServerProcess fx
+      oldClient = fxClientOld fx
+      nextClient = fxClientNext fx
+      oldServer = fxServerOld fx
+      selectedReq = ProtocolSelectRequest oldClient nextClient revision clientRole label
+      offeredReq = ProtocolOfferRequest oldServer serverNext revision serverRole label
+      opposite = if label == "Go" then "Cancel" else "Go"
+  clientRaw <- maybe (Left "paired choice missing client context") Right
+    (Map.lookup clientKey (fxContexts fx))
+  serverRaw <- maybe (Left "paired choice missing server context") Right
+    (Map.lookup serverKey (fxContexts fx))
+  loaned <- mapLeft show $ startSharedLoan spectatorName
+    (protocolResources clientRaw)
+  -- This independently supplied Server spectator is not source-derived authority.
+  -- Both locally checked transitions and the joint Core transition must frame
+  -- BOTH active loans, including the loan on the receiving side.
+  let serverSpectator = Name "fsem02.server.borrowed-spectator"
+  serverWithSpectator <- mapLeft show $ insertBinding Affine serverSpectator
+    (TyOpaque "ServerSpectator") (protocolResources serverRaw)
+  serverLoaned <- mapLeft show $ startSharedLoan serverSpectator serverWithSpectator
+  let clientBefore = clientRaw { protocolResources = loaned }
+      serverBefore = serverRaw { protocolResources = serverLoaned }
+      before = Map.insert clientKey clientBefore $
+        Map.insert serverKey serverBefore (fxContexts fx)
+  selected <- mapLeft show (checkProtocolAction selectedReq clientBefore)
+  offered <- mapLeft show (checkProtocolAction offeredReq serverBefore)
+  let expected = Map.insert clientKey (checkedProtocolContext selected) $
+        Map.insert serverKey (checkedProtocolContext offered) before
+  jointResult <- mapLeft show (joint fx label before)
+  let actual = jointChoiceContexts jointResult
+  assert (checkedComponentSelectLabel (jointChoiceSelectedSource jointResult) == label
+       && replayedComponentOfferLabel (jointChoiceCheckedOffer jointResult) == label
+       && actual == expected
+       && Map.keysSet actual == Map.keysSet before)
+    "paired source Choice/joint replay changed exact local successor maps or selected label"
+  checkSide actual clientKey oldClient nextClient
+    (TyEndpoint (End outcome)) revision clientRole
+  checkSide actual serverKey oldServer serverNext
+    (TyEndpoint (End outcome)) revision serverRole
+  clientAfter <- maybe (Left "paired choice joint result lost client") Right
+    (Map.lookup clientKey actual)
+  assert (affineBindings (protocolResources clientAfter) == affineBindings loaned
+       && sharedLoans (protocolResources clientAfter) == sharedLoans loaned)
+    "paired Choice/joint equality dropped the Client borrowed spectator"
+  serverAfter <- maybe (Left "paired Choice/joint lost the Server spectator context") Right
+    (Map.lookup serverKey actual)
+  assert (affineBindings (protocolResources serverAfter) == affineBindings serverLoaned
+       && sharedLoans (protocolResources serverAfter) == sharedLoans serverLoaned)
+    "paired Choice/joint equality dropped the independent Server borrowed spectator"
+  case checkProtocolAction selectedReq (checkedProtocolContext selected) of
+    Left (ProtocolEndpointUnknown name) ->
+      assert (name == oldClient)
+        "paired Choice second local Select rejected with wrong stale endpoint"
+    other -> Left ("paired Choice reused a consumed local Client predecessor: " <> show other)
+  case checkProtocolAction offeredReq (checkedProtocolContext offered) of
+    Left (ProtocolEndpointUnknown name) ->
+      assert (name == oldServer)
+        "paired Choice second local Offer rejected with wrong stale endpoint"
+    other -> Left ("paired Choice reused a consumed local Server predecessor: " <> show other)
+  case joint fx label actual of
+    Left (GrammarV1JointChoiceOfferSourceError
+      (GrammarV1OfferReplayProtocolError (ProtocolEndpointUnknown name))) ->
+        assert (name == oldServer)
+          "paired Choice rejected joint replay with wrong source Server predecessor"
+    other -> Left ("paired Choice accepted stale joint predecessor: " <> show other)
+  case joint fx opposite before of
+    Left (GrammarV1JointChoicePeerLabelMismatch selectedLabel peerLabel) ->
+      assert (selectedLabel == label && peerLabel == opposite)
+        "paired Choice external label mismatch lost source/peer identity"
+    other -> Left ("paired Choice accepted a mismatched external peer label: " <> show other)
+  replayed <- mapLeft show (joint fx label before)
+  assert (jointChoiceContexts replayed == expected)
+    "paired Choice negative attempts changed replay of original valid joint state"
 
 checkSide :: Map.Map ProcessKey ProtocolContext -> ProcessKey -> Name -> Name
           -> Ty -> ProtocolInstanceRevision -> ProtocolRoleKey -> Either String ()

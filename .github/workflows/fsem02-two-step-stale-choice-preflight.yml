@@ -1,0 +1,95 @@
+name: FSEM-02 Two Step Stale Choice Preflight
+
+on:
+  push:
+    branches:
+      - formal-semantics/fsem02-two-step-cross-family-stale-choice
+    paths:
+      - 'proof/Phil/Core/FSEM02TwoStepStaleChoicePrefix.v'
+      - 'docs/phase-1/formal-semantics-two-step-stale-choice-fsem02-v1.md'
+      - 'docs/phase-1/typing-and-semantics-reader-guide-v1.md'
+      - '.github/workflows/fsem02-two-step-stale-choice-preflight.yml'
+  pull_request:
+    paths:
+      - 'proof/Phil/Core/FSEM02TwoStepStaleChoicePrefix.v'
+      - 'docs/phase-1/formal-semantics-two-step-stale-choice-fsem02-v1.md'
+      - 'docs/phase-1/typing-and-semantics-reader-guide-v1.md'
+      - '.github/workflows/fsem02-two-step-stale-choice-preflight.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  strict-native:
+    name: Strict Haskell accepted/rejected source Ping and Choice witnesses
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: haskell-actions/setup@v2
+        with:
+          ghc-version: '9.6.7'
+          cabal-version: 'latest'
+          cabal-update: false
+      - run: bash scripts/ci/cabal-update-retry.sh
+      - run: cabal build lib:phil-core --ghc-options=-Werror
+      - name: Independently run production Ping and Choice accepted/rejected witnesses
+        shell: bash
+        run: |
+          set -euo pipefail
+          for file in test/Phase1FSEM02ProtocolProgressionMain.hs test/Phase1FSEM02SourceJointChoiceMain.hs; do
+            cabal exec -- ghc -isrc -Wall -Werror -fno-code "$file"
+            cabal exec -- runghc -isrc -Wall -Werror "$file"
+            sha256sum "$file"
+          done
+          sha256sum test/fixtures/fsem02-protocol-progression-v1/*.phil
+          sha256sum test/fixtures/fsem02-source-choice-v1/*.phil
+          sha256sum test/fixtures/fsem02-source-joint-choice-v1/*.phil
+          sha256sum test/fixtures/fsem02-source-offer-replay-v1/*.phil
+
+  rocq:
+    name: Rocq 9.2 stale Choice selector and offer committed-prefix proofs
+    runs-on: ubuntu-24.04
+    container:
+      image: rocq/rocq-prover:9.2.0
+      options: --user root
+    steps:
+      - uses: actions/checkout@v4
+      - name: Compile imported bridges, two-step model, and stale-prefix lemmas
+        shell: bash
+        run: |
+          set -euo pipefail
+          export PATH="/home/rocq/.opam/$COMPILER/bin:$PATH"
+          for file in \
+            proof/Phil/Core/Syntax.v \
+            proof/Phil/Core/Context.v \
+            proof/Phil/Core/ContextJoin.v \
+            proof/Phil/Core/ProcessJoin.v \
+            proof/Phil/Core/ProcessTerminal.v \
+            proof/Phil/Core/ArchitectureIdentity.v \
+            proof/Phil/Core/ArchitectureInstantiation.v \
+            proof/Phil/Core/ProviderReplacementQualification.v \
+            proof/Phil/Core/ArchitectureRealization.v \
+            proof/Phil/Systems/FactDisposition.v \
+            proof/Phil/Assurance/ValidityScope.v \
+            proof/Phil/Core/SystemsStageClosure.v \
+            proof/Phil/Core/SystemsGenericLowering.v \
+            proof/Phil/Core/ConcurrencySemantics.v \
+            proof/Phil/Core/SessionStep.v \
+            proof/Phil/Core/FSEM02ProtocolHeadProgression.v \
+            proof/Phil/Core/FSEM02JointSourceChoice.v \
+            proof/Phil/Core/FSEM02PairedLocalJointBridge.v \
+            proof/Phil/Core/FSEM02PairedChoiceJointBridge.v \
+            proof/Phil/Core/FSEM02PairedSourceFamilyEnvelope.v \
+            proof/Phil/Core/FSEM02PairedTwoStepOutcomes.v \
+            proof/Phil/Core/FSEM02TwoStepStalePrefix.v \
+            proof/Phil/Core/FSEM02TwoStepStaleChoicePrefix.v
+          do
+            rocq c -Q proof/Phil Phil "$file"
+          done
+          if grep -nE '^[[:space:]]*(Admitted[.]|Axiom[[:space:]]|Parameter[[:space:]])' \
+              proof/Phil/Core/FSEM02TwoStepStaleChoicePrefix.v; then
+            echo "New unproved FSEM-02 assumption" >&2
+            exit 1
+          fi
+          sha256sum proof/Phil/Core/FSEM02TwoStepStaleChoicePrefix.v \
+            proof/Phil/Core/FSEM02TwoStepStaleChoicePrefix.vo

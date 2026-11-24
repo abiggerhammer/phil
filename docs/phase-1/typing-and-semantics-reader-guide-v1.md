@@ -26,6 +26,10 @@ There are several layers of authority; they must not be conflated.
 | Source implementation and conformance | `src/Phil/Surface/`, `src/Phil/Core/`, `test/`, and `app/`; acceptance must be distinguished from syntactic parse success. |
 | Current completion status | Project Logic Ledger and Conformance Matrix, plus exact-commit proof/certification and CI evidence. Historical `docs/phase-1/*-v1.md` slice notes are **not** current status authorities: see the [Phase 1 notes README](README.md). |
 
+The [non-normative FSEM-02 paired Ping two-sided loan frame](formal-semantics-paired-ping-dual-loan-frame-fsem02-v1.md) extends checked local-versus-joint Send/Receive equality to independent active Client and Server affine spectators. A conditional Rocq theorem frames both abstract loan sets and arbitrary unrelated linear bindings without proving universal native Map/Set refinement or supplying rendezvous authority.
+
+The [non-normative FSEM-02 two-step stale Choice suffix](formal-semantics-two-step-stale-choice-fsem02-v1.md) proves that a later Select/Offer cannot reuse either predecessor consumed by an independently admitted Ping or Choice model step, and that its refusal retains the actual committed first-step contexts; strict native accepted/rejected source witnesses are independently replayed, without claiming a combined source program or general implementation refinement.
+
 **Suggested reading route:** [Phase 1 Tour](../tutorials/tour-phase1.md)
 → this guide → the canonical grammar → the judgment/proof links below
 → the specific proof and implementation correspondence for any claim you want
@@ -34,6 +38,8 @@ to challenge.
 The [non-normative FSEM-02 simultaneous authority diagnostic-priority gate](formal-semantics-dual-authority-error-priority-fsem02-v1.md) tests actual source Close/type rejection before forged activation and protocol identity, exact owner-mismatch precedence when both external premises are wrong, and the receiver-binder mismatch exposed by repairing only the sender owner. Its six conditional Rocq classifier lemmas do not confer transfer authority or Haskell-to-Rocq refinement.
 
 The bounded [FSEM-02 projected sender/receiver head versus protocol-binder diagnostic gate](formal-semantics-projected-head-binder-priority-fsem02-v1.md) checks live production sender-first/receiver-next head-resource failures before an independently forged protocol binder, precise owner/head/binder repair ordering, invalid source preemption and conditional Rocq gate lemmas. It does not confer nominal or message authority or establish universal refinement.
+
+The [non-normative FSEM-02 receiver Close priority gate](formal-semantics-receiver-close-native-priority-fsem02-v1.md) checks exact receiver source rejection before nine hostile native sender/receiver resource fault combinations, independent repairs and nine conditional Rocq refusal and framed-success laws. It grants no external authority or universal implementation refinement.
 
 The [FSEM-02 valid-ledger/missing-sender native refusal](formal-semantics-missing-sender-resource-fsem02-v1.md) separates owner-index evidence from actual Linear sender Bytes[8] presence. Three cross-mode destination collisions expose exact sender UnknownBinding before receiver DuplicateBinding, with independent repairs, accepted/rejected source priority and eight conditional Rocq gates. Neither the model nor the finite tests establish general source-to-Core refinement.
 
@@ -544,3 +550,81 @@ The bounded [FSEM-02 dual projected-head plus independent resource fault ladder]
 The bounded [FSEM-02 dual projected-head and dual-resource four-fault ladder](formal-semantics-source-ping-adaptive-dual-head-dual-resource-ladder-fsem02-v1.md) checks 576 independently injected four-fault native Haskell states after an authorized partial Close. It demands ordered Client head, Server head, Client resource, Server resource diagnostics before exact original-suffix replay following four separate repairs. Five conditional finite-carrier Rocq lemmas retain all external authority and implementation-refinement premises; no normative completion is asserted.
 
 The bounded [FSEM-02 typed sender-resource versus occupied receiver priority](formal-semantics-typed-sender-resource-priority-fsem02-v1.md) tests the production checked restricted source against a forged U8 sender payload and occupied Bytes[8] receiver slot, exact type-error-before-duplicate-binding precedence, source-error priority, and accepted owner/endpoint/affine replay after separately restoring resources. Six conditional Rocq finite-gate theorems are not native Map/Ty refinement or new activation authority. FSEM-02 remains non-normative.
+
+
+### FSEM-02 dual stale-source repair control (non-normative)
+
+[Independent sender/receiver stale Close repair diamond](formal-semantics-dual-source-close-repair-fsem02-v1.md) combines complete accepted and minimally rejected Grammar-v1 source witnesses with exact source-error priority and conditional finite Rocq repair/no-successor theorems. This is not general Haskell-to-Rocq refinement or FSEM-02 closure.
+
+### FSEM-02 checked restricted source observation wire (non-normative)
+
+The [OBS-V1 restricted source/Core witness](formal-semantics-restricted-observation-wire-fsem02-v1.md) byte-compares five actual production checker verdicts with a finite Rocq 9.2 observation artifact. It binds concrete accepted/rejected source checks to proof-side data without claiming general producer fidelity, semantic authority or universal refinement.
+
+
+### FSEM-02 Close-order source/Core observation (non-normative)
+
+The [Close-order OBS-V1 witness](formal-semantics-close-order-observation-wire-fsem02-v1.md) compares native source/Core sender-first and receiver-first terminal Close states for exact equality, verifies the intermediate receiver-only state and checks four actual stale endpoint refusals. Its Haskell-generated six-event datum is byte-matched with separately compiled Rocq evidence, alongside conditional finite-owner commutation/frame/refusal laws. The source fixtures and external authority are unchanged; universal refinement and global disposal correctness remain unproved.
+
+### FSEM-02 terminal source/Core observation (non-normative)
+
+The [Terminal OBS-V1 witness](formal-semantics-terminal-observation-wire-fsem02-v1.md) extends the exact source/Core OBS-V1 fixtures through independently supplied terminal outcomes, successively retired endpoint occurrence keys and an exact post-close stale retry refusal. It proves only three finite Rocq observations, not general implementation refinement, terminal authority or FSEM-02 completion.
+
+
+### FSEM-02 half-Close source/Core observation (non-normative)
+
+The [Half-Close OBS-V1 witness](formal-semantics-half-close-observation-wire-fsem02-v1.md) tests exact retired-successor refusal **at the intermediate half-closed state** in both Close orders, then verifies that the still-live peer can close without rollback, with unchanged payload/spectator owners and identical source-checked final Core states. A four-event native Haskell artifact is byte-compared with separately compiled finite Rocq data and conditional owner-bit theorems; terminal authority and general refinement remain unproved.
+
+### FSEM-02 paired source-family envelope (non-normative)
+
+The [paired Ping/Choice source-family envelope](formal-semantics-paired-source-family-envelope-fsem02-v1.md) combines two already source-checked and individually proven bounded paired-local replay branches behind an explicit family and independent admission inputs. Rocq proves uniform rejection on absent admission and dual-loan/unrelated-linear framing under branch-specific continuing-head premises; strict native checks rerun complete accepted/rejected Ping and Go/Cancel source witnesses. This is not native Map/Set-to-Rocq refinement, source-derived activation, a single mixed-family execution, general diagnostic fidelity or FSEM-02 completion.
+
+
+### FSEM-02 paired two-step outcome replay (non-normative)
+
+The [paired two-step source-family outcome observation](formal-semantics-paired-two-step-outcomes-fsem02-v1.md) sequentially composes two separately admitted Ping/Choice model steps. Rocq distinguishes first refusal, second refusal with exact committed prefix retained, and two-step success; it proves four separate admission requirements and conditional dual-peer loan/unrelated-linear preservation across both steps. Strict Haskell rechecks accepted and minimally rejected complete **separate** Ping and Choice sources, not a combined source program or universal native Map/Set-to-Rocq refinement. Activation, protocol authority, selected roots, ownership and disposal remain external premises; FSEM-02 stays open and non-normative.
+
+
+### FSEM-02 two-step stale predecessor and committed prefix (non-normative)
+
+The [two-step cross-family stale-prefix proof](formal-semantics-two-step-stale-prefix-fsem02-v1.md) lifts per-family exact predecessor consumption to a tagged Ping/Choice request, then proves a following Ping that reuses either consumed peer predecessor refuses **without rolling back** the first model transition. Dedicated GHC 9.6.7 source witnesses and Rocq 9.2 checks run independently; no combined-source execution, native resource-state refinement or source-derived nominal authority is claimed. FSEM-02 remains open.
+
+
+### FSEM-02 two-step successor chaining and missing admission (non-normative)
+
+The [two-step successor-chain proof](formal-semantics-two-step-successor-chain-fsem02-v1.md) shows conditional two-generation predecessor consumption when both peers' exact second-step predecessor keys equal first-step successor keys. It also distinguishes missing first-step source admission from missing second-step source/rendezvous admission, preserving the initial or committed context pair respectively. GHC 9.6.7 runs independent accepted/rejected Ping and Choice source witnesses; Rocq 9.2 checks the model laws. No combined two-step source trace, general native resource-state refinement or external protocol authority is asserted. FSEM-02 remains non-normative and open.
+
+
+### FSEM-02 two-step native Core resource-state trace (non-normative)
+
+The [two-step native Core protocol trace](formal-semantics-two-step-native-core-trace-fsem02-v1.md) executes two real successive Send/Receive transitions from an independently instantiated dual two-message protocol, inspects exact intermediate/final production endpoint metadata and linear resource maps, checks precise stale/wrong-action/wrong-role refusals without rolling back the first committed contexts, and closes both terminal endpoints. Existing accepted/rejected Grammar-v1 Ping/Choice source witnesses run separately; there is **no** combined source-accepted two-step program. Conditional Rocq 9.2 composition proves exact chained consumption plus two-peer shared-loan and disjoint-spectator framing under external admission/continuation premises, not native Haskell-to-Rocq refinement or new nominal authority. FSEM-02 remains open.
+
+
+### FSEM-02 native two-step disjoint spectator and borrowed-loan frame (non-normative)
+
+The [native two-step spectator/loan frame check](formal-semantics-two-step-native-spectator-loan-frame-fsem02-v1.md) tests actual two-generation `Core.Protocol` Send/Receive and terminal Close with an independently inserted disjoint protocol endpoint and active borrowed affine owner on **both peers**. It verifies exact five-collection checkpoint fidelity, stale/wrong-head/wrong-role refusal, preservation through second-step retry and explicit end-of-loan distinction. Rocq 9.2 proves a **conditional** refused-second-step committed-prefix loan/spectator frame, separately from the executable Haskell trace. Complete-source Ping/Choice witnesses are independent: no source-admitted combined two-send program, general native-to-Rocq refinement or new authority is claimed. FSEM-02 stays open.
+
+
+### FSEM-02 occupied successor refusal across two native transitions (non-normative)
+
+The [native occupied-successor frame check](formal-semantics-successor-occupied-native-frame-fsem02-v1.md) tests both peers' exact duplicate-binding rejection when a fresh second-step endpoint tries to overwrite a spectator endpoint, an active borrowed affine owner or an unrelated unrestricted owner, along with self-successor refusal and successful fresh retry/Close. Existing complete-source accepted and precisely rejected Ping/Choice controls run separately. Rocq proves conditional structural successor-occupancy refusal; this is not a native-to-Rocq refinement or a two-step source-admitted program. FSEM-02 remains open.
+
+
+### FSEM-02 complete-source two-step binder identities and native replay (non-normative)
+
+The [bounded two-step source binder-chain check](formal-semantics-two-step-source-binder-chain-fsem02-v1.md) parses one complete Grammar-v1 `DoublePing` source with two sends and receives per peer, resolves both successor endpoints through production lexical binder identities, and replays their two transitions and terminal Closes through native `Core.Protocol`. Separate minimally altered source controls assert exact test-local stale-second-predecessor and wrong-Close diagnostics. Rocq proves conditional two-generation predecessor consumption and committed-prefix preservation after stale second-step refusal; it does **not** prove generalized component-body elaboration, source-to-Core producer fidelity, native-to-Rocq refinement, rendezvous, or new nominal protocol/architecture authority. FSEM-02 remains open.
+
+### FSEM-02 bounded production two-step component boundary (non-normative)
+
+The [production two-step component boundary](formal-semantics-production-two-step-component-fsem02-v1.md) moves the exact lexical two-generation Send/Receive/Close checker from test-local code into the built `Phil.Surface.GrammarV1.ComponentTwoStepChain` module, with accepted complete-source `DoublePing` and minimally rejected stale-second/wrong-Close fixtures now exercising those production-library error constructors. Strict Haskell and conditional Rocq binder freshness checks do not establish general component elaboration, all payload typing, source-to-Core fidelity, or universal implementation refinement. FSEM-02 remains open.
+
+### FSEM-02 post-let Send payload scope classification (non-normative)
+
+The [production two-step component boundary](formal-semantics-production-two-step-component-fsem02-v1.md) now resolves its second Send payload **after** binding the first successor. A source-bound successor used as the second payload receives an exact non-parameter rejection, not an out-of-scope diagnosis. This does not certify general Send payload typing, nominal authority, or Haskell-to-Rocq refinement.
+
+### FSEM-02 two-Receive written U8 witness envelope (non-normative)
+
+The [restricted two-step production checker](formal-semantics-production-two-step-component-fsem02-v1.md)
+now checks both source-written Receive annotations against U8 in the externally
+established `DoublePing` U8/U8 projection, with stage-specific exact
+rejections. This is partial source conformance, not general Receive type
+checking, inferred authority, or a source-to-Rocq refinement theorem.

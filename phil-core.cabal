@@ -3,6 +3,11 @@ name:               phil-core
 version:            0.0.1.0
 synopsis:           Bootstrap executable kernel for the Phil Core checker
 build-type:          Simple
+extra-source-files:
+  test/fixtures/fsem01-rec01-source-record-v1/accepted-full.phil
+  test/fixtures/fsem01-rec02a-record-origin-v1/accepted.tsv
+  test/fixtures/fsem02-two-step-source-chain-v1/accepted.phil
+  test/fixtures/fsem03-doubleping-origin-v1/candidate.tsv
 
 data-files:
     examples/upload/*.phil
@@ -41,6 +46,7 @@ library
       Phil.Core.Recognition
       Phil.Core.SortCheck
       Phil.Core.Static
+      Phil.Core.IdentityKeys
       Phil.Core.Refinement
       Phil.Core.Focusing
       Phil.Core.Decision
@@ -178,6 +184,7 @@ library
       Phil.Verification.ManifestClosure
       DataModeKernel
       DataProductKernel
+      DataEliminationKernel
       GenericIdentityEqualityKernel
       GenericInstantiationDomainKernel
       GenericInstantiationValidityKernel
@@ -190,6 +197,8 @@ library
       Phil.Core.NominalDataMode
       Phil.Core.DataModeKernelBridge
       Phil.Core.DataProductKernelBridge
+      Phil.Core.DataEliminationKernelBridge
+      Phil.Core.DataDestruction
       Phil.Core.FloatArithmetic
       Phil.Core.Generic
       Phil.Core.Generic.RequirementCategory
@@ -234,10 +243,14 @@ library
       Phil.Surface.GrammarV1.BorrowViewScope
       Phil.Surface.GrammarV1.BorrowResourceSurface
       Phil.Surface.GrammarV1.DataVariants
+      Phil.Surface.GrammarV1.RecordFields
       Phil.Surface.GrammarV1.SourceAffineResource
       Phil.Surface.GrammarV1.SourceAffineProduct
       Phil.Surface.GrammarV1.SourceProductElimination
       Phil.Surface.GrammarV1.SourceNestedProductElimination
+      Phil.Surface.GrammarV1.SourceRecursiveProductElimination
+      Phil.Surface.GrammarV1.SourceRecordFieldDisposition
+      Phil.Surface.GrammarV1.RecordSourceIdentity
       Phil.Surface.GrammarV1.SourceIfJoinResource
       Phil.Surface.GrammarV1.SourceAffineIfJoinResource
       Phil.Surface.GrammarV1.SourceScopedBorrowJoin
@@ -263,6 +276,18 @@ library
       Phil.Core.ProcessLifecycle
       Phil.Surface.GrammarV1.ComponentSendClose
       Phil.Surface.GrammarV1.ComponentReceiveClose
+      Phil.Surface.GrammarV1.ComponentTwoStepChain
+      Phil.Surface.GrammarV1.DoublePingOrigin
+      Phil.Surface.GrammarV1.ArchitectureComponentActivation
+      Phil.Surface.GrammarV1.ArchitectureComponentProvisioning
+      Phil.Surface.GrammarV1.CallableSignature
+      Phil.Surface.GrammarV1.ProtocolRoles
+      Phil.Surface.GrammarV1.SemanticBindingState
+      Phil.Surface.GrammarV1.SemanticCheckedType
+      Phil.Surface.GrammarV1.SemanticComponentHeader
+      Phil.Surface.GrammarV1.SemanticRefinementType
+      Phil.Surface.GrammarV1.SessionSemantics
+      Phil.Surface.GrammarV1.ProtocolEndpointType
       Phil.Surface.GrammarV1.TwoOwnerBorrowResourceSurface
       Phil.Surface.GrammarV1.ReferenceKernelBridge
       Phil.Surface.GrammarV1.ReferenceToken

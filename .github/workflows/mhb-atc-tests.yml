@@ -22,6 +22,47 @@ on:
       - '.github/workflows/mhb-atc-reconcile.yml'
       - '.github/workflows/mhb-atc-admit.yml'
       - '.github/workflows/mhb-atc-publisher-token-preflight.yml'
+      - '.github/workflows/mhb-atc-worker-token-preflight.yml'
+      - '.github/atc-worker-policy.json'
+      - '.github/atc-worker-lanes.json'
+      - '.github/workflows/mhb-atc-worker-broker.yml'
+      - 'scripts/mhb_atc_worker_broker.py'
+      - 'scripts/test_mhb_atc_worker_broker.py'
+      - 'scripts/test_mhb_atc_staged_push_ci.py'
+      - 'scripts/test_mhb_atc_privileged_pr_ci.py'
+      - 'scripts/mhb_atc_live_authority.py'
+      - 'scripts/test_mhb_atc_live_authority.py'
+      - 'docs/phase-2/mhb-atc-live-authority-audit.md'
+      # Recheck EVERY workflow change; a future unbounded push must fail.
+      - '.github/workflows/**'
+      - 'docs/phase-2/mhb-atc-worker-broker.md'
+      - 'docs/phase-2/mhb-atc-privileged-pr-ci.md'
+      - 'scripts/test_mhb_atc_worker_preflight.py'
+      - 'scripts/mhb_atc_worker_app_identity.py'
+      - 'scripts/test_mhb_atc_worker_app_identity.py'
+      - 'scripts/mhb_atc_w3_readiness.py'
+      - 'scripts/test_mhb_atc_w3_readiness.py'
+      - 'scripts/mhb_atc_w3_ref_trial.py'
+      - 'scripts/test_mhb_atc_w3_ref_trial.py'
+      - 'scripts/mhb_atc_w3_provenance.py'
+      - 'scripts/test_mhb_atc_w3_provenance.py'
+      - 'scripts/mhb_atc_w3_evidence.py'
+      - 'scripts/test_mhb_atc_w3_evidence.py'
+      - '.github/atc-w3-fanout.json'
+      - 'scripts/mhb_atc_w3_fanout_observer.py'
+      - 'scripts/test_mhb_atc_w3_fanout_observer.py'
+      - 'scripts/mhb_atc_w3_fanout_probe.py'
+      - 'scripts/mhb_atc_w3_fanout_provenance.py'
+      - 'scripts/mhb_atc_w3_fanout_evidence.py'
+      - 'scripts/test_mhb_atc_w3_fanout_probe.py'
+      - 'scripts/test_mhb_atc_w3_fanout_provenance.py'
+      - 'docs/phase-2/mhb-atc-w3-publisher-fanout.md'
+      - 'scripts/mhb_atc_w3_default_quarantine.py'
+      - 'scripts/ci/mhb-atc-w3-pyyaml-6.0.3-hashes.txt'
+      - '.github/atc-w3-ref-trial.json'
+      - 'docs/phase-2/mhb-atc-w3-executable-ref-trials.md'
+      - 'docs/phase-2/mhb-atc-w3-negative-commissioning.md'
+      - 'docs/phase-2/mhb-atc-worker-app.md'
       - '.github/workflows/mhb-atc-stage.yml'
       - 'docs/mhb-atc.md'
       - '.github/workflows/mhb-atc-tests.yml'
@@ -47,6 +88,47 @@ on:
       - '.github/workflows/mhb-atc-reconcile.yml'
       - '.github/workflows/mhb-atc-admit.yml'
       - '.github/workflows/mhb-atc-publisher-token-preflight.yml'
+      - '.github/workflows/mhb-atc-worker-token-preflight.yml'
+      - '.github/atc-worker-policy.json'
+      - '.github/atc-worker-lanes.json'
+      - '.github/workflows/mhb-atc-worker-broker.yml'
+      - 'scripts/mhb_atc_worker_broker.py'
+      - 'scripts/test_mhb_atc_worker_broker.py'
+      - 'scripts/test_mhb_atc_staged_push_ci.py'
+      - 'scripts/test_mhb_atc_privileged_pr_ci.py'
+      - 'scripts/mhb_atc_live_authority.py'
+      - 'scripts/test_mhb_atc_live_authority.py'
+      - 'docs/phase-2/mhb-atc-live-authority-audit.md'
+      # Recheck EVERY workflow change; a future unbounded push must fail.
+      - '.github/workflows/**'
+      - 'docs/phase-2/mhb-atc-worker-broker.md'
+      - 'docs/phase-2/mhb-atc-privileged-pr-ci.md'
+      - 'scripts/test_mhb_atc_worker_preflight.py'
+      - 'scripts/mhb_atc_worker_app_identity.py'
+      - 'scripts/test_mhb_atc_worker_app_identity.py'
+      - 'scripts/mhb_atc_w3_readiness.py'
+      - 'scripts/test_mhb_atc_w3_readiness.py'
+      - 'scripts/mhb_atc_w3_ref_trial.py'
+      - 'scripts/test_mhb_atc_w3_ref_trial.py'
+      - 'scripts/mhb_atc_w3_provenance.py'
+      - 'scripts/test_mhb_atc_w3_provenance.py'
+      - 'scripts/mhb_atc_w3_evidence.py'
+      - 'scripts/test_mhb_atc_w3_evidence.py'
+      - '.github/atc-w3-fanout.json'
+      - 'scripts/mhb_atc_w3_fanout_observer.py'
+      - 'scripts/test_mhb_atc_w3_fanout_observer.py'
+      - 'scripts/mhb_atc_w3_fanout_probe.py'
+      - 'scripts/mhb_atc_w3_fanout_provenance.py'
+      - 'scripts/mhb_atc_w3_fanout_evidence.py'
+      - 'scripts/test_mhb_atc_w3_fanout_probe.py'
+      - 'scripts/test_mhb_atc_w3_fanout_provenance.py'
+      - 'docs/phase-2/mhb-atc-w3-publisher-fanout.md'
+      - 'scripts/mhb_atc_w3_default_quarantine.py'
+      - 'scripts/ci/mhb-atc-w3-pyyaml-6.0.3-hashes.txt'
+      - '.github/atc-w3-ref-trial.json'
+      - 'docs/phase-2/mhb-atc-w3-executable-ref-trials.md'
+      - 'docs/phase-2/mhb-atc-w3-negative-commissioning.md'
+      - 'docs/phase-2/mhb-atc-worker-app.md'
       - '.github/workflows/mhb-atc-stage.yml'
       - 'docs/mhb-atc.md'
       - '.github/workflows/mhb-atc-tests.yml'
@@ -63,8 +145,10 @@ jobs:
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
       - name: Syntax
-        run: python3 -m py_compile scripts/mhb_atc.py scripts/test_mhb_atc.py scripts/mhb_atc_stage.py scripts/test_mhb_atc_stage.py scripts/mhb_atc_admit.py scripts/test_mhb_atc_admit.py scripts/mhb_atc_immutable.py scripts/test_mhb_atc_immutable.py scripts/mhb_atc_inventory.py scripts/test_mhb_atc_inventory.py scripts/test_mhb_atc_auto_config.py scripts/mhb_atc_reconcile.py scripts/test_mhb_atc_reconcile.py
+        run: python3 -m py_compile scripts/mhb_atc.py scripts/test_mhb_atc.py scripts/mhb_atc_stage.py scripts/test_mhb_atc_stage.py scripts/mhb_atc_admit.py scripts/test_mhb_atc_admit.py scripts/mhb_atc_immutable.py scripts/test_mhb_atc_immutable.py scripts/mhb_atc_inventory.py scripts/test_mhb_atc_inventory.py scripts/test_mhb_atc_auto_config.py scripts/test_mhb_atc_worker_preflight.py scripts/mhb_atc_worker_app_identity.py scripts/test_mhb_atc_worker_app_identity.py scripts/mhb_atc_w3_readiness.py scripts/test_mhb_atc_w3_readiness.py scripts/mhb_atc_w3_ref_trial.py scripts/mhb_atc_w3_default_quarantine.py  scripts/mhb_atc_w3_fanout_observer.py scripts/test_mhb_atc_w3_fanout_observer.py scripts/mhb_atc_w3_fanout_probe.py scripts/mhb_atc_w3_fanout_provenance.py scripts/mhb_atc_w3_fanout_evidence.py scripts/test_mhb_atc_w3_fanout_probe.py scripts/test_mhb_atc_w3_fanout_provenance.py scripts/test_mhb_atc_w3_ref_trial.py scripts/mhb_atc_w3_provenance.py scripts/test_mhb_atc_w3_provenance.py scripts/mhb_atc_w3_evidence.py scripts/test_mhb_atc_w3_evidence.py scripts/mhb_atc_worker_broker.py scripts/test_mhb_atc_worker_broker.py scripts/test_mhb_atc_staged_push_ci.py scripts/test_mhb_atc_privileged_pr_ci.py scripts/mhb_atc_live_authority.py scripts/test_mhb_atc_live_authority.py scripts/mhb_atc_reconcile.py scripts/test_mhb_atc_reconcile.py
       - name: Offline radar and admission-policy tests
         run: python3 scripts/test_mhb_atc.py
       - name: Offline durable staging-intent tests
@@ -73,6 +157,38 @@ jobs:
         run: python3 scripts/test_mhb_atc_admit.py
       - name: Opt-in scheduled admission safety tests
         run: python3 scripts/test_mhb_atc_auto_config.py
+      - name: Offline worker App W1 no-key delegation and manual preflight tests
+        run: python3 scripts/test_mhb_atc_worker_preflight.py
+      - name: W1-ID JWT-authenticated numeric identity and real offline signing replays
+        run: python3 scripts/test_mhb_atc_worker_app_identity.py
+      - name: Install SHA256-pinned YAML parser for G1/W3 CI
+        run: |
+          python3 -c 'import sys,platform; assert sys.version_info[:2] == (3,12) and platform.machine() == "x86_64"'
+          python3 -m pip install --disable-pip-version-check --no-deps \
+            --only-binary=:all: --require-hashes --ignore-installed \
+            -r scripts/ci/mhb-atc-w3-pyyaml-6.0.3-hashes.txt
+      - name: W3 read-only ruleset/namespace readiness and negative-plan replays
+        run: python3 scripts/test_mhb_atc_w3_readiness.py
+      - name: W3 dormant protected-ref executable and publisher cleanup fake transport tests
+        run: python3 scripts/test_mhb_atc_w3_ref_trial.py
+      - name: W3 original-run identity and historical target workflow-tree tests
+        run: python3 scripts/test_mhb_atc_w3_provenance.py
+      - name: W3 durable sanitized partial failure receipts and publisher recovery evidence
+        run: python3 scripts/test_mhb_atc_w3_evidence.py
+      - name: W3 publisher App fanout census read-only and hostile fixtures
+        run: python3 scripts/test_mhb_atc_w3_fanout_observer.py
+      - name: W3 dormant publisher App canary, cleanup and STOP tests
+        run: python3 scripts/test_mhb_atc_w3_fanout_probe.py
+      - name: W3 independently authenticated original fanout run/recovery tests
+        run: python3 scripts/test_mhb_atc_w3_fanout_provenance.py
+      - name: Worker App W2 fork-to-staged broker authorization and safety replays
+        run: python3 scripts/test_mhb_atc_worker_broker.py
+      - name: G1 staged-push CI namespace and historical workflow-tree isolation
+        run: python3 scripts/test_mhb_atc_staged_push_ci.py
+      - name: G2 privileged PR environment, token and controller isolation
+        run: python3 scripts/test_mhb_atc_privileged_pr_ci.py
+      - name: Offline owner settings evidence and fail-closed trust boundary tests
+        run: python3 scripts/test_mhb_atc_live_authority.py
       - name: Immutable publisher, ruleset and receipt negative replay tests
         run: python3 scripts/test_mhb_atc_immutable.py
       - name: Full protected-ref census and authenticated history replays

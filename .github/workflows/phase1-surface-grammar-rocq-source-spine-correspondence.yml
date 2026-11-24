@@ -113,14 +113,49 @@ jobs:
             proof/Phil/Surface/GrammarAstRecordDataRecursiveGroupingCertifiedTagExactness.vo \
             proof/Phil/Surface/GrammarAstRecordDataRecursiveGroupingCertifiedAdmissionFibers.vo \
             proof/Phil/Surface/GrammarAstRecordDataRecursiveGroupingCertifiedFiberEquality.vo \
-            proof/Phil/Surface/GrammarAstRecordDataRecursiveGroupingCertifiedRootKeyEquality.vo
+            proof/Phil/Surface/GrammarAstRecordDataRecursiveGroupingCertifiedRootKeyEquality.vo \
+            proof/Phil/Surface/GrammarAstRecordDataRecursiveGroupingAcceptedKeyExtensionality.vo \
+            proof/Phil/Surface/GrammarAstRecordDataRecursiveGroupingAdmissionImageFibers.vo \
+            proof/Phil/Surface/GrammarAstRecordDataRecursiveGroupingProductionObservables.vo \
+            proof/Phil/Surface/GrammarAstRecordDataRecursiveGroupingDerivedObservables.vo \
+            proof/Phil/Surface/GrammarAstRecordDataRecursiveGroupingObservationSeparation.vo \
+            proof/Phil/Surface/GrammarAstRecordDataRecursiveGroupingDerivedObservationDisjointness.vo \
+            proof/Phil/Surface/GrammarAstRecordDataRecursiveGroupingObservationPER.vo \
+            proof/Phil/Surface/GrammarAstRecordDataRecursiveGroupingObservationPERDomain.vo \
+            proof/Phil/Surface/GrammarAstRecordDataRecursiveGroupingObservationAdmittedQuotient.vo \
+            proof/Phil/Surface/GrammarAstRecordDataRecursiveGroupingObservationAdmittedDerivations.vo \
+            proof/Phil/Surface/GrammarAstRecordDataRecursiveGroupingObservationClassCoherence.vo \
+            proof/Phil/Surface/GrammarAstRecordDataRecursiveGroupingObservationClassSaturation.vo \
+            proof/Phil/Surface/GrammarAstRecordDataRecursiveGroupingObservationClassifier.vo \
+            proof/Phil/Surface/GrammarAstRecordDataRecursiveGroupingObservationClassifierCertificates.vo \
+            proof/Phil/Surface/GrammarAstRecordDataRecursiveGroupingObservationDerivedPairFibers.vo \
+            proof/Phil/Surface/GrammarAstRecordDataRecursiveGroupingObservationFiberPartition.vo \
+            proof/Phil/Surface/GrammarAstRecordDataRecursiveGroupingObservationDerivedFiberCertificates.vo \
+            proof/Phil/Surface/GrammarAstRecordDataRecursiveGroupingObservationCertificateCoherence.vo \
+            proof/Phil/Surface/GrammarAstRecordDataRecursiveGroupingObservationCertificateFiberLaws.vo \
+            proof/Phil/Surface/GrammarAstRecordDataRecursiveGroupingObservationAdmissionReplay.vo \
+            proof/Phil/Surface/GrammarAstRecordDataRecursiveGroupingObservationReplayFiberTransport.vo \
+            proof/Phil/Surface/GrammarAstRecordDataRecursiveGroupingObservationReplayPairCoherence.vo \
+            proof/Phil/Surface/GrammarAstRecordDataRecursiveGroupingObservationReplayChainCoherence.vo \
+            proof/Phil/Surface/GrammarAstRecordDataRecursiveGroupingObservationReplayPathClosure.vo \
+            proof/Phil/Surface/GrammarAstRecordDataRecursiveGroupingObservationReplayPathQuotient.vo \
+            proof/Phil/Surface/GrammarAstRecordDataRecursiveGroupingObservationReplayPathClassifier.vo \
+            proof/Phil/Surface/GrammarAstRecordDataRecursiveGroupingObservationReplayPathSingleStep.vo \
+            proof/Phil/Surface/GrammarAstRecordDataRecursiveGroupingObservationReplayPathDecision.vo \
+            proof/Phil/Surface/GrammarAstRecordDataRecursiveGroupingObservationReplayPathBooleanPER.vo \
+            proof/Phil/Surface/GrammarAstRecordDataRecursiveGroupingObservationReplayPathBooleanRows.vo \
+            proof/Phil/Surface/GrammarAstRecordDataRecursiveGroupingObservationReplayPathClassifierFibers.vo \
+            proof/Phil/Surface/GrammarAstRecordDataRecursiveGroupingObservationReplayPathClassifierExtensionality.vo \
+            proof/Phil/Surface/GrammarAstRecordDataRecursiveGroupingObservationReplayPathTwoProbeClassifier.vo \
+            proof/Phil/Surface/GrammarAstRecordDataRecursiveGroupingObservationReplayPathComparison.vo \
+            proof/Phil/Surface/GrammarAstRecordDataRecursiveGroupingObservationReplayPathComparisonLaws.vo
 
       - name: Compile new generic-requirement modules with all warnings enabled
         shell: bash
         run: |
           set -euo pipefail
           export PATH="/home/rocq/.opam/${COMPILER}/bin:$PATH"
-          for module in GrammarAstGenericRequirementRecursiveGroupingSpine GrammarAstGenericRequirementRecursiveGroupingSpineTotality GrammarAstGenericRequirementRecursiveGroupingExamples GrammarAstGenericRequirementsRecursiveGroupingSpine GrammarAstGenericRequirementsRecursiveGroupingSpineTotality GrammarAstGenericRequirementsRecursiveGroupingExamples GrammarAstRecordDataGenericRequirementRecursiveGroupingSpine GrammarAstRecordDataGenericRequirementRecursiveGroupingTotality GrammarAstRecordDataGenericRequirementRecursiveGroupingExamples GrammarAstRecordDataRecursiveGroupingImplementationRepresentation GrammarAstRecordDataRecursiveGroupingImplementationRepresentationExtraction GrammarAstRecordDataRecursiveGroupingImplementationAdmissionExamples GrammarAstRecordDataRecursiveGroupingTaggedAdmission GrammarAstRecordDataRecursiveGroupingTaggedAdmissionInjectivity GrammarAstRecordDataRecursiveGroupingTaggedAdmissionStability GrammarAstRecordDataRecursiveGroupingTaggedAdmissionSeparation GrammarAstRecordDataRecursiveGroupingTaggedAdmissionCanonicalExclusion GrammarAstRecordDataRecursiveGroupingCertifiedTagExactness GrammarAstRecordDataRecursiveGroupingCertifiedAdmissionFibers GrammarAstRecordDataRecursiveGroupingCertifiedFiberEquality GrammarAstRecordDataRecursiveGroupingCertifiedRootKeyEquality; do
+          for module in GrammarAstGenericRequirementRecursiveGroupingSpine GrammarAstGenericRequirementRecursiveGroupingSpineTotality GrammarAstGenericRequirementRecursiveGroupingExamples GrammarAstGenericRequirementsRecursiveGroupingSpine GrammarAstGenericRequirementsRecursiveGroupingSpineTotality GrammarAstGenericRequirementsRecursiveGroupingExamples GrammarAstRecordDataGenericRequirementRecursiveGroupingSpine GrammarAstRecordDataGenericRequirementRecursiveGroupingTotality GrammarAstRecordDataGenericRequirementRecursiveGroupingExamples GrammarAstRecordDataRecursiveGroupingImplementationRepresentation GrammarAstRecordDataRecursiveGroupingImplementationRepresentationExtraction GrammarAstRecordDataRecursiveGroupingImplementationAdmissionExamples GrammarAstRecordDataRecursiveGroupingTaggedAdmission GrammarAstRecordDataRecursiveGroupingTaggedAdmissionInjectivity GrammarAstRecordDataRecursiveGroupingTaggedAdmissionStability GrammarAstRecordDataRecursiveGroupingTaggedAdmissionSeparation GrammarAstRecordDataRecursiveGroupingTaggedAdmissionCanonicalExclusion GrammarAstRecordDataRecursiveGroupingCertifiedTagExactness GrammarAstRecordDataRecursiveGroupingCertifiedAdmissionFibers GrammarAstRecordDataRecursiveGroupingCertifiedFiberEquality GrammarAstRecordDataRecursiveGroupingCertifiedRootKeyEquality GrammarAstRecordDataRecursiveGroupingAcceptedKeyExtensionality GrammarAstRecordDataRecursiveGroupingAdmissionImageFibers GrammarAstRecordDataRecursiveGroupingProductionObservables GrammarAstRecordDataRecursiveGroupingDerivedObservables GrammarAstRecordDataRecursiveGroupingObservationSeparation GrammarAstRecordDataRecursiveGroupingDerivedObservationDisjointness GrammarAstRecordDataRecursiveGroupingObservationPER GrammarAstRecordDataRecursiveGroupingObservationPERDomain GrammarAstRecordDataRecursiveGroupingObservationAdmittedQuotient GrammarAstRecordDataRecursiveGroupingObservationAdmittedDerivations GrammarAstRecordDataRecursiveGroupingObservationClassCoherence GrammarAstRecordDataRecursiveGroupingObservationClassSaturation GrammarAstRecordDataRecursiveGroupingObservationClassifier GrammarAstRecordDataRecursiveGroupingObservationClassifierCertificates GrammarAstRecordDataRecursiveGroupingObservationDerivedPairFibers GrammarAstRecordDataRecursiveGroupingObservationFiberPartition GrammarAstRecordDataRecursiveGroupingObservationDerivedFiberCertificates GrammarAstRecordDataRecursiveGroupingObservationCertificateCoherence GrammarAstRecordDataRecursiveGroupingObservationCertificateFiberLaws GrammarAstRecordDataRecursiveGroupingObservationAdmissionReplay GrammarAstRecordDataRecursiveGroupingObservationReplayFiberTransport GrammarAstRecordDataRecursiveGroupingObservationReplayPairCoherence GrammarAstRecordDataRecursiveGroupingObservationReplayChainCoherence GrammarAstRecordDataRecursiveGroupingObservationReplayPathClosure GrammarAstRecordDataRecursiveGroupingObservationReplayPathQuotient GrammarAstRecordDataRecursiveGroupingObservationReplayPathClassifier GrammarAstRecordDataRecursiveGroupingObservationReplayPathSingleStep GrammarAstRecordDataRecursiveGroupingObservationReplayPathDecision GrammarAstRecordDataRecursiveGroupingObservationReplayPathBooleanPER GrammarAstRecordDataRecursiveGroupingObservationReplayPathBooleanRows GrammarAstRecordDataRecursiveGroupingObservationReplayPathClassifierFibers GrammarAstRecordDataRecursiveGroupingObservationReplayPathClassifierExtensionality GrammarAstRecordDataRecursiveGroupingObservationReplayPathTwoProbeClassifier GrammarAstRecordDataRecursiveGroupingObservationReplayPathComparison GrammarAstRecordDataRecursiveGroupingObservationReplayPathComparisonLaws; do
             rocq c -w +all -Q proof/Phil Phil "proof/Phil/Surface/${module}.v"
           done
 
@@ -174,7 +209,42 @@ jobs:
             GrammarAstRecordDataRecursiveGroupingCertifiedTagExactness
             GrammarAstRecordDataRecursiveGroupingCertifiedAdmissionFibers
             GrammarAstRecordDataRecursiveGroupingCertifiedFiberEquality
-            GrammarAstRecordDataRecursiveGroupingCertifiedRootKeyEquality.
+            GrammarAstRecordDataRecursiveGroupingCertifiedRootKeyEquality
+            GrammarAstRecordDataRecursiveGroupingAcceptedKeyExtensionality
+            GrammarAstRecordDataRecursiveGroupingAdmissionImageFibers
+            GrammarAstRecordDataRecursiveGroupingProductionObservables
+            GrammarAstRecordDataRecursiveGroupingDerivedObservables
+            GrammarAstRecordDataRecursiveGroupingObservationSeparation
+            GrammarAstRecordDataRecursiveGroupingDerivedObservationDisjointness
+            GrammarAstRecordDataRecursiveGroupingObservationPER
+            GrammarAstRecordDataRecursiveGroupingObservationPERDomain
+            GrammarAstRecordDataRecursiveGroupingObservationAdmittedQuotient
+            GrammarAstRecordDataRecursiveGroupingObservationAdmittedDerivations
+            GrammarAstRecordDataRecursiveGroupingObservationClassCoherence
+            GrammarAstRecordDataRecursiveGroupingObservationClassSaturation
+            GrammarAstRecordDataRecursiveGroupingObservationClassifier
+            GrammarAstRecordDataRecursiveGroupingObservationClassifierCertificates
+            GrammarAstRecordDataRecursiveGroupingObservationDerivedPairFibers
+            GrammarAstRecordDataRecursiveGroupingObservationFiberPartition
+            GrammarAstRecordDataRecursiveGroupingObservationDerivedFiberCertificates
+            GrammarAstRecordDataRecursiveGroupingObservationCertificateCoherence
+            GrammarAstRecordDataRecursiveGroupingObservationCertificateFiberLaws
+            GrammarAstRecordDataRecursiveGroupingObservationAdmissionReplay
+            GrammarAstRecordDataRecursiveGroupingObservationReplayFiberTransport
+            GrammarAstRecordDataRecursiveGroupingObservationReplayPairCoherence
+            GrammarAstRecordDataRecursiveGroupingObservationReplayChainCoherence
+            GrammarAstRecordDataRecursiveGroupingObservationReplayPathClosure
+            GrammarAstRecordDataRecursiveGroupingObservationReplayPathQuotient
+            GrammarAstRecordDataRecursiveGroupingObservationReplayPathClassifier
+            GrammarAstRecordDataRecursiveGroupingObservationReplayPathSingleStep
+            GrammarAstRecordDataRecursiveGroupingObservationReplayPathDecision
+            GrammarAstRecordDataRecursiveGroupingObservationReplayPathBooleanPER
+            GrammarAstRecordDataRecursiveGroupingObservationReplayPathBooleanRows
+            GrammarAstRecordDataRecursiveGroupingObservationReplayPathClassifierFibers
+            GrammarAstRecordDataRecursiveGroupingObservationReplayPathClassifierExtensionality
+            GrammarAstRecordDataRecursiveGroupingObservationReplayPathTwoProbeClassifier
+            GrammarAstRecordDataRecursiveGroupingObservationReplayPathComparison
+            GrammarAstRecordDataRecursiveGroupingObservationReplayPathComparisonLaws.
           Print Assumptions phase1_surface_normalize_recursive_grouping_fuel_round_trip.
           Print Assumptions phase1_surface_grouping_well_formed_from_derivation_mutual.
           Print Assumptions phase1_surface_recursive_grouping_sufficient_fuel.
@@ -272,13 +342,213 @@ jobs:
           Print Assumptions phase1_surface_certified_record_root_fiber_equality_iff.
           Print Assumptions phase1_surface_certified_data_root_fiber_equality_iff.
           Print Assumptions phase1_surface_certified_record_data_root_admission_key_equality_iff.
+          Print Assumptions phase1_surface_successful_record_data_admission_key_extensionality.
+          Print Assumptions phase1_surface_successful_record_data_admission_reencode_stable.
+          Print Assumptions phase1_surface_record_data_implementation_admission_exact_fiber.
+          Print Assumptions phase1_surface_record_data_implementation_admission_image_iff.
+          Print Assumptions phase1_surface_recursive_grouping_observation_admitted_tag_exact.
+          Print Assumptions phase1_surface_recursive_grouping_observation_admitted_key_sound.
+          Print Assumptions phase1_surface_derived_record_has_admitted_observation.
+          Print Assumptions phase1_surface_derived_data_has_admitted_observation.
+          Print Assumptions phase1_surface_admitted_observation_equality_preserves_tag.
+          Print Assumptions phase1_surface_admitted_record_data_observations_disjoint.
+          Print Assumptions phase1_surface_admitted_observation_collides_on_distinct_exact_keys.
+          Print Assumptions phase1_surface_certified_record_data_observations_separated.
+          Print Assumptions phase1_surface_recursive_grouping_observation_related_reflexive_on_admission.
+          Print Assumptions phase1_surface_recursive_grouping_observation_related_symmetric.
+          Print Assumptions phase1_surface_recursive_grouping_observation_related_transitive.
+          Print Assumptions phase1_surface_recursive_grouping_observation_related_preserves_tag.
+          Print Assumptions phase1_surface_recursive_grouping_observation_related_not_exact_key_equality.
+          Print Assumptions phase1_surface_recursive_grouping_observation_malformed_reflexivity_rejected.
+          Print Assumptions phase1_surface_recursive_grouping_observation_support_iff_admission.
+          Print Assumptions phase1_surface_recursive_grouping_observation_related_has_admitted_endpoints.
+          Print Assumptions phase1_surface_recursive_grouping_rejected_key_unrelated.
+          Print Assumptions phase1_surface_recursive_grouping_derived_record_in_observation_support.
+          Print Assumptions phase1_surface_recursive_grouping_derived_data_in_observation_support.
+          Print Assumptions phase1_surface_recursive_grouping_record_data_observation_classes_disjoint.
+          Print Assumptions phase1_surface_admitted_observation_equiv_iff_public_related.
+          Print Assumptions phase1_surface_admitted_observation_equiv_reflexive.
+          Print Assumptions phase1_surface_admitted_observation_equiv_symmetric.
+          Print Assumptions phase1_surface_admitted_observation_equiv_transitive.
+          Print Assumptions phase1_surface_admitted_observation_equiv_preserves_tag.
+          Print Assumptions phase1_surface_admitted_observation_equiv_not_exact_key_equality.
+          Print Assumptions phase1_surface_rejected_key_has_no_admitted_observation_representative.
+          Print Assumptions phase1_surface_admitted_observation_representative_iff_success.
+          Print Assumptions phase1_surface_admitted_observation_same_key_equiv.
+          Print Assumptions phase1_surface_public_related_has_admitted_observation_representatives.
+          Print Assumptions phase1_surface_derived_record_has_admitted_equivalence_representative.
+          Print Assumptions phase1_surface_derived_data_has_admitted_equivalence_representative.
+          Print Assumptions phase1_surface_admitted_record_data_equivalence_classes_disjoint.
+          Print Assumptions phase1_surface_admitted_observation_class_coherence.
+          Print Assumptions phase1_surface_derived_record_class_witness_independent.
+          Print Assumptions phase1_surface_derived_data_class_witness_independent.
+          Print Assumptions phase1_surface_derived_record_data_classes_disjoint.
+          Print Assumptions phase1_surface_public_observation_related_iff_all_certified_members.
+          Print Assumptions phase1_surface_derived_record_data_all_certificates_separate.
+          Print Assumptions phase1_surface_normalized_observation_none_iff_rejection.
+          Print Assumptions phase1_surface_normalized_observation_some_iff_admission.
+          Print Assumptions phase1_surface_normalized_observation_related_iff_same_success.
+          Print Assumptions phase1_surface_normalized_observation_same_success_preserves_tag.
+          Print Assumptions phase1_surface_normalized_observation_is_lossy.
+          Print Assumptions phase1_surface_record_data_normalized_observation_separated.
+          Print Assumptions phase1_surface_classifier_matches_admitted_certificate.
+          Print Assumptions phase1_surface_classifier_some_iff_certified_observation.
+          Print Assumptions phase1_surface_classifier_certified_equiv_iff_same_result.
+          Print Assumptions phase1_surface_classifier_nonempty_equality_iff_related.
+          Print Assumptions phase1_surface_derived_record_classifier_success.
+          Print Assumptions phase1_surface_derived_data_classifier_success.
+          Print Assumptions phase1_surface_observation_fiber_iff_related.
+          Print Assumptions phase1_surface_derived_record_pair_fiber_characterization.
+          Print Assumptions phase1_surface_derived_data_pair_fiber_characterization.
+          Print Assumptions phase1_surface_derived_record_data_fibers_disjoint.
+          Print Assumptions phase1_surface_successful_observation_fiber_overlap_forces_class.
+          Print Assumptions phase1_surface_successful_observation_fibers_disjoint_if_values_differ.
+          Print Assumptions phase1_surface_successful_observation_fibers_same_members_iff_related.
+          Print Assumptions phase1_surface_rejected_observation_key_not_in_successful_fiber.
+          Print Assumptions phase1_surface_successful_fiber_member_has_certificate.
+          Print Assumptions phase1_surface_successful_fiber_member_iff_certificate.
+          Print Assumptions phase1_surface_derived_record_fiber_member_has_certificate.
+          Print Assumptions phase1_surface_derived_data_fiber_member_has_certificate.
+          Print Assumptions phase1_surface_derived_record_fiber_rejects_unadmitted_member.
+          Print Assumptions phase1_surface_derived_data_fiber_rejects_unadmitted_member.
+          Print Assumptions phase1_surface_same_key_certificates_agree.
+          Print Assumptions phase1_surface_certificate_fiber_membership_iff_observation.
+          Print Assumptions phase1_surface_derived_record_fiber_all_certificates_coherent.
+          Print Assumptions phase1_surface_derived_data_fiber_all_certificates_coherent.
+          Print Assumptions phase1_surface_derived_record_data_member_certificates_distinct.
+          Print Assumptions phase1_surface_mismatched_certificate_cannot_join_fiber.
+          Print Assumptions phase1_surface_shared_certificate_forces_equal_observations.
+          Print Assumptions phase1_surface_certificate_fibers_same_observation_same_members.
+          Print Assumptions phase1_surface_equal_certificate_observations_same_fiber_membership.
+          Print Assumptions phase1_surface_distinct_observation_fibers_have_no_common_certificate.
+          Print Assumptions phase1_surface_derived_record_data_have_no_common_certificate.
+          Print Assumptions phase1_surface_distinct_certificates_cannot_share_successful_fiber.
+          Print Assumptions phase1_surface_observation_admitted_replay_exact_key.
+          Print Assumptions phase1_surface_observation_admitted_replay_stable.
+          Print Assumptions phase1_surface_observation_admitted_replay_value.
+          Print Assumptions phase1_surface_observation_admitted_certificate_replay.
+          Print Assumptions phase1_surface_observation_admitted_replay_related.
+          Print Assumptions phase1_surface_derived_record_observation_replay.
+          Print Assumptions phase1_surface_derived_data_observation_replay.
+          Print Assumptions phase1_surface_rejected_record_key_has_no_replay.
+          Print Assumptions phase1_surface_replay_fiber_left_transport.
+          Print Assumptions phase1_surface_replay_fiber_right_transport.
+          Print Assumptions phase1_surface_replayed_key_belongs_to_original_fiber.
+          Print Assumptions phase1_surface_replay_certificate_fiber_iff_observation.
+          Print Assumptions phase1_surface_replay_mismatched_certificate_excluded.
+          Print Assumptions phase1_surface_replay_distinct_certificates_excluded.
+          Print Assumptions phase1_surface_replayed_record_data_fibers_disjoint.
+          Print Assumptions phase1_surface_rejected_record_key_has_no_replay_certificate.
+          Print Assumptions phase1_surface_dual_replay_related_iff_original.
+          Print Assumptions phase1_surface_dual_replay_related_iff_observations.
+          Print Assumptions phase1_surface_dual_replay_fiber_membership_transport.
+          Print Assumptions phase1_surface_dual_replay_shared_certificate_forces_related.
+          Print Assumptions phase1_surface_dual_replay_distinct_certificates_separated.
+          Print Assumptions phase1_surface_dual_replay_related_preserves_tag.
+          Print Assumptions phase1_surface_dual_replay_rejected_record_excluded.
+          Print Assumptions phase1_surface_triple_replay_chain_transitive.
+          Print Assumptions phase1_surface_triple_replay_certificate_fiber_transport.
+          Print Assumptions phase1_surface_triple_replay_chain_preserves_tag.
+          Print Assumptions phase1_surface_triple_replay_distinct_certificates_separated.
+          Print Assumptions phase1_surface_triple_replay_malformed_record_excluded.
+          Print Assumptions phase1_surface_replay_path_related.
+          Print Assumptions phase1_surface_replay_path_iff_related.
+          Print Assumptions phase1_surface_replay_path_preserves_tag.
+          Print Assumptions phase1_surface_replay_path_certificate_fiber_transport.
+          Print Assumptions phase1_surface_replay_path_distinct_certificates_separated.
+          Print Assumptions phase1_surface_replay_path_rejects_malformed_record_start.
+          Print Assumptions phase1_surface_replay_path_rejects_malformed_record_end.
+          Print Assumptions phase1_surface_replay_path_reflexive_on_admission.
+          Print Assumptions phase1_surface_replay_path_support_iff_admission.
+          Print Assumptions phase1_surface_replay_path_symmetric.
+          Print Assumptions phase1_surface_replay_path_transitive.
+          Print Assumptions phase1_surface_replay_path_iff_shared_certificate.
+          Print Assumptions phase1_surface_replay_path_not_exact_key_equality.
+          Print Assumptions phase1_surface_replay_path_record_data_separated.
+          Print Assumptions phase1_surface_replay_path_rejected_key_has_no_loop.
+          Print Assumptions phase1_surface_replay_path_iff_same_successful_classifier.
+          Print Assumptions phase1_surface_replay_path_classifiers_equal_and_present.
+          Print Assumptions phase1_surface_replay_path_equal_successful_classifiers_connect.
+          Print Assumptions phase1_surface_replay_path_equal_absent_classifiers_do_not_connect.
+          Print Assumptions phase1_surface_replay_path_iff_admitted_class_representative.
+          Print Assumptions phase1_surface_replay_path_certificate_member_iff_class_label.
+          Print Assumptions phase1_surface_replay_path_distinct_class_labels_excluded.
+          Print Assumptions phase1_surface_replay_path_classifier_rejects_malformed_record.
+          Print Assumptions phase1_surface_replay_path_compresses_to_single_step.
+          Print Assumptions phase1_surface_replay_single_step_expands_to_path.
+          Print Assumptions phase1_surface_replay_path_iff_single_step.
+          Print Assumptions phase1_surface_replay_path_composed_middle_eliminated.
+          Print Assumptions phase1_surface_replay_single_step_certificate_fiber_transport.
+          Print Assumptions phase1_surface_replay_single_step_not_exact_key_equality.
+          Print Assumptions phase1_surface_replay_single_step_rejects_malformed_record.
+          Print Assumptions phase1_surface_observed_mode_eq_dec.
+          Print Assumptions phase1_surface_observed_payload_eq_dec.
+          Print Assumptions phase1_surface_observed_variant_eq_dec.
+          Print Assumptions phase1_surface_observed_generic_param_eq_dec.
+          Print Assumptions phase1_surface_observed_record_data_eq_dec.
+          Print Assumptions phase1_surface_admitted_replay_path_dec.
+          Print Assumptions phase1_surface_replay_path_connectedb_iff.
+          Print Assumptions phase1_surface_replay_path_connectedb_iff_same_success.
+          Print Assumptions phase1_surface_replay_path_connectedb_rejected_left.
+          Print Assumptions phase1_surface_replay_path_connectedb_rejected_right.
+          Print Assumptions phase1_surface_replay_path_connectedb_not_exact_key_equality.
+          Print Assumptions phase1_surface_replay_path_connectedb_malformed_record_rejected.
+          Print Assumptions phase1_surface_replay_connectedb_symmetric.
+          Print Assumptions phase1_surface_replay_connectedb_transitive.
+          Print Assumptions phase1_surface_replay_connectedb_diagonal_iff_success.
+          Print Assumptions phase1_surface_replay_connectedb_endpoints_supported.
+          Print Assumptions phase1_surface_replay_connectedb_preserves_tag.
+          Print Assumptions phase1_surface_replay_connectedb_record_data_separated.
+          Print Assumptions phase1_surface_replay_connectedb_common_neighbor.
+          Print Assumptions phase1_surface_replay_connectedb_iff_common_neighbor.
+          Print Assumptions phase1_surface_replay_connectedb_two_rejections_not_neighbors.
+          Print Assumptions phase1_surface_replay_connectedb_malformed_record_no_loop.
+          Print Assumptions phase1_surface_replay_connectedb_row_invariant.
+          Print Assumptions phase1_surface_replay_connectedb_column_invariant.
+          Print Assumptions phase1_surface_replay_connectedb_supported_row_characterization.
+          Print Assumptions phase1_surface_replay_connectedb_supported_column_characterization.
+          Print Assumptions phase1_surface_replay_connectedb_rejected_row_empty.
+          Print Assumptions phase1_surface_replay_connectedb_rejected_column_empty.
+          Print Assumptions phase1_surface_replay_connectedb_rejected_rows_indistinguishable.
+          Print Assumptions phase1_surface_replay_connectedb_supported_rejected_rows_separated.
+          Print Assumptions phase1_surface_replay_connectedb_nonempty_row_iff_support.
+          Print Assumptions phase1_surface_replay_connectedb_malformed_record_row_empty.
+          Print Assumptions phase1_surface_replay_fiber_anchor_row.
+          Print Assumptions phase1_surface_replay_fiber_anchor_column.
+          Print Assumptions phase1_surface_replay_fiber_distinct_observations_disconnected.
+          Print Assumptions phase1_surface_replay_fiber_equal_observations_connected.
+          Print Assumptions phase1_surface_replay_fiber_successful_rows_iff_observations.
+          Print Assumptions phase1_surface_replay_fiber_successful_columns_iff_observations.
+          Print Assumptions phase1_surface_replay_fiber_distinct_rows_have_probe.
+          Print Assumptions phase1_surface_replay_fiber_distinct_columns_have_probe.
+          Print Assumptions phase1_surface_replay_fiber_rejected_never_neighbor.
+          Print Assumptions phase1_surface_replay_fiber_malformed_record_never_neighbor.
+          Print Assumptions phase1_surface_replay_rows_equal_iff_classifier_equal.
+          Print Assumptions phase1_surface_replay_columns_equal_iff_classifier_equal.
+          Print Assumptions phase1_surface_replay_equal_disconnected_rows_iff_rejected.
+          Print Assumptions phase1_surface_replay_malformed_record_row_collides_with_rejected.
+          Print Assumptions phase1_surface_replay_false_diagonal_row_empty.
+          Print Assumptions phase1_surface_replay_two_probes_iff_rows_equal.
+          Print Assumptions phase1_surface_replay_two_probe_equalb_iff_rows.
+          Print Assumptions phase1_surface_replay_two_probe_equalb_iff_classifier.
+          Print Assumptions phase1_surface_replay_two_probe_malformed_rejected_collision.
+          Print Assumptions phase1_surface_replay_comparison_shared_iff.
+          Print Assumptions phase1_surface_replay_comparison_rejected_iff.
+          Print Assumptions phase1_surface_replay_comparison_distinct_iff.
+          Print Assumptions phase1_surface_replay_comparison_success_self.
+          Print Assumptions phase1_surface_replay_comparison_malformed_rejected.
+          Print Assumptions phase1_surface_replay_comparison_classifier_congruence.
+          Print Assumptions phase1_surface_replay_comparison_symmetric.
+          Print Assumptions phase1_surface_replay_comparison_shared_transitive.
+          Print Assumptions phase1_surface_replay_comparison_rejected_transitive.
+          Print Assumptions phase1_surface_replay_comparison_shared_rejected_incompatible.
           EOF
           rocq c -Q proof/Phil Phil RecursiveGroupingAssumptions.v \
             | tee recursive-grouping-assumptions.txt
           python3 - <<'PY'
           from pathlib import Path
           output = Path("recursive-grouping-assumptions.txt").read_text()
-          assert output.count("Closed under the global context") == 97, output
+          assert output.count("Closed under the global context") == 297, output
           assert "Axioms:" not in output, output
           PY
           rocq check -silent -Q proof/Phil Phil \
@@ -319,7 +589,42 @@ jobs:
             Phil.Surface.GrammarAstRecordDataRecursiveGroupingCertifiedTagExactness \
             Phil.Surface.GrammarAstRecordDataRecursiveGroupingCertifiedAdmissionFibers \
             Phil.Surface.GrammarAstRecordDataRecursiveGroupingCertifiedFiberEquality \
-            Phil.Surface.GrammarAstRecordDataRecursiveGroupingCertifiedRootKeyEquality
+            Phil.Surface.GrammarAstRecordDataRecursiveGroupingCertifiedRootKeyEquality \
+            Phil.Surface.GrammarAstRecordDataRecursiveGroupingAcceptedKeyExtensionality \
+            Phil.Surface.GrammarAstRecordDataRecursiveGroupingAdmissionImageFibers \
+            Phil.Surface.GrammarAstRecordDataRecursiveGroupingProductionObservables \
+            Phil.Surface.GrammarAstRecordDataRecursiveGroupingDerivedObservables \
+            Phil.Surface.GrammarAstRecordDataRecursiveGroupingObservationSeparation \
+            Phil.Surface.GrammarAstRecordDataRecursiveGroupingDerivedObservationDisjointness \
+            Phil.Surface.GrammarAstRecordDataRecursiveGroupingObservationPER \
+            Phil.Surface.GrammarAstRecordDataRecursiveGroupingObservationPERDomain \
+            Phil.Surface.GrammarAstRecordDataRecursiveGroupingObservationAdmittedQuotient \
+            Phil.Surface.GrammarAstRecordDataRecursiveGroupingObservationAdmittedDerivations \
+            Phil.Surface.GrammarAstRecordDataRecursiveGroupingObservationClassCoherence \
+            Phil.Surface.GrammarAstRecordDataRecursiveGroupingObservationClassSaturation \
+            Phil.Surface.GrammarAstRecordDataRecursiveGroupingObservationClassifier \
+            Phil.Surface.GrammarAstRecordDataRecursiveGroupingObservationClassifierCertificates \
+            Phil.Surface.GrammarAstRecordDataRecursiveGroupingObservationDerivedPairFibers \
+            Phil.Surface.GrammarAstRecordDataRecursiveGroupingObservationFiberPartition \
+            Phil.Surface.GrammarAstRecordDataRecursiveGroupingObservationDerivedFiberCertificates \
+            Phil.Surface.GrammarAstRecordDataRecursiveGroupingObservationCertificateCoherence \
+            Phil.Surface.GrammarAstRecordDataRecursiveGroupingObservationCertificateFiberLaws \
+            Phil.Surface.GrammarAstRecordDataRecursiveGroupingObservationAdmissionReplay \
+            Phil.Surface.GrammarAstRecordDataRecursiveGroupingObservationReplayFiberTransport \
+            Phil.Surface.GrammarAstRecordDataRecursiveGroupingObservationReplayPairCoherence \
+            Phil.Surface.GrammarAstRecordDataRecursiveGroupingObservationReplayChainCoherence \
+            Phil.Surface.GrammarAstRecordDataRecursiveGroupingObservationReplayPathClosure \
+            Phil.Surface.GrammarAstRecordDataRecursiveGroupingObservationReplayPathQuotient \
+            Phil.Surface.GrammarAstRecordDataRecursiveGroupingObservationReplayPathClassifier \
+            Phil.Surface.GrammarAstRecordDataRecursiveGroupingObservationReplayPathSingleStep \
+            Phil.Surface.GrammarAstRecordDataRecursiveGroupingObservationReplayPathDecision \
+            Phil.Surface.GrammarAstRecordDataRecursiveGroupingObservationReplayPathBooleanPER \
+            Phil.Surface.GrammarAstRecordDataRecursiveGroupingObservationReplayPathBooleanRows \
+            Phil.Surface.GrammarAstRecordDataRecursiveGroupingObservationReplayPathClassifierFibers \
+            Phil.Surface.GrammarAstRecordDataRecursiveGroupingObservationReplayPathClassifierExtensionality \
+            Phil.Surface.GrammarAstRecordDataRecursiveGroupingObservationReplayPathTwoProbeClassifier \
+            Phil.Surface.GrammarAstRecordDataRecursiveGroupingObservationReplayPathComparison \
+            Phil.Surface.GrammarAstRecordDataRecursiveGroupingObservationReplayPathComparisonLaws
 
       - name: Record source representation and recursive grouping identities
         shell: bash
@@ -391,6 +696,76 @@ jobs:
           cp proof/Phil/Surface/GrammarAstRecordDataRecursiveGroupingCertifiedFiberEquality.vo surface-grammar-ast-representation/
           cp proof/Phil/Surface/GrammarAstRecordDataRecursiveGroupingCertifiedRootKeyEquality.v surface-grammar-ast-representation/
           cp proof/Phil/Surface/GrammarAstRecordDataRecursiveGroupingCertifiedRootKeyEquality.vo surface-grammar-ast-representation/
+          cp proof/Phil/Surface/GrammarAstRecordDataRecursiveGroupingAcceptedKeyExtensionality.v surface-grammar-ast-representation/
+          cp proof/Phil/Surface/GrammarAstRecordDataRecursiveGroupingAcceptedKeyExtensionality.vo surface-grammar-ast-representation/
+          cp proof/Phil/Surface/GrammarAstRecordDataRecursiveGroupingAdmissionImageFibers.v surface-grammar-ast-representation/
+          cp proof/Phil/Surface/GrammarAstRecordDataRecursiveGroupingAdmissionImageFibers.vo surface-grammar-ast-representation/
+          cp proof/Phil/Surface/GrammarAstRecordDataRecursiveGroupingProductionObservables.v surface-grammar-ast-representation/
+          cp proof/Phil/Surface/GrammarAstRecordDataRecursiveGroupingProductionObservables.vo surface-grammar-ast-representation/
+          cp proof/Phil/Surface/GrammarAstRecordDataRecursiveGroupingDerivedObservables.v surface-grammar-ast-representation/
+          cp proof/Phil/Surface/GrammarAstRecordDataRecursiveGroupingDerivedObservables.vo surface-grammar-ast-representation/
+          cp proof/Phil/Surface/GrammarAstRecordDataRecursiveGroupingObservationSeparation.v surface-grammar-ast-representation/
+          cp proof/Phil/Surface/GrammarAstRecordDataRecursiveGroupingObservationSeparation.vo surface-grammar-ast-representation/
+          cp proof/Phil/Surface/GrammarAstRecordDataRecursiveGroupingDerivedObservationDisjointness.v surface-grammar-ast-representation/
+          cp proof/Phil/Surface/GrammarAstRecordDataRecursiveGroupingDerivedObservationDisjointness.vo surface-grammar-ast-representation/
+          cp proof/Phil/Surface/GrammarAstRecordDataRecursiveGroupingObservationPER.v surface-grammar-ast-representation/
+          cp proof/Phil/Surface/GrammarAstRecordDataRecursiveGroupingObservationPERDomain.v surface-grammar-ast-representation/
+          cp proof/Phil/Surface/GrammarAstRecordDataRecursiveGroupingObservationPER.vo surface-grammar-ast-representation/
+          cp proof/Phil/Surface/GrammarAstRecordDataRecursiveGroupingObservationPERDomain.vo surface-grammar-ast-representation/
+          cp proof/Phil/Surface/GrammarAstRecordDataRecursiveGroupingObservationAdmittedQuotient.v surface-grammar-ast-representation/
+          cp proof/Phil/Surface/GrammarAstRecordDataRecursiveGroupingObservationAdmittedQuotient.vo surface-grammar-ast-representation/
+          cp proof/Phil/Surface/GrammarAstRecordDataRecursiveGroupingObservationAdmittedDerivations.v surface-grammar-ast-representation/
+          cp proof/Phil/Surface/GrammarAstRecordDataRecursiveGroupingObservationAdmittedDerivations.vo surface-grammar-ast-representation/
+          cp proof/Phil/Surface/GrammarAstRecordDataRecursiveGroupingObservationClassCoherence.v surface-grammar-ast-representation/
+          cp proof/Phil/Surface/GrammarAstRecordDataRecursiveGroupingObservationClassCoherence.vo surface-grammar-ast-representation/
+          cp proof/Phil/Surface/GrammarAstRecordDataRecursiveGroupingObservationClassSaturation.v surface-grammar-ast-representation/
+          cp proof/Phil/Surface/GrammarAstRecordDataRecursiveGroupingObservationClassSaturation.vo surface-grammar-ast-representation/
+          cp proof/Phil/Surface/GrammarAstRecordDataRecursiveGroupingObservationClassifier.v surface-grammar-ast-representation/
+          cp proof/Phil/Surface/GrammarAstRecordDataRecursiveGroupingObservationClassifier.vo surface-grammar-ast-representation/
+          cp proof/Phil/Surface/GrammarAstRecordDataRecursiveGroupingObservationClassifierCertificates.v surface-grammar-ast-representation/
+          cp proof/Phil/Surface/GrammarAstRecordDataRecursiveGroupingObservationClassifierCertificates.vo surface-grammar-ast-representation/
+          cp proof/Phil/Surface/GrammarAstRecordDataRecursiveGroupingObservationDerivedPairFibers.v surface-grammar-ast-representation/
+          cp proof/Phil/Surface/GrammarAstRecordDataRecursiveGroupingObservationDerivedPairFibers.vo surface-grammar-ast-representation/
+          cp proof/Phil/Surface/GrammarAstRecordDataRecursiveGroupingObservationFiberPartition.v surface-grammar-ast-representation/
+          cp proof/Phil/Surface/GrammarAstRecordDataRecursiveGroupingObservationFiberPartition.vo surface-grammar-ast-representation/
+          cp proof/Phil/Surface/GrammarAstRecordDataRecursiveGroupingObservationDerivedFiberCertificates.v surface-grammar-ast-representation/
+          cp proof/Phil/Surface/GrammarAstRecordDataRecursiveGroupingObservationDerivedFiberCertificates.vo surface-grammar-ast-representation/
+          cp proof/Phil/Surface/GrammarAstRecordDataRecursiveGroupingObservationCertificateCoherence.v surface-grammar-ast-representation/
+          cp proof/Phil/Surface/GrammarAstRecordDataRecursiveGroupingObservationCertificateCoherence.vo surface-grammar-ast-representation/
+          cp proof/Phil/Surface/GrammarAstRecordDataRecursiveGroupingObservationCertificateFiberLaws.v surface-grammar-ast-representation/
+          cp proof/Phil/Surface/GrammarAstRecordDataRecursiveGroupingObservationCertificateFiberLaws.vo surface-grammar-ast-representation/
+          cp proof/Phil/Surface/GrammarAstRecordDataRecursiveGroupingObservationAdmissionReplay.v surface-grammar-ast-representation/
+          cp proof/Phil/Surface/GrammarAstRecordDataRecursiveGroupingObservationAdmissionReplay.vo surface-grammar-ast-representation/
+          cp proof/Phil/Surface/GrammarAstRecordDataRecursiveGroupingObservationReplayFiberTransport.v surface-grammar-ast-representation/
+          cp proof/Phil/Surface/GrammarAstRecordDataRecursiveGroupingObservationReplayFiberTransport.vo surface-grammar-ast-representation/
+          cp proof/Phil/Surface/GrammarAstRecordDataRecursiveGroupingObservationReplayPairCoherence.v surface-grammar-ast-representation/
+          cp proof/Phil/Surface/GrammarAstRecordDataRecursiveGroupingObservationReplayPairCoherence.vo surface-grammar-ast-representation/
+          cp proof/Phil/Surface/GrammarAstRecordDataRecursiveGroupingObservationReplayChainCoherence.v surface-grammar-ast-representation/
+          cp proof/Phil/Surface/GrammarAstRecordDataRecursiveGroupingObservationReplayChainCoherence.vo surface-grammar-ast-representation/
+          cp proof/Phil/Surface/GrammarAstRecordDataRecursiveGroupingObservationReplayPathClosure.v surface-grammar-ast-representation/
+          cp proof/Phil/Surface/GrammarAstRecordDataRecursiveGroupingObservationReplayPathClosure.vo surface-grammar-ast-representation/
+          cp proof/Phil/Surface/GrammarAstRecordDataRecursiveGroupingObservationReplayPathQuotient.v surface-grammar-ast-representation/
+          cp proof/Phil/Surface/GrammarAstRecordDataRecursiveGroupingObservationReplayPathQuotient.vo surface-grammar-ast-representation/
+          cp proof/Phil/Surface/GrammarAstRecordDataRecursiveGroupingObservationReplayPathClassifier.v surface-grammar-ast-representation/
+          cp proof/Phil/Surface/GrammarAstRecordDataRecursiveGroupingObservationReplayPathClassifier.vo surface-grammar-ast-representation/
+          cp proof/Phil/Surface/GrammarAstRecordDataRecursiveGroupingObservationReplayPathSingleStep.v surface-grammar-ast-representation/
+          cp proof/Phil/Surface/GrammarAstRecordDataRecursiveGroupingObservationReplayPathSingleStep.vo surface-grammar-ast-representation/
+          cp proof/Phil/Surface/GrammarAstRecordDataRecursiveGroupingObservationReplayPathDecision.v surface-grammar-ast-representation/
+          cp proof/Phil/Surface/GrammarAstRecordDataRecursiveGroupingObservationReplayPathDecision.vo surface-grammar-ast-representation/
+          cp proof/Phil/Surface/GrammarAstRecordDataRecursiveGroupingObservationReplayPathBooleanPER.v surface-grammar-ast-representation/
+          cp proof/Phil/Surface/GrammarAstRecordDataRecursiveGroupingObservationReplayPathBooleanPER.vo surface-grammar-ast-representation/
+          cp proof/Phil/Surface/GrammarAstRecordDataRecursiveGroupingObservationReplayPathBooleanRows.v surface-grammar-ast-representation/
+          cp proof/Phil/Surface/GrammarAstRecordDataRecursiveGroupingObservationReplayPathBooleanRows.vo surface-grammar-ast-representation/
+          cp proof/Phil/Surface/GrammarAstRecordDataRecursiveGroupingObservationReplayPathClassifierFibers.v surface-grammar-ast-representation/
+          cp proof/Phil/Surface/GrammarAstRecordDataRecursiveGroupingObservationReplayPathClassifierFibers.vo surface-grammar-ast-representation/
+          cp proof/Phil/Surface/GrammarAstRecordDataRecursiveGroupingObservationReplayPathClassifierExtensionality.v surface-grammar-ast-representation/
+          cp proof/Phil/Surface/GrammarAstRecordDataRecursiveGroupingObservationReplayPathClassifierExtensionality.vo surface-grammar-ast-representation/
+          cp proof/Phil/Surface/GrammarAstRecordDataRecursiveGroupingObservationReplayPathTwoProbeClassifier.v surface-grammar-ast-representation/
+          cp proof/Phil/Surface/GrammarAstRecordDataRecursiveGroupingObservationReplayPathTwoProbeClassifier.vo surface-grammar-ast-representation/
+          cp proof/Phil/Surface/GrammarAstRecordDataRecursiveGroupingObservationReplayPathComparison.v surface-grammar-ast-representation/
+          cp proof/Phil/Surface/GrammarAstRecordDataRecursiveGroupingObservationReplayPathComparison.vo surface-grammar-ast-representation/
+          cp proof/Phil/Surface/GrammarAstRecordDataRecursiveGroupingObservationReplayPathComparisonLaws.v surface-grammar-ast-representation/
+          cp proof/Phil/Surface/GrammarAstRecordDataRecursiveGroupingObservationReplayPathComparisonLaws.vo surface-grammar-ast-representation/
           cp SurfaceGrammarAstRecordDataRecursiveGroupingKernel.hs surface-grammar-ast-representation/
           cp recursive-grouping-assumptions.txt surface-grammar-ast-representation/
           sha256sum \
@@ -511,6 +886,76 @@ jobs:
             proof/Phil/Surface/GrammarAstRecordDataRecursiveGroupingCertifiedFiberEquality.vo \
             proof/Phil/Surface/GrammarAstRecordDataRecursiveGroupingCertifiedRootKeyEquality.v \
             proof/Phil/Surface/GrammarAstRecordDataRecursiveGroupingCertifiedRootKeyEquality.vo \
+            proof/Phil/Surface/GrammarAstRecordDataRecursiveGroupingAcceptedKeyExtensionality.v \
+            proof/Phil/Surface/GrammarAstRecordDataRecursiveGroupingAcceptedKeyExtensionality.vo \
+            proof/Phil/Surface/GrammarAstRecordDataRecursiveGroupingAdmissionImageFibers.v \
+            proof/Phil/Surface/GrammarAstRecordDataRecursiveGroupingAdmissionImageFibers.vo \
+            proof/Phil/Surface/GrammarAstRecordDataRecursiveGroupingProductionObservables.v \
+            proof/Phil/Surface/GrammarAstRecordDataRecursiveGroupingProductionObservables.vo \
+            proof/Phil/Surface/GrammarAstRecordDataRecursiveGroupingDerivedObservables.v \
+            proof/Phil/Surface/GrammarAstRecordDataRecursiveGroupingDerivedObservables.vo \
+            proof/Phil/Surface/GrammarAstRecordDataRecursiveGroupingObservationSeparation.v \
+            proof/Phil/Surface/GrammarAstRecordDataRecursiveGroupingObservationSeparation.vo \
+            proof/Phil/Surface/GrammarAstRecordDataRecursiveGroupingDerivedObservationDisjointness.v \
+            proof/Phil/Surface/GrammarAstRecordDataRecursiveGroupingDerivedObservationDisjointness.vo \
+            proof/Phil/Surface/GrammarAstRecordDataRecursiveGroupingObservationPER.v \
+            proof/Phil/Surface/GrammarAstRecordDataRecursiveGroupingObservationPER.vo \
+            proof/Phil/Surface/GrammarAstRecordDataRecursiveGroupingObservationPERDomain.v \
+            proof/Phil/Surface/GrammarAstRecordDataRecursiveGroupingObservationPERDomain.vo \
+            proof/Phil/Surface/GrammarAstRecordDataRecursiveGroupingObservationAdmittedQuotient.v \
+            proof/Phil/Surface/GrammarAstRecordDataRecursiveGroupingObservationAdmittedQuotient.vo \
+            proof/Phil/Surface/GrammarAstRecordDataRecursiveGroupingObservationAdmittedDerivations.v \
+            proof/Phil/Surface/GrammarAstRecordDataRecursiveGroupingObservationAdmittedDerivations.vo \
+            proof/Phil/Surface/GrammarAstRecordDataRecursiveGroupingObservationClassCoherence.v \
+            proof/Phil/Surface/GrammarAstRecordDataRecursiveGroupingObservationClassCoherence.vo \
+            proof/Phil/Surface/GrammarAstRecordDataRecursiveGroupingObservationClassSaturation.v \
+            proof/Phil/Surface/GrammarAstRecordDataRecursiveGroupingObservationClassSaturation.vo \
+            proof/Phil/Surface/GrammarAstRecordDataRecursiveGroupingObservationClassifier.v \
+            proof/Phil/Surface/GrammarAstRecordDataRecursiveGroupingObservationClassifier.vo \
+            proof/Phil/Surface/GrammarAstRecordDataRecursiveGroupingObservationClassifierCertificates.v \
+            proof/Phil/Surface/GrammarAstRecordDataRecursiveGroupingObservationClassifierCertificates.vo \
+            proof/Phil/Surface/GrammarAstRecordDataRecursiveGroupingObservationDerivedPairFibers.v \
+            proof/Phil/Surface/GrammarAstRecordDataRecursiveGroupingObservationDerivedPairFibers.vo \
+            proof/Phil/Surface/GrammarAstRecordDataRecursiveGroupingObservationFiberPartition.v \
+            proof/Phil/Surface/GrammarAstRecordDataRecursiveGroupingObservationFiberPartition.vo \
+            proof/Phil/Surface/GrammarAstRecordDataRecursiveGroupingObservationDerivedFiberCertificates.v \
+            proof/Phil/Surface/GrammarAstRecordDataRecursiveGroupingObservationDerivedFiberCertificates.vo \
+            proof/Phil/Surface/GrammarAstRecordDataRecursiveGroupingObservationCertificateCoherence.v \
+            proof/Phil/Surface/GrammarAstRecordDataRecursiveGroupingObservationCertificateCoherence.vo \
+            proof/Phil/Surface/GrammarAstRecordDataRecursiveGroupingObservationCertificateFiberLaws.v \
+            proof/Phil/Surface/GrammarAstRecordDataRecursiveGroupingObservationCertificateFiberLaws.vo \
+            proof/Phil/Surface/GrammarAstRecordDataRecursiveGroupingObservationAdmissionReplay.v \
+            proof/Phil/Surface/GrammarAstRecordDataRecursiveGroupingObservationAdmissionReplay.vo \
+            proof/Phil/Surface/GrammarAstRecordDataRecursiveGroupingObservationReplayFiberTransport.v \
+            proof/Phil/Surface/GrammarAstRecordDataRecursiveGroupingObservationReplayFiberTransport.vo \
+            proof/Phil/Surface/GrammarAstRecordDataRecursiveGroupingObservationReplayPairCoherence.v \
+            proof/Phil/Surface/GrammarAstRecordDataRecursiveGroupingObservationReplayPairCoherence.vo \
+            proof/Phil/Surface/GrammarAstRecordDataRecursiveGroupingObservationReplayChainCoherence.v \
+            proof/Phil/Surface/GrammarAstRecordDataRecursiveGroupingObservationReplayChainCoherence.vo \
+            proof/Phil/Surface/GrammarAstRecordDataRecursiveGroupingObservationReplayPathClosure.v \
+            proof/Phil/Surface/GrammarAstRecordDataRecursiveGroupingObservationReplayPathClosure.vo \
+            proof/Phil/Surface/GrammarAstRecordDataRecursiveGroupingObservationReplayPathQuotient.v \
+            proof/Phil/Surface/GrammarAstRecordDataRecursiveGroupingObservationReplayPathQuotient.vo \
+            proof/Phil/Surface/GrammarAstRecordDataRecursiveGroupingObservationReplayPathClassifier.v \
+            proof/Phil/Surface/GrammarAstRecordDataRecursiveGroupingObservationReplayPathClassifier.vo \
+            proof/Phil/Surface/GrammarAstRecordDataRecursiveGroupingObservationReplayPathSingleStep.v \
+            proof/Phil/Surface/GrammarAstRecordDataRecursiveGroupingObservationReplayPathSingleStep.vo \
+            proof/Phil/Surface/GrammarAstRecordDataRecursiveGroupingObservationReplayPathDecision.v \
+            proof/Phil/Surface/GrammarAstRecordDataRecursiveGroupingObservationReplayPathDecision.vo \
+            proof/Phil/Surface/GrammarAstRecordDataRecursiveGroupingObservationReplayPathBooleanPER.v \
+            proof/Phil/Surface/GrammarAstRecordDataRecursiveGroupingObservationReplayPathBooleanPER.vo \
+            proof/Phil/Surface/GrammarAstRecordDataRecursiveGroupingObservationReplayPathBooleanRows.v \
+            proof/Phil/Surface/GrammarAstRecordDataRecursiveGroupingObservationReplayPathBooleanRows.vo \
+            proof/Phil/Surface/GrammarAstRecordDataRecursiveGroupingObservationReplayPathClassifierFibers.v \
+            proof/Phil/Surface/GrammarAstRecordDataRecursiveGroupingObservationReplayPathClassifierFibers.vo \
+            proof/Phil/Surface/GrammarAstRecordDataRecursiveGroupingObservationReplayPathClassifierExtensionality.v \
+            proof/Phil/Surface/GrammarAstRecordDataRecursiveGroupingObservationReplayPathClassifierExtensionality.vo \
+            proof/Phil/Surface/GrammarAstRecordDataRecursiveGroupingObservationReplayPathTwoProbeClassifier.v \
+            proof/Phil/Surface/GrammarAstRecordDataRecursiveGroupingObservationReplayPathTwoProbeClassifier.vo \
+            proof/Phil/Surface/GrammarAstRecordDataRecursiveGroupingObservationReplayPathComparison.v \
+            proof/Phil/Surface/GrammarAstRecordDataRecursiveGroupingObservationReplayPathComparison.vo \
+            proof/Phil/Surface/GrammarAstRecordDataRecursiveGroupingObservationReplayPathComparisonLaws.v \
+            proof/Phil/Surface/GrammarAstRecordDataRecursiveGroupingObservationReplayPathComparisonLaws.vo \
             SurfaceGrammarAstRecordDataRecursiveGroupingKernel.hs \
             > surface-grammar-ast-representation/identities.sha256
           cat surface-grammar-ast-representation/identities.sha256

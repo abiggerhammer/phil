@@ -6,7 +6,7 @@ concurrency:
 
 permissions:
   contents: read
-  actions: write
+  # Supersession uses native concurrency; PR execution has no Actions write.
 
 on:
   pull_request:

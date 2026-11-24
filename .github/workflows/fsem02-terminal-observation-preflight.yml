@@ -1,0 +1,60 @@
+name: FSEM-02 Terminal Source Observation Preflight
+
+on:
+  push:
+    branches:
+      - formal-semantics/fsem02-source-terminal-observation
+    paths:
+      - 'test/Phase1FSEM02RestrictedSourceTransferMain.hs'
+      - 'proof/Phil/Core/FSEM02TerminalObservation*.v'
+      - 'docs/phase-1/formal-semantics-terminal-observation-wire-fsem02-v1.md'
+      - 'docs/phase-1/typing-and-semantics-reader-guide-v1.md'
+      - '.github/workflows/fsem02-terminal-observation-preflight.yml'
+  pull_request:
+    paths:
+      - 'test/Phase1FSEM02RestrictedSourceTransferMain.hs'
+      - 'proof/Phil/Core/FSEM02TerminalObservation*.v'
+      - 'docs/phase-1/formal-semantics-terminal-observation-wire-fsem02-v1.md'
+      - 'docs/phase-1/typing-and-semantics-reader-guide-v1.md'
+      - '.github/workflows/fsem02-terminal-observation-preflight.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  strict-source-core:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: haskell-actions/setup@v2
+        with:
+          ghc-version: '9.6.7'
+          cabal-version: 'latest'
+          cabal-update: false
+      - run: bash scripts/ci/cabal-update-retry.sh
+      - run: cabal build lib:phil-core --ghc-options=-Werror
+      - name: Native source/Core terminal accepted/refused/replay and exact wire
+        run: |
+          set -euo pipefail
+          cabal exec -- ghc -isrc -Wall -Werror -fno-code test/Phase1FSEM02RestrictedSourceTransferMain.hs
+          cabal exec -- runghc -isrc -Wall -Werror test/Phase1FSEM02RestrictedSourceTransferMain.hs
+          cabal exec -- runghc -isrc -Wall -Werror test/Phase1FSEM02RestrictedSourceTransferMain.hs emit-rocq-terminal-observation > /tmp/fsem02-terminal-observed.v
+          diff -u proof/Phil/Core/FSEM02TerminalObservationData.v /tmp/fsem02-terminal-observed.v
+          sha256sum /tmp/fsem02-terminal-observed.v proof/Phil/Core/FSEM02TerminalObservationData.v
+  rocq:
+    runs-on: ubuntu-24.04
+    container:
+      image: rocq/rocq-prover:9.2.0
+      options: --user root
+    steps:
+      - uses: actions/checkout@v4
+      - name: Checked source/Core terminal observation and finite Rocq proofs
+        shell: bash
+        run: |
+          set -euo pipefail
+          export PATH="/home/rocq/.opam/$COMPILER/bin:$PATH"
+          for f in FSEM02RestrictedSourceObservationModel FSEM02RestrictedSourceObservationData FSEM02TerminalObservationModel FSEM02TerminalObservationData FSEM02TerminalObservationChecks; do
+            rocq c -Q proof/Phil Phil "proof/Phil/Core/$f.v"
+          done
+          if grep -nE '^[[:space:]]*(Admitted[.]|Axiom[[:space:]]|Parameter[[:space:]])' proof/Phil/Core/FSEM02TerminalObservation*.v; then exit 1; fi
+          sha256sum proof/Phil/Core/FSEM02TerminalObservation*.vo

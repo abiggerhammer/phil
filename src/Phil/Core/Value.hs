@@ -586,6 +586,8 @@ equalTy env left right =
           (extendBinder leftBinder rightBinder env)
           leftProp
           rightProp
+    (TyRecordNominal leftKey leftRevision, TyRecordNominal rightKey rightRevision) ->
+      leftKey == rightKey && leftRevision == rightRevision
     (TyOpaque leftName, TyOpaque rightName) -> leftName == rightName
     (TyOpaqueSorted leftName leftSort, TyOpaqueSorted rightName rightSort) ->
       leftName == rightName && leftSort == rightSort

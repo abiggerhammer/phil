@@ -1,0 +1,78 @@
+name: FSEM-01 REC-02A nominal record preflight
+
+on:
+  push:
+    branches: [formal-semantics/fsem01-rec02a-nominal-core-record]
+  pull_request:
+    paths:
+      - 'src/Phil/Core/**'
+      - 'src/Phil/Surface/GrammarV1/**'
+      - 'test/Phase1FSEM01Rec02A*'
+      - 'test/fixtures/fsem01-rec02a-record-origin-v1/**'
+      - 'test/fixtures/fsem01-rec01-source-record-v1/**'
+      - 'proof/Phil/Surface/NominalRecordREC02A.v'
+      - 'phil-core.cabal'
+      - '.github/workflows/fsem01-rec02a-nominal-core-record-preflight.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  strict-native:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: haskell-actions/setup@v2
+        with:
+          ghc-version: '9.6.7'
+          cabal-version: '3.18.1.0'
+          cabal-update: false
+      - run: bash scripts/ci/cabal-update-retry.sh
+      - name: Compile and run native regressions
+        run: |
+          cabal build lib:phil-core --ghc-options=-Werror
+          cabal exec -- runghc -isrc -itest -Wall -Werror test/Phase1FSEM01Rec02ANominalRecordMain.hs
+          cabal exec -- runghc -isrc -itest -Wall -Werror test/Phase1FSEM01Rec01SourceRecordDispositionMain.hs
+      - name: Reject construction and update from an external client
+        run: |
+          set -euo pipefail
+          temp=$(mktemp -d)
+          for symbol in ConditionallyCheckedRecord checkedRecordIdentity checkedFunctionIdentity checkedOwner checkedReturnedBinder checkedOwnerType; do
+            if [[ "$symbol" == ConditionallyCheckedRecord ]]; then
+              expression='Invalid.ConditionallyCheckedRecord undefined undefined undefined undefined undefined'
+              diagnostic='Data constructor not in scope|does not export|Illegal term-level use of the type constructor'
+            else
+              expression="checked { Invalid.$symbol = undefined }"
+              diagnostic='not a record selector|not a record field'
+            fi
+            cat > "$temp/Client.hs" <<CLIENT
+          module Client where
+          import qualified Phil.Surface.GrammarV1.RecordSourceIdentity as Invalid
+          checked :: Invalid.ConditionallyCheckedRecord
+          checked = undefined
+          invalid :: Invalid.ConditionallyCheckedRecord
+          invalid = $expression
+          CLIENT
+            if cabal exec -- ghc -isrc -fno-code "$temp/Client.hs" > "$temp/error" 2>&1; then
+              echo "Unexpected successful client access: $symbol"
+              exit 1
+            fi
+            grep -Ei "$diagnostic" "$temp/error"
+          done
+  rocq:
+    runs-on: ubuntu-24.04
+    container:
+      image: rocq/rocq-prover:9.2.0
+      options: --user root
+    steps:
+      - uses: actions/checkout@v4
+      - name: Compile and recursively check the conditional model
+        shell: bash
+        run: |
+          set -euo pipefail
+          export PATH="/home/rocq/.opam/$COMPILER/bin:$PATH"
+          for file in proof/Phil/Core/{Syntax,Context,DataElimination}.v proof/Phil/Surface/NominalRecordREC02A.v; do
+            rocq c -Q proof/Phil Phil "$file"
+          done
+          rocq check -Q proof/Phil Phil Phil.Surface.NominalRecordREC02A
+          ! grep -nE '^[[:space:]]*(Admitted[.]|Axiom[[:space:]]|Parameter[[:space:]])' proof/Phil/Surface/NominalRecordREC02A.v

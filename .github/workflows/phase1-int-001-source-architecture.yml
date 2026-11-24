@@ -8,6 +8,11 @@ concurrency:
 
 on:
   push:
+    # Phase 2 staged refs carry unreviewed worker code; never execute push CI.
+    branches-ignore:
+      - 'hamster/staged/**'
+      # Disposable W3 publisher canary/seed refs are not admission.
+      - 'hamster/admitted/w3-*'
     paths:
       - 'src/Phil/Compiler/SourceBundle.hs'
       - 'src/Phil/Compiler/SourceArchitecture.hs'
