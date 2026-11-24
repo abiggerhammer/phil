@@ -4,6 +4,8 @@ import argparse
 import base64
 import contextlib
 import copy
+from email.message import Message
+import hashlib
 import io
 import json
 import os
@@ -16,6 +18,7 @@ import tempfile
 import types
 import unittest
 from unittest import mock
+import urllib.error
 import urllib.parse
 
 import probe
@@ -221,6 +224,138 @@ class OfflineTests(unittest.TestCase):
             marker = json.loads((Path(d)/"a1b2c3d4e5f6.create-intent.json").read_text())
             self.assertEqual(marker["decision"], "EXACT_STATE_VERIFIED")
             self.assertEqual(marker["action"], "create")
+
+    def run_refusal(self, directory, error, fail_at=None, action="create"):
+        api = object.__new__(probe.GitHub)
+        api.repo, api._token = REPO, "offline-secret"
+        api.operator = mock.Mock(return_value=ACTOR)
+        api.admitted = mock.Mock(return_value={})
+        api._opener = mock.Mock()
+        suffix = "create" if action == "create" else "delete"
+        prior = {} if action == "create" else {REF: TARGET}
+        marker = Path(directory) / f"a1b2c3d4e5f6.{suffix}-intent.json"
+        sidecar = marker.with_suffix(".http-diagnostic.json")
+
+        def open_request(request, timeout):
+            self.assertEqual(request.get_method(), "POST" if action == "create" else "DELETE")
+            self.assertEqual(json.loads(marker.read_text())["decision"],
+                             "INTENT_UNKNOWN_AFTER_INTERRUPTION")
+            raise error
+
+        api._opener.open.side_effect = open_request
+        args = argparse.Namespace(repo=REPO, repo_id=ID, actor=ACTOR,
+                                  nonce="a1b2c3d4e5f6", target_sha=TARGET,
+                                  default_sha=DEFAULT, action=action,
+                                  confirm=action.upper().replace("-", "_") + "_TEST_ONLY",
+                                  state_dir=directory)
+        pre = dict(repo=REPO, repository_id=ID, ref=REF, target_sha=TARGET,
+                   default_sha=DEFAULT, observed_refs=prior)
+        sync = os.fsync
+        write_new = probe.durable_new
+        injected = False
+
+        def fail_diagnostic_sync(fd):
+            nonlocal injected
+            if (not injected and sidecar.exists() and
+                stat.S_ISDIR(os.fstat(fd).st_mode) == (fail_at == "directory")):
+                injected = True
+                raise OSError("injected diagnostic sync failure")
+            sync(fd)
+
+        def fail_diagnostic_write(path, data):
+            if path == sidecar:
+                raise OSError("injected diagnostic write failure")
+            return write_new(path, data)
+
+        if fail_at == "write":
+            context = mock.patch.object(probe, "durable_new", side_effect=fail_diagnostic_write)
+        elif fail_at:
+            context = mock.patch.object(probe.os, "fsync", side_effect=fail_diagnostic_sync)
+        else:
+            context = contextlib.nullcontext()
+        with mock.patch.object(probe, "GitHub", return_value=api), \
+             mock.patch.object(probe, "preflight", return_value=pre), \
+             contextlib.redirect_stdout(io.StringIO()) as output:
+            with context, self.assertRaises(probe.Stop):
+                probe.execute(args)
+            with self.assertRaisesRegex(probe.Stop, "evidence path occupied"):
+                probe.execute(args)
+        api._opener.open.assert_called_once()
+        intent = json.loads(marker.read_text())
+        self.assertTrue(intent["decision"].startswith("STOP"))
+        with self.assertRaisesRegex(probe.Stop, "requires its own successful receipt"):
+            probe.load_intent(marker, {}, {}, suffix)
+        self.assertNotIn("offline-secret", output.getvalue())
+        self.assertNotIn("message_category", output.getvalue())
+        return intent, sidecar
+
+    def test_http_refusal_private_diagnostic_binding_and_sanitization(self):
+        headers = Message()
+        headers["X-GitHub-Request-Id"] = "F00D:AB:123"
+        headers["X-RateLimit-Remaining"] = "0"
+        headers["Retry-After"] = "offline-secret"
+        headers["Authorization"] = "Bearer offline-secret"
+        headers["Set-Cookie"] = "offline-secret"
+        headers["X-RateLimit-Limit"] = "100"
+        headers["X-RateLimit-Limit"] = "200"
+        raw = b'{"message":"Forbidden","errors":[{"value":"offline-secret"}]}'
+        for action in ("create", "delete", "abort-cleanup"):
+            with self.subTest(action=action), tempfile.TemporaryDirectory() as directory:
+                error = urllib.error.HTTPError("https://example.invalid", 403, "refusal",
+                                               headers, io.BytesIO(raw))
+                intent, sidecar = self.run_refusal(directory, error, action=action)
+                self.assertEqual(intent["http_status"], 403)
+                self.assertEqual(intent["diagnostic_capture"], "complete")
+                self.assertEqual(stat.S_IMODE(sidecar.stat().st_mode), 0o600)
+                serialized = sidecar.read_text()
+                self.assertNotIn("offline-secret", serialized)
+                self.assertNotIn("example.invalid", serialized)
+                record = json.loads(serialized)
+                self.assertEqual(record["http_status"], 403)
+                self.assertEqual(record["identity"], {
+                    "action": action, "repo": REPO, "repository_id": ID, "ref": REF,
+                    "target_sha": TARGET, "default_sha": DEFAULT, "api_origin": probe.API_ORIGIN,
+                    "nonce": "a1b2c3d4e5f6", "approved_actor": ACTOR,
+                    "prepared_at": intent["prepared_at"],
+                    "probe_sha256": hashlib.sha256(Path(probe.__file__).read_bytes()).hexdigest(),
+                })
+                for key in ("request_started_at", "request_completed_at"):
+                    self.assertEqual(record[key], intent[key])
+                diagnostic = record["diagnostic"]
+                self.assertEqual(diagnostic, {
+                    "capture": "complete", "body_bytes_inspected": len(raw),
+                    "message_category": "forbidden",
+                    "headers": {"x-github-request-id": "F00D:AB:123", "x-ratelimit-remaining": "0"},
+                })
+                digest = hashlib.sha256(
+                    json.dumps(diagnostic, sort_keys=True, separators=(",", ":")).encode())
+                self.assertEqual(record["diagnostic_sha256"], digest.hexdigest())
+
+    def test_http_diagnostic_incomplete_captures_remain_stop(self):
+        for raw, expected in ((b'{"message":', "failed"), (b"{}", "complete"),
+                              (b"x" * 9000, "truncated"), (None, "unavailable")):
+            with self.subTest(expected=expected), tempfile.TemporaryDirectory() as directory:
+                stream = io.BytesIO(raw) if raw is not None else None
+                error = urllib.error.HTTPError("https://example.invalid", 403, "refusal",
+                                               Message(), stream)
+                intent, sidecar = self.run_refusal(directory, error)
+                self.assertEqual(intent["diagnostic_capture"], expected)
+                record = json.loads(sidecar.read_text())
+                self.assertLessEqual(record["diagnostic"]["body_bytes_inspected"],
+                                     probe.HTTP_ERROR_LIMIT + 1)
+                self.assertEqual(record["diagnostic"]["capture"], expected)
+        with tempfile.TemporaryDirectory() as directory:
+            intent, sidecar = self.run_refusal(directory, TimeoutError("offline-secret"))
+            self.assertIsNone(intent["http_status"])
+            self.assertEqual(json.loads(sidecar.read_text())["diagnostic"]["capture"], "unavailable")
+
+    def test_diagnostic_file_and_directory_sync_failure_preserve_consumed_intent(self):
+        for stage in ("write", "file", "directory"):
+            with self.subTest(stage=stage), tempfile.TemporaryDirectory() as directory:
+                error = urllib.error.HTTPError("https://example.invalid", 403, "refusal",
+                                               Message(), io.BytesIO(b'{"message":"Forbidden"}'))
+                intent, _ = self.run_refusal(directory, error, fail_at=stage)
+                self.assertEqual(intent["diagnostic_capture"], "failed")
 
     def test_abort_cleanup_never_relabels_phase_c(self):
         with tempfile.TemporaryDirectory() as d:

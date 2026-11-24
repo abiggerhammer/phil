@@ -245,3 +245,32 @@ any prospective mutation call. Errors abort without retries, leaving
 the one-use path occupied. Poststate reconciliation is separate and
 cannot retroactively make an unfynced intent safe. Do not run the
 source mutator to exercise this guarantee outside mocked offline tests.
+
+## Private HTTP diagnostic receipts
+
+On an attempted mutation with an unexpected HTTP response, the probe
+preserves a mode-0600 sidecar beside the consumed intent in the
+owner-private state directory. A transport or response-processing
+failure also receives an unavailable diagnostic when preservation
+succeeds. The sidecar binds the operation, repository, actor, nonce,
+exact ref and source SHAs, UTC timestamps, and probe file SHA-256.
+Its diagnostic digest covers the canonical JSON of the sanitized
+diagnostic object. It does not cover the original response bytes.
+
+- `complete` means a bounded JSON error object was read and classified.
+  Only a fixed message category and allowlisted, format-validated
+  request ID or rate-limit fields are retained.
+- `truncated` means the 4 KiB body cap was exceeded, as detected by
+  reading one extra byte. No body text or partial message is retained.
+- `unavailable` means there was no usable error body or HTTP response.
+  Check the separately recorded HTTP status, which may be null.
+- `failed` means reading or validating the diagnostic failed. If writing
+  or syncing the sidecar fails, the intent records diagnostic failure
+  when possible. The original durable marker remains consumed even if
+  the intent summary itself cannot be updated. Sidecar presence alone
+  does not establish successful preservation.
+
+The sidecar never supplies success evidence. Preserve it privately with
+the corresponding STOP receipt and disclose only independently reviewed
+details. See the [GitHub support appendix](github-support-appendix.md)
+for the historical diagnostic gap and unresolved platform questions.

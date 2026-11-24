@@ -3,6 +3,7 @@
 from __future__ import annotations
 import argparse
 import base64
+from dataclasses import dataclass
 import datetime as dt
 import hashlib
 import json
@@ -106,6 +107,86 @@ def durable_replace(path, obj):
     finally:
         os.close(fd)
 
+HTTP_ERROR_LIMIT = 4096
+DIAGNOSTIC_HEADERS = {
+    "X-GitHub-Request-Id": r"[0-9A-Fa-f]{1,16}(?::[0-9A-Fa-f]{1,16}){2,7}",
+    "X-RateLimit-Limit": r"[0-9]{1,16}",
+    "X-RateLimit-Remaining": r"[0-9]{1,16}",
+    "X-RateLimit-Reset": r"[0-9]{1,16}",
+    "Retry-After": r"[0-9]{1,16}",
+}
+ERROR_MESSAGES = {
+    "Forbidden": "forbidden",
+    "Not Found": "not-found",
+    "Validation Failed": "validation-failed",
+    "Resource not accessible by personal access token": "pat-resource-inaccessible",
+    "Resource not accessible by integration": "integration-resource-inaccessible",
+}
+
+
+@dataclass(frozen=True)
+class HttpErrorDiagnostic:
+    payload: dict
+
+
+def capture_http_error(error, token):
+    """Read bounded error evidence without retaining server-supplied prose."""
+    evidence = {"capture": "unavailable", "headers": {}, "body_bytes_inspected": 0}
+    try:
+        if error.headers is not None:
+            for name, grammar in DIAGNOSTIC_HEADERS.items():
+                values = error.headers.get_all(name, [])
+                if (len(values) == 1 and len(values[0]) <= 135 and
+                    not (token and token in values[0]) and re.fullmatch(grammar, values[0])):
+                    evidence["headers"][name.lower()] = values[0]
+        if error.fp is None:
+            return evidence
+        raw = error.read(HTTP_ERROR_LIMIT + 1)
+        evidence["body_bytes_inspected"] = len(raw)
+        if len(raw) > HTTP_ERROR_LIMIT:
+            evidence["capture"] = "truncated"
+        elif not raw:
+            evidence["capture"] = "unavailable"
+        else:
+            doc = strict_json(raw.decode("utf-8"))
+            check(isinstance(doc, dict), "invalid error response shape")
+            message = doc.get("message")
+            evidence["message_category"] = (
+                ERROR_MESSAGES.get(message, "other") if isinstance(message, str) else "other")
+            evidence["capture"] = "complete"
+    except Exception:
+        evidence["capture"] = "failed"
+    return evidence
+
+
+def preserve_diagnostic(marker, intent, diagnostic, nonce, probe_digest):
+    capture = diagnostic["capture"]
+    evidence = {
+        "schema": "W3-SELECTOR-HTTP-DIAGNOSTIC-V1",
+        "identity": {
+            **{key: intent[key] for key in (
+                "action", "repo", "repository_id", "ref", "target_sha", "default_sha",
+                "api_origin", "approved_actor", "prepared_at")},
+            "nonce": nonce,
+            "probe_sha256": probe_digest,
+        },
+        "request_started_at": intent["request_started_at"],
+        "request_completed_at": intent["request_completed_at"],
+        "http_status": intent["http_status"],
+        "diagnostic": diagnostic,
+        "diagnostic_sha256": hashlib.sha256(
+            json.dumps(diagnostic, sort_keys=True, separators=(",", ":")).encode()
+        ).hexdigest(),
+    }
+    path = marker.with_suffix(".http-diagnostic.json")
+    try:
+        durable_new(path, evidence)
+    except (OSError, Stop):
+        intent["diagnostic_capture"] = "failed"
+        raise Stop("HTTP diagnostic preservation failed; intent remains consumed") from None
+    intent["diagnostic_capture"] = capture
+
+
 class NoRedirect(urllib.request.HTTPRedirectHandler):
     def redirect_request(self, *args, **kwargs):
         return None
@@ -206,8 +287,15 @@ class GitHub:
                 status = resp.status
                 raw = resp.read(1024 * 1024 + 1)
         except urllib.error.HTTPError as exc:
-            # Never expose arbitrary API response bodies, URLs with auth, or tokens.
-            return exc.code, None
+            try:
+                diagnostic = (None if method == "GET" else
+                              HttpErrorDiagnostic(capture_http_error(exc, self._token)))
+                return exc.code, diagnostic
+            finally:
+                try:
+                    exc.close()
+                except Exception:
+                    pass  # A close failure does not erase a received HTTP status.
         except Exception as exc:
             raise Stop("UNKNOWN_AFTER_API_REQUEST: reconcile before any retry") from exc
         check(len(raw) <= 1024 * 1024, "oversized API response")
@@ -324,28 +412,41 @@ def execute(args):
               "prepared_at": iso(dt.datetime.now(UTC)),
               "api_origin": API_ORIGIN, "approved_actor": operator,
               **before}
+    probe_digest = hashlib.sha256(Path(__file__).read_bytes()).hexdigest()
     durable_new(marker, intent)  # file AND containing-directory fsynced
     if action != "create" and not before["observed_refs"]:
         intent["decision"] = "ALREADY_ABSENT_NO_WRITE"
         durable_replace(marker, intent)
         print(json.dumps(intent, sort_keys=True))
         return
-    status = None
+    method = "POST" if action == "create" else "DELETE"
+    route = "/git/refs" if action == "create" else "/git/refs/" + ref.removeprefix("refs/")
+    payload = {"ref": ref, "sha": target} if action == "create" else None
+    expected_status = 201 if action == "create" else 204
+    unavailable = {"capture": "unavailable", "headers": {}, "body_bytes_inspected": 0}
     try:
         intent["request_started_at"] = iso(dt.datetime.now(UTC))
-        if action == "create":
-            status, _ = api.request("POST", "/git/refs",
-                                    {"ref": ref, "sha": target})
-            expected_status = 201
-        else:
-            suffix = ref.removeprefix("refs/")
-            status, _ = api.request("DELETE", "/git/refs/" + suffix)
-            expected_status = 204
+        try:
+            status, response = api.request(method, route, payload)
+        except Stop:
+            intent["request_completed_at"] = iso(dt.datetime.now(UTC))
+            intent["http_status"] = None
+            preserve_diagnostic(marker, intent, unavailable, args.nonce, probe_digest)
+            raise Stop("mutation response unavailable; intent remains consumed") from None
+        received_expected_response = (
+            status == expected_status and not isinstance(response, HttpErrorDiagnostic))
+        if not received_expected_response:
+            intent["request_completed_at"] = iso(dt.datetime.now(UTC))
+            intent["http_status"] = status
+            diagnostic = (response.payload if isinstance(response, HttpErrorDiagnostic)
+                          else unavailable)
+            preserve_diagnostic(marker, intent, diagnostic, args.nonce, probe_digest)
         actual = api.admitted()
-        intent["request_completed_at"] = iso(dt.datetime.now(UTC))
+        if received_expected_response:
+            intent["request_completed_at"] = iso(dt.datetime.now(UTC))
         intent["http_status"] = status
         intent["observed_refs_after"] = actual
-        verified = status == expected_status and actual == (
+        verified = received_expected_response and actual == (
             {ref: target} if action == "create" else {})
         intent["decision"] = (
             ("ABORT_CLEANUP_STATE_VERIFIED" if action == "abort-cleanup"
@@ -356,6 +457,7 @@ def execute(args):
         durable_replace(marker, intent)
         raise
     durable_replace(marker, intent)
+    # Only the intent summary is printable. The sidecar stays owner-local.
     print(json.dumps(intent, sort_keys=True))
     check(intent["decision"] in ("EXACT_STATE_VERIFIED",
                                  "ABORT_CLEANUP_STATE_VERIFIED"),
