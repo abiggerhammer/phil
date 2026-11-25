@@ -1,7 +1,8 @@
 # FSEM-06 selected SteveGet Core/payload reference semantics — proposed
 
-**Status: candidate only, pending exact-head CI and independent semantic-owner
-acceptance.** The accepted upstream is the bounded original-source FSEM-05
+**Status: focused repair candidate after Astra's bounded ACCEPT / actual
+correspondence REVISE (#7163632267); pending new exact-head CI and independent
+adequacy review.** The accepted upstream is the bounded original-source FSEM-05
 rule in #2017, squash 89ef6436a68a5d1ac9ac5a3d0223047c567f7ac9.
 This selected tranche is governed by #1913 and the two-path authorization
 #7154581456. No R3/R4, G3, G4, F2, P9 or whole FSEM-06 closure follows.
@@ -74,14 +75,39 @@ and source open/close administrative segments are explicit.
 Named theorems cover exact typed-selector reflection, exact choice guards,
 labelled replay soundness, bounded step lifting, composed fixed-E history
 inclusion, phase lifecycle inheritance, rank decrease, no unanswered provider
-step, exact found payload, and exact abstract origin-pair comparison. Source
-Haskell-to-Rocq and target Haskell-to-Rocq simulation, including the concrete
-Text/Origin representation relation and source binding persistence, remain
-unproved. The extracted checker is a verified executable selector on the
-typed representation, not an assertion that Haskell adapter or native execution
-is definitionally the Rocq relation. Independent review must decide whether the
-actual-object grounding and selected mathematical refinement are sufficient for
-this bounded reference-rule tranche; if not, stop at the precise missing bridge.
+step, exact found payload, and exact abstract origin-pair comparison. The focused repair adds a distinct invocation-bound dynamic check. The static
+Core rule's key predicate remains structural only; the new full
+binding_matches_native compares the independently admitted source+invocation
+context with every qualified reply (full spans, both operation/interface/
+implementation identities and exact invocation ContentId). SourceSpan point
+fields are encoded separately. The new checked segment theorem states an actual
+represented target step, exact E consumption and a specified qualified labelled
+source segment with at most two source steps and preserved observations.
+
+The source side of the checked producer calls the SAME privately held selected
+FSEM-05 invocation; it checks actual returned step results against per-call
+snapshot deltas and the actual world active status. The target computes its
+step before consulting the source. A receipt is only issued after the extracted
+checker accepts the real pre/post target frame reifications, fixed E suffix,
+actual consumed reply, target observations, actual source input labels and
+private source observations. The source delta is not a caller assertion and
+the checker tests the specified realized segment rather than choosing an
+existential alternate source trace.
+
+The payload table is taken once from the immutable invocation E (exact UTF-8
+names); payload_index_sound and equal_payload_index_preserves_bytes show
+the code's exact table lookup property. The model's origin IDs are local
+indices obtained by applying unique_index to equality comparisons with
+the actual opaque issued identities, not by encoding Unique or a hash.
+unique_index_sound and unique_index_only_match show that the index selects the
+one actual equality slot. The checked private map pairs target and source
+origins and complete issued/retired sets, including across invocations; the
+target now retains actual retirement order. A separate-world origin cannot
+select an entry in the receipt's opaque table. These are finite checked
+representation and source-realization controls, not a formal semantics of
+arbitrary Haskell Eq, Text, IORef, Map, GHC or extraction. The independent
+review must judge the fidelity of the actual adapters and private producer,
+not assume it from the mathematical theorem or from green tests alone.
 
 ## Build and ownership
 
@@ -99,8 +125,9 @@ library would need an explicit separate decision and closure review.
 
 No authentic native provider event claim, native linked FFI/StablePtr/ABA,
 Systems/LLVM/build #1826, SHA semantic profile, selected Blob assumptions,
-actual Haskell-to-Rocq simulation, general progress, whole-language FSEM or
+general Haskell-to-Rocq simulation, general progress, whole-language FSEM or
 P9-G3 adequacy is established. The mathematical model has nat payload/origin
 symbols and exact labelled history; the concrete evaluator uses full Text and
-opaque origins. These are not assumed equivalent. No new axiom, caller Prop,
+opaque origins and the new private checked representations. This is a repair
+candidate, not final acceptance of actual-source/Core adequacy. No new axiom, caller Prop,
 blanket ABI premise or implicit permission to resume P9 is introduced.

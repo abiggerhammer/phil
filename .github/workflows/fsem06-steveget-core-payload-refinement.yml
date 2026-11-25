@@ -38,7 +38,7 @@ jobs:
       - uses: actions/checkout@v4
         with:
           ref: ${{ github.event.pull_request.head.sha || github.sha }}
-      - name: Compile accepted source and new selected theorem; extract checked selector
+      - name: Compile accepted source and selected theorem; extract static and dynamic checkers
         shell: bash
         run: |
           set -euo pipefail
@@ -47,7 +47,7 @@ jobs:
           proof=proof/Phil/Verification/FSEM06SteveGetSelectedCorePayloadRefinement.v
           rocq c -Q proof/Phil Phil "$upstream"
           rocq c -Q proof/Phil Phil "$proof" | tee /tmp/fsem06-assumptions.log
-          test "$(grep -c '^Closed under the global context' /tmp/fsem06-assumptions.log)" -eq 24
+          test "$(grep -c '^Closed under the global context' /tmp/fsem06-assumptions.log)" -eq 32
           if grep -Eq '^Axioms:' /tmp/fsem06-assumptions.log; then exit 1; fi
           if grep -nE '^[[:space:]]*(Admitted[.]|Axiom[[:space:]]|Parameter[[:space:]])' "$proof"; then
             echo "unexpected new admission" >&2

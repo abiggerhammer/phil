@@ -3,7 +3,8 @@
 -- | Bounded selected SteveGet reference interpreter.  Admission is over the
 -- actual ordinary-Surface selector and full native Steve Core + exact plan,
 -- not their lossy digests.  This module is a proposed FSEM-06 rule producer;
--- it is not a proof of native execution, or of Haskell/Rocq correspondence.
+-- the dynamic proof-extracted checker certifies represented actual segments.
+-- It does not establish linked native execution or arbitrary Haskell semantics.
 module Phil.Compiler.SelectedSteveGetCoreExecution
   ( SelectedSteveGetCore
   , prepareSelectedSteveGetCore
@@ -36,9 +37,11 @@ import Data.Unique (Unique, newUnique)
 import Data.Word (Word8)
 import qualified FSEM06SteveGetNativeKernel as K
 import qualified Phil.Compiler.RuntimeChoicePayload as P
-import Phil.Core.Static (DeclarationKey (..), InstanceKey (..))
+import Phil.Core.Static (DeclarationKey (..), InstanceKey (..),
+  InterfaceRevision (..), DefinitionRevision (..))
 import Phil.Examples.Phase1.SystemsWitnesses (steveCoreProgram)
 import qualified Phil.Surface.SelectedSteveGetExecution as S
+import qualified Phil.Surface.Syntax as Syntax
 import qualified Phil.Systems.GenericLowering as C
 
 -- Positional, admission-only representation; no public record labels.
@@ -110,6 +113,68 @@ nativeName = map byteNat . BS.unpack . TextEncoding.encodeUtf8
     go :: Int -> K.Nat
     go 0 = K.O
     go n = K.S (go (n - 1))
+
+-- Invocation identity is independent of the offered E reply.  SourceSpan
+-- fields are encoded individually (not a pretty-printer or a concatenation).
+-- The ContentId is obtained only at begin; it is not a static Core key.
+nativeSpan :: Syntax.SourceSpan -> [[K.Nat]]
+nativeSpan spanValue = point (Syntax.sourceSpanStart spanValue)
+  ++ point (Syntax.sourceSpanEnd spanValue)
+  where
+    point p = map nativeName
+      [ Syntax.sourcePointFile p
+      , Text.pack (show (Syntax.sourcePointLine p))
+      , Text.pack (show (Syntax.sourcePointColumn p))
+      , Text.pack (show (Syntax.sourcePointOffset p)) ]
+
+nativeBinding :: S.SelectedSteveGet -> Text -> K.Selected_binding
+nativeBinding source = nativeBindingFor source
+  (S.selectedReadOccurrence source, S.selectedReadProvider source)
+  (S.selectedDigestOccurrence source, S.selectedDigestProvider source)
+
+nativeBindingFor :: S.SelectedSteveGet
+  -> (Syntax.SourceSpan, S.QualifiedProviderRef)
+  -> (Syntax.SourceSpan, S.QualifiedProviderRef)
+  -> Text -> K.Selected_binding
+nativeBindingFor source (readAt, readProvider) (digestAt, digestProvider) contentId =
+  let DeclarationKey declaration = S.selectedDeclarationKey source
+      InstanceKey instanceKey = S.selectedInstanceKey source
+      InterfaceRevision readInterface = S.qualifiedProviderInterface readProvider
+      DefinitionRevision readImplementation = S.qualifiedProviderImplementation readProvider
+      InterfaceRevision digestInterface = S.qualifiedProviderInterface digestProvider
+      DefinitionRevision digestImplementation = S.qualifiedProviderImplementation digestProvider
+  in K.Binding (nativeName declaration) (nativeName instanceKey)
+       (nativeSpan readAt) (nativeSpan digestAt)
+       (nativeName (S.qualifiedProviderOperation readProvider))
+       (nativeName readInterface) (nativeName readImplementation)
+       (nativeName (S.qualifiedProviderOperation digestProvider))
+       (nativeName digestInterface) (nativeName digestImplementation) (nativeName contentId)
+
+type PayloadTable = [[K.Nat]]
+
+nativePayload :: PayloadTable -> Text -> Either Text K.Nat
+nativePayload table payload = maybe (Left "payload absent from exact invocation byte table")
+  Right (K.payload_index table (nativeName payload))
+
+nativeReply :: S.SelectedSteveGet -> PayloadTable -> S.SuppliedResponse
+  -> Either Text (K.Selected_binding, K.Qualified_reply)
+nativeReply source table response = case response of
+  S.ReadResponse at provider contentId outcome -> do
+    let binding = nativeBindingFor source (at, provider)
+          (S.selectedDigestOccurrence source, S.selectedDigestProvider source) contentId
+    encoded <- case outcome of
+      S.ReadFound payload -> K.QFound binding <$> nativePayload table payload
+      S.ReadNotFound -> Right (K.QNotFound binding)
+      S.ReadStorageFailure _ -> Right (K.QFailure binding)
+    pure (binding, encoded)
+  S.DigestResponse at provider contentId view outcome -> do
+    require (view == "bytesView") "wrong original source digest view"
+    let binding = nativeBindingFor source
+          (S.selectedReadOccurrence source, S.selectedReadProvider source)
+          (at, provider) contentId
+    pure (binding, case outcome of
+      S.DigestAccepted -> K.QAccepted binding
+      S.DigestRejected _ -> K.QRejected binding)
 
 nativeSubject
   :: S.SelectedSteveGet -> C.CoreSystemsFunction -> P.RuntimeChoicePayloadPlan
@@ -209,6 +274,7 @@ data TargetLedger = TargetLedger
   , ledgerNext :: !Integer
   , ledgerIssued :: !(Set TargetOrigin)
   , ledgerRetired :: !(Set TargetOrigin)
+  , ledgerRetiredOrder :: ![TargetOrigin]
   }
 
 data TargetFrame = TargetFrame
@@ -255,8 +321,23 @@ receiptMatchesOriginPair (CoreReceipt _ observations _ origins) owner loan = cas
 sameMappedPair :: OriginMap -> TargetOrigin -> TargetOrigin -> S.Origin -> S.Origin -> Bool
 sameMappedPair origins targetOwner targetLoan owner loan =
   targetOwner /= targetLoan && owner /= loan
+    && checkedPair origins targetOwner targetLoan owner loan
     && Map.lookup targetOwner origins == Just owner
     && Map.lookup targetLoan origins == Just loan
+
+-- The extracted equality-table selector is exercised by real receipt
+-- comparisons too.  Separate-world identities have no entry in this table;
+-- equal local counters alone cannot select an origin.  Local indices never
+-- escape the sealed comparison context.
+checkedPair :: OriginMap -> TargetOrigin -> TargetOrigin -> S.Origin -> S.Origin -> Bool
+checkedPair origins targetOwner targetLoan owner loan =
+  case ( K.unique_index (map (== targetOwner) (Map.keys origins))
+       , K.unique_index (map (== targetLoan) (Map.keys origins))
+       , K.unique_index (map (== owner) (Map.elems origins))
+       , K.unique_index (map (== loan) (Map.elems origins)) ) of
+    (Just a, Just b, Just c, Just d) ->
+      K.exact_pair_match (K.O, a) (K.O, b) (K.O, c) (K.O, d)
+    _ -> False
 
 data CoreRunResult
   = CoreCompleted !CoreReceipt
@@ -274,7 +355,7 @@ newSelectedCoreWorld = do
   source <- S.newSelectedWorld
   namespace <- newUnique
   SelectedCoreWorld <$> newMVar
-    (World source (TargetLedger namespace 0 Set.empty Set.empty) Map.empty False)
+    (World source (TargetLedger namespace 0 Set.empty Set.empty []) Map.empty False)
 
 -- All target branches/payloads/operations are computed from the admitted
 -- actual Core and exact plan plus E BEFORE the source is stepped.
@@ -294,7 +375,8 @@ live ledger origin = Set.member origin (ledgerIssued ledger)
 retire :: TargetLedger -> TargetOrigin -> Either Text TargetLedger
 retire ledger origin = do
   require (live ledger origin) "non-live or already retired target origin"
-  pure ledger { ledgerRetired = Set.insert origin (ledgerRetired ledger) }
+  pure ledger { ledgerRetired = Set.insert origin (ledgerRetired ledger)
+              , ledgerRetiredOrder = origin : ledgerRetiredOrder ledger }
 
 -- Read the actual choice terminator and the separately recertified plan.
 -- The arm target and result identifier are not guessed from an outcome label.
@@ -481,19 +563,30 @@ matchSource source origins targetEvents sourceEvents = case
 sourceDelta
   :: S.SelectedWorld -> S.SelectedRun -> [Maybe S.SuppliedResponse]
   -> IO (Either Text [S.SourceEvent])
-sourceDelta world run inputs = do
-  before <- S.snapshotSelectedWorld world
-  results <- mapM (S.stepSelectedSteveGet run) inputs
-  after <- S.snapshotSelectedWorld world
-  let prefix = S.snapshotEvents before
-      events = S.snapshotEvents after
-      ok (S.SourceAdvanced _) = True
-      ok (S.SourceReturnedUnit _) = True
-      ok _ = False
-  pure $ do
-    require (all ok results && take (length prefix) events == prefix)
-      "actual private source step failed or history changed"
-    pure (drop (length prefix) events)
+sourceDelta world run = go
+  where
+    go [] = pure (Right [])
+    go (input : rest) = do
+      before <- S.snapshotSelectedWorld world
+      result <- S.stepSelectedSteveGet run input
+      after <- S.snapshotSelectedWorld world
+      let prefix = S.snapshotEvents before
+          events = S.snapshotEvents after
+          delta = drop (length prefix) events
+          realized = case result of
+            S.SourceAdvanced event -> delta == [event]
+              && S.snapshotHasActiveInvocation after
+            S.SourceReturnedUnit branch -> case reverse delta of
+              S.ReturnedUnit actual : _ -> actual == branch
+                && not (S.snapshotHasActiveInvocation after)
+              _ -> False
+            _ -> False
+      if S.snapshotHasActiveInvocation before
+          && take (length prefix) events == prefix && realized
+        then do
+          following <- go rest
+          pure ((delta ++) <$> following)
+        else pure (Left "actual private source step failed or history changed")
 
 sourceInputs :: Maybe S.SuppliedResponse -> [CoreObservation] -> [Maybe S.SuppliedResponse]
 sourceInputs supplied events = case events of
@@ -515,6 +608,176 @@ ledgerMatches ledger origins snapshot =
     && Set.fromList (Map.elems origins) == S.snapshotIssued snapshot
     && Set.fromList [sourceOrigin | targetOrigin <- Set.toList (ledgerRetired ledger),
          Just sourceOrigin <- [Map.lookup targetOrigin origins]] == S.snapshotRetired snapshot
+
+-- Concrete reification of ACTUAL frames, ledgers and observations.  The
+-- selected target world has a single private namespace.  Its issued set's
+-- ascending order is allocation order; old entries are never removed.
+-- Resolve indices using equality to opaque values, not their serial or Show.
+targetIndex :: TargetLedger -> TargetOrigin -> Either Text K.Nat
+targetIndex ledger origin = maybe (Left "target origin not uniquely issued")
+  Right (K.unique_index (map (== origin) (Set.toAscList (ledgerIssued ledger))))
+
+sourceIndex :: TargetLedger -> OriginMap -> S.Origin -> Either Text K.Nat
+sourceIndex ledger origins origin = do
+  members <- mapM (\key -> findKey key origins) (Set.toAscList (ledgerIssued ledger))
+  maybe (Left "source origin not uniquely mapped in this world")
+    Right (K.unique_index (map (== origin) members))
+
+nativeCounter :: Integer -> K.Nat
+nativeCounter n
+  | n <= 0 = K.O
+  | otherwise = K.S (nativeCounter (n - 1))
+
+nativeBranch :: S.UnitBranch -> K.Unit_branch
+nativeBranch branch = case branch of
+  S.UnitFoundAccepted -> K.UnitAccepted
+  S.UnitFoundRejected -> K.UnitRejected
+  S.UnitNotFound -> K.UnitNotFound
+  S.UnitStorageFailure -> K.UnitStorageFailure
+
+nativeLedger :: TargetLedger -> Either Text (K.Nat, [K.Nat], [K.Nat])
+nativeLedger ledger = do
+  require (ledgerNext ledger == toInteger (Set.size (ledgerIssued ledger))
+    && Set.fromList (ledgerRetiredOrder ledger) == ledgerRetired ledger
+    && length (ledgerRetiredOrder ledger) == Set.size (ledgerRetired ledger))
+    "incomplete target allocation/retirement history"
+  issued <- mapM (targetIndex ledger) (reverse (Set.toAscList (ledgerIssued ledger)))
+  retired <- mapM (targetIndex ledger) (ledgerRetiredOrder ledger)
+  pure (nativeCounter (ledgerNext ledger), issued, retired)
+
+nativeFrame :: PayloadTable -> Text -> TargetLedger -> TargetFrame
+  -> [CoreObservation] -> Either Text K.Target_state
+nativeFrame table contentId ledger frame history = do
+  (n, issued, retired) <- nativeLedger ledger
+  let values = frameValues frame
+      keys = Map.keys values
+      pc = framePC frame
+      branch = frameBranch frame
+      exactKeys expected = require (keys == expected) "wrong concrete frame domain"
+      owned = case Map.lookup "get.bytes" values of
+        Just (Owned o p) -> (,) <$> targetIndex ledger o <*> nativePayload table p
+        _ -> Left "no actual selected owned payload in frame"
+      endPC b = case b of
+        S.UnitFoundAccepted -> "get.ok"
+        S.UnitFoundRejected -> "get.integrity-failure"
+        S.UnitNotFound -> "get.not-found"
+        S.UnitStorageFailure -> "get.failure"
+  require (Map.lookup "get.id" values == Just (ScalarId contentId))
+    "concrete frame differs from invocation ContentId"
+  if frameComplete frame then do
+    b <- maybe (Left "missing concrete terminal branch") Right branch
+    exactKeys ["get.id"]
+    require (pc == endPC b) "wrong concrete completed PC"
+    pure (K.TDone n issued retired (nativeBranch b))
+  else case (pc, branch) of
+    ("get.entry", Nothing) -> exactKeys ["get.id"] >> pure (K.TRead n issued retired)
+    ("get.check", Nothing) -> do
+      exactKeys ["get.bytes", "get.bytes-view", "get.id"]
+      (owner, payload) <- owned
+      loan <- case (Map.lookup "get.bytes" values, Map.lookup "get.bytes-view" values) of
+        (Just (Owned o _), Just (Borrowed o' l)) | o == o' && o /= l -> targetIndex ledger l
+        _ -> Left "concrete borrowed value not linked to the owned result"
+      pure (K.TDigest n issued retired payload owner loan)
+    (_, Just b) | b == S.UnitFoundAccepted || b == S.UnitFoundRejected -> do
+      exactKeys ["get.bytes", "get.id"]
+      require (pc == endPC b) "wrong concrete release PC"
+      (owner, payload) <- owned
+      loan <- case (Map.lookup "get.bytes" values,
+          [(o,l) | CoreBorrowOpened o l <- history],
+          [l | CoreBorrowClosed l <- history]) of
+        (Just (Owned o _), [(o',l)], [closed])
+          | o == o' && o /= l && l == closed
+              && Set.member l (ledgerRetired ledger) -> targetIndex ledger l
+        _ -> Left "no exact closed loan history for concrete release"
+      pure (K.TRelease n issued retired payload owner loan (b == S.UnitFoundAccepted))
+    (_, Just b) -> do
+      exactKeys ["get.id"]
+      require (pc == endPC b) "wrong concrete nonfound PC"
+      pure (K.TNonfoundEnd n issued retired (nativeBranch b))
+    _ -> Left "unrepresented selected concrete frame"
+
+nativeTargetObservation :: PayloadTable -> TargetLedger -> CoreObservation -> Either Text K.Observation
+nativeTargetObservation table ledger event = case event of
+  CoreReadFound payload owner -> K.ObsFound <$> nativePayload table payload <*> at owner
+  CoreReadNotFound -> Right K.ObsNotFound
+  CoreReadFailure -> Right K.ObsFailure
+  CoreBorrowOpened owner loan -> K.ObsBorrow <$> at owner <*> at loan
+  CoreDigest owner loan decision -> K.ObsDigest <$> at owner <*> at loan
+    <*> pure (decision == S.DigestAccepted)
+  CoreBorrowClosed loan -> K.ObsClose <$> at loan
+  CoreReleased owner -> K.ObsRelease <$> at owner
+  CoreDiagnostic message -> Right (K.ObsDiagnostic (nativeName message))
+  CoreReturnedUnit b -> Right (K.ObsUnit (nativeBranch b))
+  where at = targetIndex ledger
+
+nativeSourceObservation :: S.SelectedSteveGet -> PayloadTable -> TargetLedger -> OriginMap
+  -> S.SourceEvent -> Either Text K.Observation
+nativeSourceObservation source table ledger origins event = case event of
+  S.ObservedReadFound site payload owner -> do
+    require (site == S.selectedReadOccurrence source) "wrong actual source read occurrence"
+    K.ObsFound <$> nativePayload table payload <*> at owner
+  S.ObservedReadNotFound site -> readSite site >> pure K.ObsNotFound
+  S.ObservedReadFailure site -> readSite site >> pure K.ObsFailure
+  S.OpenedLoan owner loan -> K.ObsBorrow <$> at owner <*> at loan
+  S.ObservedDigest site owner loan decision -> do
+    require (site == S.selectedDigestOccurrence source) "wrong actual source digest occurrence"
+    K.ObsDigest <$> at owner <*> at loan <*> pure (decision == S.DigestAccepted)
+  S.ClosedLoan loan -> K.ObsClose <$> at loan
+  S.ReleasedOwner owner -> K.ObsRelease <$> at owner
+  S.ReturnedUnit b -> Right (K.ObsUnit (nativeBranch b))
+  where
+    at = sourceIndex ledger origins
+    readSite site = require (site == S.selectedReadOccurrence source)
+      "wrong actual source read occurrence"
+
+-- Independently derived expected binding and the actual response projection
+-- are passed to the extracted full-field checker BEFORE either machine steps.
+checkOfferedBinding :: SelectedSteveGetCore -> ReceiptContext -> Maybe S.SuppliedResponse
+  -> Either Text ()
+checkOfferedBinding (SelectedSteveGetCore source fn plan)
+    (ReceiptContext _ contentId fixedE) offered = do
+  subject <- nativeSubject source fn plan
+  let table = payloadTable fixedE
+  case offered of
+    Nothing -> Right ()
+    Just response -> do
+      (actual, _) <- nativeReply source table response
+      require (K.native_binding_accepts subject (nativeBinding source contentId) actual)
+        "proof-extracted qualified binding rejected"
+
+payloadTable :: [S.SuppliedResponse] -> PayloadTable
+payloadTable fixedE = [nativeName payload |
+  S.ReadResponse _ _ _ (S.ReadFound payload) <- fixedE]
+
+-- This checker is applied to both independently executed transitions, not
+-- just the model's own output.  Actual successful source inputs/results were
+-- observed by sourceDelta on the SAME sealed invocation.  The original
+-- source evaluator is unchanged; its actual qualified response checks and
+-- opaque histories remain enforced.  No caller can supply a source trace.
+checkActualSegment :: SelectedSteveGetCore -> ReceiptContext
+  -> TargetLedger -> TargetFrame -> [CoreObservation] -> [S.SuppliedResponse]
+  -> TargetLedger -> TargetFrame -> [CoreObservation] -> [S.SuppliedResponse]
+  -> Maybe S.SuppliedResponse -> [Maybe S.SuppliedResponse] -> [S.SourceEvent] -> OriginMap
+  -> Either Text ()
+checkActualSegment (SelectedSteveGetCore source fn plan)
+    (ReceiptContext _ contentId fixedE) ledger frame history remaining
+    nextLedger nextFrame events rest supplied sourceSteps sourceEvents origins = do
+  subject <- nativeSubject source fn plan
+  let table = payloadTable fixedE
+      expected = nativeBinding source contentId
+      reply = fmap snd . nativeReply source table
+      label Nothing = Right K.NoInput
+      label (Just response) = K.reply_label <$> reply response
+  before <- nativeFrame table contentId ledger frame history
+  after <- nativeFrame table contentId nextLedger nextFrame (history ++ events)
+  e <- mapM reply remaining
+  e' <- mapM reply rest
+  used <- mapM reply (maybe [] (:[]) supplied)
+  labels <- mapM label sourceSteps
+  targetEvents <- mapM (nativeTargetObservation table nextLedger) events
+  actualSourceEvents <- mapM (nativeSourceObservation source table nextLedger origins) sourceEvents
+  require (K.check_segment subject expected before e after e' targetEvents
+    used labels actualSourceEvents) "proof-extracted dynamic segment rejected"
 
 expectedSourceActive :: TargetFrame -> Bool
 expectedSourceActive frame = not (frameComplete frame)
@@ -588,17 +851,24 @@ drive world run selected@(SelectedSteveGetCore source fn _) context fuel ledger 
   where
     failed problem = pure (CoreRejected problem, ledger, origins)
     advance supplied used rest =
-      case targetAdvance selected ledger frame supplied of
+      case checkOfferedBinding selected context supplied >>
+          targetAdvance selected ledger frame supplied of
         Left problem -> failed problem
         Right (TargetAdvance nextLedger nextFrame events) -> do
-          observed <- sourceDelta world run (sourceInputs supplied events)
-          case observed >>= matchSource source origins events of
+          let inputs = sourceInputs supplied events
+          observed <- sourceDelta world run inputs
+          case observed of
             Left problem -> pure (CoreRejected problem, nextLedger, origins)
-            Right nextOrigins -> do
-              snapshot <- S.snapshotSelectedWorld world
-              if ledgerMatches nextLedger nextOrigins snapshot
-                  && S.snapshotHasActiveInvocation snapshot == expectedSourceActive nextFrame
-                then drive world run selected context (fuel - 1)
-                  nextLedger nextOrigins nextFrame (history ++ events) used rest
-                else pure (CoreRejected "persistent source/target H or phase mismatch",
-                  nextLedger, nextOrigins)
+            Right sourceEvents -> case matchSource source origins events sourceEvents of
+              Left problem -> pure (CoreRejected problem, nextLedger, origins)
+              Right nextOrigins -> do
+                snapshot <- S.snapshotSelectedWorld world
+                if ledgerMatches nextLedger nextOrigins snapshot
+                    && S.snapshotHasActiveInvocation snapshot == expectedSourceActive nextFrame
+                  then case checkActualSegment selected context ledger frame history remaining
+                        nextLedger nextFrame events rest supplied inputs sourceEvents nextOrigins of
+                    Left problem -> pure (CoreRejected problem, nextLedger, nextOrigins)
+                    Right () -> drive world run selected context (fuel - 1)
+                      nextLedger nextOrigins nextFrame (history ++ events) used rest
+                  else pure (CoreRejected "persistent source/target H or phase mismatch",
+                    nextLedger, nextOrigins)

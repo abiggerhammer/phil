@@ -9,6 +9,7 @@ import qualified Data.Map.Strict as Map
 import Data.Text (Text)
 import qualified Data.Text as Text
 import qualified Data.Text.IO as TextIO
+import qualified FSEM06SteveGetNativeKernel as K
 import Phil.Compiler.SelectedSteveGetCoreExecution
 import qualified Phil.Compiler.RuntimeChoicePayload as P
 import Phil.Core.Static (InterfaceRevision (..), DefinitionRevision (..))
@@ -261,6 +262,7 @@ main = do
       _ -> False)
   rejectedRun "cannot reset live loan/world" (runSelectedSteveGetCore prefixWorld selected ident envYes)
 
+  dynamicKernelNegatives
   let wrongRead = readProvider { S.qualifiedProviderInterface = InterfaceRevision "forged" }
       wrongDigest = digestProvider { S.qualifiedProviderImplementation = DefinitionRevision "forged" }
   mapM_ (\(label, offered) -> do
@@ -277,7 +279,70 @@ main = do
     , ("extra read after found", [readFound, readFound])
     , ("extra digest after terminal", [readFound, digestYes, digestNo])
     ]
-  putStrLn "PASS: actual selected source/Core/plan reference checks (not native ABI or Haskell/Rocq simulation)"
+  -- The full-field extracted guard itself must reject these actual bad E
+  -- identities, rather than relying solely on the earlier Haskell guards.
+  let badReadImpl = readProvider { S.qualifiedProviderImplementation = DefinitionRevision "wrong" }
+      badReadOp = readProvider { S.qualifiedProviderOperation = "wrong" }
+      badDigestIface = digestProvider { S.qualifiedProviderInterface = InterfaceRevision "wrong" }
+      badDigestOp = digestProvider { S.qualifiedProviderOperation = "wrong" }
+  mapM_ (\(label, offered) -> do
+    fresh <- newSelectedCoreWorld
+    result <- runSelectedSteveGetCore fresh selected ident offered
+    require label $ case result of
+      CoreRejected "proof-extracted qualified binding rejected" -> True
+      _ -> False)
+    [ ("bridge rejects read occurrence with correct K/I", [S.ReadResponse digestAt readProvider ident (S.ReadFound payload)])
+    , ("bridge rejects read interface revision", [S.ReadResponse readAt wrongRead ident (S.ReadFound payload)])
+    , ("bridge rejects read implementation revision", [S.ReadResponse readAt badReadImpl ident (S.ReadFound payload)])
+    , ("bridge rejects read operation", [S.ReadResponse readAt badReadOp ident (S.ReadFound payload)])
+    , ("bridge rejects actual invocation ContentId", [S.ReadResponse readAt readProvider "other" (S.ReadFound payload)])
+    , ("bridge rejects digest occurrence", [readFound, S.DigestResponse readAt digestProvider ident "bytesView" S.DigestAccepted])
+    , ("bridge rejects digest interface revision", [readFound, S.DigestResponse digestAt badDigestIface ident "bytesView" S.DigestAccepted])
+    , ("bridge rejects digest implementation revision", [readFound, S.DigestResponse digestAt wrongDigest ident "bytesView" S.DigestAccepted])
+    , ("bridge rejects digest operation", [readFound, S.DigestResponse digestAt badDigestOp ident "bytesView" S.DigestAccepted])
+    , ("bridge rejects digest invocation ContentId", [readFound, S.DigestResponse digestAt digestProvider "other" "bytesView" S.DigestAccepted])
+    ]
+  putStrLn "PASS: actual selected source/Core/plan reference checks and extracted dynamic segment checks (not native ABI)"
+
+-- Test the newly extracted DYNAMIC verifier directly, including a poisoned
+-- representation that the old static selector could not detect.
+dynamicKernelNegatives :: IO ()
+dynamicKernelNegatives = case K.expected_native of
+  subject@(K.NSubject dk ik blob digest _ _) -> do
+    let zero = K.O
+        one = K.S zero
+        two = K.S one
+        binding = K.Binding dk ik [[zero]] [[one]] blob [zero] [one]
+          digest [one] [two] [zero]
+        bad = K.Binding dk ik [[one]] [[one]] blob [zero] [one]
+          digest [one] [two] [zero]
+        start = K.TRead zero [] []
+        finish payload = K.TDigest two [one, zero] [] payload zero one
+        offered = [K.QFound binding zero]
+        observations = [K.ObsFound zero zero, K.ObsBorrow zero one]
+        labels = [K.ReadFound zero, K.NoInput]
+        verify after sourceEvents = K.check_segment subject binding start offered after []
+          observations offered labels sourceEvents
+    require "dynamic checker positive realized found/borrow segment"
+      (verify (finish zero) observations)
+    require "dynamic checker rejects changed actual target payload representation"
+      (not (verify (finish one) observations))
+    require "dynamic checker rejects changed source payload representation"
+      (not (verify (finish zero) [K.ObsFound one zero, K.ObsBorrow zero one]))
+    require "dynamic checker rejects well-formed wrong owner/loan indices"
+      (not (verify (finish zero) [K.ObsFound zero one, K.ObsBorrow one zero]))
+    require "dynamic checker rejects wrong source occurrence with correct K/I"
+      (not (K.check_segment subject binding start [K.QFound bad zero] (finish zero) []
+        observations [K.QFound bad zero] labels observations))
+    require "payload code uses exact bytes rather than length"
+      (case (K.payload_index [[zero], [one]] [zero],
+             K.payload_index [[zero], [one]] [one]) of
+        (Just x, Just y) -> not (K.exact_pair_match (zero, x) (zero, x) (zero, y) (zero, y))
+        _ -> False)
+    require "origin equality table rejects zero or multiple exact matches"
+      (case (K.unique_index [False,False], K.unique_index [True,True]) of
+        (Nothing, Nothing) -> True
+        _ -> False)
 
 acceptedTrace :: Text -> [CoreObservation] -> Bool
 acceptedTrace payload events = case events of

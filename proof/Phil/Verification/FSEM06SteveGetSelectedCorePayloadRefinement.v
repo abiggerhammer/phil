@@ -224,23 +224,76 @@ Qed.
 Record selected_binding := Binding {
   binding_declaration : name;
   binding_instance : name;
-  binding_read_occurrence : name;
-  binding_digest_occurrence : name;
+  binding_read_occurrence : list name;
+  binding_digest_occurrence : list name;
+  binding_blob_operation : name;
   binding_blob_interface : name;
   binding_blob_implementation : name;
+  binding_digest_operation : name;
   binding_digest_interface : name;
   binding_digest_implementation : name;
   binding_content_id : name
 }.
 
-(* The dynamic binding must name the exact selected declaration and instance.
-   The concrete adapter additionally checks the source descriptor's exact spans,
-   qualified interface/implementation revisions and the immutable ContentId. *)
-Definition binding_matches_native (input : NativeSubject) (binding : selected_binding) : Prop :=
+(* The structural rule only needs these keys.  The invocation-level
+   checker below requires ALL fields of independently admitted context. *)
+Definition binding_keys_match_native (input : NativeSubject) (binding : selected_binding) : Prop :=
   match input with
   | NSubject dk ik _ _ _ _ =>
       binding_declaration binding = dk /\ binding_instance binding = ik
   end.
+
+Definition binding_dec : forall x y : selected_binding, {x = y} + {x <> y}.
+Proof. decide equality; first [apply name_dec | apply names_dec]. Defined.
+
+(* The static Core does not supply the free ContentId or source spans.  The
+   expected binding is a SEPARATE admitted source+invocation context.  Never
+   choose it by inspecting a provider reply. *)
+Definition binding_matches_native (input : NativeSubject)
+    (expected actual : selected_binding) : Prop :=
+  match input with
+  | NSubject dk ik blob digest _ _ =>
+    binding_declaration expected = dk /\
+    binding_instance expected = ik /\
+    binding_blob_operation expected = blob /\
+    binding_digest_operation expected = digest /\
+    actual = expected
+  end.
+
+Definition native_binding_accepts (input : NativeSubject)
+    (expected actual : selected_binding) : bool :=
+  match input with
+  | NSubject dk ik blob digest _ _ =>
+    name_eqb (binding_declaration expected) dk &&
+    name_eqb (binding_instance expected) ik &&
+    name_eqb (binding_blob_operation expected) blob &&
+    name_eqb (binding_digest_operation expected) digest &&
+    (if binding_dec actual expected then true else false)
+  end.
+
+Lemma name_eqb_sound : forall x y, name_eqb x y = true <-> x = y.
+Proof.
+  intros x y. unfold name_eqb. destruct (name_dec x y);
+    split; intro H; try reflexivity; try assumption; try discriminate; contradiction.
+Qed.
+
+Theorem native_binding_reflection : forall input expected actual,
+  native_binding_accepts input expected actual = true <->
+  binding_matches_native input expected actual.
+Proof.
+  intros [dk ik blob digest fn specs] expected actual.
+  unfold native_binding_accepts, binding_matches_native.
+  repeat rewrite Bool.andb_true_iff. repeat rewrite name_eqb_sound.
+  destruct (binding_dec actual expected); intuition discriminate.
+Qed.
+
+Theorem different_invocation_binding_rejected : forall input expected actual,
+  actual <> expected -> native_binding_accepts input expected actual = false.
+Proof.
+  intros [dk ik blob digest fn specs] expected actual H.
+  unfold native_binding_accepts. destruct (binding_dec actual expected);
+    [contradiction|]. repeat rewrite Bool.andb_false_r. reflexivity.
+Qed.
 
 Inductive qualified_reply :=
 | QFound : selected_binding -> nat -> qualified_reply
@@ -248,6 +301,12 @@ Inductive qualified_reply :=
 | QFailure : selected_binding -> qualified_reply
 | QAccepted : selected_binding -> qualified_reply
 | QRejected : selected_binding -> qualified_reply.
+
+Definition reply_binding (r : qualified_reply) : selected_binding :=
+  match r with
+  | QFound binding _ | QNotFound binding | QFailure binding
+  | QAccepted binding | QRejected binding => binding
+  end.
 
 Definition reply_label (r : qualified_reply) : offered :=
   match r with
@@ -377,26 +436,26 @@ Inductive core_step (input : NativeSubject) (binding : selected_binding) :
     list qualified_reply -> list observation -> Prop :=
 | CoreFound : forall n issued retired payload rest,
     selected_native_accepts input = true ->
-    binding_matches_native input binding ->
+    binding_keys_match_native input binding ->
     read_choice input "found" "get.check" (Some "get.bytes") = true ->
     core_step input binding (TRead n issued retired) (QFound binding payload :: rest)
       (TDigest (S (S n)) (S n :: n :: issued) retired payload n (S n)) rest
       [ObsFound payload n; ObsBorrow n (S n)]
 | CoreNotFound : forall n issued retired rest,
     selected_native_accepts input = true ->
-    binding_matches_native input binding ->
+    binding_keys_match_native input binding ->
     read_choice input "not-found" "get.not-found" None = true ->
     core_step input binding (TRead n issued retired) (QNotFound binding :: rest)
       (TNonfoundEnd n issued retired UnitNotFound) rest [ObsNotFound]
 | CoreFailure : forall n issued retired rest,
     selected_native_accepts input = true ->
-    binding_matches_native input binding ->
+    binding_keys_match_native input binding ->
     read_choice input "storage-failure" "get.failure" None = true ->
     core_step input binding (TRead n issued retired) (QFailure binding :: rest)
       (TNonfoundEnd n issued retired UnitStorageFailure) rest [ObsFailure]
 | CoreDigestAccepted : forall n issued retired payload owner loan rest,
     selected_native_accepts input = true ->
-    binding_matches_native input binding ->
+    binding_keys_match_native input binding ->
     digest_choice input "accepted" "get.ok" = true ->
     core_step input binding (TDigest n issued retired payload owner loan)
       (QAccepted binding :: rest)
@@ -404,7 +463,7 @@ Inductive core_step (input : NativeSubject) (binding : selected_binding) :
       [ObsDigest owner loan true; ObsClose loan]
 | CoreDigestRejected : forall n issued retired payload owner loan rest,
     selected_native_accepts input = true ->
-    binding_matches_native input binding ->
+    binding_keys_match_native input binding ->
     digest_choice input "rejected" "get.integrity-failure" = true ->
     core_step input binding (TDigest n issued retired payload owner loan)
       (QRejected binding :: rest)
@@ -412,27 +471,27 @@ Inductive core_step (input : NativeSubject) (binding : selected_binding) :
       [ObsDigest owner loan false; ObsClose loan]
 | CoreAcceptedEnd : forall n issued retired payload owner loan rest,
     selected_native_accepts input = true ->
-    binding_matches_native input binding ->
+    binding_keys_match_native input binding ->
     end_present input "get.ok" "success" [release_bytes; trace_commit] = true ->
     core_step input binding (TRelease n issued retired payload owner loan true) rest
       (TDone n issued (owner :: retired) UnitAccepted) rest
       [ObsRelease owner; ObsDiagnostic (nm "steve.get.commit"); ObsUnit UnitAccepted]
 | CoreRejectedEnd : forall n issued retired payload owner loan rest,
     selected_native_accepts input = true ->
-    binding_matches_native input binding ->
+    binding_keys_match_native input binding ->
     end_present input "get.integrity-failure" "integrity-failure" [release_bytes] = true ->
     core_step input binding (TRelease n issued retired payload owner loan false) rest
       (TDone n issued (owner :: retired) UnitRejected) rest
       [ObsRelease owner; ObsUnit UnitRejected]
 | CoreNotFoundEnd : forall n issued retired rest,
     selected_native_accepts input = true ->
-    binding_matches_native input binding ->
+    binding_keys_match_native input binding ->
     end_present input "get.not-found" "not-found" [] = true ->
     core_step input binding (TNonfoundEnd n issued retired UnitNotFound) rest
       (TDone n issued retired UnitNotFound) rest [ObsUnit UnitNotFound]
 | CoreFailureEnd : forall n issued retired rest,
     selected_native_accepts input = true ->
-    binding_matches_native input binding ->
+    binding_keys_match_native input binding ->
     end_present input "get.failure" "storage-failure" [] = true ->
     core_step input binding (TNonfoundEnd n issued retired UnitStorageFailure) rest
       (TDone n issued retired UnitStorageFailure) rest [ObsUnit UnitStorageFailure].
@@ -525,7 +584,7 @@ Theorem target_step_exact_binding_keys : forall input binding c e c' e' obs,
 Proof.
   intros input binding c e c' e' obs H.
   assert (Ha : selected_native_accepts input = true) by (destruct H; assumption).
-  assert (Hb : binding_matches_native input binding) by (destruct H; assumption).
+  assert (Hb : binding_keys_match_native input binding) by (destruct H; assumption).
   apply selected_native_reflection in Ha. subst input. exact Hb.
 Qed.
 
@@ -655,6 +714,268 @@ Proof.
   simpl in Hobs. rewrite app_nil_r in Hobs. rewrite Hobs. exact Hsource.
 Qed.
 
+(* Dynamic proof-extracted segment verifier.  Unlike the original selector,
+   this is executed on actual before/after Core frames, the immutable E suffix,
+   consumed responses and the observations returned by the SAME private
+   selected source invocation.  A successful check is a certificate of the
+   following labelled mathematical relation, not of arbitrary Haskell IO. *)
+Definition branch_dec : forall x y : unit_branch, {x = y} + {x <> y}.
+Proof. decide equality. Defined.
+Definition bool_decidable : forall x y : bool, {x = y} + {x <> y}.
+Proof. decide equality. Defined.
+Definition nat_list_dec : forall x y : list nat, {x = y} + {x <> y}.
+Proof. apply list_eq_dec. exact Nat.eq_dec. Defined.
+Definition reply_dec : forall x y : qualified_reply, {x = y} + {x <> y}.
+Proof. decide equality; first [apply binding_dec | apply Nat.eq_dec]. Defined.
+Definition replies_dec : forall x y : list qualified_reply, {x = y} + {x <> y}.
+Proof. apply list_eq_dec. exact reply_dec. Defined.
+Definition label_dec : forall x y : offered, {x = y} + {x <> y}.
+Proof. decide equality; apply Nat.eq_dec. Defined.
+Definition labels_dec : forall x y : list offered, {x = y} + {x <> y}.
+Proof. apply list_eq_dec. exact label_dec. Defined.
+Definition obs_dec : forall x y : observation, {x = y} + {x <> y}.
+Proof. decide equality;
+  first [apply Nat.eq_dec | apply name_dec | apply bool_decidable | apply branch_dec].
+Defined.
+Definition observations_dec : forall x y : list observation, {x = y} + {x <> y}.
+Proof. apply list_eq_dec. exact obs_dec. Defined.
+Definition target_state_dec : forall x y : target_state, {x = y} + {x <> y}.
+Proof. decide equality;
+  first [apply Nat.eq_dec | apply nat_list_dec | apply bool_decidable | apply branch_dec].
+Defined.
+Definition source_state_dec : forall x y : state, {x = y} + {x <> y}.
+Proof. decide equality;
+  first [apply Nat.eq_dec | apply nat_list_dec | apply bool_decidable | apply branch_dec].
+Defined.
+
+Definition core_candidate (binding : selected_binding) (c : target_state)
+    (e : list qualified_reply)
+    : option (target_state * list qualified_reply * list observation) :=
+  match c, e with
+  | TRead n issued retired, QFound actual payload :: rest =>
+    if binding_dec actual binding then
+      Some (TDigest (S (S n)) (S n :: n :: issued) retired payload n (S n),
+            rest, [ObsFound payload n; ObsBorrow n (S n)])
+    else None
+  | TRead n issued retired, QNotFound actual :: rest =>
+    if binding_dec actual binding then
+      Some (TNonfoundEnd n issued retired UnitNotFound, rest, [ObsNotFound])
+    else None
+  | TRead n issued retired, QFailure actual :: rest =>
+    if binding_dec actual binding then
+      Some (TNonfoundEnd n issued retired UnitStorageFailure, rest, [ObsFailure])
+    else None
+  | TDigest n issued retired payload owner loan, QAccepted actual :: rest =>
+    if binding_dec actual binding then
+      Some (TRelease n issued (loan :: retired) payload owner loan true,
+            rest, [ObsDigest owner loan true; ObsClose loan])
+    else None
+  | TDigest n issued retired payload owner loan, QRejected actual :: rest =>
+    if binding_dec actual binding then
+      Some (TRelease n issued (loan :: retired) payload owner loan false,
+            rest, [ObsDigest owner loan false; ObsClose loan])
+    else None
+  | TRelease n issued retired _ owner _ true, _ =>
+    Some (TDone n issued (owner :: retired) UnitAccepted, e,
+          [ObsRelease owner; ObsDiagnostic (nm "steve.get.commit"); ObsUnit UnitAccepted])
+  | TRelease n issued retired _ owner _ false, _ =>
+    Some (TDone n issued (owner :: retired) UnitRejected, e,
+          [ObsRelease owner; ObsUnit UnitRejected])
+  | TNonfoundEnd n issued retired UnitNotFound, _ =>
+    Some (TDone n issued retired UnitNotFound, e, [ObsUnit UnitNotFound])
+  | TNonfoundEnd n issued retired UnitStorageFailure, _ =>
+    Some (TDone n issued retired UnitStorageFailure, e, [ObsUnit UnitStorageFailure])
+  | _, _ => None
+  end.
+
+Theorem core_candidate_sound : forall input binding c e c' rest obs,
+  selected_native_accepts input = true ->
+  binding_keys_match_native input binding ->
+  core_candidate binding c e = Some (c', rest, obs) ->
+  core_step input binding c e c' rest obs.
+Proof.
+  intros input binding c e c' rest obs Ha Hb H.
+  pose proof (accepted_native_has_exact_choices input Ha) as Hchoices.
+  destruct c; destruct e as [|r tail]; try destruct r;
+    repeat match goal with
+    | d : bool |- _ => destruct d
+    | u : unit_branch |- _ => destruct u
+    end;
+    cbn [core_candidate] in H;
+    repeat match type of H with
+    | context [if ?d then _ else _] => destruct d
+    end;
+    try discriminate;
+    inversion H; subst; clear H;
+    constructor; try assumption; tauto.
+Qed.
+
+(* Every consumed reply is independently bound before projection to the
+   older accepted FSEM-05 labels.  No qualification is reconstructed from
+   the result labels.  The source trace must be the supplied realized trace,
+   not merely some existential trace that could agree. *)
+Definition qualified_source_segment (input : NativeSubject)
+    (binding : selected_binding) (start final : state)
+    (consumed : list qualified_reply) (labels : list offered)
+    (events : list observation) : Prop :=
+  Forall (fun r => binding_matches_native input binding (reply_binding r)) consumed /\
+  external_labels labels = map reply_label consumed /\
+  source_trace start labels events final.
+
+Definition check_segment (input : NativeSubject) (expected : selected_binding)
+    (c : target_state) (e : list qualified_reply)
+    (c' : target_state) (rest : list qualified_reply) (target_events : list observation)
+    (consumed : list qualified_reply) (labels : list offered) (source_events : list observation)
+    : bool :=
+  if selected_native_accepts input then
+  if native_binding_accepts input expected expected then
+  if forallb (fun r => native_binding_accepts input expected (reply_binding r)) consumed then
+  match core_candidate expected c e with
+  | Some (wanted, remaining, events) =>
+    if target_state_dec wanted c' then
+    if replies_dec remaining rest then
+    if observations_dec events target_events then
+    if replies_dec e (consumed ++ rest) then
+    if labels_dec (external_labels labels) (map reply_label consumed) then
+    if Nat.leb (List.length labels) 2 then
+      match replay_source (source_projection c) labels with
+      | Some (source_end, observed) =>
+        if source_state_dec source_end (source_projection c') then
+        if observations_dec observed source_events then
+        if observations_dec (erase_diagnostic target_events ++ pending_unit c')
+                            (pending_unit c ++ source_events)
+        then true else false
+        else false else false
+      | None => false
+      end
+    else false else false else false else false else false else false
+  | None => false
+  end
+  else false else false else false.
+
+Theorem check_segment_sound : forall input expected c e c' rest target_events
+    consumed labels source_events,
+  check_segment input expected c e c' rest target_events consumed labels source_events = true ->
+  binding_matches_native input expected expected /\
+  core_step input expected c e c' rest target_events /\
+  e = consumed ++ rest /\
+  List.length labels <= 2 /\
+  qualified_source_segment input expected (source_projection c) (source_projection c')
+    consumed labels source_events /\
+  erase_diagnostic target_events ++ pending_unit c' = pending_unit c ++ source_events.
+Proof.
+  intros input expected c e c' rest target_events consumed labels source_events H.
+  unfold check_segment in H.
+  destruct (selected_native_accepts input) eqn:Ha; try discriminate.
+  destruct (native_binding_accepts input expected expected) eqn:Hb; try discriminate.
+  destruct (forallb (fun r => native_binding_accepts input expected (reply_binding r)) consumed)
+    eqn:Hqualified; try discriminate.
+  destruct (core_candidate expected c e) as [[[wanted remaining] events]|] eqn:Hc;
+    try discriminate.
+  destruct (target_state_dec wanted c') as [Hstate|]; try discriminate.
+  destruct (replies_dec remaining rest) as [Hrest|]; try discriminate.
+  destruct (observations_dec events target_events) as [Htarget|]; try discriminate.
+  destruct (replies_dec e (consumed ++ rest)) as [Hconsumed|]; try discriminate.
+  destruct (labels_dec (external_labels labels) (map reply_label consumed)) as [Hl|];
+    try discriminate.
+  destruct (Nat.leb (List.length labels) 2) eqn:Hbound; try discriminate.
+  destruct (replay_source (source_projection c) labels) as [[source_end observed]|] eqn:Hr;
+    try discriminate.
+  destruct (source_state_dec source_end (source_projection c')) as [Hend|]; try discriminate.
+  destruct (observations_dec observed source_events) as [Hobs|]; try discriminate.
+  destruct (observations_dec (erase_diagnostic target_events ++ pending_unit c')
+                           (pending_unit c ++ source_events)) as [Hpreserve|]; try discriminate.
+  apply native_binding_reflection in Hb.
+  assert (Hkeys : binding_keys_match_native input expected).
+  { destruct input; simpl in *; tauto. }
+  split; [exact Hb|].
+  split.
+  - rewrite Hstate, Hrest, Htarget in Hc.
+    eapply core_candidate_sound; eauto.
+  - split; [exact Hconsumed|].
+    split; [apply Nat.leb_le; exact Hbound|].
+    split; [|exact Hpreserve].
+    unfold qualified_source_segment. split.
+    + apply Forall_forall. intros r Hin. apply native_binding_reflection.
+      rewrite forallb_forall in Hqualified. apply Hqualified. exact Hin.
+    + split; [exact Hl|].
+      rewrite Hend, Hobs in Hr. eapply replay_source_is_labelled; exact Hr.
+Qed.
+
+(* Payload symbols are indices into the exact invocation-local byte table.
+   This is not a hash or a length-only representation.  Equal indices have
+   equal entries even if the input table contains duplicates. *)
+Fixpoint payload_index (table : list name) (payload : name) : option nat :=
+  match table with
+  | [] => None
+  | p :: tail => if name_dec p payload then Some 0
+                 else option_map S (payload_index tail payload)
+  end.
+
+Theorem payload_index_sound : forall table payload i,
+  payload_index table payload = Some i -> nth_error table i = Some payload.
+Proof.
+  induction table as [|p tail IH]; intros payload i H; simpl in H; try discriminate.
+  destruct (name_dec p payload) as [Heq|].
+  - inversion H; subst. reflexivity.
+  - destruct (payload_index tail payload) eqn:Hi; simpl in H; try discriminate.
+    inversion H; subst. simpl. eapply IH; eauto.
+Qed.
+
+Theorem equal_payload_index_preserves_bytes : forall table p q i,
+  payload_index table p = Some i -> payload_index table q = Some i -> p = q.
+Proof.
+  intros table p q i Hp Hq.
+  apply payload_index_sound in Hp. apply payload_index_sound in Hq.
+  congruence.
+Qed.
+
+(* Opaque origins are NOT encoded from Unique/hash/display/serial.  A private
+   adapter compares actual opaque values against the complete local table.
+   This extracted selector requires exactly one true equality in that table. *)
+Fixpoint unique_index (flags : list bool) : option nat :=
+  match flags with
+  | [] => None
+  | true :: rest => if existsb (fun b => b) rest then None else Some 0
+  | false :: rest => option_map S (unique_index rest)
+  end.
+
+Theorem unique_index_sound : forall flags i,
+  unique_index flags = Some i -> nth_error flags i = Some true.
+Proof.
+  induction flags as [|b tail IH]; intros i H; simpl in H; try discriminate.
+  destruct b.
+  - destruct (existsb (fun b => b) tail); try discriminate.
+    inversion H; subst. reflexivity.
+  - destruct (unique_index tail) eqn:Hi; simpl in H; try discriminate.
+    inversion H; subst. simpl. eapply IH; eauto.
+Qed.
+
+Theorem unique_index_only_match : forall flags i j,
+  unique_index flags = Some i -> nth_error flags j = Some true -> i = j.
+Proof.
+  induction flags as [|b tail IH]; intros i j H Hj; simpl in H; try discriminate.
+  destruct b.
+  - destruct (existsb (fun b => b) tail) eqn:He; try discriminate.
+    inversion H; subst. destruct j as [|j]; [reflexivity|].
+    simpl in Hj.
+    assert (Hex : existsb (fun b => b) tail = true).
+    { apply existsb_exists. exists true. split; [eapply nth_error_In; exact Hj|reflexivity]. }
+    congruence.
+  - destruct (unique_index tail) eqn:Hi; simpl in H; try discriminate.
+    inversion H; subst. destruct j as [|j]; simpl in Hj; try discriminate.
+    f_equal. eapply IH; eauto.
+Qed.
+
+Print Assumptions native_binding_reflection.
+Print Assumptions different_invocation_binding_rejected.
+Print Assumptions core_candidate_sound.
+Print Assumptions check_segment_sound.
+Print Assumptions payload_index_sound.
+Print Assumptions equal_payload_index_preserves_bytes.
+Print Assumptions unique_index_sound.
+Print Assumptions unique_index_only_match.
+
 Print Assumptions target_trace_preserves_lifecycle.
 Print Assumptions initial_target_lifecycle.
 Print Assumptions completed_target_preserves_all_fixed_history_observations.
@@ -688,4 +1009,6 @@ Extract Inductive bool => "Prelude.Bool" [ "Prelude.True" "Prelude.False" ].
 Extract Inductive list => "[]" [ "[]" "(:)" ].
 Extract Inductive option => "Prelude.Maybe" [ "Prelude.Just" "Prelude.Nothing" ].
 Extract Inductive prod => "(,)" [ "(,)" ].
-Extraction "FSEM06SteveGetNativeKernel.hs" selected_native_accepts.
+Extraction "FSEM06SteveGetNativeKernel.hs"
+  selected_native_accepts native_binding_accepts check_segment
+  reply_label payload_index unique_index exact_pair_match.
