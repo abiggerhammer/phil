@@ -57,7 +57,6 @@ prepareSelectedSteveGetCore raw program plan = do
   -- Check raw containers before any Eq, lookup, Map projection or digest.
   mapError C.validateCoreNativeContainers program
   mapError C.validateCoreNativeContainers steveCoreProgram
-  require (program == steveCoreProgram) "not the exact native Steve Core object"
   function <- findKey "SteveGet" (C.coreProgramFunctions program)
   require (C.coreFunctionKey function == "SteveGet"
     && C.coreFunctionEntry function == "get.entry")
@@ -67,13 +66,14 @@ prepareSelectedSteveGetCore raw program plan = do
     (Map.elems specs)) "malformed payload-plan containers"
   recertified <- mapError (P.certifyRuntimeChoicePayloadPlan program) (Map.elems specs)
   expected <- mapError (P.certifyRuntimeChoicePayloadPlan program) exactSpecs
-  require (recertified == plan && expected == plan)
-    "wrong complete payload plan or recertified Core identity"
+  require (recertified == plan) "payload plan does not recertify against this native Core"
+  encoded <- nativeSubject source function plan
+  require (K.selected_native_accepts encoded) "proof-extracted full typed selector rejected"
+  require (program == steveCoreProgram) "not the exact native Steve Core object"
+  require (expected == plan) "wrong complete selected payload plan"
   role function "get.id" (C.CoreRuntimeScalar "ContentId[SHA256]")
   role function "get.bytes" (C.CoreOwnedBuffer "OwnedBytes")
   role function "get.bytes-view" (C.CoreBorrowedValue "get.bytes")
-  encoded <- nativeSubject source function plan
-  require (K.selected_native_accepts encoded) "proof-extracted full typed selector rejected"
   pure (SelectedSteveGetCore source function plan)
 
 -- The exact full plan domain includes both StevePut sites, but only the

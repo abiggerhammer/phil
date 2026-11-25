@@ -1,0 +1,145 @@
+name: FSEM-06 SteveGet Selected Core Payload Refinement
+
+on:
+  push:
+    branches:
+      - formal-semantics/fsem06-steveget-core-payload-refinement
+    paths:
+      - 'src/Phil/Compiler/SelectedSteveGetCoreExecution.hs'
+      - 'phil-core.cabal'
+      - 'proof/Phil/Verification/FSEM06SteveGetSelectedCorePayloadRefinement.v'
+      - 'test/FSEM06SteveGetSelectedCorePayloadMain.hs'
+      - 'docs/phase-1/fsem06-steveget-core-payload-execution-v1.md'
+      - '.github/workflows/fsem06-steveget-core-payload-refinement.yml'
+  pull_request:
+    paths:
+      - 'src/Phil/Compiler/SelectedSteveGetCoreExecution.hs'
+      - 'phil-core.cabal'
+      - 'proof/Phil/Verification/FSEM06SteveGetSelectedCorePayloadRefinement.v'
+      - 'test/FSEM06SteveGetSelectedCorePayloadMain.hs'
+      - 'docs/phase-1/fsem06-steveget-core-payload-execution-v1.md'
+      - '.github/workflows/fsem06-steveget-core-payload-refinement.yml'
+
+concurrency:
+  group: fsem06-selected-core-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  selected-rocq:
+    name: Rocq 9.2 selected exact native selector and labelled fixed-E lifting
+    runs-on: ubuntu-24.04
+    container:
+      image: rocq/rocq-prover:9.2.0
+      options: --user root
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+      - name: Compile accepted source and new selected theorem; extract checked selector
+        shell: bash
+        run: |
+          set -euo pipefail
+          export PATH="/home/rocq/.opam/${COMPILER}/bin:$PATH"
+          upstream=proof/Phil/Verification/FSEM05SteveGetSelectedSourceEvents.v
+          proof=proof/Phil/Verification/FSEM06SteveGetSelectedCorePayloadRefinement.v
+          rocq c -Q proof/Phil Phil "$upstream"
+          rocq c -Q proof/Phil Phil "$proof" | tee /tmp/fsem06-assumptions.log
+          test "$(grep -c '^Closed under the global context' /tmp/fsem06-assumptions.log)" -eq 23
+          if grep -Eq '^Axioms:' /tmp/fsem06-assumptions.log; then exit 1; fi
+          if grep -nE '^[[:space:]]*(Admitted[.]|Axiom[[:space:]]|Parameter[[:space:]])' "$proof"; then
+            echo "unexpected new admission" >&2
+            exit 1
+          fi
+          rocq check -Q proof/Phil Phil Phil.Verification.FSEM05SteveGetSelectedSourceEvents Phil.Verification.FSEM06SteveGetSelectedCorePayloadRefinement
+          sha256sum "$upstream" "$proof" proof/Phil/Verification/FSEM06SteveGetSelectedCorePayloadRefinement.vo /tmp/fsem06-assumptions.log
+          test "$(git hash-object examples/steve/get.phil)" = 8de9853762201b516d7c05bfd5568e54acbd7dc8
+          test -f FSEM06SteveGetNativeKernel.hs
+          mkdir -p /tmp/fsem06-extracted
+          cp FSEM06SteveGetNativeKernel.hs /tmp/fsem06-extracted/
+          (cd /tmp/fsem06-extracted && sha256sum FSEM06SteveGetNativeKernel.hs > SHA256SUMS && cat SHA256SUMS)
+      - uses: actions/upload-artifact@v4
+        with:
+          name: fsem06-checked-extracted-selector
+          path: /tmp/fsem06-extracted
+          if-no-files-found: error
+
+  strict-actual-core:
+    name: GHC 9.6.7 actual source Core typed-plan and opaque-origin adversarial checks
+    needs: selected-rocq
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+      - uses: haskell-actions/setup@v2
+        with:
+          ghc-version: '9.6.7'
+          cabal-version: 'latest'
+          cabal-update: false
+      - uses: actions/download-artifact@v4
+        with:
+          name: fsem06-checked-extracted-selector
+          path: /tmp/fsem06-extracted
+      - name: Strict unsuppressed actual-object build and adversarial execution
+        shell: bash
+        run: |
+          set -euo pipefail
+          (cd /tmp/fsem06-extracted && sha256sum -c SHA256SUMS)
+          bash scripts/ci/cabal-update-retry.sh
+          cabal build lib:phil-core --ghc-options='-Werror'
+          cabal exec -- ghc --make -Wall -Werror -isrc -itest -i/tmp/fsem06-extracted \
+            -outputdir /tmp/fsem06-ghc test/FSEM06SteveGetSelectedCorePayloadMain.hs \
+            -o /tmp/fsem06-selected
+          /tmp/fsem06-selected
+          sha256sum src/Phil/Compiler/SelectedSteveGetCoreExecution.hs \
+            test/FSEM06SteveGetSelectedCorePayloadMain.hs \
+            examples/steve/get.phil /tmp/fsem06-extracted/FSEM06SteveGetNativeKernel.hs
+
+  scope:
+    name: Exclusive FSEM-06 authorized paths and exact family claim
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          fetch-depth: 0
+      - name: Verify actual changed paths and matching atomic claim
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          git fetch origin main
+          python3 - <<'PY'
+          import os
+          import subprocess
+          import sys
+          sys.path.insert(0, "scripts")
+          import fsem_claim
+          allowed_new = {
+            "src/Phil/Compiler/SelectedSteveGetCoreExecution.hs",
+            "proof/Phil/Verification/FSEM06SteveGetSelectedCorePayloadRefinement.v",
+            "test/FSEM06SteveGetSelectedCorePayloadMain.hs",
+            "docs/phase-1/fsem06-steveget-core-payload-execution-v1.md",
+            ".github/workflows/fsem06-steveget-core-payload-refinement.yml",
+          }
+          lines = subprocess.check_output(
+            ["git", "diff", "--name-status", "origin/main...HEAD"], text=True).splitlines()
+          changed = set()
+          for line in lines:
+              status, path = line.split("\t", 1)
+              if status != "A" or path not in allowed_new:
+                  raise SystemExit("unauthorized change: " + line)
+              changed.add(path)
+          assert changed == allowed_new, sorted(changed)
+          print("PASS: five authorized new paths; no Cabal or existing path edit")
+          api = fsem_claim.GitHub(token=os.environ["GH_TOKEN"])
+          record, commit_sha = fsem_claim.live_claim(api, "fsem-06")
+          fsem_claim.require_issue_record(api, record, commit_sha)
+          assert record["branch"] == "formal-semantics/fsem06-steveget-core-payload-refinement"
+          assert record["actor"] == "hamster:fsem-06-core"
+          print("PASS: exact atomic prebranch claim", commit_sha)
+          PY
