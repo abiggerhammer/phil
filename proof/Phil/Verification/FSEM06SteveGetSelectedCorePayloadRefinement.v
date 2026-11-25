@@ -593,7 +593,7 @@ Proof. intros input binding n issued retired payload owner loan rest c' e' obs H
 (* Model comparison uses exact origin namespace and serial, never content.
    The concrete evaluator uses opaque Origin equality and its private map;
    no relation from concrete Unique to this mathematical nat is presumed. *)
-Definition origin_ref := nat * nat.
+Definition origin_ref : Type := (nat * nat)%type.
 Definition exact_origin_eq (x y : origin_ref) : bool :=
   andb (Nat.eqb (fst x) (fst y)) (Nat.eqb (snd x) (snd y)).
 Definition exact_pair_match (ao al bo bl : origin_ref) : bool :=
@@ -688,4 +688,4 @@ Extract Inductive bool => "Prelude.Bool" [ "Prelude.True" "Prelude.False" ].
 Extract Inductive list => "[]" [ "[]" "(:)" ].
 Extract Inductive option => "Prelude.Maybe" [ "Prelude.Just" "Prelude.Nothing" ].
 Extract Inductive prod => "(,)" [ "(,)" ].
-Extraction "FSEM06SteveGetNativeKernel" selected_native_accepts.
+Extraction "FSEM06SteveGetNativeKernel.hs" selected_native_accepts.
