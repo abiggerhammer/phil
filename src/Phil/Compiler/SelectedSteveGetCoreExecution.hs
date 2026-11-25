@@ -619,7 +619,8 @@ targetIndex ledger origin = maybe (Left "target origin not uniquely issued")
 
 sourceIndex :: TargetLedger -> OriginMap -> S.Origin -> Either Text K.Nat
 sourceIndex ledger origins origin = do
-  members <- mapM (\key -> findKey key origins) (Set.toAscList (ledgerIssued ledger))
+  members <- mapM (\key -> maybe (Left "issued target origin has no source mapping") Right
+    (Map.lookup key origins)) (Set.toAscList (ledgerIssued ledger))
   maybe (Left "source origin not uniquely mapped in this world")
     Right (K.unique_index (map (== origin) members))
 
