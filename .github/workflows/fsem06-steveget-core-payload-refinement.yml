@@ -47,7 +47,7 @@ jobs:
           proof=proof/Phil/Verification/FSEM06SteveGetSelectedCorePayloadRefinement.v
           rocq c -Q proof/Phil Phil "$upstream"
           rocq c -Q proof/Phil Phil "$proof" | tee /tmp/fsem06-assumptions.log
-          test "$(grep -c '^Closed under the global context' /tmp/fsem06-assumptions.log)" -eq 23
+          test "$(grep -c '^Closed under the global context' /tmp/fsem06-assumptions.log)" -eq 24
           if grep -Eq '^Axioms:' /tmp/fsem06-assumptions.log; then exit 1; fi
           if grep -nE '^[[:space:]]*(Admitted[.]|Axiom[[:space:]]|Parameter[[:space:]])' "$proof"; then
             echo "unexpected new admission" >&2

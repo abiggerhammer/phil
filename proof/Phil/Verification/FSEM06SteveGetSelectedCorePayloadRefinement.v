@@ -233,6 +233,15 @@ Record selected_binding := Binding {
   binding_content_id : name
 }.
 
+(* The dynamic binding must name the exact selected declaration and instance.
+   The concrete adapter additionally checks the source descriptor's exact spans,
+   qualified interface/implementation revisions and the immutable ContentId. *)
+Definition binding_matches_native (input : NativeSubject) (binding : selected_binding) : Prop :=
+  match input with
+  | NSubject dk ik _ _ _ _ =>
+      binding_declaration binding = dk /\ binding_instance binding = ik
+  end.
+
 Inductive qualified_reply :=
 | QFound : selected_binding -> nat -> qualified_reply
 | QNotFound : selected_binding -> qualified_reply
@@ -368,22 +377,26 @@ Inductive core_step (input : NativeSubject) (binding : selected_binding) :
     list qualified_reply -> list observation -> Prop :=
 | CoreFound : forall n issued retired payload rest,
     selected_native_accepts input = true ->
+    binding_matches_native input binding ->
     read_choice input "found" "get.check" (Some "get.bytes") = true ->
     core_step input binding (TRead n issued retired) (QFound binding payload :: rest)
       (TDigest (S (S n)) (S n :: n :: issued) retired payload n (S n)) rest
       [ObsFound payload n; ObsBorrow n (S n)]
 | CoreNotFound : forall n issued retired rest,
     selected_native_accepts input = true ->
+    binding_matches_native input binding ->
     read_choice input "not-found" "get.not-found" None = true ->
     core_step input binding (TRead n issued retired) (QNotFound binding :: rest)
       (TNonfoundEnd n issued retired UnitNotFound) rest [ObsNotFound]
 | CoreFailure : forall n issued retired rest,
     selected_native_accepts input = true ->
+    binding_matches_native input binding ->
     read_choice input "storage-failure" "get.failure" None = true ->
     core_step input binding (TRead n issued retired) (QFailure binding :: rest)
       (TNonfoundEnd n issued retired UnitStorageFailure) rest [ObsFailure]
 | CoreDigestAccepted : forall n issued retired payload owner loan rest,
     selected_native_accepts input = true ->
+    binding_matches_native input binding ->
     digest_choice input "accepted" "get.ok" = true ->
     core_step input binding (TDigest n issued retired payload owner loan)
       (QAccepted binding :: rest)
@@ -391,6 +404,7 @@ Inductive core_step (input : NativeSubject) (binding : selected_binding) :
       [ObsDigest owner loan true; ObsClose loan]
 | CoreDigestRejected : forall n issued retired payload owner loan rest,
     selected_native_accepts input = true ->
+    binding_matches_native input binding ->
     digest_choice input "rejected" "get.integrity-failure" = true ->
     core_step input binding (TDigest n issued retired payload owner loan)
       (QRejected binding :: rest)
@@ -398,23 +412,27 @@ Inductive core_step (input : NativeSubject) (binding : selected_binding) :
       [ObsDigest owner loan false; ObsClose loan]
 | CoreAcceptedEnd : forall n issued retired payload owner loan rest,
     selected_native_accepts input = true ->
+    binding_matches_native input binding ->
     end_present input "get.ok" "success" [release_bytes; trace_commit] = true ->
     core_step input binding (TRelease n issued retired payload owner loan true) rest
       (TDone n issued (owner :: retired) UnitAccepted) rest
       [ObsRelease owner; ObsDiagnostic (nm "steve.get.commit"); ObsUnit UnitAccepted]
 | CoreRejectedEnd : forall n issued retired payload owner loan rest,
     selected_native_accepts input = true ->
+    binding_matches_native input binding ->
     end_present input "get.integrity-failure" "integrity-failure" [release_bytes] = true ->
     core_step input binding (TRelease n issued retired payload owner loan false) rest
       (TDone n issued (owner :: retired) UnitRejected) rest
       [ObsRelease owner; ObsUnit UnitRejected]
 | CoreNotFoundEnd : forall n issued retired rest,
     selected_native_accepts input = true ->
+    binding_matches_native input binding ->
     end_present input "get.not-found" "not-found" [] = true ->
     core_step input binding (TNonfoundEnd n issued retired UnitNotFound) rest
       (TDone n issued retired UnitNotFound) rest [ObsUnit UnitNotFound]
 | CoreFailureEnd : forall n issued retired rest,
     selected_native_accepts input = true ->
+    binding_matches_native input binding ->
     end_present input "get.failure" "storage-failure" [] = true ->
     core_step input binding (TNonfoundEnd n issued retired UnitStorageFailure) rest
       (TDone n issued retired UnitStorageFailure) rest [ObsUnit UnitStorageFailure].
@@ -482,7 +500,8 @@ Theorem target_trace_lifts_fixed_history : forall input binding c e target_obs c
 Proof.
   intros input binding c e target_obs c' e' Htrace.
   induction Htrace as [c e|c e middle rest events more final remaining Hstep Hmore IH].
-  - exists [], [], []. repeat split; try reflexivity; try apply app_nil_r; try constructor.
+  - exists [], [], []. split; [reflexivity|]. split; [reflexivity|].
+    split; [constructor|]. simpl. rewrite app_nil_r. reflexivity.
   - destruct (target_step_lifts _ _ _ _ _ _ _ Hstep)
       as [used1 [labels1 [obs1 [He [Hlabels1 [_ [Hs1 Hobs1]]]]]]].
     destruct IH as [used2 [labels2 [obs2 [Hr [Hlabels2 [Hs2 Hobs2]]]]]].
@@ -497,6 +516,17 @@ Proof.
         -- unfold erase_diagnostic in *. rewrite filter_app.
            rewrite <- app_assoc, Hobs2, app_assoc, Hobs1, <- app_assoc.
            reflexivity.
+Qed.
+
+Theorem target_step_exact_binding_keys : forall input binding c e c' e' obs,
+  core_step input binding c e c' e' obs ->
+  binding_declaration binding = nm "decl:steve.get" /\
+  binding_instance binding = nm "inst:phase1.steve".
+Proof.
+  intros input binding c e c' e' obs H.
+  assert (Ha : selected_native_accepts input = true) by (destruct H; assumption).
+  assert (Hb : binding_matches_native input binding) by (destruct H; assumption).
+  apply selected_native_reflection in Ha. subst input. exact Hb.
 Qed.
 
 Theorem target_step_preserves_lifecycle : forall input binding c e c' e' obs,
@@ -635,6 +665,7 @@ Print Assumptions replay_source_is_labelled.
 Print Assumptions source_trace_forget.
 Print Assumptions source_trace_append.
 Print Assumptions target_step_lifts.
+Print Assumptions target_step_exact_binding_keys.
 Print Assumptions target_trace_lifts_fixed_history.
 Print Assumptions target_step_preserves_lifecycle.
 Print Assumptions target_digest_live_owner_loan.
