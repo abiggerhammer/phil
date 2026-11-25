@@ -153,14 +153,15 @@ jobs:
             proof/Phil/Surface/GrammarAstRecordDataRecursiveGroupingObservationReplayPathClassifierValueComparison.vo \
             proof/Phil/Surface/GrammarAstRecordDataRecursiveGroupingObservationReplayPathClassifierValueRows.vo \
             proof/Phil/Surface/GrammarAstRecordDataRecursiveGroupingObservationReplayPathClassifierCacheValidation.vo \
-            proof/Phil/Surface/GrammarAstRecordDataRecursiveGroupingObservationReplayPathGuardedCacheComparison.vo
+            proof/Phil/Surface/GrammarAstRecordDataRecursiveGroupingObservationReplayPathGuardedCacheComparison.vo \
+            proof/Phil/Surface/GrammarAstRecordDataRecursiveGroupingObservationReplayPathGuardedCacheComparisonOutcomes.vo
 
       - name: Compile new generic-requirement modules with all warnings enabled
         shell: bash
         run: |
           set -euo pipefail
           export PATH="/home/rocq/.opam/${COMPILER}/bin:$PATH"
-          for module in GrammarAstGenericRequirementRecursiveGroupingSpine GrammarAstGenericRequirementRecursiveGroupingSpineTotality GrammarAstGenericRequirementRecursiveGroupingExamples GrammarAstGenericRequirementsRecursiveGroupingSpine GrammarAstGenericRequirementsRecursiveGroupingSpineTotality GrammarAstGenericRequirementsRecursiveGroupingExamples GrammarAstRecordDataGenericRequirementRecursiveGroupingSpine GrammarAstRecordDataGenericRequirementRecursiveGroupingTotality GrammarAstRecordDataGenericRequirementRecursiveGroupingExamples GrammarAstRecordDataRecursiveGroupingImplementationRepresentation GrammarAstRecordDataRecursiveGroupingImplementationRepresentationExtraction GrammarAstRecordDataRecursiveGroupingImplementationAdmissionExamples GrammarAstRecordDataRecursiveGroupingTaggedAdmission GrammarAstRecordDataRecursiveGroupingTaggedAdmissionInjectivity GrammarAstRecordDataRecursiveGroupingTaggedAdmissionStability GrammarAstRecordDataRecursiveGroupingTaggedAdmissionSeparation GrammarAstRecordDataRecursiveGroupingTaggedAdmissionCanonicalExclusion GrammarAstRecordDataRecursiveGroupingCertifiedTagExactness GrammarAstRecordDataRecursiveGroupingCertifiedAdmissionFibers GrammarAstRecordDataRecursiveGroupingCertifiedFiberEquality GrammarAstRecordDataRecursiveGroupingCertifiedRootKeyEquality GrammarAstRecordDataRecursiveGroupingAcceptedKeyExtensionality GrammarAstRecordDataRecursiveGroupingAdmissionImageFibers GrammarAstRecordDataRecursiveGroupingProductionObservables GrammarAstRecordDataRecursiveGroupingDerivedObservables GrammarAstRecordDataRecursiveGroupingObservationSeparation GrammarAstRecordDataRecursiveGroupingDerivedObservationDisjointness GrammarAstRecordDataRecursiveGroupingObservationPER GrammarAstRecordDataRecursiveGroupingObservationPERDomain GrammarAstRecordDataRecursiveGroupingObservationAdmittedQuotient GrammarAstRecordDataRecursiveGroupingObservationAdmittedDerivations GrammarAstRecordDataRecursiveGroupingObservationClassCoherence GrammarAstRecordDataRecursiveGroupingObservationClassSaturation GrammarAstRecordDataRecursiveGroupingObservationClassifier GrammarAstRecordDataRecursiveGroupingObservationClassifierCertificates GrammarAstRecordDataRecursiveGroupingObservationDerivedPairFibers GrammarAstRecordDataRecursiveGroupingObservationFiberPartition GrammarAstRecordDataRecursiveGroupingObservationDerivedFiberCertificates GrammarAstRecordDataRecursiveGroupingObservationCertificateCoherence GrammarAstRecordDataRecursiveGroupingObservationCertificateFiberLaws GrammarAstRecordDataRecursiveGroupingObservationAdmissionReplay GrammarAstRecordDataRecursiveGroupingObservationReplayFiberTransport GrammarAstRecordDataRecursiveGroupingObservationReplayPairCoherence GrammarAstRecordDataRecursiveGroupingObservationReplayChainCoherence GrammarAstRecordDataRecursiveGroupingObservationReplayPathClosure GrammarAstRecordDataRecursiveGroupingObservationReplayPathQuotient GrammarAstRecordDataRecursiveGroupingObservationReplayPathClassifier GrammarAstRecordDataRecursiveGroupingObservationReplayPathSingleStep GrammarAstRecordDataRecursiveGroupingObservationReplayPathDecision GrammarAstRecordDataRecursiveGroupingObservationReplayPathBooleanPER GrammarAstRecordDataRecursiveGroupingObservationReplayPathBooleanRows GrammarAstRecordDataRecursiveGroupingObservationReplayPathClassifierFibers GrammarAstRecordDataRecursiveGroupingObservationReplayPathClassifierExtensionality GrammarAstRecordDataRecursiveGroupingObservationReplayPathTwoProbeClassifier GrammarAstRecordDataRecursiveGroupingObservationReplayPathComparison GrammarAstRecordDataRecursiveGroupingObservationReplayPathComparisonLaws GrammarAstRecordDataRecursiveGroupingObservationReplayPathDirectComparison GrammarAstRecordDataRecursiveGroupingObservationReplayPathClassifierValueComparison GrammarAstRecordDataRecursiveGroupingObservationReplayPathClassifierValueRows GrammarAstRecordDataRecursiveGroupingObservationReplayPathClassifierCacheValidation GrammarAstRecordDataRecursiveGroupingObservationReplayPathGuardedCacheComparison; do
+          for module in GrammarAstGenericRequirementRecursiveGroupingSpine GrammarAstGenericRequirementRecursiveGroupingSpineTotality GrammarAstGenericRequirementRecursiveGroupingExamples GrammarAstGenericRequirementsRecursiveGroupingSpine GrammarAstGenericRequirementsRecursiveGroupingSpineTotality GrammarAstGenericRequirementsRecursiveGroupingExamples GrammarAstRecordDataGenericRequirementRecursiveGroupingSpine GrammarAstRecordDataGenericRequirementRecursiveGroupingTotality GrammarAstRecordDataGenericRequirementRecursiveGroupingExamples GrammarAstRecordDataRecursiveGroupingImplementationRepresentation GrammarAstRecordDataRecursiveGroupingImplementationRepresentationExtraction GrammarAstRecordDataRecursiveGroupingImplementationAdmissionExamples GrammarAstRecordDataRecursiveGroupingTaggedAdmission GrammarAstRecordDataRecursiveGroupingTaggedAdmissionInjectivity GrammarAstRecordDataRecursiveGroupingTaggedAdmissionStability GrammarAstRecordDataRecursiveGroupingTaggedAdmissionSeparation GrammarAstRecordDataRecursiveGroupingTaggedAdmissionCanonicalExclusion GrammarAstRecordDataRecursiveGroupingCertifiedTagExactness GrammarAstRecordDataRecursiveGroupingCertifiedAdmissionFibers GrammarAstRecordDataRecursiveGroupingCertifiedFiberEquality GrammarAstRecordDataRecursiveGroupingCertifiedRootKeyEquality GrammarAstRecordDataRecursiveGroupingAcceptedKeyExtensionality GrammarAstRecordDataRecursiveGroupingAdmissionImageFibers GrammarAstRecordDataRecursiveGroupingProductionObservables GrammarAstRecordDataRecursiveGroupingDerivedObservables GrammarAstRecordDataRecursiveGroupingObservationSeparation GrammarAstRecordDataRecursiveGroupingDerivedObservationDisjointness GrammarAstRecordDataRecursiveGroupingObservationPER GrammarAstRecordDataRecursiveGroupingObservationPERDomain GrammarAstRecordDataRecursiveGroupingObservationAdmittedQuotient GrammarAstRecordDataRecursiveGroupingObservationAdmittedDerivations GrammarAstRecordDataRecursiveGroupingObservationClassCoherence GrammarAstRecordDataRecursiveGroupingObservationClassSaturation GrammarAstRecordDataRecursiveGroupingObservationClassifier GrammarAstRecordDataRecursiveGroupingObservationClassifierCertificates GrammarAstRecordDataRecursiveGroupingObservationDerivedPairFibers GrammarAstRecordDataRecursiveGroupingObservationFiberPartition GrammarAstRecordDataRecursiveGroupingObservationDerivedFiberCertificates GrammarAstRecordDataRecursiveGroupingObservationCertificateCoherence GrammarAstRecordDataRecursiveGroupingObservationCertificateFiberLaws GrammarAstRecordDataRecursiveGroupingObservationAdmissionReplay GrammarAstRecordDataRecursiveGroupingObservationReplayFiberTransport GrammarAstRecordDataRecursiveGroupingObservationReplayPairCoherence GrammarAstRecordDataRecursiveGroupingObservationReplayChainCoherence GrammarAstRecordDataRecursiveGroupingObservationReplayPathClosure GrammarAstRecordDataRecursiveGroupingObservationReplayPathQuotient GrammarAstRecordDataRecursiveGroupingObservationReplayPathClassifier GrammarAstRecordDataRecursiveGroupingObservationReplayPathSingleStep GrammarAstRecordDataRecursiveGroupingObservationReplayPathDecision GrammarAstRecordDataRecursiveGroupingObservationReplayPathBooleanPER GrammarAstRecordDataRecursiveGroupingObservationReplayPathBooleanRows GrammarAstRecordDataRecursiveGroupingObservationReplayPathClassifierFibers GrammarAstRecordDataRecursiveGroupingObservationReplayPathClassifierExtensionality GrammarAstRecordDataRecursiveGroupingObservationReplayPathTwoProbeClassifier GrammarAstRecordDataRecursiveGroupingObservationReplayPathComparison GrammarAstRecordDataRecursiveGroupingObservationReplayPathComparisonLaws GrammarAstRecordDataRecursiveGroupingObservationReplayPathDirectComparison GrammarAstRecordDataRecursiveGroupingObservationReplayPathClassifierValueComparison GrammarAstRecordDataRecursiveGroupingObservationReplayPathClassifierValueRows GrammarAstRecordDataRecursiveGroupingObservationReplayPathClassifierCacheValidation GrammarAstRecordDataRecursiveGroupingObservationReplayPathGuardedCacheComparison GrammarAstRecordDataRecursiveGroupingObservationReplayPathGuardedCacheComparisonOutcomes; do
             rocq c -w +all -Q proof/Phil Phil "proof/Phil/Surface/${module}.v"
           done
 
@@ -254,7 +255,8 @@ jobs:
             GrammarAstRecordDataRecursiveGroupingObservationReplayPathClassifierValueComparison
             GrammarAstRecordDataRecursiveGroupingObservationReplayPathClassifierValueRows
             GrammarAstRecordDataRecursiveGroupingObservationReplayPathClassifierCacheValidation
-            GrammarAstRecordDataRecursiveGroupingObservationReplayPathGuardedCacheComparison.
+            GrammarAstRecordDataRecursiveGroupingObservationReplayPathGuardedCacheComparison
+            GrammarAstRecordDataRecursiveGroupingObservationReplayPathGuardedCacheComparisonOutcomes.
           Print Assumptions phase1_surface_normalize_recursive_grouping_fuel_round_trip.
           Print Assumptions phase1_surface_grouping_well_formed_from_derivation_mutual.
           Print Assumptions phase1_surface_recursive_grouping_sufficient_fuel.
@@ -575,13 +577,17 @@ jobs:
           Print Assumptions phase1_surface_guarded_cache_compare_invalid_iff.
           Print Assumptions phase1_surface_guarded_cache_compare_compared_iff.
           Print Assumptions phase1_surface_guarded_cache_compare_both_rejected.
+          Print Assumptions phase1_surface_guarded_cache_compare_values_iff.
+          Print Assumptions phase1_surface_guarded_cache_compare_shared_iff.
+          Print Assumptions phase1_surface_guarded_cache_compare_rejected_iff.
+          Print Assumptions phase1_surface_guarded_cache_compare_distinct_iff.
           EOF
           rocq c -Q proof/Phil Phil RecursiveGroupingAssumptions.v \
             | tee recursive-grouping-assumptions.txt
           python3 - <<'PY'
           from pathlib import Path
           output = Path("recursive-grouping-assumptions.txt").read_text()
-          assert output.count("Closed under the global context") == 320, output
+          assert output.count("Closed under the global context") == 324, output
           assert "Axioms:" not in output, output
           PY
           rocq check -silent -Q proof/Phil Phil \
@@ -662,7 +668,8 @@ jobs:
             Phil.Surface.GrammarAstRecordDataRecursiveGroupingObservationReplayPathClassifierValueComparison \
             Phil.Surface.GrammarAstRecordDataRecursiveGroupingObservationReplayPathClassifierValueRows \
             Phil.Surface.GrammarAstRecordDataRecursiveGroupingObservationReplayPathClassifierCacheValidation \
-            Phil.Surface.GrammarAstRecordDataRecursiveGroupingObservationReplayPathGuardedCacheComparison
+            Phil.Surface.GrammarAstRecordDataRecursiveGroupingObservationReplayPathGuardedCacheComparison \
+            Phil.Surface.GrammarAstRecordDataRecursiveGroupingObservationReplayPathGuardedCacheComparisonOutcomes
 
       - name: Record source representation and recursive grouping identities
         shell: bash
@@ -814,6 +821,8 @@ jobs:
           cp proof/Phil/Surface/GrammarAstRecordDataRecursiveGroupingObservationReplayPathClassifierCacheValidation.vo surface-grammar-ast-representation/
           cp proof/Phil/Surface/GrammarAstRecordDataRecursiveGroupingObservationReplayPathGuardedCacheComparison.v surface-grammar-ast-representation/
           cp proof/Phil/Surface/GrammarAstRecordDataRecursiveGroupingObservationReplayPathGuardedCacheComparison.vo surface-grammar-ast-representation/
+          cp proof/Phil/Surface/GrammarAstRecordDataRecursiveGroupingObservationReplayPathGuardedCacheComparisonOutcomes.v surface-grammar-ast-representation/
+          cp proof/Phil/Surface/GrammarAstRecordDataRecursiveGroupingObservationReplayPathGuardedCacheComparisonOutcomes.vo surface-grammar-ast-representation/
           cp SurfaceGrammarAstRecordDataRecursiveGroupingKernel.hs surface-grammar-ast-representation/
           cp recursive-grouping-assumptions.txt surface-grammar-ast-representation/
           sha256sum \
@@ -1014,6 +1023,8 @@ jobs:
             proof/Phil/Surface/GrammarAstRecordDataRecursiveGroupingObservationReplayPathClassifierCacheValidation.vo \
             proof/Phil/Surface/GrammarAstRecordDataRecursiveGroupingObservationReplayPathGuardedCacheComparison.v \
             proof/Phil/Surface/GrammarAstRecordDataRecursiveGroupingObservationReplayPathGuardedCacheComparison.vo \
+            proof/Phil/Surface/GrammarAstRecordDataRecursiveGroupingObservationReplayPathGuardedCacheComparisonOutcomes.v \
+            proof/Phil/Surface/GrammarAstRecordDataRecursiveGroupingObservationReplayPathGuardedCacheComparisonOutcomes.vo \
             SurfaceGrammarAstRecordDataRecursiveGroupingKernel.hs \
             > surface-grammar-ast-representation/identities.sha256
           cat surface-grammar-ast-representation/identities.sha256
