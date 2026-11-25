@@ -15,6 +15,7 @@ module Phil.Compiler.SelectedSteveGetCoreExecution
   , receiptObservations
   , receiptConsumedResponses
   , receiptOriginPair
+  , receiptMatchesContext
   , receiptMatchesOriginPair
   , CoreRunResult (..)
   , runSelectedSteveGetCore
@@ -23,13 +24,17 @@ module Phil.Compiler.SelectedSteveGetCoreExecution
 import Control.Concurrent.MVar (MVar, newMVar, putMVar, takeMVar)
 import Control.Exception (mask, onException)
 import Control.Monad (foldM, unless)
+import qualified Data.ByteString as BS
 import qualified Data.Map.Strict as Map
 import Data.Map.Strict (Map)
 import qualified Data.Set as Set
 import Data.Set (Set)
 import Data.Text (Text)
 import qualified Data.Text as Text
+import qualified Data.Text.Encoding as TextEncoding
 import Data.Unique (Unique, newUnique)
+import Data.Word (Word8)
+import qualified FSEM06SteveGetNativeKernel as K
 import qualified Phil.Compiler.RuntimeChoicePayload as P
 import Phil.Core.Static (DeclarationKey (..), InstanceKey (..))
 import Phil.Examples.Phase1.SystemsWitnesses (steveCoreProgram)
@@ -39,6 +44,7 @@ import qualified Phil.Systems.GenericLowering as C
 -- Positional, admission-only representation; no public record labels.
 data SelectedSteveGetCore = SelectedSteveGetCore
   !S.SelectedSteveGet !C.CoreSystemsFunction !P.RuntimeChoicePayloadPlan
+  deriving (Eq)
 
 prepareSelectedSteveGetCore
   :: Text -> C.CoreSystemsProgram -> P.RuntimeChoicePayloadPlan
@@ -66,6 +72,8 @@ prepareSelectedSteveGetCore raw program plan = do
   role function "get.id" (C.CoreRuntimeScalar "ContentId[SHA256]")
   role function "get.bytes" (C.CoreOwnedBuffer "OwnedBytes")
   role function "get.bytes-view" (C.CoreBorrowedValue "get.bytes")
+  encoded <- nativeSubject source function plan
+  require (K.selected_native_accepts encoded) "proof-extracted full typed selector rejected"
   pure (SelectedSteveGetCore source function plan)
 
 -- The exact full plan domain includes both StevePut sites, but only the
@@ -89,6 +97,74 @@ exactSpecs =
     spec fn block arms = P.RuntimeChoicePayloadSpec
       (P.RuntimeChoiceSite fn block) (Map.fromList arms)
     arm label target value = (label, P.RuntimeChoicePayloadArm target value)
+
+-- Direct native-to-extracted representation: UTF-8 byte lists, exact map
+-- keys and internal keys, complete ordered operations/operands/arms/plan,
+-- explicit optional realization and storage fields. Unsupported native
+-- constructors reject; no projected hash, pretty printer, or caller proof.
+nativeName :: Text -> [K.Nat]
+nativeName = map byteNat . BS.unpack . TextEncoding.encodeUtf8
+  where
+    byteNat :: Word8 -> K.Nat
+    byteNat = go . fromIntegral
+    go :: Int -> K.Nat
+    go 0 = K.O
+    go n = K.S (go (n - 1))
+
+nativeSubject
+  :: S.SelectedSteveGet -> C.CoreSystemsFunction -> P.RuntimeChoicePayloadPlan
+  -> Either Text K.NativeSubject
+nativeSubject source fn plan = do
+  values <- mapM nativeValue (Map.toAscList (C.coreFunctionValues fn))
+  blocks <- mapM nativeBlock (Map.toAscList (C.coreFunctionBlocks fn))
+  let DeclarationKey declaration = S.selectedDeclarationKey source
+      InstanceKey instanceKey = S.selectedInstanceKey source
+  pure (K.NSubject (nativeName declaration) (nativeName instanceKey)
+    (nativeName (S.qualifiedProviderOperation (S.selectedReadProvider source)))
+    (nativeName (S.qualifiedProviderOperation (S.selectedDigestProvider source)))
+    (K.NFunction (nativeName "SteveGet") (nativeName (C.coreFunctionKey fn))
+      (nativeName (C.coreFunctionEntry fn)) values blocks)
+    (map nativeSpec (Map.toAscList (P.runtimeChoicePayloadPlanSpecs plan))))
+
+nativeValue :: (Text, C.CoreSystemsValue) -> Either Text K.NativeValue
+nativeValue (key, value) = do
+  convertedRole <- case C.coreValueRole value of
+    C.CoreRuntimeScalar ty -> Right (K.NScalar (nativeName ty))
+    C.CoreOwnedBuffer ty -> Right (K.NOwned (nativeName ty))
+    C.CoreBorrowedValue owner -> Right (K.NBorrowed (nativeName owner))
+    _ -> Left "unsupported selected native value role"
+  pure (K.NValue (nativeName key) (nativeName (C.coreValueKey value))
+    convertedRole (fmap nativeName (C.coreValueStorageIdentity value)))
+
+nativeBlock :: (Text, C.CoreSystemsBlock) -> Either Text K.NativeBlock
+nativeBlock (key, block) = do
+  operations <- mapM nativeOp (C.coreBlockOperations block)
+  terminator <- case C.coreBlockTerminator block of
+    C.CoreSystemsRuntimeChoice operation operands site arms ->
+      Right (K.NChoice (nativeName operation) (map nativeName operands)
+        (fmap nativeName site)
+        [(nativeName label, nativeName target) | (label, target) <- Map.toAscList arms])
+    C.CoreSystemsEnd label -> Right (K.NEnd (nativeName label))
+    _ -> Left "unsupported selected native terminator"
+  pure (K.NBlock (nativeName key) (nativeName (C.coreBlockKey block))
+    operations terminator)
+
+nativeOp :: C.CoreSystemsOperation -> Either Text K.NativeOp
+nativeOp operation = case operation of
+  C.CoreReleaseOwner decision owner -> Right (K.NRelease (nativeName decision) (nativeName owner))
+  C.CoreTrace message -> Right (K.NTrace (nativeName message))
+  _ -> Left "unsupported selected native operation"
+
+nativeSpec :: (P.RuntimeChoiceSite, P.RuntimeChoicePayloadSpec) -> K.NativeSpec
+nativeSpec (key, payloadSpec) =
+  let actualSite = P.runtimeChoicePayloadSite payloadSpec
+  in K.NSpec (nativeName (P.runtimeChoiceSiteFunction key))
+    (nativeName (P.runtimeChoiceSiteBlock key))
+    (nativeName (P.runtimeChoiceSiteFunction actualSite))
+    (nativeName (P.runtimeChoiceSiteBlock actualSite))
+    [ K.NArm (nativeName label) (nativeName (P.runtimeChoicePayloadTarget arm))
+        (fmap nativeName (P.runtimeChoicePayloadValue arm))
+    | (label, arm) <- Map.toAscList (P.runtimeChoicePayloadArms payloadSpec) ]
 
 require :: Bool -> Text -> Either Text ()
 require ok problem = unless ok (Left problem)
@@ -147,23 +223,30 @@ type OriginMap = Map TargetOrigin S.Origin
 -- Public receipts are sealed.  Public source events/snapshots are never
 -- accepted as inputs.  Only the private joint driver constructs a receipt
 -- after it steps its own private source run under the fixed E.
+data ReceiptContext = ReceiptContext !SelectedSteveGetCore !Text ![S.SuppliedResponse]
 data CoreReceipt = CoreReceipt
-  ![CoreObservation] ![S.SuppliedResponse] !OriginMap
+  !ReceiptContext ![CoreObservation] ![S.SuppliedResponse] !OriginMap
+
+receiptMatchesContext
+  :: CoreReceipt -> SelectedSteveGetCore -> Text -> [S.SuppliedResponse] -> Bool
+receiptMatchesContext (CoreReceipt (ReceiptContext actual actualId actualE) _ _ _)
+    selected contentId fixedE =
+  actual == selected && actualId == contentId && actualE == fixedE
 
 receiptObservations :: CoreReceipt -> [CoreObservation]
-receiptObservations (CoreReceipt observations _ _) = observations
+receiptObservations (CoreReceipt _ observations _ _) = observations
 
 receiptConsumedResponses :: CoreReceipt -> [S.SuppliedResponse]
-receiptConsumedResponses (CoreReceipt _ consumed _) = consumed
+receiptConsumedResponses (CoreReceipt _ _ consumed _) = consumed
 
 receiptOriginPair :: CoreReceipt -> Maybe (S.Origin, S.Origin)
-receiptOriginPair (CoreReceipt observations _ origins) = case
+receiptOriginPair (CoreReceipt _ observations _ origins) = case
     [(owner, loan) | CoreBorrowOpened owner loan <- observations] of
   [(owner, loan)] -> (,) <$> Map.lookup owner origins <*> Map.lookup loan origins
   _ -> Nothing
 
 receiptMatchesOriginPair :: CoreReceipt -> S.Origin -> S.Origin -> Bool
-receiptMatchesOriginPair (CoreReceipt observations _ origins) owner loan = case
+receiptMatchesOriginPair (CoreReceipt _ observations _ origins) owner loan = case
     [(targetOwner, targetLoan) | CoreBorrowOpened targetOwner targetLoan <- observations] of
   [(targetOwner, targetLoan)] ->
     sameMappedPair origins targetOwner targetLoan owner loan
@@ -421,6 +504,23 @@ sourceInputs supplied events = case events of
   CoreReleased _ : _ -> [Nothing]
   _ -> []
 
+-- Compare the complete private source and target H histories after every
+-- segment.  Map equality is on the actual opaque Origin, not its Show/hash.
+-- Repeated equal payloads and separate namespaces cannot collapse.
+ledgerMatches :: TargetLedger -> OriginMap -> S.WorldSnapshot -> Bool
+ledgerMatches ledger origins snapshot =
+  ledgerNext ledger == S.snapshotNextOrigin snapshot
+    && Map.keysSet origins == ledgerIssued ledger
+    && Map.size origins == Set.size (Set.fromList (Map.elems origins))
+    && Set.fromList (Map.elems origins) == S.snapshotIssued snapshot
+    && Set.fromList [sourceOrigin | targetOrigin <- Set.toList (ledgerRetired ledger),
+         Just sourceOrigin <- [Map.lookup targetOrigin origins]] == S.snapshotRetired snapshot
+
+expectedSourceActive :: TargetFrame -> Bool
+expectedSourceActive frame = not (frameComplete frame)
+  && frameBranch frame /= Just S.UnitNotFound
+  && frameBranch frame /= Just S.UnitStorageFailure
+
 -- The E list is captured once, not supplied by the caller at each step.
 -- At most three actual Core blocks execute.  A missing E response is a
 -- finite waiting prefix; polling twice must leave the private source H and
@@ -436,14 +536,20 @@ runSelectedSteveGetCore (SelectedCoreWorld lock) selected@(SelectedSteveGetCore 
     else do
       let poison = putMVar lock (World sourceWorld ledger origins True)
       (do
-        started <- S.beginSelectedSteveGet sourceWorld source contentId
+        initial <- S.snapshotSelectedWorld sourceWorld
+        started <- if ledgerMatches ledger origins initial
+            && not (S.snapshotHasActiveInvocation initial)
+            && ledgerIssued ledger == ledgerRetired ledger
+          then S.beginSelectedSteveGet sourceWorld source contentId
+          else pure (Left "initial persistent origin history mismatch")
         case started of
           Left problem -> poison >> pure (CoreRejected problem)
           Right sourceRun -> do
             let frame = TargetFrame (C.coreFunctionEntry fn)
                   (Map.singleton "get.id" (ScalarId contentId)) Nothing False
             (result, newLedger, newOrigins) <-
-              drive sourceWorld sourceRun selected 3 ledger origins frame [] [] fixedE
+              drive sourceWorld sourceRun selected (ReceiptContext selected contentId fixedE)
+                3 ledger origins frame [] [] fixedE
             let complete = case result of
                   CoreCompleted _ -> True
                   _ -> False
@@ -451,15 +557,15 @@ runSelectedSteveGetCore (SelectedCoreWorld lock) selected@(SelectedSteveGetCore 
             pure result) `onException` poison
 
 drive
-  :: S.SelectedWorld -> S.SelectedRun -> SelectedSteveGetCore -> Int
+  :: S.SelectedWorld -> S.SelectedRun -> SelectedSteveGetCore -> ReceiptContext -> Int
   -> TargetLedger -> OriginMap -> TargetFrame -> [CoreObservation]
   -> [S.SuppliedResponse] -> [S.SuppliedResponse]
   -> IO (CoreRunResult, TargetLedger, OriginMap)
-drive world run selected@(SelectedSteveGetCore source fn _) fuel ledger origins frame
+drive world run selected@(SelectedSteveGetCore source fn _) context fuel ledger origins frame
     history consumed remaining
   | frameComplete frame =
       if null remaining
-        then pure (CoreCompleted (CoreReceipt history consumed origins), ledger, origins)
+        then pure (CoreCompleted (CoreReceipt context history consumed origins), ledger, origins)
         else failed "extra response after selected invocation"
   | fuel <= 0 = failed "target exceeded closed-fragment block bound"
   | otherwise = case Map.lookup (framePC frame) (C.coreFunctionBlocks fn) of
@@ -474,7 +580,8 @@ drive world run selected@(SelectedSteveGetCore source fn _) fuel ledger origins 
             let expected = if operation == "BlobProvider.read"
                   then S.NeedsReadResponse else S.NeedsDigestResponse
             if first == expected && second == expected && before == after
-              then pure (CoreWaiting (CoreReceipt history consumed origins), ledger, origins)
+                && ledgerMatches ledger origins after
+              then pure (CoreWaiting (CoreReceipt context history consumed origins), ledger, origins)
               else failed "waiting changed source request or history"
           response : rest -> advance (Just response) (consumed ++ [response]) rest
         _ -> advance Nothing consumed remaining
@@ -487,5 +594,11 @@ drive world run selected@(SelectedSteveGetCore source fn _) fuel ledger origins 
           observed <- sourceDelta world run (sourceInputs supplied events)
           case observed >>= matchSource source origins events of
             Left problem -> pure (CoreRejected problem, nextLedger, origins)
-            Right nextOrigins -> drive world run selected (fuel - 1)
-              nextLedger nextOrigins nextFrame (history ++ events) used rest
+            Right nextOrigins -> do
+              snapshot <- S.snapshotSelectedWorld world
+              if ledgerMatches nextLedger nextOrigins snapshot
+                  && S.snapshotHasActiveInvocation snapshot == expectedSourceActive nextFrame
+                then drive world run selected context (fuel - 1)
+                  nextLedger nextOrigins nextFrame (history ++ events) used rest
+                else pure (CoreRejected "persistent source/target H or phase mismatch",
+                  nextLedger, nextOrigins)

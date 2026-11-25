@@ -5,7 +5,7 @@
   its label-erasing closure.  Neither native provider authenticity nor
   Haskell/Rocq representation/simulation is asserted by these theorems.
 *)
-From Stdlib Require Import List Arith Lia Strings.String Strings.Ascii Extraction.
+From Stdlib Require Import List Arith Lia Bool.Bool Strings.String Strings.Ascii Extraction.
 From Phil.Verification Require Import FSEM05SteveGetSelectedSourceEvents.
 Import ListNotations SelectedSteveGetEvents.
 Local Open Scope string_scope.
@@ -21,29 +21,29 @@ Fixpoint nm (s : string) : name :=
   | String c rest => nat_of_ascii c :: nm rest
   end.
 
-Inductive native_role :=
-| NScalar : name -> native_role
-| NOwned : name -> native_role
-| NBorrowed : name -> native_role.
-Inductive native_value :=
-| NValue : name -> name -> native_role -> option name -> native_value.
-Inductive native_op :=
-| NRelease : name -> name -> native_op
-| NTrace : name -> native_op.
-Inductive native_term :=
-| NChoice : name -> list name -> option name -> list (name * name) -> native_term
-| NEnd : name -> native_term.
-Inductive native_block :=
-| NBlock : name -> name -> list native_op -> native_term -> native_block.
-Inductive native_function :=
-| NFunction : name -> name -> name -> list native_value -> list native_block -> native_function.
-Inductive native_arm :=
-| NArm : name -> name -> option name -> native_arm.
-Inductive native_spec :=
-| NSpec : name -> name -> name -> name -> list native_arm -> native_spec.
-Inductive native_subject :=
-| NSubject : name -> name -> name -> name -> native_function ->
-    list native_spec -> native_subject.
+Inductive NativeRole :=
+| NScalar : name -> NativeRole
+| NOwned : name -> NativeRole
+| NBorrowed : name -> NativeRole.
+Inductive NativeValue :=
+| NValue : name -> name -> NativeRole -> option name -> NativeValue.
+Inductive NativeOp :=
+| NRelease : name -> name -> NativeOp
+| NTrace : name -> NativeOp.
+Inductive NativeTerm :=
+| NChoice : name -> list name -> option name -> list (name * name) -> NativeTerm
+| NEnd : name -> NativeTerm.
+Inductive NativeBlock :=
+| NBlock : name -> name -> list NativeOp -> NativeTerm -> NativeBlock.
+Inductive NativeFunction :=
+| NFunction : name -> name -> name -> list NativeValue -> list NativeBlock -> NativeFunction.
+Inductive NativeArm :=
+| NArm : name -> name -> option name -> NativeArm.
+Inductive NativeSpec :=
+| NSpec : name -> name -> name -> name -> list NativeArm -> NativeSpec.
+Inductive NativeSubject :=
+| NSubject : name -> name -> name -> name -> NativeFunction ->
+    list NativeSpec -> NativeSubject.
 
 Definition name_dec : forall x y : name, {x = y} + {x <> y}.
 Proof. apply list_eq_dec. exact Nat.eq_dec. Defined.
@@ -55,48 +55,48 @@ Definition name_pair_dec : forall x y : name * name, {x = y} + {x <> y}.
 Proof. decide equality; apply name_dec. Defined.
 Definition name_pairs_dec : forall x y : list (name * name), {x = y} + {x <> y}.
 Proof. apply list_eq_dec. exact name_pair_dec. Defined.
-Definition role_dec : forall x y : native_role, {x = y} + {x <> y}.
+Definition role_dec : forall x y : NativeRole, {x = y} + {x <> y}.
 Proof. decide equality; apply name_dec. Defined.
-Definition value_dec : forall x y : native_value, {x = y} + {x <> y}.
+Definition value_dec : forall x y : NativeValue, {x = y} + {x <> y}.
 Proof. decide equality; first [apply name_dec | apply role_dec | apply optional_name_dec]. Defined.
-Definition values_dec : forall x y : list native_value, {x = y} + {x <> y}.
+Definition values_dec : forall x y : list NativeValue, {x = y} + {x <> y}.
 Proof. apply list_eq_dec. exact value_dec. Defined.
-Definition op_dec : forall x y : native_op, {x = y} + {x <> y}.
+Definition op_dec : forall x y : NativeOp, {x = y} + {x <> y}.
 Proof. decide equality; apply name_dec. Defined.
-Definition ops_dec : forall x y : list native_op, {x = y} + {x <> y}.
+Definition ops_dec : forall x y : list NativeOp, {x = y} + {x <> y}.
 Proof. apply list_eq_dec. exact op_dec. Defined.
-Definition term_dec : forall x y : native_term, {x = y} + {x <> y}.
+Definition term_dec : forall x y : NativeTerm, {x = y} + {x <> y}.
 Proof.
   decide equality;
     first [apply name_dec | apply names_dec | apply optional_name_dec | apply name_pairs_dec].
 Defined.
-Definition block_dec : forall x y : native_block, {x = y} + {x <> y}.
+Definition block_dec : forall x y : NativeBlock, {x = y} + {x <> y}.
 Proof. decide equality; first [apply name_dec | apply ops_dec | apply term_dec]. Defined.
-Definition blocks_dec : forall x y : list native_block, {x = y} + {x <> y}.
+Definition blocks_dec : forall x y : list NativeBlock, {x = y} + {x <> y}.
 Proof. apply list_eq_dec. exact block_dec. Defined.
-Definition function_dec : forall x y : native_function, {x = y} + {x <> y}.
+Definition function_dec : forall x y : NativeFunction, {x = y} + {x <> y}.
 Proof. decide equality; first [apply name_dec | apply values_dec | apply blocks_dec]. Defined.
-Definition arm_dec : forall x y : native_arm, {x = y} + {x <> y}.
+Definition arm_dec : forall x y : NativeArm, {x = y} + {x <> y}.
 Proof. decide equality; first [apply name_dec | apply optional_name_dec]. Defined.
-Definition arms_dec : forall x y : list native_arm, {x = y} + {x <> y}.
+Definition arms_dec : forall x y : list NativeArm, {x = y} + {x <> y}.
 Proof. apply list_eq_dec. exact arm_dec. Defined.
-Definition spec_dec : forall x y : native_spec, {x = y} + {x <> y}.
+Definition spec_dec : forall x y : NativeSpec, {x = y} + {x <> y}.
 Proof. decide equality; first [apply name_dec | apply arms_dec]. Defined.
-Definition specs_dec : forall x y : list native_spec, {x = y} + {x <> y}.
+Definition specs_dec : forall x y : list NativeSpec, {x = y} + {x <> y}.
 Proof. apply list_eq_dec. exact spec_dec. Defined.
-Definition subject_dec : forall x y : native_subject, {x = y} + {x <> y}.
+Definition subject_dec : forall x y : NativeSubject, {x = y} + {x <> y}.
 Proof. decide equality; first [apply name_dec | apply function_dec | apply specs_dec]. Defined.
 
-Definition a (label target : string) (payload : option string) : native_arm :=
+Definition a (label target : string) (payload : option string) : NativeArm :=
   NArm (nm label) (nm target) (option_map nm payload).
-Definition spec (fn block : string) (arms : list native_arm) : native_spec :=
+Definition spec (fn block : string) (arms : list NativeArm) : NativeSpec :=
   NSpec (nm fn) (nm block) (nm fn) (nm block) arms.
-Definition b (key : string) (ops : list native_op) (term : native_term) : native_block :=
+Definition b (key : string) (ops : list NativeOp) (term : NativeTerm) : NativeBlock :=
   NBlock (nm key) (nm key) ops term.
-Definition v (key : string) (role : native_role) (storage : option string) : native_value :=
+Definition v (key : string) (role : NativeRole) (storage : option string) : NativeValue :=
   NValue (nm key) (nm key) role (option_map nm storage).
 Definition arm_target (label target : string) : name * name := (nm label, nm target).
-Definition end_block (key label : string) (ops : list native_op) : native_block :=
+Definition end_block (key label : string) (ops : list NativeOp) : NativeBlock :=
   b key ops (NEnd (nm label)).
 Definition release_bytes := NRelease (nm "cleanup") (nm "get.bytes").
 Definition trace_commit := NTrace (nm "steve.get.commit").
@@ -105,7 +105,7 @@ Definition trace_commit := NTrace (nm "steve.get.commit").
    Full Steve program identity is separately checked before selecting this
    function; this representation retains all selected-function fields and
    all four actual plan sites, including the unexecuted StevePut sites. *)
-Definition expected_native : native_subject :=
+Definition expected_native : NativeSubject :=
   NSubject (nm "decl:steve.get") (nm "inst:phase1.steve")
     (nm "BlobProvider.read") (nm "DigestProvider.check")
     (NFunction (nm "SteveGet") (nm "SteveGet") (nm "get.entry")
@@ -133,7 +133,7 @@ Definition expected_native : native_subject :=
         [a "already-exists" "put.ok" None; a "installed" "put.ok" None;
          a "storage-failure" "put.failure" None] ].
 
-Definition selected_native_accepts (input : native_subject) : bool :=
+Definition selected_native_accepts (input : NativeSubject) : bool :=
   if subject_dec input expected_native then true else false.
 
 Theorem selected_native_reflection : forall input,
@@ -149,7 +149,7 @@ Definition names_eqb (x y : list name) := if names_dec x y then true else false.
 
 (* The dynamic rule checks the actual selected block, operation, operands,
    runtime site, control arm and separately supplied plan arm. *)
-Definition choice_present (input : native_subject)
+Definition choice_present (input : NativeSubject)
     (pc operation : string) (operands : list string)
     (label target : string) (payload : option string) : bool :=
   match input with
@@ -179,8 +179,8 @@ Definition choice_present (input : native_subject)
         end) specs)
   end.
 
-Definition end_present (input : native_subject) (pc label : string)
-    (ops : list native_op) : bool :=
+Definition end_present (input : NativeSubject) (pc label : string)
+    (ops : list NativeOp) : bool :=
   match input with
   | NSubject _ _ _ _ (NFunction _ _ _ _ blocks) _ =>
       existsb (fun block => if block_dec block (end_block pc label ops) then true else false) blocks
@@ -363,7 +363,7 @@ Qed.
    the target allocates its own owner/loan from its persistent supply.
    Every external step consumes the head of one fixed qualified E.
    Internal cleanup/end consumes no provider response. *)
-Inductive core_step (input : native_subject) (binding : selected_binding) :
+Inductive core_step (input : NativeSubject) (binding : selected_binding) :
     target_state -> list qualified_reply -> target_state ->
     list qualified_reply -> list observation -> Prop :=
 | CoreFound : forall n issued retired payload rest,
@@ -435,37 +435,35 @@ Proof.
   intros input binding c e c' e' target_obs H; destruct H.
   - exists [QFound binding payload], [ReadFound payload; NoInput],
       [ObsFound payload n; ObsBorrow n (S n)].
-    repeat split; try reflexivity; try (simpl; lia).
-    apply replay_source_is_labelled; reflexivity.
+    repeat split; try reflexivity; try (simpl; lia);
+      try (apply replay_source_is_labelled; reflexivity).
   - exists [QNotFound binding], [ReadNotFound], [ObsNotFound; ObsUnit UnitNotFound].
-    repeat split; try reflexivity; try (simpl; lia).
-    apply replay_source_is_labelled; reflexivity.
+    repeat split; try reflexivity; try (simpl; lia);
+      try (apply replay_source_is_labelled; reflexivity).
   - exists [QFailure binding], [ReadFailure], [ObsFailure; ObsUnit UnitStorageFailure].
-    repeat split; try reflexivity; try (simpl; lia).
-    apply replay_source_is_labelled; reflexivity.
+    repeat split; try reflexivity; try (simpl; lia);
+      try (apply replay_source_is_labelled; reflexivity).
   - exists [QAccepted binding], [DigestAccepted; NoInput],
       [ObsDigest owner loan true; ObsClose loan].
-    repeat split; try reflexivity; try (simpl; lia).
-    apply replay_source_is_labelled; reflexivity.
+    repeat split; try reflexivity; try (simpl; lia);
+      try (apply replay_source_is_labelled; reflexivity).
   - exists [QRejected binding], [DigestRejected; NoInput],
       [ObsDigest owner loan false; ObsClose loan].
-    repeat split; try reflexivity; try (simpl; lia).
-    apply replay_source_is_labelled; reflexivity.
+    repeat split; try reflexivity; try (simpl; lia);
+      try (apply replay_source_is_labelled; reflexivity).
   - exists [], [NoInput], [ObsRelease owner; ObsUnit UnitAccepted].
-    repeat split; try reflexivity; try (simpl; lia).
-    apply replay_source_is_labelled; reflexivity.
+    repeat split; try reflexivity; try (simpl; lia);
+      try (apply replay_source_is_labelled; reflexivity).
   - exists [], [NoInput], [ObsRelease owner; ObsUnit UnitRejected].
-    repeat split; try reflexivity; try (simpl; lia).
-    apply replay_source_is_labelled; reflexivity.
+    repeat split; try reflexivity; try (simpl; lia);
+      try (apply replay_source_is_labelled; reflexivity).
   - exists [], [], [].
-    repeat split; try reflexivity; try (simpl; lia).
-    constructor.
+    repeat split; try reflexivity; try (simpl; lia); try constructor.
   - exists [], [], [].
-    repeat split; try reflexivity; try (simpl; lia).
-    constructor.
+    repeat split; try reflexivity; try (simpl; lia); try constructor.
 Qed.
 
-Inductive core_trace (input : native_subject) (binding : selected_binding) :
+Inductive core_trace (input : NativeSubject) (binding : selected_binding) :
     target_state -> list qualified_reply -> list observation ->
     target_state -> list qualified_reply -> Prop :=
 | CoreTraceNil : forall c e, core_trace input binding c e [] c e
@@ -484,7 +482,7 @@ Theorem target_trace_lifts_fixed_history : forall input binding c e target_obs c
 Proof.
   intros input binding c e target_obs c' e' Htrace.
   induction Htrace as [c e|c e middle rest events more final remaining Hstep Hmore IH].
-  - exists [], [], []. repeat split; try reflexivity; try apply app_nil_r; constructor.
+  - exists [], [], []. repeat split; try reflexivity; try apply app_nil_r; try constructor.
   - destruct (target_step_lifts _ _ _ _ _ _ _ Hstep)
       as [used1 [labels1 [obs1 [He [Hlabels1 [_ [Hs1 Hobs1]]]]]]].
     destruct IH as [used2 [labels2 [obs2 [Hr [Hlabels2 [Hs2 Hobs2]]]]]].
@@ -592,6 +590,44 @@ Proof.
   apply exact_pair_match_sound in Heq. tauto.
 Qed.
 
+Theorem target_trace_preserves_lifecycle : forall input binding c e target_obs c' e',
+  core_trace input binding c e target_obs c' e' ->
+  canonical_lifecycle (source_projection c) ->
+  canonical_lifecycle (source_projection c').
+Proof.
+  intros input binding c e target_obs c' e' Htrace Hlife.
+  destruct (target_trace_lifts_fixed_history _ _ _ _ _ _ _ Htrace)
+    as [used [labels [source_obs [_ [_ [Hsource _]]]]]].
+  eapply reachable_lifecycle_valid; [eapply source_trace_forget; exact Hsource|exact Hlife].
+Qed.
+
+Theorem initial_target_lifecycle :
+  canonical_lifecycle (source_projection (TRead 0 [] [])).
+Proof.
+  apply canonical_lifecycle_reachable.
+  eapply StepsNext; [apply RuleStart|constructor].
+Qed.
+
+Theorem completed_target_preserves_all_fixed_history_observations :
+  forall input binding n issued retired e target_obs n' issued' retired' branch remaining,
+  core_trace input binding (TRead n issued retired) e target_obs
+    (TDone n' issued' retired' branch) remaining ->
+  exists consumed labels,
+    e = consumed ++ remaining /\
+    external_labels labels = map reply_label consumed /\
+    source_trace (AwaitRead n issued retired) labels (erase_diagnostic target_obs)
+      (Done n' issued' retired' branch).
+Proof.
+  intros input binding n issued retired e target_obs n' issued' retired' branch remaining H.
+  destruct (target_trace_lifts_fixed_history _ _ _ _ _ _ _ H)
+    as [used [labels [source_obs [He [Hlabels [Hsource Hobs]]]]]].
+  exists used, labels. split; [exact He|]. split; [exact Hlabels|].
+  simpl in Hobs. rewrite app_nil_r in Hobs. rewrite Hobs. exact Hsource.
+Qed.
+
+Print Assumptions target_trace_preserves_lifecycle.
+Print Assumptions initial_target_lifecycle.
+Print Assumptions completed_target_preserves_all_fixed_history_observations.
 Print Assumptions selected_native_reflection.
 Print Assumptions accepted_native_has_exact_choices.
 Print Assumptions accepted_native_rejects_wrong_destination.
