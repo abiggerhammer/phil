@@ -14,11 +14,16 @@ on:
     branches:
       - phase1-int009-bounded-ping-loop-source
 
+permissions:
+  contents: read
+
 jobs:
   bounded-ping-loop-source:
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
       - uses: haskell-actions/setup@v2
         with:
           ghc-version: '9.6.7'

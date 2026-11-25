@@ -1,0 +1,27 @@
+{
+  "schema": 1,
+  "actions": {
+    "upload": {
+      "tag": "actions/upload-artifact@v4",
+      "revision": "actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02",
+      "defaults": {
+        "name": "artifact",
+        "if-no-files-found": "warn",
+        "retention-days": "repository default",
+        "compression-level": "6",
+        "overwrite": "false",
+        "include-hidden-files": "false"
+      }
+    },
+    "download": {
+      "tag": "actions/download-artifact@v4",
+      "revision": "actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093",
+      "defaults": {
+        "path": "GITHUB_WORKSPACE",
+        "merge-multiple": "false",
+        "repository": "${{ github.repository }}",
+        "run-id": "${{ github.run_id }}"
+      }
+    }
+  }
+}

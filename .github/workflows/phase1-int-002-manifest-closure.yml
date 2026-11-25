@@ -73,11 +73,16 @@ on:
       - 'test/Phase1VerificationIndependentTargetMain.hs'
       - '.github/workflows/phase1-int-002-manifest-closure.yml'
 
+permissions:
+  contents: read
+
 jobs:
   manifest-closure:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
       - uses: haskell-actions/setup@v2
         with:
           ghc-version: '9.6.7'

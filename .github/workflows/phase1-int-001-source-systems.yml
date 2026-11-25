@@ -33,11 +33,16 @@ on:
       - 'test/Phase1INT001SourceSystemsMain.hs'
       - '.github/workflows/phase1-int-001-source-systems.yml'
 
+permissions:
+  contents: read
+
 jobs:
   corresponded-systems-admission:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
       - uses: haskell-actions/setup@v2
         with:
           ghc-version: '9.6.7'

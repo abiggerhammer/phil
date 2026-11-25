@@ -17,11 +17,16 @@ on:
       - 'test/Phase1INT009BoundedPingRuntimeMain.hs'
       - '.github/workflows/phase1-int009-bounded-ping-runtime.yml'
 
+permissions:
+  contents: read
+
 jobs:
   bounded-ping-runtime:
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
       - uses: haskell-actions/setup@v2
         with:
           ghc-version: '9.6.7'

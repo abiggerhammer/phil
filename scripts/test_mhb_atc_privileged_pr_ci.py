@@ -8,7 +8,6 @@ No credential, live PR, release or App token is used by these tests.
 from __future__ import annotations
 
 import copy
-import json
 from pathlib import Path
 import re
 import shutil
@@ -18,6 +17,7 @@ import unittest
 import yaml
 
 from test_mhb_atc_staged_push_ci import StrictWorkflowLoader, parse_workflow_events
+from mhb_atc_g2_policy import EXPRESSION, SECRET_CONTEXT, strings
 
 ROOT = Path(__file__).resolve().parents[1]
 WORKFLOWS = ROOT / ".github" / "workflows"
@@ -104,18 +104,22 @@ def check_pr_privileges(path: Path) -> None:
         deny(not root_writes,
              f"{path.name}: candidate PR workflows cannot have root write permissions")
 
-    root_env = json.dumps(doc.get("env", {}))
-    deny("secrets." not in root_env and "secrets[" not in root_env,
-         f"{path.name}: no PR-wide secret environment")
+    for value in strings({k: v for k, v in doc.items() if k != "jobs"}):
+        deny(not any(SECRET_CONTEXT.search(expr) for expr in EXPRESSION.findall(value)),
+             f"{path.name}/pull_request: SECRET_CONTEXT")
 
     for jobname, job in jobs.items():
         deny(isinstance(job, dict), f"{path.name}: malformed job {jobname}")
-        writes = write_scopes(job.get("permissions"))
+        effective = job.get("permissions", doc.get("permissions"))
+        deny(effective is not None, f"{path.name}/{jobname}/pull_request: PERMISSIONS_ABSENT")
+        writes = write_scopes(effective)
         is_publish = path.name in RELEASES and jobname == "publish"
         if is_publish:
             deny(writes == {"contents"} and
                  normalize_expr(job.get("if")) == PUBLISH_IF,
                  f"{path.name}: publishing must require push on trusted main")
+        elif is_reconcile:
+            deny("permissions" not in job, f"{path.name}: reconciler override changed")
         else:
             deny(not writes,
                  f"{path.name}: job {jobname} grants write to candidate PR code")
@@ -130,17 +134,19 @@ def check_pr_privileges(path: Path) -> None:
             deny(not env,
                  f"{path.name}: unreviewed PR job environment {jobname}")
 
-        secret_refs = re.findall(r"secrets(?:\.|\[)([A-Za-z0-9_]+)", json.dumps(job))
-        if secret_refs:
-            if is_signer:
-                deny(all(name.startswith("APPLE_") for name in secret_refs),
-                     f"{path.name}: unreviewed signing secret")
-            elif is_publish or (path.name == "fsem-claim-guard.yml" and
-                                jobname == "exact-claim-before-pr"):
-                deny(set(secret_refs) == {"GITHUB_TOKEN"},
-                     f"{path.name}: unexpected token or signing secret")
-            else:
-                raise ValueError(f"{path.name}: unreviewed PR job secret {jobname}")
+        for value in strings(job):
+            for expr in EXPRESSION.findall(value):
+                if not SECRET_CONTEXT.search(expr):
+                    continue
+                match = re.fullmatch(r"secrets\.([A-Za-z0-9_]+)", expr)
+                allowed = False
+                if match:
+                    name = match[1]
+                    allowed = (is_signer and name.startswith("APPLE_")) or (
+                        name == "GITHUB_TOKEN" and (
+                            is_publish or (path.name == "fsem-claim-guard.yml" and
+                                           jobname == "exact-claim-before-pr")))
+                deny(allowed, f"{path.name}/{jobname}/pull_request: SECRET_CONTEXT")
 
 
 def audit_pr_workflow_inventory(root: Path) -> int:

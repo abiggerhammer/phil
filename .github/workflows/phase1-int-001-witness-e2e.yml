@@ -35,11 +35,16 @@ on:
       - 'test/Phase1INT001WitnessE2EMain.hs'
       - '.github/workflows/phase1-int-001-witness-e2e.yml'
 
+permissions:
+  contents: read
+
 jobs:
   witness-e2e:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
       - uses: haskell-actions/setup@v2
         with:
           ghc-version: '9.6.7'

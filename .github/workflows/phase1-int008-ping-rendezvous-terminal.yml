@@ -12,11 +12,16 @@ on:
       - '.github/workflows/phase1-int008-ping-rendezvous-terminal.yml'
   workflow_dispatch:
 
+permissions:
+  contents: read
+
 jobs:
   ping-rendezvous-terminal:
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
       - uses: haskell-actions/setup@v2
         with:
           ghc-version: '9.6.7'
