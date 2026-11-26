@@ -288,6 +288,25 @@ Proof.
   - apply p9_source_history_monotone in H. exact H.
 Qed.
 
+
+(* Countermodel to upgrading equality reflection into original-object
+   soundness. The accepted private native producer does not supply this
+   binding. This is a proof-kernel boundary witness, not a producer bug. *)
+Definition p9_unanchored_binding : selected_binding :=
+  Binding [100; 101; 99; 108; 58; 115; 116; 101; 118; 101; 46; 103; 101; 116] [105; 110; 115; 116; 58; 112; 104; 97; 115; 101; 49; 46; 115; 116; 101; 118; 101]
+    [] [] [66; 108; 111; 98; 80; 114; 111; 118; 105; 100; 101; 114; 46; 114; 101; 97; 100] [] []
+    [68; 105; 103; 101; 115; 116; 80; 114; 111; 118; 105; 100; 101; 114; 46; 99; 104; 101; 99; 107] [] [] [].
+
+Theorem p9_unanchored_binding_witness :
+  p9_input_accepts p9_original_bytes expected_native
+    p9_unanchored_binding p9_unanchored_binding = true /\
+  binding_read_occurrence p9_unanchored_binding = [] /\
+  binding_digest_occurrence p9_unanchored_binding = [] /\
+  binding_blob_interface p9_unanchored_binding = [] /\
+  binding_digest_implementation p9_unanchored_binding = [].
+Proof. vm_compute. repeat split. Qed.
+
+Print Assumptions p9_unanchored_binding_witness.
 Print Assumptions p9_source_segment_reflection.
 Print Assumptions p9_source_segment_safety.
 Print Assumptions p9_source_trace_replay.

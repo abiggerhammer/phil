@@ -14,6 +14,16 @@ import qualified Data.Text.Encoding as Text
 import Data.Word (Word8)
 import qualified P9G3OriginalInputKernel as K
 import qualified Phil.Compiler.RuntimeChoicePayload as P
+import qualified Phil.Compiler.SourceArchitecture as A
+import qualified Phil.Compiler.SourceBundle as B
+import qualified Phil.Core.ProviderQualification as QP
+import qualified Phil.Core.Static as D
+import qualified Phil.Core.Syntax as T
+import Phil.Examples.Steve.ApplicationShell (steveGetShellEnvironment)
+import qualified Phil.Examples.Steve.ProviderQualifications as Q
+import qualified Phil.Surface.Check as E
+import qualified Phil.Surface.Lineage as L
+import qualified Phil.Surface.Syntax as X
 import Phil.Compiler.SelectedSteveGetCoreExecution
 import Phil.Examples.Phase1.SystemsWitnesses (steveCoreProgram)
 import qualified Phil.Surface.SelectedSteveGetExecution as S
@@ -222,11 +232,104 @@ sourceOnly source ident readFound digestAccepted = do
   require "retired source invocation cannot replay"
     (case stale of S.SourceRejected _ -> after == b; _ -> False)
 
+
+-- Re-run the accepted ordinary bundle/architecture checker independently
+-- from original bytes with the canonical FREE binder. Public diagnostics
+-- do not mint a selected source or qualification credential.
+originalMetadata :: Text -> S.SelectedSteveGet -> IO ()
+originalMetadata decoded selected = do
+  shell <- orDie "independent canonical environment" steveGetShellEnvironment
+  let root = "program:steve.get"
+      key = D.DeclarationKey "decl:steve.get"
+      instanceSite = L.InstanceLineageSiteId "instance.steve"
+      primitives = Map.restrictKeys (E.surfacePrimitives shell)
+        (Set.fromList ["blob_read", "digest_check"])
+      canonical = (E.emptySurfaceEnvironment D.emptyStaticContext)
+        { E.surfaceInitialBindings = Map.singleton "contentId"
+            (E.InitialBinding T.Unrestricted
+              (T.TyOpaque "ContentId[SHA256]") E.PlainShape)
+        , E.surfacePrimitives = primitives
+        , E.surfaceExpectedProvides = Just T.TyUnit
+        , E.surfaceReleaseTransitions = E.surfaceReleaseTransitions shell
+        }
+      bundle = L.PortableSourceBundle
+        { L.portableGrammarRevision = L.canonicalGrammarRevisionV1
+        , L.portableSelectedProgramRoot = root
+        , L.portableSourceUnits =
+            [ L.PortableSourceUnit (L.SourceUnitId "unit.steve.get")
+                (L.DeclarationSiteId "site.steve.get")
+                (Just "decl:steve.get") decoded ]
+        , L.portableInstanceLineage =
+            [L.PortableInstanceLineage instanceSite "inst:phase1.steve"]
+        , L.portableProcessLineage = []
+        }
+  checked <- orDie "independent original checked source"
+    (B.checkPortableSourceBundle (Map.singleton root key)
+      (Map.singleton key canonical) bundle)
+  architecture <- orDie "independent checked original architecture"
+    (A.buildCheckedSourceArchitecture (Map.singleton root instanceSite) checked)
+  let declaration = A.checkedSourceArchitectureDeclaration architecture
+  require "independent checked original declaration and instance"
+    (D.identityDeclarationKey declaration == S.selectedDeclarationKey selected
+      && A.checkedSourceArchitectureInstanceKey architecture ==
+        S.selectedInstanceKey selected
+      && Map.size primitives == 2)
+  component <- case B.checkedSourceUnits checked of
+    [unit] | B.checkedSourceDeclarationKey unit == key ->
+      pure (B.checkedSourceComponent unit)
+    _ -> putStrLn "FAIL: independent checked source unit" >> exitFailure
+  -- Ordinals count selected primitive calls in structural execution order,
+  -- not the SourceEvidenceEvent proof-use ordinals.
+  case originalCallSites component of
+    Just [(0, readRoute, readAt), (1, digestRoute, digestAt)] -> do
+      require "independent original AST call routes and occurrence spans"
+        (readRoute == ["statement:0", "decide:scrutinee"]
+          && digestRoute == ["statement:0", "arm:0:found", "statement:0",
+              "borrow:body", "statement:0"]
+          && readAt == S.selectedReadOccurrence selected
+          && digestAt == S.selectedDigestOccurrence selected)
+      putStrLn ("P9 ORIGINAL CALL 0: " ++ show (readRoute, readAt))
+      putStrLn ("P9 ORIGINAL CALL 1: " ++ show (digestRoute, digestAt))
+    _ -> putStrLn "FAIL: independently checked original call route" >> exitFailure
+  qualifications <- orDie "independent provider qualification materialization"
+    Q.materializeSteveProviderQualifications
+  let qualify operation artifact = S.QualifiedProviderRef
+        operation
+        (QP.providerContractInterfaceRevision (Q.steveProviderContract artifact))
+        (QP.providerImplementationDefinitionRevision (Q.steveProviderImplementation artifact))
+      blob = qualify "BlobProvider.read" (Q.steveBlobProviderQualification qualifications)
+      digest = qualify "DigestProvider.check" (Q.steveDigestProviderQualification qualifications)
+  require "independent qualified provider revision equality"
+    (blob == S.selectedReadProvider selected && digest == S.selectedDigestProvider selected)
+  putStrLn ("P9 ORIGINAL CHECKED DECLARATION: " ++ show declaration)
+  putStrLn ("P9 ORIGINAL QUALIFIED READ: " ++ show blob)
+  putStrLn ("P9 ORIGINAL QUALIFIED DIGEST: " ++ show digest)
+
+originalCallSites :: X.Located X.Component -> Maybe [(Int, [Text], X.SourceSpan)]
+originalCallSites component = do
+  [outerStatement] <- pure (X.blockStatements
+    (X.locatedValue (X.componentBody (X.locatedValue component))))
+  X.ExpressionStatement outer <- pure (X.locatedValue outerStatement)
+  X.DecideExpression readCall [found, _, _] <- pure (X.locatedValue outer)
+  X.CallExpression "blob_read" [_] <- pure (X.locatedValue readCall)
+  let foundArm = X.locatedValue found
+      armLabel = X.casePatternLabel (X.caseArmPattern foundArm)
+  [binding, _] <- pure (X.blockStatements (X.locatedValue (X.caseArmBody foundArm)))
+  X.LetStatement _ borrowed <- pure (X.locatedValue binding)
+  X.BorrowExpression _ "bytesView" borrowBody <- pure (X.locatedValue borrowed)
+  [digestStatement] <- pure (X.blockStatements (X.locatedValue borrowBody))
+  X.ExpressionStatement digestCall <- pure (X.locatedValue digestStatement)
+  X.CallExpression "digest_check" [_, _] <- pure (X.locatedValue digestCall)
+  pure [(0, ["statement:0", "decide:scrutinee"], X.locatedSpan readCall),
+        (1, ["statement:0", "arm:0:" <> armLabel, "statement:0",
+             "borrow:body", "statement:0"], X.locatedSpan digestCall)]
+
 main :: IO ()
 main = do
   raw <- BS.readFile "examples/steve/get.phil"
   decoded <- orDie "exact UTF-8 original" (Text.decodeUtf8' raw)
   source <- orDie "independent admitted source" (S.prepareSelectedSteveGet decoded)
+  originalMetadata decoded source
   plan <- orDie "recertified actual full native plan"
     (P.certifyRuntimeChoicePayloadPlan steveCoreProgram payloadSpecs)
   selected <- orDie "exact original + accepted full native selector"
