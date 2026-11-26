@@ -417,6 +417,131 @@ Print Assumptions p9_completed_checked_path.
 Print Assumptions p9_raw_reflection.
 Print Assumptions p9_input_reflection.
 
+
+(* A represented source invocation starts with the same persistent history
+   as the selected target. Beginning is administrative, not a provider event. *)
+Theorem p9_initial_related : forall n issued retired,
+  canonical_lifecycle (Idle n issued retired) ->
+  source_trace (Idle n issued retired) [NoInput] []
+    (source_projection (TRead n issued retired)) /\
+  canonical_lifecycle (source_projection (TRead n issued retired)).
+Proof.
+  intros n issued retired H. split.
+  - apply replay_source_is_labelled. reflexivity.
+  - simpl. eapply canonical_lifecycle_step; [exact H|constructor].
+Qed.
+
+(* Coverage, not just soundness, of the accepted actual typed Core model.
+   No candidate execution is substituted for a particular native segment. *)
+Lemma p9_core_candidate_coverage : forall input binding c e final rest events,
+  core_step input binding c e final rest events ->
+  core_candidate binding c e = Some (final, rest, events).
+Proof.
+  intros input binding c e final rest events H.
+  destruct H; cbn [core_candidate];
+    repeat match goal with
+    | |- context [binding_dec ?b ?b] =>
+        destruct (binding_dec b b); [|contradiction]
+    end;
+    try reflexivity;
+    match goal with
+    | r : list qualified_reply |- _ => destruct r; reflexivity
+    end.
+Qed.
+
+Lemma p9_segment_coverage : forall input binding c e final rest target_events
+    consumed labels source_events,
+  selected_native_accepts input = true ->
+  binding_matches_native input binding binding ->
+  core_step input binding c e final rest target_events ->
+  e = consumed ++ rest ->
+  List.length labels <= 2 ->
+  qualified_source_segment input binding (source_projection c)
+    (source_projection final) consumed labels source_events ->
+  erase_diagnostic target_events ++ pending_unit final =
+    pending_unit c ++ source_events ->
+  check_segment input binding c e final rest target_events
+    consumed labels source_events = true.
+Proof.
+  intros input binding c e final rest target_events consumed labels source_events
+    Ha Hb Hstep He Hbound Hseg Hobs.
+  unfold qualified_source_segment in Hseg.
+  destruct Hseg as [Hqual [Hlabels Hsource]].
+  apply native_binding_reflection in Hb.
+  assert (Hq : forallb (fun r => native_binding_accepts input binding
+      (reply_binding r)) consumed = true).
+  { apply forallb_forall. intros x Hx. apply native_binding_reflection.
+    rewrite Forall_forall in Hqual. auto. }
+  assert (Hlen : Nat.leb (List.length labels) 2 = true)
+    by (apply Nat.leb_le; exact Hbound).
+  pose proof (p9_core_candidate_coverage _ _ _ _ _ _ _ Hstep) as Hcandidate.
+  pose proof (p9_source_trace_replay _ _ _ _ Hsource) as Hreplay.
+  unfold check_segment. rewrite Ha, Hb, Hq, Hcandidate.
+  destruct (target_state_dec final final); [|contradiction].
+  destruct (replies_dec rest rest); [|contradiction].
+  destruct (observations_dec target_events target_events); [|contradiction].
+  destruct (replies_dec e (consumed ++ rest)); [|contradiction].
+  destruct (labels_dec (external_labels labels) (map reply_label consumed));
+    [|contradiction].
+  rewrite Hlen, Hreplay.
+  destruct (source_state_dec (source_projection final) (source_projection final));
+    [|contradiction].
+  destruct (observations_dec source_events source_events); [|contradiction].
+  destruct (observations_dec (erase_diagnostic target_events ++ pending_unit final)
+    (pending_unit c ++ source_events)); [reflexivity|contradiction].
+Qed.
+
+Theorem p9_core_step_checked : forall input binding c e final rest target_events,
+  binding_matches_native input binding binding ->
+  core_step input binding c e final rest target_events ->
+  exists consumed labels source_events,
+    check_segment input binding c e final rest target_events
+      consumed labels source_events = true.
+Proof.
+  intros input binding c e final rest target_events Hb Hstep.
+  assert (Ha : selected_native_accepts input = true) by (destruct Hstep; assumption).
+  destruct (target_step_lifts _ _ _ _ _ _ _ Hstep)
+    as [used [labels [source_events [He [Hl [Hlen [Hsource Hobs]]]]]]].
+  assert (Hqual : Forall (fun r => binding_matches_native input binding
+      (reply_binding r)) used).
+  { destruct Hstep;
+    lazymatch type of He with
+    | ?reply :: ?tail = ?u ++ ?tail =>
+        change ([reply] ++ tail = u ++ tail) in He
+    | ?tail = ?u ++ ?tail =>
+        change ([] ++ tail = u ++ tail) in He
+    end;
+    apply app_inv_tail in He; subst used;
+    constructor; try exact Hb; try constructor. }
+  exists used, labels, source_events.
+  eapply p9_segment_coverage; try eassumption.
+  unfold qualified_source_segment. auto.
+Qed.
+
+Theorem p9_core_trace_checked : forall input binding c e target_events final rest,
+  binding_matches_native input binding binding ->
+  core_trace input binding c e target_events final rest ->
+  exists count used labels source_events,
+    p9_checked_path input binding count c e used labels
+      target_events source_events final rest.
+Proof.
+  intros input binding c e target_events final rest Hb H.
+  induction H as [c e|c e middle remaining events more final rest Hstep Htail IH].
+  - exists 0, [], [], []. constructor.
+  - destruct (p9_core_step_checked _ _ _ _ _ _ _ Hb Hstep)
+      as [used [labels [source_events Hchecked]]].
+    destruct IH as [count [used_more [labels_more [source_more Hpath]]]].
+    exists (S count), (used ++ used_more), (labels ++ labels_more),
+      (source_events ++ source_more).
+    econstructor; eauto.
+Qed.
+
+Print Assumptions p9_initial_related.
+Print Assumptions p9_core_candidate_coverage.
+Print Assumptions p9_segment_coverage.
+Print Assumptions p9_core_step_checked.
+Print Assumptions p9_core_trace_checked.
+
 Extraction Language Haskell.
 Extract Inductive bool => "Prelude.Bool" [ "Prelude.True" "Prelude.False" ].
 Extract Inductive list => "[]" [ "[]" "(:)" ].

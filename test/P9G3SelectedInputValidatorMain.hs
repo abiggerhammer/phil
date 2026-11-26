@@ -127,9 +127,9 @@ encodeBranch branch = case branch of
 -- Labels come from original qualified E, observations separately from the
 -- actual delta. Full Text equality precedes singleton payload-table index
 -- projection, and the actual digest outcome is compared before projection.
-checkSourceRun :: S.SelectedSteveGet -> Text -> [S.SuppliedResponse]
-  -> S.WorldSnapshot -> S.WorldSnapshot -> S.UnitBranch -> Either Text Bool
-checkSourceRun source ident fixedE before after branch = do
+checkSourcePrefix :: S.SelectedSteveGet -> Text -> [S.SuppliedResponse]
+  -> S.WorldSnapshot -> S.WorldSnapshot -> Int -> Either Text Bool
+checkSourcePrefix source ident fixedE before after count = do
   let old = S.snapshotEvents before
       new = S.snapshotEvents after
       issued = allocationOrder new
@@ -144,10 +144,8 @@ checkSourceRun source ident fixedE before after branch = do
       digestLabel decision = case decision of
         S.DigestAccepted -> K.DigestAccepted
         S.DigestRejected _ -> K.DigestRejected
-  unless (isPrefixOf old new
-      && not (S.snapshotHasActiveInvocation before)
-      && not (S.snapshotHasActiveInvocation after))
-    (Left "not a complete actual source invocation on the same history")
+  unless (isPrefixOf old new && not (S.snapshotHasActiveInvocation before))
+    (Left "not an actual source prefix on the original idle history")
   (readOutcome, digestOutcome, labels) <- case fixedE of
     [S.ReadResponse at p cid (S.ReadFound payload),
       S.DigestResponse at' p' cid' view decision]
@@ -183,8 +181,77 @@ checkSourceRun source ident fixedE before after branch = do
   observations <- mapM encode (drop (length old) new)
   (n, i, r) <- snapshotLedger before
   (n', i', r') <- snapshotLedger after
-  pure (K.p9_source_segment_accepts (K.AwaitRead n i r) labels
-    (K.Done n' i' r' (encodeBranch branch)) observations)
+  unless (count >= 0 && count <= length labels)
+    (Left "invalid selected successful-step prefix length")
+  -- Reconstruct the represented current control position from actual
+  -- completed events and active status, not from offered E or a Core trace.
+  let active = S.snapshotHasActiveInvocation after
+  final <- case observations of
+    [] | active -> Right (K.AwaitRead n' i' r')
+    [K.ObsFound _ owner] | active ->
+      Right (K.AwaitBorrow n' i' r' owner)
+    [K.ObsFound _ owner, K.ObsBorrow _ loan] | active ->
+      Right (K.AwaitDigest n' i' r' owner loan)
+    [K.ObsFound _ owner, K.ObsBorrow _ loan, K.ObsDigest _ _ decision]
+      | active -> Right (K.AwaitClose n' i' r' owner loan decision)
+    [K.ObsFound _ owner, K.ObsBorrow _ loan, K.ObsDigest _ _ decision, K.ObsClose _]
+      | active -> Right (K.AwaitRelease n' i' r' owner loan decision)
+    [K.ObsFound _ _, K.ObsBorrow _ _, K.ObsDigest _ _ _, K.ObsClose _,
+      K.ObsRelease _, K.ObsUnit branch] | not active ->
+      Right (K.Done n' i' r' branch)
+    [K.ObsNotFound, K.ObsUnit branch] | not active ->
+      Right (K.Done n' i' r' branch)
+    [K.ObsFailure, K.ObsUnit branch] | not active ->
+      Right (K.Done n' i' r' branch)
+    _ -> Left "actual prefix events and active status disagree"
+  pure (K.p9_source_segment_accepts (K.AwaitRead n i r) (take count labels)
+    final observations)
+
+checkSourceRun :: S.SelectedSteveGet -> Text -> [S.SuppliedResponse]
+  -> S.WorldSnapshot -> S.WorldSnapshot -> S.UnitBranch -> Either Text Bool
+checkSourceRun source ident fixedE before after branch = do
+  let count = case fixedE of
+        [S.ReadResponse _ _ _ (S.ReadFound _), S.DigestResponse _ _ _ _ _] -> 5
+        _ -> 1
+  unless (not (S.snapshotHasActiveInvocation after)
+      && reverse (S.snapshotEvents after) /= []
+      && take 1 (reverse (S.snapshotEvents after)) == [S.ReturnedUnit branch])
+    (Left "not the claimed completed actual source branch")
+  checkSourcePrefix source ident fixedE before after count
+
+-- Acquire the actual run and snapshots locally from one private world.
+-- The pure prefix checker is not a credential for arbitrary supplied snapshots.
+sourcePrefixControls :: S.SelectedSteveGet -> Text -> [S.SuppliedResponse]
+  -> S.UnitBranch -> IO ()
+sourcePrefixControls source ident fixedE branch = do
+  world <- S.newSelectedWorld
+  initial <- S.snapshotSelectedWorld world
+  run <- S.beginSelectedSteveGet world source ident >>= orDie "prefix begin"
+  let checkAt count = do
+        snapshot <- S.snapshotSelectedWorld world
+        checked <- orDie "actual source prefix representation"
+          (checkSourcePrefix source ident fixedE initial snapshot count)
+        require ("extracted actual prefix " ++ show branch ++ "/" ++ show count) checked
+      waiting expected = do
+        before <- S.snapshotSelectedWorld world
+        result <- S.stepSelectedSteveGet run Nothing
+        after <- S.snapshotSelectedWorld world
+        require "actual waiting leaves source prefix unchanged"
+          (result == expected && before == after)
+      inputs = case fixedE of
+        [readReply, digestReply] -> [Just readReply, Nothing, Just digestReply, Nothing, Nothing]
+        [readReply] -> [Just readReply]
+        _ -> []
+  checkAt 0
+  waiting S.NeedsReadResponse
+  mapM_ (\(count, supplied) -> do
+    result <- S.stepSelectedSteveGet run supplied
+    require "actual selected source step advances or returns its exact branch"
+      (if count == length inputs then result == S.SourceReturnedUnit branch
+       else case result of S.SourceAdvanced _ -> True; _ -> False)
+    checkAt count
+    if length inputs == 5 && count == 2 then waiting S.NeedsDigestResponse else pure ()
+    ) (zip [1..] inputs)
 
 -- The standalone selected source producer is actually executed twice on
 -- the same world (not reconstructed from a target trace). Its observations
@@ -365,12 +432,24 @@ checkAnchor :: BS.ByteString -> [Text] -> Text -> K.Selected_binding -> Bool
 checkAnchor raw metadata ident = K.p9_anchored_source_accepts
   (map byteNat (BS.unpack raw)) (map encodeName metadata) (encodeName ident)
 
+-- This test-only wrapper retains the free argument that passed the anchor.
+-- No subsequent caller can choose a second ContentId at invocation start.
+data AnchoredOriginal = AnchoredOriginal !SelectedSteveGetCore !Text
+
 admitAnchoredOriginal :: BS.ByteString -> [Text] -> S.SelectedSteveGet -> Text
-  -> C.CoreSystemsProgram -> P.RuntimeChoicePayloadPlan -> Either Text SelectedSteveGetCore
-admitAnchoredOriginal raw metadata source ident program plan
-  | checkAnchor raw metadata ident (encodeBinding source ident) =
-      admitOriginal raw program plan
-  | otherwise = Left "original checked source anchor rejected"
+  -> C.CoreSystemsProgram -> P.RuntimeChoicePayloadPlan -> Either Text AnchoredOriginal
+admitAnchoredOriginal raw metadata source ident program plan = do
+  decoded <- either (const (Left "invalid original UTF-8")) Right (Text.decodeUtf8' raw)
+  admitted <- either (Left . TText.pack . show) Right (S.prepareSelectedSteveGet decoded)
+  unless (source == admitted && checkAnchor raw metadata ident (encodeBinding admitted ident))
+    (Left "original checked source anchor rejected")
+  selected <- admitOriginal raw program plan
+  pure (AnchoredOriginal selected ident)
+
+runAnchoredOriginal :: SelectedCoreWorld -> AnchoredOriginal
+  -> [S.SuppliedResponse] -> IO CoreRunResult
+runAnchoredOriginal world (AnchoredOriginal selected ident) =
+  runSelectedSteveGetCore world selected ident
 
 anchorNegatives :: BS.ByteString -> [Text] -> S.SelectedSteveGet -> Text -> IO ()
 anchorNegatives raw metadata source ident = do
@@ -405,7 +484,7 @@ main = do
   anchorNegatives raw metadata source ident
   plan <- orDie "recertified actual full native plan"
     (P.certifyRuntimeChoicePayloadPlan steveCoreProgram payloadSpecs)
-  selected <- orDie "exact original + accepted full native selector"
+  anchored@(AnchoredOriginal selected _) <- orDie "exact original + accepted full native selector"
     (admitAnchoredOriginal raw metadata source ident steveCoreProgram plan)
   require "same semantic shape but changed carrier cannot pass P9 raw gate"
     (case admitOriginal (raw <> "// changed original carrier\n") steveCoreProgram plan of
@@ -419,9 +498,17 @@ main = do
         (S.selectedDigestProvider source) ident "bytesView" (S.DigestRejected "reason")
       fixedE = [readFound, digestAccepted]
   sourceOnly source ident readFound digestAccepted
+  sourcePrefixControls source ident fixedE S.UnitFoundAccepted
+  sourcePrefixControls source ident [readFound, digestRejected] S.UnitFoundRejected
+  sourcePrefixControls source ident
+    [S.ReadResponse (S.selectedReadOccurrence source) (S.selectedReadProvider source)
+       ident S.ReadNotFound] S.UnitNotFound
+  sourcePrefixControls source ident
+    [S.ReadResponse (S.selectedReadOccurrence source) (S.selectedReadProvider source)
+       ident (S.ReadStorageFailure "reason")] S.UnitStorageFailure
   world <- newSelectedCoreWorld
-  a <- complete (runSelectedSteveGetCore world selected ident fixedE)
-  b <- complete (runSelectedSteveGetCore world selected ident fixedE)
+  a <- complete (runAnchoredOriginal world anchored fixedE)
+  b <- complete (runAnchoredOriginal world anchored fixedE)
   pairA <- maybe (putStrLn "FAIL: missing original origin pair" >> exitFailure) pure
     (receiptOriginPair a)
   pairB <- maybe (putStrLn "FAIL: missing second origin pair" >> exitFailure) pure
