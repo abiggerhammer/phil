@@ -20,6 +20,8 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
+          # The container runs as root; trust only this exact checkout path.
+          git config --global --add safe.directory "$GITHUB_WORKSPACE"
           test "$(git rev-parse HEAD)" = "$GITHUB_SHA"
           git diff --name-status b0fb9ff506e8d4e9cbf61fa9869ae36b2382c6b0 HEAD
           test "$(git diff --name-only b0fb9ff506e8d4e9cbf61fa9869ae36b2382c6b0 HEAD | wc -l)" -eq 4
