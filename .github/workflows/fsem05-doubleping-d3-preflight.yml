@@ -112,7 +112,6 @@ jobs:
   conditional-rocq:
     name: Strict Rocq 9.2 conditional prefix model
     runs-on: ubuntu-24.04
-    container: rocq/rocq-prover@sha256:33926fb3757b2b560c3844157bd64173a26b6d338a256be1ae5eec8df2019025
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
         with:
@@ -122,14 +121,21 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          eval "$(opam env)"
-          rocq --version | grep -E 'version 9\.2([. ]|$)'
           proof=proof/Phil/Surface/DoublePingD3.v
+          image=rocq/rocq-prover@sha256:33926fb3757b2b560c3844157bd64173a26b6d338a256be1ae5eec8df2019025
+          docker run --rm --interactive --network none \
+            --mount "type=bind,source=$GITHUB_WORKSPACE/$proof,target=/tmp/source.v,readonly" \
+            "$image" bash -s <<'ROCq'
+          set -euo pipefail
+          rocq --version | grep -E 'version 9\.2([. ]|$)'
+          cd /tmp
+          proof=proof/Phil/Surface/DoublePingD3.v
+          mkdir -p "$(dirname "$proof")"
+          cp /tmp/source.v "$proof"
           if grep -nE '\b(Admitted|Axiom|Parameter|admit)\b' "$proof"; then
             exit 1
           fi
-          output=$(mktemp)
-          trap 'rm -f -- "$output"' EXIT
-          rocq compile -w @all -Q proof/Phil Phil "$proof" | tee "$output"
-          test "$(grep -cFx 'Closed under the global context' "$output")" -eq 6
+          rocq compile -w @all -Q proof/Phil Phil "$proof" | tee assumptions.log
+          test "$(grep -cFx 'Closed under the global context' assumptions.log)" -eq 6
           rocq check -silent -Q proof/Phil Phil Phil.Surface.DoublePingD3
+          ROCq
