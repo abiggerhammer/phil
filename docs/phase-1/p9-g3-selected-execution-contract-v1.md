@@ -1,0 +1,27 @@
+# P9-G3 selected execution: scratch applicability contract
+
+Status: **scratch candidate, not P0–P6 discharge, not authorization to publish a PR.** Governing allocation: #1909, maintainer receipt 7195496019 (2026-11-26). Base b0fb9ff506e8d4e9cbf61fa9869ae36b2382c6b0.
+
+## Evidence delta
+
+| Obligation | Already accepted authority | New scratch composition / outstanding gate |
+|---|---|---|
+| P0 | FSEM05 prepareSelectedSteveGet reparses the checked ordinary source, checks canonical free contentId, K/I, original spans and qualified provider revisions; FSEM06 prepareSelectedSteveGetCore checks actual complete typed Core and recertified four-site plan | Extracted exact original carrier byte gate, followed by actual native admission. Independently review actual occurrence/route/ordinal, semantic revision and canonical environment reification, rather than infer those from byte equality alone. |
+| P1 | FSEM05 selected_source_step, selected_step_sound/coverage; FSEM06 source_trace, core_step, selected_native_reflection, native_binding_reflection, check_segment_sound | Import these accepted rules unchanged; no new source execution relation or provider axiom. |
+| P2 | FSEM05 canonical_lifecycle_reachable and freshness, reachable digest/close/release safety; FSEM06 replay_source_is_labelled | Prove converse replay and history monotonicity over accepted labelled source traces, plus reachable replay safety. Exercise actual source-only private world twice and reject stale invocation. Review applicability across selected source-only execution, not just the joint driver. |
+| P3 | FSEM06 exact payload index and opaque origin-pair checks; actual private source delta, persistent ledger and checked target/source observations | Checked path threads the actual segment labels and observations, not an existential replacement source execution. Review native frame representation, same original private invocation, persistent ledger and payload/loan mapping. |
+| P4 | FSEM06 target_step_lifts, target_trace_lifts_fixed_history, check_segment_sound and completed_target_preserves_all_fixed_history_observations | Compose the checked segments with exact same E suffix, qualified consumed replies, source observations and target diagnostic erasure; complete path consumes precisely the offered fixed E. |
+| P5 | FSEM06 target_step_rank_decreases and unanswered read/digest lemmas; FSEM05 separate waiting, rejection and fuel outcomes | Compose rank bound; complete selected path at most three target steps. No universal termination under provider nonresponse or arbitrary cancellation. |
+| P6 | FSEM06 selected_native_reflection, native_binding_reflection, check_segment_sound and independently accepted actual admission/segment adapter | Exact original bytes and existing native selector/binding reflection composed, with actual extracted raw gate followed by independently reconstructed plan and real native admission in scratch harness. Native expected binding must come from sealed actual source/invocation; never a caller-supplied correctness proposition. Independent applicability review still required. |
+
+Accepted upstream receipts: #2017 / 89ef6436a68a5d1ac9ac5a3d0223047c567f7ac9, #1912 comment 7152047291; #2039 / 9f5492ac8b7c4d4002f98bc928ec307918ccedb7, #1913 comments 7189394361 and 7193014735. The prior b677d622 scratch candidate is not evidence.
+
+## Original subject and observation boundary
+
+Original examples/steve/get.phil blob 8de9853762201b516d7c05bfd5568e54acbd7dc8: decl:steve.get / inst:phase1.steve, canonical free contentId, selected manual SteveGet, independently recertified complete RuntimeChoicePayloadPlan, found -> get.bytes owned buffer and get.bytes-view borrowed from that exact owner. Nonfound arms allocate no owner. Both digest arms release once; four Unit outcomes remain distinct in the observed branch history. Source semantic revision is span-free, while the original carrier byte pin is deliberately stronger: e.g. an appended comment is not the original carrier even if its semantic shape is unchanged. This is an extra P9 admission control, not a defect in FSEM05 shape admission.
+
+Same fixed E, exact qualified consumed replies, payload symbols, source occurrence binding, persistent origin history, branch/digest/release observations. The accepted FSEM06 native adapter checks segments realized by the same private original source invocation; the new Rocq path uses those checked segments. Erase diagnostic CoreTrace only, not resource or branch effects. No claim of universal Haskell/Rocq semantics, native provider E authenticity, SHA/Blob assumptions discharge, FFI/ABI or whole-language refinement.
+
+## Scratch gates
+
+Compile imports and new proof with Rocq 9.2, print all named assumptions and recursively check objects, extract the original carrier gate and accepted dynamic kernel. Compile with GHC 9.6.7 -Wall -Werror, run original FSEM05 and FSEM06 actual selected tests plus new P9 source-only/pinned-original/paired-valid controls. Require exact-head receipts and independent semantic applicability review before any official PR. Scratch evidence is not protected-merge evidence; P9-G3 remains open. No F2/E3 allocation used, and no other worker is authorized to restart.
