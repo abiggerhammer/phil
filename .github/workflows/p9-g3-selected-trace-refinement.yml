@@ -1,0 +1,84 @@
+name: P9 G3 selected trace refinement scratch
+on:
+  push:
+    branches: [scratch/p9-g3-p0p6-20261126]
+permissions:
+  contents: read
+jobs:
+  rocq:
+    runs-on: ubuntu-latest
+    container:
+      image: rocq/rocq-prover:9.2.0
+      options: --user root
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+          fetch-depth: 0
+      - name: Scope and original subject
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(git rev-parse HEAD)" = "$GITHUB_SHA"
+          git diff --name-status b0fb9ff506e8d4e9cbf61fa9869ae36b2382c6b0 HEAD
+          test "$(git diff --name-only b0fb9ff506e8d4e9cbf61fa9869ae36b2382c6b0 HEAD | wc -l)" -eq 4
+          test "$(git diff --diff-filter=ACMRTUXB --name-only b0fb9ff506e8d4e9cbf61fa9869ae36b2382c6b0 HEAD | sort)" = "$(printf '%s\n' .github/workflows/p9-g3-selected-trace-refinement.yml docs/phase-1/p9-g3-selected-execution-contract-v1.md proof/Phil/Verification/P9G3SteveGetSelectedTraceRefinement.v test/P9G3SelectedInputValidatorMain.hs | sort)"
+          test -z "$(git diff --diff-filter=CDMRTUXB --name-only b0fb9ff506e8d4e9cbf61fa9869ae36b2382c6b0 HEAD)"
+          test "$(git hash-object examples/steve/get.phil)" = 8de9853762201b516d7c05bfd5568e54acbd7dc8
+      - name: Check accepted dependencies and scratch proof
+        shell: bash
+        run: |
+          set -euo pipefail
+          export PATH="/home/rocq/.opam/${COMPILER}/bin:$PATH"
+          rocq --version
+          p=proof/Phil/Verification
+          test "$(git hash-object "$p/FSEM05SteveGetSelectedSourceEvents.v")" = f1adb45b30b6b72df3b0979df66b8e281f9dc748
+          test "$(git hash-object "$p/FSEM06SteveGetSelectedCorePayloadRefinement.v")" = e00f82fa35d875496a93a2b394ab7375687e7a0a
+          ! grep -En '(^|[[:space:]])(Axiom|Admitted|Parameter)[[:space:].]' "$p/P9G3SteveGetSelectedTraceRefinement.v"
+          rocq c -Q proof/Phil Phil "$p/FSEM05SteveGetSelectedSourceEvents.v" | tee /tmp/p9-05.log
+          rocq c -Q proof/Phil Phil "$p/FSEM06SteveGetSelectedCorePayloadRefinement.v" | tee /tmp/p9-06.log
+          rocq c -Q proof/Phil Phil "$p/P9G3SteveGetSelectedTraceRefinement.v" | tee /tmp/p9-proof.log
+          test "$(grep -c 'Closed under the global context' /tmp/p9-05.log)" -eq 20
+          test "$(grep -c 'Closed under the global context' /tmp/p9-06.log)" -eq 32
+          test "$(grep -c 'Closed under the global context' /tmp/p9-proof.log)" -eq 11
+          ! grep -q 'Axioms:' /tmp/p9-05.log /tmp/p9-06.log /tmp/p9-proof.log
+          rocq check -Q proof/Phil Phil Phil.Verification.FSEM05SteveGetSelectedSourceEvents Phil.Verification.FSEM06SteveGetSelectedCorePayloadRefinement Phil.Verification.P9G3SteveGetSelectedTraceRefinement
+          sha256sum examples/steve/get.phil "$p"/{FSEM05SteveGetSelectedSourceEvents,FSEM06SteveGetSelectedCorePayloadRefinement,P9G3SteveGetSelectedTraceRefinement}.{v,vo} /tmp/p9-{05,06,proof}.log
+          mkdir -p /tmp/p9-extracted
+          cp FSEM06SteveGetNativeKernel.hs P9G3OriginalInputKernel.hs /tmp/p9-extracted/
+          (cd /tmp/p9-extracted && sha256sum *.hs > SHA256SUMS && cat SHA256SUMS)
+      - uses: actions/upload-artifact@v4
+        with:
+          name: p9-g3-scratch-extracted
+          path: /tmp/p9-extracted/
+          if-no-files-found: error
+  ghc:
+    needs: rocq
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+      - uses: haskell-actions/setup@v2
+        with:
+          ghc-version: '9.6.7'
+          cabal-update: false
+      - uses: actions/download-artifact@v4
+        with:
+          name: p9-g3-scratch-extracted
+          path: /tmp/p9-extracted
+      - name: Strict actual selected source, Core and validator controls
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(git rev-parse HEAD)" = "$GITHUB_SHA"
+          test "$(ghc --numeric-version)" = 9.6.7
+          (cd /tmp/p9-extracted && sha256sum -c SHA256SUMS)
+          bash scripts/ci/cabal-update-retry.sh
+          cabal build lib:phil-core --ghc-options='-Werror'
+          for test in FSEM05SteveGetSelectedSourceEventMain FSEM06SteveGetSelectedCorePayloadMain P9G3SelectedInputValidatorMain; do
+            cabal exec -- ghc --make -Wall -Werror -isrc -itest -i/tmp/p9-extracted -outputdir "/tmp/p9-$test" "test/$test.hs" -o "/tmp/run-$test"
+            "/tmp/run-$test"
+          done
