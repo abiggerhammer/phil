@@ -17,10 +17,20 @@ Theorem phase1_surface_classifier_cache_batch_indexed_invalid_none_iff :
     phase1_surface_classifier_cache_batch_validb entries = true.
 Proof.
   intro entries.
-  rewrite <- phase1_surface_classifier_cache_batch_first_invalid_none_iff.
-  rewrite <- phase1_surface_classifier_cache_batch_indexed_invalid_projection.
-  destruct (phase1_surface_classifier_cache_batch_indexed_invalid entries)
-    as [[i bad]|]; simpl; split; congruence.
+  split.
+  - intro Hnone.
+    apply (proj1 (phase1_surface_classifier_cache_batch_first_invalid_none_iff entries)).
+    pose proof (phase1_surface_classifier_cache_batch_indexed_invalid_projection entries) as Hp.
+    rewrite Hnone in Hp.
+    symmetry. exact Hp.
+  - intro Hvalid.
+    pose proof (proj2 (phase1_surface_classifier_cache_batch_first_invalid_none_iff entries)
+      Hvalid) as Hnone.
+    pose proof (phase1_surface_classifier_cache_batch_indexed_invalid_projection entries) as Hp.
+    destruct (phase1_surface_classifier_cache_batch_indexed_invalid entries)
+      as [[i bad]|] eqn:Hd.
+    + rewrite Hnone in Hp. discriminate Hp.
+    + reflexivity.
 Qed.
 
 Theorem phase1_surface_classifier_cache_batch_validb_append :
