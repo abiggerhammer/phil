@@ -2,7 +2,7 @@
    FSEM-05 selected reference rules; the target and source observations are
    the accepted FSEM-06 typed Core/plan and labelled source rules.
    Concrete native admission/representation is a separate checked gate. *)
-From Stdlib Require Import List Arith Lia Bool.Bool Extraction.
+From Stdlib Require Import List Arith Lia Bool.Bool Strings.String Extraction.
 From Phil.Verification Require Import FSEM05SteveGetSelectedSourceEvents
   FSEM06SteveGetSelectedCorePayloadRefinement.
 Import ListNotations SelectedSteveGetEvents.
@@ -306,6 +306,102 @@ Theorem p9_unanchored_binding_witness :
   binding_digest_implementation p9_unanchored_binding = [].
 Proof. vm_compute. repeat split. Qed.
 
+
+(* P0/P6: fixed original checked carrier/metadata and independently supplied
+   invocation input. The metadata literals are full checked revision bytes,
+   not hashes: observed on the independent ordinary bundle/architecture
+   path at exact head 6dc26678, run 45885639415. Ordered fields below are
+   interface, definition, read ordinal/route, digest ordinal/route.
+   The accepted source selector and native Core admission remain separate. *)
+Local Open Scope string_scope.
+Local Open Scope list_scope.
+Definition p9_original_metadata : list name :=
+  map nm ["phil.interface.canonical.v1:record{10:parameters=ordered[],8:provides=record{6:fields=ordered[record{6:fields=ordered[],3:tag=atom(4:Unit)}],3:tag=atom(4:some)}}";
+    "phil.definition.canonical.v1:record{10:definition=ordered[record{6:fields=ordered[record{6:fields=ordered[record{6:fields=ordered[atom(9:blob_read),ordered[record{6:fields=ordered[atom(9:contentId)],3:tag=atom(8:variable)}]],3:tag=atom(4:call)},ordered[record{4:body=ordered[record{6:fields=ordered[record{6:fields=ordered[atom(14:digestDecision)],3:tag=atom(4:bind)},record{6:fields=ordered[record{6:fields=ordered[atom(5:bytes)],3:tag=atom(8:variable)},atom(9:bytesView),ordered[record{6:fields=ordered[record{6:fields=ordered[atom(12:digest_check),ordered[record{6:fields=ordered[atom(9:contentId)],3:tag=atom(8:variable)},record{6:fields=ordered[atom(9:bytesView)],3:tag=atom(8:variable)}]],3:tag=atom(4:call)}],3:tag=atom(10:expression)}]],3:tag=atom(6:borrow)}],3:tag=atom(3:let)},record{6:fields=ordered[record{6:fields=ordered[record{6:fields=ordered[atom(14:digestDecision)],3:tag=atom(8:variable)},ordered[record{4:body=ordered[record{6:fields=ordered[record{6:fields=ordered[record{6:fields=ordered[atom(5:bytes)],3:tag=atom(8:variable)}],3:tag=atom(7:release)}],3:tag=atom(10:expression)},record{6:fields=ordered[record{6:fields=ordered[],3:tag=atom(4:unit)}],3:tag=atom(6:return)}],7:pattern=record{7:binders=ordered[],5:label=atom(8:accepted)}},record{4:body=ordered[record{6:fields=ordered[record{6:fields=ordered[record{6:fields=ordered[atom(5:bytes)],3:tag=atom(8:variable)}],3:tag=atom(7:release)}],3:tag=atom(10:expression)},record{6:fields=ordered[record{6:fields=ordered[],3:tag=atom(4:unit)}],3:tag=atom(6:return)}],7:pattern=record{7:binders=ordered[atom(6:reason)],5:label=atom(8:rejected)}}]],3:tag=atom(6:decide)}],3:tag=atom(10:expression)}],7:pattern=record{7:binders=ordered[atom(5:bytes)],5:label=atom(5:found)}},record{4:body=ordered[record{6:fields=ordered[record{6:fields=ordered[],3:tag=atom(4:unit)}],3:tag=atom(6:return)}],7:pattern=record{7:binders=ordered[],5:label=atom(9:not-found)}},record{4:body=ordered[record{6:fields=ordered[record{6:fields=ordered[],3:tag=atom(4:unit)}],3:tag=atom(6:return)}],7:pattern=record{7:binders=ordered[atom(6:reason)],5:label=atom(15:storage-failure)}}]],3:tag=atom(6:decide)}],3:tag=atom(10:expression)}],18:interface_revision=atom(161:phil.interface.canonical.v1:record{10:parameters=ordered[],8:provides=record{6:fields=ordered[record{6:fields=ordered[],3:tag=atom(4:Unit)}],3:tag=atom(4:some)}})}";
+    "0";
+    "statement:0";
+    "decide:scrutinee";
+    "1";
+    "statement:0";
+    "arm:0:found";
+    "statement:0";
+    "borrow:body";
+    "statement:0"].
+
+Definition p9_original_binding (content_id : name) : selected_binding :=
+  Binding (nm "decl:steve.get") (nm "inst:phase1.steve")
+    (map nm ["unit.steve.get"; "2"; "12"; "46"; "unit.steve.get"; "2"; "33"; "67"])
+    (map nm ["unit.steve.get"; "5"; "17"; "172"; "unit.steve.get"; "6"; "13"; "219"])
+    (nm "BlobProvider.read") (nm "steve.provider.blob.v1")
+    (nm "steve.provider.blob.impl.v1")
+    (nm "DigestProvider.check") (nm "steve.provider.digest.sha256.v1")
+    (nm "steve.provider.digest.sha256.impl.v1") content_id.
+
+Definition p9_anchored_source_accepts (raw : name) (metadata : list name)
+    (content_id : name) (actual : selected_binding) : bool :=
+  andb (p9_raw_accepts raw)
+    (andb (if names_dec metadata p9_original_metadata then true else false)
+      (if binding_dec actual (p9_original_binding content_id) then true else false)).
+
+Theorem p9_anchored_source_reflection : forall raw metadata content_id actual,
+  p9_anchored_source_accepts raw metadata content_id actual = true <->
+  raw = p9_original_bytes /\ metadata = p9_original_metadata /\
+  actual = p9_original_binding content_id.
+Proof.
+  intros. unfold p9_anchored_source_accepts.
+  rewrite !Bool.andb_true_iff, p9_raw_reflection.
+  destruct (names_dec metadata p9_original_metadata);
+    destruct (binding_dec actual (p9_original_binding content_id));
+    intuition discriminate.
+Qed.
+
+(* This rejects even a self-paired expected/actual value of the old
+   unanchored gate. No offered E reply can choose the static anchor. *)
+Theorem p9_anchored_rejects_unanchored : forall content_id,
+  p9_anchored_source_accepts p9_original_bytes p9_original_metadata
+    content_id p9_unanchored_binding = false.
+Proof.
+  intro content_id.
+  destruct (p9_anchored_source_accepts p9_original_bytes p9_original_metadata
+    content_id p9_unanchored_binding) eqn:H; [|reflexivity].
+  apply p9_anchored_source_reflection in H.
+  destruct H as [_ [_ H]].
+  apply (f_equal binding_read_occurrence) in H. discriminate.
+Qed.
+
+(* The static gate and actual represented typed selector jointly anchor the
+   particular checked dynamic path, including exact qualified E, safety,
+   and diagnostic erasure. No new native representation law is assumed. *)
+Theorem p9_anchored_checked_path : forall raw metadata content_id actual
+    input count c e used labels target_events source_events final remaining,
+  p9_anchored_source_accepts raw metadata content_id actual = true ->
+  selected_native_accepts input = true ->
+  p9_checked_path input actual count c e used labels target_events source_events final remaining ->
+  canonical_lifecycle (source_projection c) ->
+  input = expected_native /\
+  core_trace input (p9_original_binding content_id) c e target_events final remaining /\
+  e = used ++ remaining /\
+  qualified_source_segment input (p9_original_binding content_id)
+    (source_projection c) (source_projection final) used labels source_events /\
+  erase_diagnostic target_events ++ pending_unit final = pending_unit c ++ source_events /\
+  canonical_lifecycle (source_projection final).
+Proof.
+  intros raw metadata content_id actual input count c e used labels
+    target_events source_events final remaining Ha Hi Hpath Hsafe.
+  apply p9_anchored_source_reflection in Ha. destruct Ha as [_ [_ Ha]].
+  subst actual.
+  apply selected_native_reflection in Hi.
+  destruct (p9_checked_path_sound _ _ _ _ _ _ _ _ _ _ _ Hpath)
+    as [Hcore [He [Hseg Hobs]]].
+  split; [exact Hi|]. split; [exact Hcore|]. split; [exact He|].
+  split; [exact Hseg|]. split; [exact Hobs|].
+  eapply target_trace_preserves_lifecycle; eauto.
+Qed.
+
+Print Assumptions p9_anchored_source_reflection.
+Print Assumptions p9_anchored_rejects_unanchored.
+Print Assumptions p9_anchored_checked_path.
+
 Print Assumptions p9_unanchored_binding_witness.
 Print Assumptions p9_source_segment_reflection.
 Print Assumptions p9_source_segment_safety.
@@ -324,4 +420,4 @@ Print Assumptions p9_input_reflection.
 Extraction Language Haskell.
 Extract Inductive bool => "Prelude.Bool" [ "Prelude.True" "Prelude.False" ].
 Extract Inductive list => "[]" [ "[]" "(:)" ].
-Extraction "P9G3OriginalInputKernel.hs" p9_raw_accepts p9_source_segment_accepts.
+Extraction "P9G3OriginalInputKernel.hs" p9_raw_accepts p9_source_segment_accepts p9_anchored_source_accepts.

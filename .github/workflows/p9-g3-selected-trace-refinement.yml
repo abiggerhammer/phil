@@ -43,7 +43,7 @@ jobs:
           rocq c -Q proof/Phil Phil "$p/P9G3SteveGetSelectedTraceRefinement.v" | tee /tmp/p9-proof.log
           test "$(grep -c 'Closed under the global context' /tmp/p9-05.log)" -eq 20
           test "$(grep -c 'Closed under the global context' /tmp/p9-06.log)" -eq 32
-          test "$(grep -c 'Closed under the global context' /tmp/p9-proof.log)" -eq 14
+          test "$(grep -c 'Closed under the global context' /tmp/p9-proof.log)" -eq 17
           ! grep -q 'Axioms:' /tmp/p9-05.log /tmp/p9-06.log /tmp/p9-proof.log
           rocq check -Q proof/Phil Phil Phil.Verification.FSEM05SteveGetSelectedSourceEvents Phil.Verification.FSEM06SteveGetSelectedCorePayloadRefinement Phil.Verification.P9G3SteveGetSelectedTraceRefinement
           sha256sum examples/steve/get.phil "$p"/{FSEM05SteveGetSelectedSourceEvents,FSEM06SteveGetSelectedCorePayloadRefinement,P9G3SteveGetSelectedTraceRefinement}.{v,vo} /tmp/p9-{05,06,proof}.log

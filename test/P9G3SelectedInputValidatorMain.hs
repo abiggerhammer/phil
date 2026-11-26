@@ -10,6 +10,7 @@ import Data.List (elemIndex, isPrefixOf)
 import qualified Data.Map.Strict as Map
 import qualified Data.Set as Set
 import Data.Text (Text)
+import qualified Data.Text as TText
 import qualified Data.Text.Encoding as Text
 import Data.Word (Word8)
 import qualified P9G3OriginalInputKernel as K
@@ -236,7 +237,7 @@ sourceOnly source ident readFound digestAccepted = do
 -- Re-run the accepted ordinary bundle/architecture checker independently
 -- from original bytes with the canonical FREE binder. Public diagnostics
 -- do not mint a selected source or qualification credential.
-originalMetadata :: Text -> S.SelectedSteveGet -> IO ()
+originalMetadata :: Text -> S.SelectedSteveGet -> IO [Text]
 originalMetadata decoded selected = do
   shell <- orDie "independent canonical environment" steveGetShellEnvironment
   let root = "program:steve.get"
@@ -280,7 +281,7 @@ originalMetadata decoded selected = do
     _ -> putStrLn "FAIL: independent checked source unit" >> exitFailure
   -- Ordinals count selected primitive calls in structural execution order,
   -- not the SourceEvidenceEvent proof-use ordinals.
-  case originalCallSites component of
+  routes <- case originalCallSites component of
     Just [(0, readRoute, readAt), (1, digestRoute, digestAt)] -> do
       require "independent original AST call routes and occurrence spans"
         (readRoute == ["statement:0", "decide:scrutinee"]
@@ -290,6 +291,7 @@ originalMetadata decoded selected = do
           && digestAt == S.selectedDigestOccurrence selected)
       putStrLn ("P9 ORIGINAL CALL 0: " ++ show (readRoute, readAt))
       putStrLn ("P9 ORIGINAL CALL 1: " ++ show (digestRoute, digestAt))
+      pure (["0"] ++ readRoute ++ ["1"] ++ digestRoute)
     _ -> putStrLn "FAIL: independently checked original call route" >> exitFailure
   qualifications <- orDie "independent provider qualification materialization"
     Q.materializeSteveProviderQualifications
@@ -304,6 +306,9 @@ originalMetadata decoded selected = do
   putStrLn ("P9 ORIGINAL CHECKED DECLARATION: " ++ show declaration)
   putStrLn ("P9 ORIGINAL QUALIFIED READ: " ++ show blob)
   putStrLn ("P9 ORIGINAL QUALIFIED DIGEST: " ++ show digest)
+  let D.InterfaceRevision interfaceRevision = D.identityInterfaceRevision declaration
+      D.DefinitionRevision definitionRevision = D.identityDefinitionRevision declaration
+  pure ([interfaceRevision, definitionRevision] ++ routes)
 
 originalCallSites :: X.Located X.Component -> Maybe [(Int, [Text], X.SourceSpan)]
 originalCallSites component = do
@@ -324,22 +329,89 @@ originalCallSites component = do
         (1, ["statement:0", "arm:0:" <> armLabel, "statement:0",
              "borrow:body", "statement:0"], X.locatedSpan digestCall)]
 
+
+-- Reify the sealed selected descriptor independently of offered E. The
+-- original metadata above comes from a distinct ordinary checked path;
+-- neither the metadata nor actual binding supplies the kernel's expectation.
+encodeName :: Text -> [K.Nat]
+encodeName = map byteNat . BS.unpack . Text.encodeUtf8
+
+encodeSpan :: X.SourceSpan -> [[K.Nat]]
+encodeSpan s = point (X.sourceSpanStart s) ++ point (X.sourceSpanEnd s)
+  where
+    point p = map encodeName [X.sourcePointFile p,
+      TText.pack (show (X.sourcePointLine p)),
+      TText.pack (show (X.sourcePointColumn p)),
+      TText.pack (show (X.sourcePointOffset p))]
+
+encodeBinding :: S.SelectedSteveGet -> Text -> K.Selected_binding
+encodeBinding source ident =
+  let D.DeclarationKey key = S.selectedDeclarationKey source
+      D.InstanceKey instanceKey = S.selectedInstanceKey source
+      readProvider = S.selectedReadProvider source
+      digestProvider = S.selectedDigestProvider source
+      D.InterfaceRevision ri = S.qualifiedProviderInterface readProvider
+      D.DefinitionRevision rd = S.qualifiedProviderImplementation readProvider
+      D.InterfaceRevision di = S.qualifiedProviderInterface digestProvider
+      D.DefinitionRevision dd = S.qualifiedProviderImplementation digestProvider
+  in K.Binding (encodeName key) (encodeName instanceKey)
+       (encodeSpan (S.selectedReadOccurrence source))
+       (encodeSpan (S.selectedDigestOccurrence source))
+       (encodeName (S.qualifiedProviderOperation readProvider)) (encodeName ri) (encodeName rd)
+       (encodeName (S.qualifiedProviderOperation digestProvider)) (encodeName di) (encodeName dd)
+       (encodeName ident)
+
+checkAnchor :: BS.ByteString -> [Text] -> Text -> K.Selected_binding -> Bool
+checkAnchor raw metadata ident = K.p9_anchored_source_accepts
+  (map byteNat (BS.unpack raw)) (map encodeName metadata) (encodeName ident)
+
+admitAnchoredOriginal :: BS.ByteString -> [Text] -> S.SelectedSteveGet -> Text
+  -> C.CoreSystemsProgram -> P.RuntimeChoicePayloadPlan -> Either Text SelectedSteveGetCore
+admitAnchoredOriginal raw metadata source ident program plan
+  | checkAnchor raw metadata ident (encodeBinding source ident) =
+      admitOriginal raw program plan
+  | otherwise = Left "original checked source anchor rejected"
+
+anchorNegatives :: BS.ByteString -> [Text] -> S.SelectedSteveGet -> Text -> IO ()
+anchorNegatives raw metadata source ident = do
+  let actual = encodeBinding source ident
+      K.Binding dk ik readAt digestAt blob ri rd digest di dd cid = actual
+      alternatives =
+        [ ("read occurrence", K.Binding dk ik [] digestAt blob ri rd digest di dd cid)
+        , ("digest occurrence", K.Binding dk ik readAt [] blob ri rd digest di dd cid)
+        , ("Blob qualification revision", K.Binding dk ik readAt digestAt blob [] rd digest di dd cid)
+        , ("Digest qualification revision", K.Binding dk ik readAt digestAt blob ri rd digest di [] cid)
+        , ("original declaration", K.Binding [] ik readAt digestAt blob ri rd digest di dd cid)
+        , ("original instance", K.Binding dk [] readAt digestAt blob ri rd digest di dd cid)
+        , ("self-paired empty occurrence/revisions", K.Binding dk ik [] [] blob [] [] digest [] [] cid)
+        ]
+  require "extracted anchored original source and invocation binding" (checkAnchor raw metadata ident actual)
+  mapM_ (\(label, bad) -> require ("anchored gate rejects " ++ label)
+    (not (checkAnchor raw metadata ident bad))) alternatives
+  require "anchored gate rejects different invocation ContentId"
+    (not (checkAnchor raw metadata "different-content-id" actual))
+  require "anchored gate rejects different actual declaration revision"
+    (not (checkAnchor raw ("different-revision" : drop 1 metadata) ident actual))
+  require "anchored gate rejects different original occurrence route/ordinal"
+    (not (checkAnchor raw (take 2 metadata ++ ["9"] ++ drop 3 metadata) ident actual))
+
 main :: IO ()
 main = do
   raw <- BS.readFile "examples/steve/get.phil"
   decoded <- orDie "exact UTF-8 original" (Text.decodeUtf8' raw)
   source <- orDie "independent admitted source" (S.prepareSelectedSteveGet decoded)
-  originalMetadata decoded source
+  metadata <- originalMetadata decoded source
+  let ident = "sha256:fixed-selected"
+  anchorNegatives raw metadata source ident
   plan <- orDie "recertified actual full native plan"
     (P.certifyRuntimeChoicePayloadPlan steveCoreProgram payloadSpecs)
   selected <- orDie "exact original + accepted full native selector"
-    (admitOriginal raw steveCoreProgram plan)
+    (admitAnchoredOriginal raw metadata source ident steveCoreProgram plan)
   require "same semantic shape but changed carrier cannot pass P9 raw gate"
     (case admitOriginal (raw <> "// changed original carrier\n") steveCoreProgram plan of
       Left "not the pinned original source carrier" -> True
       _ -> False)
-  let ident = "sha256:fixed-selected"
-      readFound = S.ReadResponse (S.selectedReadOccurrence source)
+  let readFound = S.ReadResponse (S.selectedReadOccurrence source)
         (S.selectedReadProvider source) ident (S.ReadFound "same exact bytes")
       digestAccepted = S.DigestResponse (S.selectedDigestOccurrence source)
         (S.selectedDigestProvider source) ident "bytesView" S.DigestAccepted
