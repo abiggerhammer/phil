@@ -246,6 +246,50 @@ Proof.
     selected_native_reflection, native_binding_reflection. reflexivity.
 Qed.
 
+
+(* Independently check actual source-only event deltas and snapshots against
+   the accepted labelled rules, not against a target-generated source trace. *)
+Definition p9_source_segment_accepts (start : state) (labels : list offered)
+    (final : state) (events : list observation) : bool :=
+  match replay_source start labels with
+  | Some (actual, seen) =>
+      if source_state_dec actual final then
+        if observations_dec seen events then true else false
+      else false
+  | None => false
+  end.
+
+Theorem p9_source_segment_reflection : forall start labels final events,
+  p9_source_segment_accepts start labels final events = true <->
+  source_trace start labels events final.
+Proof.
+  intros start labels final events.
+  rewrite <- p9_source_model_reflection.
+  unfold p9_source_segment_accepts.
+  destruct (replay_source start labels) as [[actual seen]|].
+  - destruct (source_state_dec actual final);
+      destruct (observations_dec seen events);
+      split; intro H; try discriminate; congruence.
+  - split; discriminate.
+Qed.
+
+Theorem p9_source_segment_safety : forall start labels final events,
+  p9_source_segment_accepts start labels final events = true ->
+  canonical_lifecycle start ->
+  canonical_lifecycle final /\
+  state_next start <= state_next final /\
+  (forall x, In x (state_issued start) -> In x (state_issued final)) /\
+  (forall x, In x (state_retired start) -> In x (state_retired final)).
+Proof.
+  intros start labels final events H Hsafe.
+  apply p9_source_segment_reflection in H.
+  split.
+  - eapply reachable_lifecycle_valid; [eapply source_trace_forget; exact H | exact Hsafe].
+  - apply p9_source_history_monotone in H. exact H.
+Qed.
+
+Print Assumptions p9_source_segment_reflection.
+Print Assumptions p9_source_segment_safety.
 Print Assumptions p9_source_trace_replay.
 Print Assumptions p9_source_model_reflection.
 Print Assumptions p9_step_history_monotone.
@@ -261,4 +305,4 @@ Print Assumptions p9_input_reflection.
 Extraction Language Haskell.
 Extract Inductive bool => "Prelude.Bool" [ "Prelude.True" "Prelude.False" ].
 Extract Inductive list => "[]" [ "[]" "(:)" ].
-Extraction "P9G3OriginalInputKernel.hs" p9_raw_accepts.
+Extraction "P9G3OriginalInputKernel.hs" p9_raw_accepts p9_source_segment_accepts.
