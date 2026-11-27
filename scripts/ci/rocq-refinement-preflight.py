@@ -69,6 +69,7 @@ MODULES = (
     "GrammarAstRecordDataRecursiveGroupingObservationReplayPathClassifierCacheBatchIndexedDiagnosticDeletion",
     "GrammarAstRecordDataRecursiveGroupingObservationReplayPathClassifierCacheBatchIndexedDiagnosticSplice",
     "GrammarAstRecordDataRecursiveGroupingObservationReplayPathClassifierCacheBatchIndexedDiagnosticRefresh",
+    "GrammarAstRecordDataRecursiveGroupingObservationReplayPathClassifierCacheBatchRefreshAll",
 )
 
 
