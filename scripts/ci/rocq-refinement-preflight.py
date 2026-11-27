@@ -71,6 +71,7 @@ MODULES = (
     "GrammarAstRecordDataRecursiveGroupingObservationReplayPathClassifierCacheBatchIndexedDiagnosticRefresh",
     "GrammarAstRecordDataRecursiveGroupingObservationReplayPathClassifierCacheBatchRefreshAll",
     "GrammarAstRecordDataRecursiveGroupingObservationReplayPathClassifierCacheBatchCanonical",
+    "GrammarAstRecordDataRecursiveGroupingObservationReplayPathClassifierCacheBatchIndexedComparison",
 )
 
 
