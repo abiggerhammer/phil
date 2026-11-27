@@ -72,10 +72,14 @@ Proof.
     Some Phase1CacheInvalid <->
     phase1_surface_classifier_cache_validb (fst left) (snd left) = false \/
     phase1_surface_classifier_cache_validb (fst right) (snd right) = false).
-  rewrite <- phase1_surface_guarded_cache_compare_invalid_iff.
+  pose proof (phase1_surface_guarded_cache_compare_invalid_iff
+    (fst left) (fst right) (snd left) (snd right)) as Hinvalid.
   split.
-  - intro H. now injection H.
-  - intro H. now rewrite H.
+  - intro H. injection H as Hcompare.
+    exact (proj1 Hinvalid Hcompare).
+  - intro H.
+    exact (f_equal (@Some Phase1SurfaceGuardedCacheComparison)
+      (proj2 Hinvalid H)).
 Qed.
 
 Theorem phase1_surface_classifier_cache_batch_compare_at_valid :
