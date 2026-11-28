@@ -1,0 +1,66 @@
+name: MHB ATC Phase 2 Stage Bridge (Opt-In)
+
+# Only new Phase 2 staged branches. NEVER open a PR directly.
+# Disabled by default until the controlled commissioning and bypass review.
+on:
+  push:
+    branches:
+      - 'hamster/staged/phase2-selfhost/**'
+      - 'hamster/staged/phase2-embedded/**'
+
+permissions:
+  contents: write # repository_dispatch requires contents write
+  issues: read
+
+jobs:
+  register:
+    if: >-
+      github.event_name == 'push' &&
+      github.event.deleted == false &&
+      vars.MHB_ATC_PHASE2_STAGE_BRIDGE_ENABLED == 'true'
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Checkout trusted main only
+        uses: actions/checkout@v4
+        with:
+          ref: main
+          persist-credentials: false
+
+      - name: Dispatch checked exact-head candidate to trusted stage workflow
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          BRANCH: ${{ github.ref_name }}
+          HEAD_SHA: ${{ github.sha }}
+        run: |
+          set -euo pipefail
+
+          case "$BRANCH" in
+            hamster/staged/phase2-selfhost/*|hamster/staged/phase2-embedded/*) ;;
+            *) echo "Phase 2 staged-branch allowlist mismatch" >&2; exit 1 ;;
+          esac
+
+          # Validate trusted-main syntax. Staged-branch content is NEVER checked out.
+          python3 scripts/mhb_atc_stage.py \
+            --branch "$BRANCH" --head-sha "$HEAD_SHA" \
+            --live-sha "$HEAD_SHA" >/dev/null
+
+          live="$(gh api "repos/$GH_REPO/git/ref/heads/$BRANCH" --jq '.object.sha')"
+          test "$live" = "$HEAD_SHA" || {
+            echo "Staged ref advanced; refuse stale dispatch" >&2
+            exit 1
+          }
+
+          gh api --method POST "repos/$GH_REPO/dispatches" \
+            -f event_type=mhb-atc-stage \
+            -f "client_payload[branch]=$BRANCH" \
+            -f "client_payload[head_sha]=$HEAD_SHA"
+
+          {
+            echo "### MHB-ATC Phase 2 staging bridge"
+            echo "- branch: $BRANCH"
+            echo "- pushed exact head: $HEAD_SHA"
+            echo "- next step: trusted staging issue, NOT a PR"
+            echo "- merge authority: none"
+          } >> "$GITHUB_STEP_SUMMARY"
