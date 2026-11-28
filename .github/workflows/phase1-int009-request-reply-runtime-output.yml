@@ -17,11 +17,16 @@ on:
       - 'test/Phase1INT009RequestReplyRuntimeMain.hs'
       - '.github/workflows/phase1-int009-request-reply-runtime-output.yml'
 
+permissions:
+  contents: read
+
 jobs:
   request-reply-runtime-output:
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
       - uses: haskell-actions/setup@v2
         with:
           ghc-version: '9.6.7'

@@ -27,11 +27,16 @@ on:
       - 'src/Phil/Surface/Parser.hs'
       - '.github/workflows/phase1-int-001-steve-ordinary-provider-source.yml'
 
+permissions:
+  contents: read
+
 jobs:
   steve-ordinary-provider-source:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
       - uses: haskell-actions/setup@v2
         with:
           ghc-version: '9.6.7'

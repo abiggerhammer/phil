@@ -17,11 +17,16 @@ on:
       - 'test/Phase1INT009RequestReplySourceShapeMain.hs'
       - '.github/workflows/phase1-int009-request-reply-source-shape.yml'
 
+permissions:
+  contents: read
+
 jobs:
   request-reply-source-shape:
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
       - uses: haskell-actions/setup@v2
         with:
           ghc-version: '9.6.7'

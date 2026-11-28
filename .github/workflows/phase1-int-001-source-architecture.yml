@@ -37,11 +37,16 @@ on:
       - 'test/Phase1INT001SourceArchitectureMain.hs'
       - '.github/workflows/phase1-int-001-source-architecture.yml'
 
+permissions:
+  contents: read
+
 jobs:
   source-architecture:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
 
       - uses: haskell-actions/setup@v2
         with:

@@ -17,11 +17,16 @@ on:
       - 'test/Phase1INT008UnrestrictedValueFlowMain.hs'
       - '.github/workflows/phase1-int008-unrestricted-value-flow.yml'
 
+permissions:
+  contents: read
+
 jobs:
   unrestricted-value-flow:
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
       - uses: haskell-actions/setup@v2
         with:
           ghc-version: '9.6.7'
