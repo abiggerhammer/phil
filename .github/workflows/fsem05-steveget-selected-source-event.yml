@@ -11,6 +11,8 @@ on:
       - 'proof/Phil/Verification/FSEM05SteveGetSelectedSourceEvents.v'
       - 'docs/phase-1/fsem05-steveget-qualified-source-event-v1.md'
       - '.github/workflows/fsem05-steveget-selected-source-event.yml'
+      - 'scripts/ci/steveget_scope_routing.py'
+      - 'scripts/ci/test_steveget_scope_routing.py'
   pull_request:
     paths:
       - 'src/Phil/Surface/SelectedSteveGetExecution.hs'
@@ -19,6 +21,8 @@ on:
       - 'proof/Phil/Verification/FSEM05SteveGetSelectedSourceEvents.v'
       - 'docs/phase-1/fsem05-steveget-qualified-source-event-v1.md'
       - '.github/workflows/fsem05-steveget-selected-source-event.yml'
+      - 'scripts/ci/steveget_scope_routing.py'
+      - 'scripts/ci/test_steveget_scope_routing.py'
 
 concurrency:
   group: fsem05-selected-source-${{ github.event.pull_request.number || github.ref }}
@@ -121,42 +125,12 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with:
+          ref: ${{ github.sha }}
           fetch-depth: 0
-      - name: Only maintainer-authorized selected FSEM-05 paths
-        shell: bash
+          persist-credentials: false
+      - name: Exercise SteveGet routing offline
+        run: python3 scripts/ci/test_steveget_scope_routing.py
+      - name: Classify event and enforce applicable historical scope
         env:
           GH_TOKEN: ${{ github.token }}
-        run: |
-          set -euo pipefail
-          git fetch origin main
-          python3 - <<'PY'
-          import subprocess
-          allowed = {
-            "src/Phil/Surface/SelectedSteveGetExecution.hs",
-            "phil-core.cabal",
-            "test/FSEM05SteveGetSelectedSourceEventMain.hs",
-            "proof/Phil/Verification/FSEM05SteveGetSelectedSourceEvents.v",
-            "docs/phase-1/fsem05-steveget-qualified-source-event-v1.md",
-            ".github/workflows/fsem05-steveget-selected-source-event.yml",
-          }
-          changed = set(subprocess.check_output(
-            ["git", "diff", "--name-only", "origin/main...HEAD"],
-            text=True).splitlines())
-          forbidden = changed - allowed
-          if forbidden:
-            raise SystemExit("unauthorized files: " + repr(sorted(forbidden)))
-          assert changed, "empty selected FSEM-05 slice"
-          print("PASS: only authorized paths", sorted(changed))
-          PY
-          python3 - <<'PY'
-          import os
-          import sys
-          sys.path.insert(0, "scripts")
-          import fsem_claim
-          api = fsem_claim.GitHub(token=os.environ["GH_TOKEN"])
-          record, commit_sha = fsem_claim.live_claim(api, "fsem-05")
-          fsem_claim.require_issue_record(api, record, commit_sha)
-          assert record["branch"] == "formal-semantics/fsem05-steveget-qualified-source-events"
-          assert record["actor"] == "hamster:fsem-05-source"
-          print("PASS: exact atomic prebranch family claim", commit_sha)
-          PY
+        run: python3 scripts/ci/steveget_scope_routing.py fsem05

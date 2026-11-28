@@ -11,6 +11,8 @@ on:
       - 'test/FSEM06SteveGetSelectedCorePayloadMain.hs'
       - 'docs/phase-1/fsem06-steveget-core-payload-execution-v1.md'
       - '.github/workflows/fsem06-steveget-core-payload-refinement.yml'
+      - 'scripts/ci/steveget_scope_routing.py'
+      - 'scripts/ci/test_steveget_scope_routing.py'
   pull_request:
     paths:
       - 'src/Phil/Compiler/SelectedSteveGetCoreExecution.hs'
@@ -19,6 +21,8 @@ on:
       - 'test/FSEM06SteveGetSelectedCorePayloadMain.hs'
       - 'docs/phase-1/fsem06-steveget-core-payload-execution-v1.md'
       - '.github/workflows/fsem06-steveget-core-payload-refinement.yml'
+      - 'scripts/ci/steveget_scope_routing.py'
+      - 'scripts/ci/test_steveget_scope_routing.py'
 
 concurrency:
   group: fsem06-selected-core-${{ github.event.pull_request.number || github.ref }}
@@ -104,42 +108,12 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with:
-          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          ref: ${{ github.sha }}
           fetch-depth: 0
-      - name: Verify actual changed paths and matching atomic claim
-        shell: bash
+          persist-credentials: false
+      - name: Exercise SteveGet routing offline
+        run: python3 scripts/ci/test_steveget_scope_routing.py
+      - name: Classify event and enforce applicable historical scope
         env:
           GH_TOKEN: ${{ github.token }}
-        run: |
-          set -euo pipefail
-          git fetch origin main
-          python3 - <<'PY'
-          import os
-          import subprocess
-          import sys
-          sys.path.insert(0, "scripts")
-          import fsem_claim
-          allowed_new = {
-            "src/Phil/Compiler/SelectedSteveGetCoreExecution.hs",
-            "proof/Phil/Verification/FSEM06SteveGetSelectedCorePayloadRefinement.v",
-            "test/FSEM06SteveGetSelectedCorePayloadMain.hs",
-            "docs/phase-1/fsem06-steveget-core-payload-execution-v1.md",
-            ".github/workflows/fsem06-steveget-core-payload-refinement.yml",
-          }
-          lines = subprocess.check_output(
-            ["git", "diff", "--name-status", "origin/main...HEAD"], text=True).splitlines()
-          changed = set()
-          for line in lines:
-              status, path = line.split("\t", 1)
-              if status != "A" or path not in allowed_new:
-                  raise SystemExit("unauthorized change: " + line)
-              changed.add(path)
-          assert changed == allowed_new, sorted(changed)
-          print("PASS: five authorized new paths; no Cabal or existing path edit")
-          api = fsem_claim.GitHub(token=os.environ["GH_TOKEN"])
-          record, commit_sha = fsem_claim.live_claim(api, "fsem-06")
-          fsem_claim.require_issue_record(api, record, commit_sha)
-          assert record["branch"] == "formal-semantics/fsem06-steveget-core-payload-refinement"
-          assert record["actor"] == "hamster:fsem-06-core"
-          print("PASS: exact atomic prebranch claim", commit_sha)
-          PY
+        run: python3 scripts/ci/steveget_scope_routing.py fsem06
