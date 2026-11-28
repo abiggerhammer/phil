@@ -54,6 +54,7 @@ library
       Phil.Core.Value
       Phil.Surface.Syntax
       Phil.Surface.SelectedSteveGetExecution
+      Phil.Surface.GrammarV1.DoublePingExecution
       Phil.Surface.Parser
       Phil.Surface.Elaborate
       Phil.Surface.Check
@@ -74,6 +75,12 @@ library
       Phil.Handoff.Phase1AssuranceInputs
       Phil.Handoff.Phase1RuntimeBuild
   other-modules:
+      Phil.Core.ConcurrencyRendezvousCertification
+      Phil.Core.ConcurrencyActivationCertification
+      Phil.Core.ProcessParticipants
+      Phil.Core.ProcessCausality
+      ConcurrencyRendezvousKernel
+      ConcurrencyActivationKernel
       ConsoleImplementationKernel
       FileSystemKernel
       Phil.Core.ProviderEvidenceQualification

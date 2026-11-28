@@ -1,0 +1,141 @@
+name: FSEM-05 DoublePing D3 preflight
+
+on:
+  pull_request:
+    paths:
+      - '.github/workflows/fsem05-doubleping-d3-preflight.yml'
+      - 'phil-core.cabal'
+      - 'src/Phil/Surface/GrammarV1/DoublePingExecution.hs'
+      - 'test/Phase1FSEM05DoublePingExecutionMain.hs'
+      - 'test/Phase1FSEM05DoublePingExecutionPrivateMain.hs'
+      - 'proof/Phil/Surface/DoublePingD3.v'
+      - 'docs/phase-1/formal-semantics-doubleping-d3-fsem05-v1.md'
+
+permissions:
+  contents: read
+
+jobs:
+  strict-native:
+    name: Strict GHC 9.6.7 native and installed-package controls
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: haskell-actions/setup@0f8e8c99d88aeb3fbfd523f1ef2c6f762d10d64d
+        with:
+          ghc-version: '9.6.7'
+          cabal-version: '3.18.1.0'
+          cabal-update: false
+      - name: Confirm the two independently adopted inputs
+        shell: bash
+        run: |
+          set -euo pipefail
+          source_path=test/fixtures/fsem02-two-step-source-chain-v1/accepted.phil
+          sidecar_path=test/fixtures/fsem03-doubleping-origin-v1/candidate.tsv
+          source_object="2fc0c4abe970f398b516a2bdff2000ac4d09333f:$source_path"
+          sidecar_object="31d0e3909b3e4341b58d7387b036cf0996e971bd:$sidecar_path"
+          test "$(git rev-parse "$source_object")" = 76f1d238407397ec09d358a42ff9ebaac4c44909
+          test "$(git rev-parse "$sidecar_object")" = d172f4456dbb0ef2cb0e548e45273829b63c6906
+          git show "$source_object" | cmp - "$source_path"
+          git show "$sidecar_object" | cmp - "$sidecar_path"
+          printf '%s  %s\n' \
+            33687d0c4320dda4d136fa16038f4fad043d14e1367729b8db43044e2d5c51e7 "$source_path" \
+            4e58ba944ceb0ee6b0356de7d314b7977e1271d715df42d4d05c8789bfdffeb2 "$sidecar_path" | sha256sum -c -
+      - run: bash scripts/ci/cabal-update-retry.sh
+      - name: Strict library build
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(ghc --numeric-version)" = 9.6.7
+          cabal build lib:phil-core --ghc-options=-Werror
+      - name: Installed-package positive and external injection negatives
+        shell: bash
+        run: |
+          set -euo pipefail
+          tmpdir=$(mktemp -d)
+          trap 'rm -rf -- "$tmpdir"' EXIT
+          cabal exec -- ghc --make -i -Wall -Werror -package phil-core \
+            -outputdir "$tmpdir/public" test/Phase1FSEM05DoublePingExecutionMain.hs -o "$tmpdir/public-test"
+          "$tmpdir/public-test"
+
+          rejects () {
+            local label=$1 identifier=$2
+            shift 2
+            printf '%s\n' 'module Main where' "$@" > "$tmpdir/Main.hs"
+            if cabal exec -- ghc -i -Wall -Werror -package phil-core -fno-code "$tmpdir/Main.hs" > "$tmpdir/refusal" 2>&1; then
+              echo "Unexpected external access: $label" >&2
+              exit 1
+            fi
+            cat "$tmpdir/refusal"
+            grep -F -- "$identifier" "$tmpdir/refusal"
+            grep -Ei 'not in scope|not a record selector|not export|hidden module|Illegal term-level use' "$tmpdir/refusal"
+            echo "PASS: $label rejected by the installed package"
+          }
+
+          d3='import Phil.Surface.GrammarV1.DoublePingExecution'
+          rejects 'admitted state construction' AdmittedRun "$d3" 'main = print AdmittedRun'
+          rejects 'execution state construction' StepState "$d3" 'main = print StepState'
+          rejects 'run construction' DoublePingRun "$d3" 'main = print DoublePingRun'
+          rejects 'snapshot construction' Snapshot "$d3" 'main = print Snapshot'
+          rejects 'event construction' CommittedEvent "$d3" 'main = print CommittedEvent'
+          rejects 'run record update' runSnapshots "$d3" \
+            'main = print (runInputs ((undefined :: DoublePingRun) {runSnapshots = []}))'
+          rejects 'event record update' eventValue "$d3" \
+            'main = print (eventValue ((undefined :: CommittedEvent) {eventValue = 0}))'
+          rejects 'segment splice' advance "$d3" 'main = print advance'
+          rejects 'private test entrypoint' runInternalControls "$d3" 'main = print runInternalControls'
+          rejects 'unqualified Candidate authoring' DoublePingOrigin \
+            'import Phil.Surface.GrammarV1.DoublePingOrigin' 'main = print prepareCandidate'
+      - name: Separately compile and run the fixed internal controls
+        shell: bash
+        run: |
+          set -euo pipefail
+          tmpdir=$(mktemp -d)
+          trap 'rm -rf -- "$tmpdir"' EXIT
+          cabal exec -- ghc --make -isrc -itest -Wall -Werror -DPHIL_D3_INTERNAL_TEST \
+            -outputdir "$tmpdir/private" test/Phase1FSEM05DoublePingExecutionPrivateMain.hs -o "$tmpdir/private-test"
+          "$tmpdir/private-test"
+      - name: Recheck the adopted static source and native correspondence regressions
+        shell: bash
+        run: |
+          set -euo pipefail
+          for file in \
+              test/Phase1FSEM03DoublePingOriginMain.hs \
+              test/Phase1FSEM02TwoStepSourceBinderChainMain.hs \
+              test/Phase1FSEM02TwoStepCoreTraceMain.hs; do
+            cabal exec -- runghc -isrc -Wall -Werror "$file"
+          done
+
+  conditional-rocq:
+    name: Strict Rocq 9.2 conditional prefix model
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+          persist-credentials: false
+      - name: Compile, print named assumptions and recursively check
+        shell: bash
+        run: |
+          set -euo pipefail
+          proof=proof/Phil/Surface/DoublePingD3.v
+          image=rocq/rocq-prover@sha256:33926fb3757b2b560c3844157bd64173a26b6d338a256be1ae5eec8df2019025
+          docker run --rm --interactive --network none \
+            --mount "type=bind,source=$GITHUB_WORKSPACE/$proof,target=/tmp/source.v,readonly" \
+            "$image" bash -s <<'ROCq'
+          set -euo pipefail
+          rocq --version | grep -E 'version 9\.2([. ]|$)'
+          cd /tmp
+          proof=proof/Phil/Surface/DoublePingD3.v
+          mkdir -p "$(dirname "$proof")"
+          cp /tmp/source.v "$proof"
+          if grep -nE '\b(Admitted|Axiom|Parameter|admit)\b' "$proof"; then
+            exit 1
+          fi
+          rocq compile -w @all -Q proof/Phil Phil "$proof" | tee assumptions.log
+          test "$(grep -cFx 'Closed under the global context' assumptions.log)" -eq 6
+          rocq check -silent -Q proof/Phil Phil Phil.Surface.DoublePingD3
+          ROCq
